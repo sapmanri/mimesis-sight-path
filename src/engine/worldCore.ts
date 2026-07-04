@@ -51,6 +51,98 @@ export type BuiltWorld = {
 };
 
 
+
+// ---------- BUILD 076: 프로시저럴 표면 질감 ----------
+// 레퍼런스의 "낡음"은 모델이 아니라 표면에 있다.
+// DataTexture라 브라우저/헤드리스 양쪽에서 동일하게 생성·검증된다.
+
+function makeValueNoise(w: number, h: number, seed: number) {
+  const rnd = seededRandom(seed);
+  const g = 16; // lattice
+  const lattice: number[] = [];
+  for (let i = 0; i < (g + 1) * (g + 1); i += 1) lattice.push(rnd());
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * (t * t * (3 - 2 * t));
+  return (x: number, y: number, freq: number) => {
+    const fx = ((x / w) * freq * g) % g;
+    const fy = ((y / h) * freq * g) % g;
+    const x0 = Math.floor(fx), y0 = Math.floor(fy);
+    const tx = fx - x0, ty = fy - y0;
+    const i = (xx: number, yy: number) => lattice[((yy % g) + g) % g * (g + 1) + (((xx % g) + g) % g)];
+    return lerp(lerp(i(x0, y0), i(x0 + 1, y0), tx), lerp(i(x0, y0 + 1), i(x0 + 1, y0 + 1), tx), ty);
+  };
+}
+
+/** 길 상판: 모래알 그레인 + 흙 얼룩 + 드문 자갈점. 평균은 흰색(버텍스컬러 보존). */
+function makeGroundTexture() {
+  const S = 256;
+  const data = new Uint8Array(S * S * 4);
+  const n = makeValueNoise(S, S, 7133);
+  const rnd = seededRandom(9241);
+  for (let y = 0; y < S; y += 1) {
+    for (let x = 0; x < S; x += 1) {
+      const blotch = n(x, y, 3) * 0.5 + n(x, y, 7) * 0.3 + n(x, y, 19) * 0.2; // 얼룩
+      const grain = (rnd() - 0.5) * 0.16;                                     // 모래알
+      let v = 1 + (blotch - 0.5) * 0.22 + grain;
+      let r = v, gr = v * (1 - (blotch - 0.5) * 0.06), b = v * (1 - (blotch - 0.5) * 0.12);
+      const idx = (y * S + x) * 4;
+      data[idx] = Math.max(0, Math.min(255, r * 235));
+      data[idx + 1] = Math.max(0, Math.min(255, gr * 233));
+      data[idx + 2] = Math.max(0, Math.min(255, b * 228));
+      data[idx + 3] = 255;
+    }
+  }
+  // 드문 자갈/부스러기 점
+  for (let k = 0; k < 320; k += 1) {
+    const cx = Math.floor(rnd() * S), cy = Math.floor(rnd() * S);
+    const dark = rnd() > 0.4;
+    const rad = rnd() > 0.85 ? 2 : 1;
+    for (let dy = -rad; dy <= rad; dy += 1) for (let dx = -rad; dx <= rad; dx += 1) {
+      if (dx * dx + dy * dy > rad * rad) continue;
+      const idx = ((((cy + dy) % S + S) % S) * S + (((cx + dx) % S + S) % S)) * 4;
+      const m = dark ? 0.62 : 1.22;
+      data[idx] = Math.min(255, data[idx] * m);
+      data[idx + 1] = Math.min(255, data[idx + 1] * m);
+      data[idx + 2] = Math.min(255, data[idx + 2] * m);
+    }
+  }
+  const tex = new THREE.DataTexture(data, S, S);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** 절벽면: 세로 침식 줄무늬 + 지층 띠 + 파임 자국. u=깊이방향, v=길이방향. */
+function makeCliffTexture() {
+  const S = 256;
+  const data = new Uint8Array(S * S * 4);
+  const n = makeValueNoise(S, S, 4517);
+  const rnd = seededRandom(3391);
+  for (let y = 0; y < S; y += 1) {
+    for (let x = 0; x < S; x += 1) {
+      // x = 깊이(u): 위(0)가 밝고 아래로 침식. y = 길이(v): 세로 스트릭.
+      const streak = n(0, y, 9) * 0.6 + n(0, y, 23) * 0.4;        // 길이축 세로줄
+      const strata = n(x, 0, 5);                                    // 깊이축 지층
+      const pit = n(x, y, 13);
+      let v = 1 + (streak - 0.5) * 0.3 + (strata - 0.5) * 0.16 + (pit - 0.5) * 0.14 + (rnd() - 0.5) * 0.06;
+      // 상단 모서리 AO 띠 (u가 0 근처)
+      const rim = Math.max(0, 1 - (x / S) * 7);
+      v *= 1 - rim * 0.22;
+      const idx = (y * S + x) * 4;
+      const c = Math.max(0, Math.min(255, v * 226));
+      data[idx] = c; data[idx + 1] = Math.max(0, c - 4); data[idx + 2] = Math.max(0, c - 10);
+      data[idx + 3] = 255;
+    }
+  }
+  const tex = new THREE.DataTexture(data, S, S);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 // ---------- BUILD 075: 실물 모델 시스템 ----------
 // 원칙: 모델은 팔레트를 통과해야만 세계에 들어온다 (원색 반입 금지).
 // 로드 실패 시 프로시저럴 프록시가 그대로 남는다 (폴백 안전).
@@ -59,16 +151,17 @@ export type ModelLoader = (file: string) => Promise<THREE.Group>;
 
 type ModelSpec = {
   file: string;
-  height: number;        // 정규화 목표 높이 (월드 유닛, 사람 키 = 0.9)
+  height: number;        // 정규화 목표 크기 (월드 유닛, 사람 키 = 0.9)
   tint: string;          // 텍스처/무채색 재질의 대체 틴트
   preRotateX?: number;   // 눕혀진 모델 세우기 등
+  fitMaxDim?: boolean;   // 높이 대신 최대 치수 기준 (납작한 돌 등)
 };
 
 const MODELS: Record<string, ModelSpec> = {
   suitcase: { file: 'Old_Suitcase.glb', height: 0.5, tint: PALETTE.mint, preRotateX: -Math.PI / 2 },
   cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2' },
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 3.4, tint: PALETTE.white },
-  stone: { file: 'stone11.glb', height: 0.2, tint: PALETTE.basalt },
+  stone: { file: 'stone11.glb', height: 0.16, tint: '#6e7268', fitMaxDim: true },
 };
 
 const PALETTE_HUES = [0.07, 0.11, 0.29, 0.53]; // wood, sand, sage, teal
@@ -119,7 +212,8 @@ function normalizeModel(group: THREE.Group, spec: ModelSpec) {
   group.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(group);
   const size = box.getSize(new THREE.Vector3());
-  const s = spec.height / Math.max(size.y, 1e-6);
+  const denom = spec.fitMaxDim ? Math.max(size.x, size.y, size.z) : size.y;
+  const s = spec.height / Math.max(denom, 1e-6);
   group.scale.setScalar(s);
   group.updateMatrixWorld(true);
   const box2 = new THREE.Box3().setFromObject(group);
@@ -267,13 +361,13 @@ async function attachModels(
       wallSlots.forEach((k) => {
         const rnd = seededRandom(k.seed);
         k.slot.clear();
-        const n = k.kit === 'stone-wall-kit' ? 9 : 4;
+        const n = k.kit === 'stone-wall-kit' ? 7 : 3;
         for (let i = 0; i < n; i += 1) {
           const s = stone.clone(true);
           const course = k.kit === 'stone-wall-kit' ? i % 2 : 0;
-          s.position.set(-0.5 + (i * 0.13) + (rnd() - 0.5) * 0.04, course * 0.13, (rnd() - 0.5) * 0.08);
+          s.position.set(-0.33 + (i * 0.11) + (rnd() - 0.5) * 0.03, course * 0.075, (rnd() - 0.5) * 0.05);
           s.rotation.y = rnd() * Math.PI * 2;
-          s.scale.setScalar(0.75 + rnd() * 0.6);
+          s.scale.setScalar(0.6 + rnd() * 0.45);
           k.slot.add(s);
         }
       });
@@ -304,6 +398,8 @@ type Frame = { t: number; p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vecto
 
 function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
+  const groundTex = makeGroundTexture();
+  const cliffTex = makeCliffTexture();
   const cSandTop = new THREE.Color(PALETTE.sandTop);
   const cSandEdge = new THREE.Color(PALETTE.sandEdge);
   const strata = [
@@ -343,13 +439,17 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
+    const uv: number[] = [];
     const W = 6;
+    let dist = 0;
     cross.forEach((rings, i) => {
+      if (i > 0) dist += frames[i].p.distanceTo(frames[i - 1].p);
       for (let j = 0; j <= W; j += 1) {
         const a = j / W;
         const p = rings[0].L.clone().lerp(rings[0].R, a);
         p.y += noise1(i * 0.4 + j * 2.3) * 0.02;
         pos.push(p.x, p.y, p.z);
+        uv.push(a * 0.9, dist * 0.55);
         const edge = Math.pow(Math.abs(a - 0.5) * 2, 2.2);
         const c = cSandTop.clone().lerp(cSandEdge, edge * 0.85);
         const tint = 1 + noise1(i * 0.9 + j * 3.1) * 0.035;
@@ -363,7 +463,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
         idx.push(a, b, a + 1, a + 1, b, b + 1);
       }
     }
-    g.add(colorMesh(pos, col, idx, { receiveShadow: true }));
+    g.add(colorMesh(pos, col, idx, { receiveShadow: true, uv, map: groundTex }));
   }
 
   // cliff sides
@@ -371,10 +471,14 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
+    const uv: number[] = [];
+    let dist2 = 0;
     cross.forEach((rings, i) => {
+      if (i > 0) dist2 += frames[i].p.distanceTo(frames[i - 1].p);
       rings.forEach((ring, r) => {
         const p = ring[side];
         pos.push(p.x, p.y, p.z);
+        uv.push((r / (RINGS - 1)) * 0.96, dist2 * 0.34);
         const v = r / (RINGS - 1);
         const si = Math.min(strata.length - 1, v * strata.length);
         const s0 = strata[Math.floor(si)];
@@ -393,7 +497,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
         else idx.push(a, b, a + 1, a + 1, b, b + 1);
       }
     }
-    g.add(colorMesh(pos, col, idx, { castShadow: true }));
+    g.add(colorMesh(pos, col, idx, { castShadow: true, uv, map: cliffTex }));
   });
 
   // underside
@@ -421,14 +525,15 @@ function colorMesh(
   pos: number[],
   col: number[],
   idx: number[],
-  { castShadow = false, receiveShadow = false }: { castShadow?: boolean; receiveShadow?: boolean },
+  { castShadow = false, receiveShadow = false, uv, map }: { castShadow?: boolean; receiveShadow?: boolean; uv?: number[]; map?: THREE.Texture },
 ) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  if (uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: map ?? null });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = castShadow;
   mesh.receiveShadow = receiveShadow;
@@ -655,8 +760,10 @@ function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group 
     island.rotation.y = rnd() * Math.PI;
     g.add(island);
     if (i === 2) {
-      // 등대는 이 섬 위에 앉는다 — 닿을 수 없는 랜드마크
-      lighthouseSlot.position.copy(island.position).add(new THREE.Vector3(0, 0.25, 0));
+      // 등대섬: 안개에 반쯤 잠기되 실루엣은 읽히는 거리
+      island.position.set(7.5, 0.6, -24);
+      island.scale.setScalar(0.55);
+      lighthouseSlot.position.copy(island.position).add(new THREE.Vector3(0, 0.16, 0));
       g.add(lighthouseSlot);
     }
   }
