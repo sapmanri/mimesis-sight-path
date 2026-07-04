@@ -3,11 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { MemoryHorizon } from './scene/MemoryHorizon';
+import { MemoryParts } from './scene/MemoryParts';
 import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.4.2 · ORBITING MEMORY · BUILD 067';
+const BUILD_LABEL = 'v0.4.3 · MEMORY PARTS · BUILD 068';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -90,6 +91,7 @@ export default function App() {
         <ParallaxLayers activeIndex={activeIndex} scene={jejuScenes[activeIndex]} />
         <Canvas className="world-canvas" camera={{ position: [0, 2.15, 8.4], fov: 34 }} dpr={[1, 2]} gl={{ alpha: true }}>
           <MemoryHorizon />
+          <MemoryParts />
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
         <div className="build-badge">{BUILD_LABEL}</div>
