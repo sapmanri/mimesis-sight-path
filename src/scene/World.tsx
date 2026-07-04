@@ -1,13 +1,10 @@
-import { Float, Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
 import { LightCreature } from '../components/LightCreature';
-import { MemoryObject } from '../components/MemoryObject';
 import { PathEnvironment } from '../components/PathEnvironment';
-import { createSceneScatter, type ScatterItem } from '../engine/scatter';
-import { pathSegmentPresets, surfaceColor, weatherFog } from '../engine/pathPresets';
+import { weatherFog } from '../engine/pathPresets';
 
 type WorldProps = {
   scenes: ObservationScene[];
@@ -15,47 +12,44 @@ type WorldProps = {
   mode: 'auto' | 'manual';
 };
 
-type SurfaceMark = {
-  id: string;
-  position: [number, number, number];
-  rotation: number;
-  size: number;
-  color: string;
-  opacity: number;
-  round: boolean;
+type RoadPiece = {
+  geometry: THREE.BufferGeometry;
+  edgeLeft: THREE.TubeGeometry;
+  edgeRight: THREE.TubeGeometry;
+  center: THREE.Vector3;
+  index: number;
 };
 
-type RibbonSegment = {
+type Pebble = {
   id: string;
-  geometry: THREE.BufferGeometry;
-  leftEdge: THREE.TubeGeometry;
-  rightEdge: THREE.TubeGeometry;
+  position: [number, number, number];
+  scale: [number, number, number];
+  rotation: [number, number, number];
   color: string;
-  focusIndex: number;
-  marks: SurfaceMark[];
+  opacity: number;
 };
 
 export function World({ scenes, activeIndex, mode }: WorldProps) {
   const lightRef = useRef<THREE.Group>(null);
   const activeScene = scenes[activeIndex];
   const activePosition = useMemo(() => new THREE.Vector3(...activeScene.position), [activeScene.position]);
-  const particlePoints = useMemo(() => buildMistPoints(), []);
+  const roadPieces = useMemo(() => buildRoadPieces(scenes), [scenes]);
+  const pebbles = useMemo(() => buildPebbles(scenes), [scenes]);
+  const mist = useMemo(() => buildMistPoints(), []);
   const fog = weatherFog[activeScene.weather];
 
   useFrame(({ camera, clock }, delta) => {
-    const director = getCameraDirector(activeIndex, clock.elapsedTime, mode);
-    const desiredCamera = activePosition.clone().add(director.offset);
-    const lookAt = activePosition.clone().add(director.lookOffset);
+    const breathe = Math.sin(clock.elapsedTime * 0.32) * (mode === 'auto' ? 0.18 : 0.08);
+    const sideLook = Math.sin(clock.elapsedTime * 0.18 + activeIndex * 0.7) * 0.28;
+    const desired = activePosition.clone().add(new THREE.Vector3(sideLook, 1.32 + breathe, 4.2));
+    const target = activePosition.clone().add(new THREE.Vector3(0, -0.42, -1.5));
 
-    camera.position.lerp(desiredCamera, 1 - Math.pow(mode === 'auto' ? 0.022 : 0.032, delta));
-    camera.lookAt(lookAt.x, lookAt.y, lookAt.z);
+    camera.position.lerp(desired, 1 - Math.pow(0.026, delta));
+    camera.lookAt(target.x, target.y, target.z);
 
     if (lightRef.current) {
-      const pulse = Math.sin(clock.elapsedTime * 2.8) * 0.035;
-      lightRef.current.position.lerp(
-        activePosition.clone().add(new THREE.Vector3(director.lightLead.x, 0.55 + pulse, director.lightLead.z)),
-        1 - Math.pow(0.018, delta),
-      );
+      const bob = Math.sin(clock.elapsedTime * 2.4) * 0.04;
+      lightRef.current.position.lerp(activePosition.clone().add(new THREE.Vector3(0.08, 0.42 + bob, -0.62)), 1 - Math.pow(0.018, delta));
       lightRef.current.rotation.y = Math.sin(clock.elapsedTime * 0.8) * 0.28;
       lightRef.current.rotation.z = Math.sin(clock.elapsedTime * 1.7) * 0.16;
     }
@@ -63,66 +57,46 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
 
   return (
     <>
-      <color attach="background" args={[fog.color]} />
-      <fog attach="fog" args={[fog.color, fog.near, fog.far]} />
-      <ambientLight intensity={1.88} />
-      <directionalLight position={[2, 5, 3]} intensity={2.35} />
-      <pointLight position={[0, 2.2, 1.8]} intensity={2.8} color="#fff4d1" />
+      <color attach="background" args={['transparent']} />
+      <fog attach="fog" args={[fog.color, fog.near * 0.8, fog.far * 1.25]} />
+      <ambientLight intensity={1.74} />
+      <directionalLight position={[-2.2, 4.5, 3.5]} intensity={2.5} color="#fff3cf" />
+      <pointLight position={[0, 1.4, 0.8]} intensity={2.2} color="#fff5ca" />
 
-      <NarrativePath scenes={scenes} activeIndex={activeIndex} />
+      <mesh position={[0, -0.82, -16]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[8.5, 42, 1, 1]} />
+        <meshStandardMaterial color="#8eb2a7" roughness={1} transparent opacity={0.22} />
+      </mesh>
+
+      <MeshRoad pieces={roadPieces} activeIndex={activeIndex} />
+      <RoadPebbles pebbles={pebbles} activeIndex={activeIndex} scenes={scenes} />
       <PathEnvironment scenes={scenes} activeIndex={activeIndex} />
 
-      <points geometry={particlePoints}>
-        <pointsMaterial color="#fff7df" size={0.025} transparent opacity={0.22} depthWrite={false} />
+      <points geometry={mist}>
+        <pointsMaterial color="#fff7df" size={0.03} transparent opacity={0.18} depthWrite={false} />
       </points>
-
-      <SightTrail scenes={scenes} />
-
-      {scenes.map((scene, index) => (
-        <SceneScatter key={`scatter-${scene.id}`} scene={scene} index={index} activeIndex={activeIndex} />
-      ))}
-
-      {scenes.map((scene, index) => (
-        <ObservationNode key={scene.id} scene={scene} active={index === activeIndex} index={index} activeIndex={activeIndex} />
-      ))}
 
       <LightCreature ref={lightRef} />
     </>
   );
 }
 
-function getCameraDirector(activeIndex: number, elapsed: number, mode: 'auto' | 'manual') {
-  const breathe = Math.sin(elapsed * 0.38) * (mode === 'auto' ? 0.12 : 0.06);
-  const glance = Math.sin(elapsed * 0.17 + activeIndex) * 0.1;
-  const shot = activeIndex % 6;
-
-  if (shot === 0) return { offset: new THREE.Vector3(-0.78 + glance, 1.18 + breathe, 3.08), lookOffset: new THREE.Vector3(0.08, 0.04, -0.48), lightLead: { x: 0.06, z: 0.18 } };
-  if (shot === 1) return { offset: new THREE.Vector3(0.82 + glance, 0.92 + breathe, 2.78), lookOffset: new THREE.Vector3(-0.12, 0.01, -0.38), lightLead: { x: -0.02, z: 0.18 } };
-  if (shot === 2) return { offset: new THREE.Vector3(0.08 + glance, 2.15 + breathe, 1.74), lookOffset: new THREE.Vector3(0, -0.18, -0.24), lightLead: { x: 0.03, z: 0.16 } };
-  if (shot === 3) return { offset: new THREE.Vector3(-0.1 + glance, 0.7 + breathe, 2.18), lookOffset: new THREE.Vector3(0.02, 0.02, -0.76), lightLead: { x: 0.08, z: 0.22 } };
-  if (shot === 4) return { offset: new THREE.Vector3(1.05 + glance, 1.04 + breathe, 2.95), lookOffset: new THREE.Vector3(-0.22, 0.06, -0.4), lightLead: { x: -0.06, z: 0.2 } };
-  return { offset: new THREE.Vector3(-1.02 + glance, 0.98 + breathe, 2.88), lookOffset: new THREE.Vector3(0.2, 0.02, -0.34), lightLead: { x: 0.06, z: 0.16 } };
-}
-
-function NarrativePath({ scenes, activeIndex }: { scenes: ObservationScene[]; activeIndex: number }) {
-  const ribbonSegments = useMemo(() => buildRibbonSegments(scenes), [scenes]);
-
+function MeshRoad({ pieces, activeIndex }: { pieces: RoadPiece[]; activeIndex: number }) {
   return (
     <group>
-      {ribbonSegments.map((segment) => {
-        const opacity = Math.max(0.35, 0.98 - Math.abs(segment.focusIndex - activeIndex) * 0.12);
+      {pieces.map((piece) => {
+        const focus = Math.max(0.45, 1 - Math.abs(piece.index - activeIndex) * 0.08);
         return (
-          <group key={segment.id}>
-            <mesh geometry={segment.geometry}>
-              <meshStandardMaterial color={segment.color} roughness={0.96} transparent opacity={opacity} side={THREE.DoubleSide} />
+          <group key={piece.index}>
+            <mesh geometry={piece.geometry} receiveShadow>
+              <meshStandardMaterial color="#efe7cf" roughness={0.96} metalness={0} transparent opacity={0.94 * focus} side={THREE.DoubleSide} />
             </mesh>
-            <mesh geometry={segment.leftEdge}>
-              <meshBasicMaterial color="#fff4df" transparent opacity={opacity * 0.2} />
+            <mesh geometry={piece.edgeLeft}>
+              <meshBasicMaterial color="#55796e" transparent opacity={0.24 * focus} />
             </mesh>
-            <mesh geometry={segment.rightEdge}>
-              <meshBasicMaterial color="#486a62" transparent opacity={opacity * 0.1} />
+            <mesh geometry={piece.edgeRight}>
+              <meshBasicMaterial color="#fff6dc" transparent opacity={0.18 * focus} />
             </mesh>
-            <RibbonSurfaceMarks marks={segment.marks} opacity={opacity} />
           </group>
         );
       })}
@@ -130,111 +104,48 @@ function NarrativePath({ scenes, activeIndex }: { scenes: ObservationScene[]; ac
   );
 }
 
-function RibbonSurfaceMarks({ marks, opacity }: { marks: SurfaceMark[]; opacity: number }) {
+function RoadPebbles({ pebbles, activeIndex, scenes }: { pebbles: Pebble[]; activeIndex: number; scenes: ObservationScene[] }) {
   return (
     <group>
-      {marks.map((mark) => (
-        <mesh key={mark.id} position={mark.position} rotation={[-Math.PI / 2, 0, mark.rotation]}>
-          {mark.round ? <circleGeometry args={[mark.size, 14]} /> : <boxGeometry args={[mark.size * 2.2, mark.size * 0.55, 0.012]} />}
-          <meshBasicMaterial color={mark.color} transparent opacity={mark.opacity * opacity} />
-        </mesh>
-      ))}
+      {pebbles.map((pebble) => {
+        const nearest = nearestSceneIndex(pebble.position, scenes);
+        const opacity = pebble.opacity * Math.max(0.22, 1 - Math.abs(nearest - activeIndex) * 0.12);
+        return (
+          <mesh key={pebble.id} position={pebble.position} scale={pebble.scale} rotation={pebble.rotation}>
+            <dodecahedronGeometry args={[0.08, 0]} />
+            <meshStandardMaterial color={pebble.color} roughness={1} transparent opacity={opacity} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
 
-function SceneScatter({ scene, index, activeIndex }: { scene: ObservationScene; index: number; activeIndex: number }) {
-  const items = useMemo(() => createSceneScatter(scene, index), [scene, index]);
-  const distance = Math.abs(index - activeIndex);
-  const opacityMultiplier = Math.max(0.08, 0.5 - distance * 0.14);
-
-  return (
-    <group>
-      {items.map((item) => (
-        <ScatterMesh key={item.id} item={item} opacityMultiplier={opacityMultiplier} />
-      ))}
-    </group>
-  );
-}
-
-function ScatterMesh({ item, opacityMultiplier }: { item: ScatterItem; opacityMultiplier: number }) {
-  const elongated = item.kind.includes('handle') || item.kind.includes('line') || item.kind.includes('track') || item.kind.includes('strip');
-  const round = item.kind.includes('fruit') || item.kind.includes('seed') || item.kind.includes('stone') || item.kind.includes('glint');
-
-  return (
-    <mesh position={item.position} rotation={[-Math.PI / 2, 0, item.rotation]} scale={item.scale}>
-      {round ? <circleGeometry args={[1, 18]} /> : <boxGeometry args={elongated ? [2.4, 0.35, 0.08] : [1, 0.72, 0.08]} />}
-      <meshBasicMaterial color={item.color} transparent opacity={item.opacity * opacityMultiplier} />
-    </mesh>
-  );
-}
-
-function ObservationNode({ scene, active, index, activeIndex }: { scene: ObservationScene; active: boolean; index: number; activeIndex: number }) {
-  const distance = Math.abs(index - activeIndex);
-  const focusOpacity = active ? 0.9 : Math.max(0.06, 0.36 - distance * 0.08);
-  const focusScale = active ? scene.scale * 0.98 : scene.scale * Math.max(0.52, 0.76 - distance * 0.04);
-
-  return (
-    <group position={scene.position}>
-      <Float speed={0.62} rotationIntensity={0.018} floatIntensity={0.045}>
-        <group scale={focusScale}>
-          <MemoryObject scene={scene} active={active} opacity={focusOpacity} />
-        </group>
-      </Float>
-
-      {active && (
-        <Text position={[0, -0.62, 0.08]} fontSize={0.105} anchorX="center" anchorY="middle">
-          {scene.title}
-          <meshBasicMaterial color="#fff9ed" />
-        </Text>
-      )}
-    </group>
-  );
-}
-
-function SightTrail({ scenes }: { scenes: ObservationScene[] }) {
-  const points = useMemo(() => scenes.map((scene) => new THREE.Vector3(...scene.position)), [scenes]);
-  const curve = useMemo(() => new THREE.CatmullRomCurve3(points), [points]);
-  const tube = useMemo(() => new THREE.TubeGeometry(curve, 190, 0.005, 8, false), [curve]);
-
-  return (
-    <mesh geometry={tube}>
-      <meshBasicMaterial color="#fff4ca" transparent opacity={0.18} />
-    </mesh>
-  );
-}
-
-function buildRibbonSegments(scenes: ObservationScene[]): RibbonSegment[] {
+function buildRoadPieces(scenes: ObservationScene[]): RoadPiece[] {
   return scenes.slice(0, -1).map((scene, index) => {
     const next = scenes[index + 1];
-    const preset = pathSegmentPresets[scene.pathKind];
-    const start = new THREE.Vector3(...scene.position).add(new THREE.Vector3(0, -0.67, 0));
-    const end = new THREE.Vector3(...next.position).add(new THREE.Vector3(0, -0.67, 0));
+    const start = new THREE.Vector3(...scene.position).add(new THREE.Vector3(0, -0.68, 0));
+    const end = new THREE.Vector3(...next.position).add(new THREE.Vector3(0, -0.68, 0));
     const direction = end.clone().sub(start).normalize();
-    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x);
+    const normal = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
     const side = index % 2 === 0 ? 1 : -1;
-    const curveStrength = (0.22 + preset.curve * 0.8) * side;
-    const c1 = start.clone().lerp(end, 0.32).add(perpendicular.clone().multiplyScalar(curveStrength));
-    const c2 = start.clone().lerp(end, 0.68).add(perpendicular.clone().multiplyScalar(curveStrength * 0.74));
+    const bend = 0.54 * side + Math.sin(index * 1.7) * 0.14;
+    const c1 = start.clone().lerp(end, 0.34).add(normal.clone().multiplyScalar(bend));
+    const c2 = start.clone().lerp(end, 0.68).add(normal.clone().multiplyScalar(bend * 0.72));
     const curve = new THREE.CubicBezierCurve3(start, c1, c2, end);
-    const samples = curve.getPoints(22);
-    const width = preset.width * 1.08;
-    const geometry = buildRibbonGeometry(samples, width, index);
-    const { left, right } = buildRibbonEdgeCurves(samples, width);
+    const points = curve.getPoints(30);
+    const width = 1.18 + Math.sin(index * 0.8) * 0.18;
 
     return {
-      id: `${scene.id}-${next.id}`,
-      geometry,
-      leftEdge: new THREE.TubeGeometry(left, 54, 0.008, 6, false),
-      rightEdge: new THREE.TubeGeometry(right, 54, 0.006, 6, false),
-      color: surfaceColor[scene.surface],
-      focusIndex: index,
-      marks: buildRibbonSurfaceMarks(samples, width, preset.roughness, index),
+      geometry: buildRoadGeometry(points, width, index),
+      ...buildRoadEdges(points, width),
+      center: start.clone().lerp(end, 0.5),
+      index,
     };
   });
 }
 
-function buildRibbonGeometry(points: THREE.Vector3[], width: number, index: number) {
+function buildRoadGeometry(points: THREE.Vector3[], width: number, index: number) {
   const vertices: number[] = [];
   const indices: number[] = [];
 
@@ -243,11 +154,12 @@ function buildRibbonGeometry(points: THREE.Vector3[], width: number, index: numb
     const next = points[Math.min(points.length - 1, i + 1)];
     const tangent = next.clone().sub(prev).normalize();
     const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const breathingWidth = width * (0.82 + Math.sin(i * 0.48 + index) * 0.1 + Math.sin(i * 0.17) * 0.05);
-    const left = point.clone().add(normal.clone().multiplyScalar(breathingWidth * 0.5));
-    const right = point.clone().add(normal.clone().multiplyScalar(-breathingWidth * 0.5));
-    left.y += Math.sin(i * 0.7 + index) * 0.01;
-    right.y += Math.cos(i * 0.64 + index) * 0.01;
+    const pulse = Math.sin(i * 0.46 + index) * 0.12 + Math.sin(i * 0.17 + index * 1.4) * 0.06;
+    const localWidth = width * (0.86 + pulse);
+    const left = point.clone().add(normal.clone().multiplyScalar(localWidth * 0.5));
+    const right = point.clone().add(normal.clone().multiplyScalar(-localWidth * 0.5));
+    left.y += Math.sin(i * 0.6 + index) * 0.012;
+    right.y += Math.cos(i * 0.7 + index) * 0.012;
     vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
   });
 
@@ -263,7 +175,7 @@ function buildRibbonGeometry(points: THREE.Vector3[], width: number, index: numb
   return geometry;
 }
 
-function buildRibbonEdgeCurves(points: THREE.Vector3[], width: number) {
+function buildRoadEdges(points: THREE.Vector3[], width: number) {
   const leftPoints: THREE.Vector3[] = [];
   const rightPoints: THREE.Vector3[] = [];
 
@@ -272,55 +184,79 @@ function buildRibbonEdgeCurves(points: THREE.Vector3[], width: number) {
     const next = points[Math.min(points.length - 1, i + 1)];
     const tangent = next.clone().sub(prev).normalize();
     const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const edgeWidth = width * (0.44 + Math.sin(i * 0.42) * 0.035);
-    leftPoints.push(point.clone().add(normal.clone().multiplyScalar(edgeWidth)).add(new THREE.Vector3(0, 0.018, 0)));
-    rightPoints.push(point.clone().add(normal.clone().multiplyScalar(-edgeWidth)).add(new THREE.Vector3(0, 0.012, 0)));
+    const edgeWidth = width * (0.49 + Math.sin(i * 0.33) * 0.04);
+    leftPoints.push(point.clone().add(normal.clone().multiplyScalar(edgeWidth)).add(new THREE.Vector3(0, 0.022, 0)));
+    rightPoints.push(point.clone().add(normal.clone().multiplyScalar(-edgeWidth)).add(new THREE.Vector3(0, 0.018, 0)));
   });
 
-  return { left: new THREE.CatmullRomCurve3(leftPoints), right: new THREE.CatmullRomCurve3(rightPoints) };
+  return {
+    edgeLeft: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(leftPoints), 64, 0.012, 8, false),
+    edgeRight: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rightPoints), 64, 0.009, 8, false),
+  };
 }
 
-function buildRibbonSurfaceMarks(points: THREE.Vector3[], width: number, roughness: number, index: number): SurfaceMark[] {
-  const random = seededRandom(907 + index * 157);
-  const marks: SurfaceMark[] = [];
-  const count = Math.round(16 + points.length * (0.45 + roughness * 0.9));
+function buildPebbles(scenes: ObservationScene[]): Pebble[] {
+  const pebbles: Pebble[] = [];
+  const random = seededRandom(3501);
 
-  for (let i = 0; i < count; i += 1) {
-    const baseIndex = Math.floor(random() * (points.length - 2)) + 1;
-    const point = points[baseIndex];
-    const prev = points[baseIndex - 1];
-    const next = points[baseIndex + 1];
-    const tangent = next.clone().sub(prev).normalize();
-    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const edgeBias = random() > 0.5 ? 0.64 : 0.28;
-    const offset = (random() - 0.5) * width * edgeBias;
-    const position = point.clone().add(normal.multiplyScalar(offset)).add(new THREE.Vector3(0, 0.035 + random() * 0.01, 0));
-    const t = random();
+  scenes.slice(0, -1).forEach((scene, index) => {
+    const next = scenes[index + 1];
+    const start = new THREE.Vector3(...scene.position);
+    const end = new THREE.Vector3(...next.position);
+    const direction = end.clone().sub(start).normalize();
+    const normal = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const count = 9;
 
-    marks.push({
-      id: `ribbon-${index}-mark-${i}`,
-      position: [position.x, position.y, position.z],
-      rotation: random() * Math.PI,
-      size: 0.012 + random() * 0.052,
-      color: t < 0.5 ? '#fff4df' : t < 0.76 ? '#486a62' : '#9aac9f',
-      opacity: 0.09 + random() * (0.18 + roughness * 0.16),
-      round: random() > 0.4,
-    });
-  }
+    for (let i = 0; i < count; i += 1) {
+      const t = random();
+      const base = start.clone().lerp(end, t);
+      const side = random() > 0.5 ? 1 : -1;
+      const edge = 0.35 + random() * 0.62;
+      const pos = base.add(normal.clone().multiplyScalar(side * edge));
+      const s = 0.55 + random() * 1.2;
 
-  return marks;
+      pebbles.push({
+        id: `pebble-${index}-${i}`,
+        position: [pos.x, -0.61 + random() * 0.04, pos.z],
+        scale: [s, 0.35 + random() * 0.35, s * (0.65 + random() * 0.4)],
+        rotation: [random() * Math.PI, random() * Math.PI, random() * Math.PI],
+        color: random() > 0.42 ? '#c9c0ad' : '#7f9b8f',
+        opacity: 0.32 + random() * 0.36,
+      });
+    }
+  });
+
+  return pebbles;
 }
 
 function buildMistPoints() {
   const geometry = new THREE.BufferGeometry();
   const positions: number[] = [];
+  const random = seededRandom(901);
 
-  for (let i = 0; i < 120; i += 1) {
-    positions.push((Math.random() - 0.5) * 4.5, Math.random() * 2.4 - 0.2, -Math.random() * 34);
+  for (let i = 0; i < 90; i += 1) {
+    positions.push((random() - 0.5) * 4.8, random() * 2.4 - 0.15, -random() * 34);
   }
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   return geometry;
+}
+
+function nearestSceneIndex(position: [number, number, number], scenes: ObservationScene[]) {
+  let nearest = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  scenes.forEach((scene, index) => {
+    const dx = scene.position[0] - position[0];
+    const dz = scene.position[2] - position[2];
+    const distance = dx * dx + dz * dz;
+    if (distance < nearestDistance) {
+      nearest = index;
+      nearestDistance = distance;
+    }
+  });
+
+  return nearest;
 }
 
 function seededRandom(seed: number) {
