@@ -2,11 +2,12 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
+import { MemoryHorizon } from './scene/MemoryHorizon';
 import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.3.9 · CLEAN DISTANCE · BUILD 064';
+const BUILD_LABEL = 'v0.4.0 · MEMORY HORIZON · BUILD 065';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -88,6 +89,7 @@ export default function App() {
       <section className="viewport-card road-only-viewport">
         <ParallaxLayers activeIndex={activeIndex} scene={jejuScenes[activeIndex]} />
         <Canvas className="world-canvas" camera={{ position: [0, 2.15, 8.4], fov: 34 }} dpr={[1, 2]} gl={{ alpha: true }}>
+          <MemoryHorizon />
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
         <div className="build-badge">{BUILD_LABEL}</div>
