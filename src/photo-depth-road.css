@@ -1,14 +1,22 @@
-/* v0.3.0 mesh road pass
-   CSS only provides sky / distant landscape / atmosphere. The road itself is now Three.js mesh. */
+/* v0.3.1 road only pass
+   Keep only distant sky/clouds and the mesh road. No CSS road, no haze wash. */
 
 .viewport-card .world-canvas {
   opacity: 1;
   mix-blend-mode: normal;
 }
 
+.road-only-shell {
+  background: linear-gradient(180deg, #79aeb8 0%, #92bbb2 52%, #d9cfb6 100%) !important;
+}
+
+.road-only-viewport {
+  background: transparent !important;
+}
+
 .parallax-scene {
   background:
-    linear-gradient(180deg, #7eb3bd 0%, #93bdb7 45%, #d7c9aa 100%) !important;
+    linear-gradient(180deg, #6aa5b4 0%, #84b5b0 43%, #d9cfb6 100%) !important;
 }
 
 .parallax-scene::before {
@@ -17,74 +25,65 @@
   z-index: 0;
   inset: 0;
   background:
-    radial-gradient(ellipse at 66% 18%, rgba(255,255,255,0.72) 0 5%, transparent 18%),
-    radial-gradient(ellipse at 30% 22%, rgba(255,255,255,0.34) 0 14%, transparent 34%),
-    radial-gradient(ellipse at 78% 28%, rgba(255,255,255,0.26) 0 12%, transparent 30%);
-  opacity: 0.95;
-  animation: photo-cloud-drift 28s ease-in-out infinite alternate;
+    radial-gradient(ellipse at 65% 16%, rgba(255,255,255,0.62) 0 4%, transparent 16%),
+    radial-gradient(ellipse at 28% 20%, rgba(255,255,255,0.22) 0 12%, transparent 30%),
+    radial-gradient(ellipse at 80% 28%, rgba(255,255,255,0.16) 0 10%, transparent 28%);
+  opacity: 0.86;
+  animation: photo-cloud-drift 32s ease-in-out infinite alternate;
 }
 
 .parallax-scene::after {
   content: '';
   position: absolute;
   z-index: 1;
-  left: -18%;
-  right: -18%;
-  top: 19%;
-  height: 34%;
+  left: -16%;
+  right: -16%;
+  top: 20%;
+  height: 31%;
   background:
-    linear-gradient(142deg, transparent 0 27%, rgba(61,103,106,0.34) 27% 43%, transparent 43%),
-    linear-gradient(32deg, transparent 0 38%, rgba(67,116,109,0.3) 38% 57%, transparent 57%),
-    linear-gradient(168deg, transparent 0 52%, rgba(229,219,193,0.5) 52% 68%, transparent 68%);
-  filter: blur(1px) saturate(0.82);
-  opacity: 0.74;
+    linear-gradient(142deg, transparent 0 27%, rgba(56,91,96,0.28) 27% 43%, transparent 43%),
+    linear-gradient(32deg, transparent 0 38%, rgba(66,110,104,0.24) 38% 57%, transparent 57%),
+    linear-gradient(168deg, transparent 0 52%, rgba(225,215,190,0.34) 52% 68%, transparent 68%);
+  opacity: 0.55;
 }
 
 .layer-sky,
 .layer-far,
 .layer-mid,
-.layer-near {
+.layer-near,
+.layer-haze {
   opacity: 0 !important;
   background: none !important;
-}
-
-.layer-haze {
-  z-index: 6;
-  opacity: 0.24 !important;
-  background:
-    radial-gradient(ellipse at 50% 38%, rgba(255,255,255,0.42) 0 18%, transparent 42%),
-    linear-gradient(180deg, rgba(255,255,255,0.18) 0%, transparent 40%, rgba(255,255,255,0.08) 100%) !important;
+  animation: none !important;
 }
 
 .layer-vignette {
   z-index: 7;
   background:
-    radial-gradient(circle at 50% 48%, transparent 0 58%, rgba(38,66,62,0.12) 84%, rgba(38,66,62,0.22) 100%),
-    linear-gradient(180deg, transparent 0 72%, rgba(226,213,188,0.18) 100%) !important;
+    radial-gradient(circle at 50% 48%, transparent 0 62%, rgba(38,66,62,0.08) 86%, rgba(38,66,62,0.15) 100%),
+    linear-gradient(180deg, transparent 0 76%, rgba(226,213,188,0.12) 100%) !important;
 }
 
-.story-card {
-  transform: scale(0.84);
-  transform-origin: right bottom;
-  background: rgba(45, 67, 63, 0.3) !important;
+.road-only-topbar {
+  opacity: 0.7;
 }
 
-.progress-nav {
-  opacity: 0.44;
+.road-only-topbar h1 {
+  opacity: 0.82;
 }
 
 .build-badge {
-  opacity: 0.72;
+  opacity: 0.58;
+}
+
+.story-card,
+.progress-nav,
+.sound-toggle,
+.hint {
+  display: none !important;
 }
 
 @keyframes photo-cloud-drift {
-  from { transform: translate3d(-10px, -4px, 0) scale(1.02); }
-  to { transform: translate3d(16px, 5px, 0) scale(1.04); }
-}
-
-@media (max-width: 520px) {
-  .story-card {
-    transform: scale(0.82);
-    max-height: 22vh;
-  }
+  from { transform: translate3d(-8px, -3px, 0) scale(1.01); }
+  to { transform: translate3d(14px, 4px, 0) scale(1.03); }
 }
