@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
+import { LightCreature } from '../components/LightCreature';
 import { MemoryObject } from '../components/MemoryObject';
 import { createSceneScatter, type ScatterItem } from '../engine/scatter';
 import { pathSegmentPresets, surfaceColor, weatherFog } from '../engine/pathPresets';
@@ -62,7 +63,8 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
       const pulse = Math.sin(clock.elapsedTime * 2.8) * 0.035;
       const lead = director.lightLead;
       lightRef.current.position.lerp(activePosition.clone().add(new THREE.Vector3(lead.x, 0.55 + pulse, lead.z)), 1 - Math.pow(0.018, delta));
-      lightRef.current.rotation.z += delta * 0.45;
+      lightRef.current.rotation.y = Math.sin(clock.elapsedTime * 0.8) * 0.28;
+      lightRef.current.rotation.z = Math.sin(clock.elapsedTime * 1.7) * 0.16;
     }
   });
 
@@ -90,17 +92,7 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
         <ObservationNode key={scene.id} scene={scene} active={index === activeIndex} index={index} activeIndex={activeIndex} />
       ))}
 
-      <group ref={lightRef}>
-        <mesh>
-          <sphereGeometry args={[0.052, 32, 32]} />
-          <meshBasicMaterial color="#fffdf2" />
-        </mesh>
-        <mesh>
-          <sphereGeometry args={[0.15, 32, 32]} />
-          <meshBasicMaterial color="#fff7d5" transparent opacity={0.18} />
-        </mesh>
-        <pointLight intensity={6} distance={2.4} color="#fff0bb" />
-      </group>
+      <LightCreature ref={lightRef} />
     </>
   );
 }
