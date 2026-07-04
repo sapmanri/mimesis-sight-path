@@ -8,7 +8,7 @@ import { ParallaxLayers } from './components/ParallaxLayers';
 import { Soundscape } from './audio/Soundscape';
 
 const AUTO_RESUME_MS = 11000;
-const BUILD_LABEL = 'v0.2.1 · PARALLAX ROAD · BUILD 052';
+const BUILD_LABEL = 'v0.2.2 · PHOTO DEPTH ROAD · BUILD 053';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
