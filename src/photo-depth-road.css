@@ -1,14 +1,14 @@
-/* v0.2.3 clear road composition
-   Goal: first glance must read as sky / distant mountain / road. */
+/* v0.3.0 mesh road pass
+   CSS only provides sky / distant landscape / atmosphere. The road itself is now Three.js mesh. */
 
 .viewport-card .world-canvas {
-  opacity: 0.14;
+  opacity: 1;
   mix-blend-mode: normal;
 }
 
 .parallax-scene {
   background:
-    linear-gradient(180deg, #7fb3bd 0%, #9fc4bc 48%, #e7dcc4 100%) !important;
+    linear-gradient(180deg, #7eb3bd 0%, #93bdb7 45%, #d7c9aa 100%) !important;
 }
 
 .parallax-scene::before {
@@ -17,11 +17,11 @@
   z-index: 0;
   inset: 0;
   background:
-    radial-gradient(ellipse at 64% 18%, rgba(255,255,255,0.72) 0 5%, transparent 18%),
+    radial-gradient(ellipse at 66% 18%, rgba(255,255,255,0.72) 0 5%, transparent 18%),
     radial-gradient(ellipse at 30% 22%, rgba(255,255,255,0.34) 0 14%, transparent 34%),
     radial-gradient(ellipse at 78% 28%, rgba(255,255,255,0.26) 0 12%, transparent 30%);
-  opacity: 0.9;
-  animation: photo-cloud-drift 26s ease-in-out infinite alternate;
+  opacity: 0.95;
+  animation: photo-cloud-drift 28s ease-in-out infinite alternate;
 }
 
 .parallax-scene::after {
@@ -30,64 +30,27 @@
   z-index: 1;
   left: -18%;
   right: -18%;
-  top: 18%;
+  top: 19%;
   height: 34%;
   background:
-    linear-gradient(142deg, transparent 0 27%, rgba(61,103,106,0.38) 27% 43%, transparent 43%),
-    linear-gradient(32deg, transparent 0 38%, rgba(67,116,109,0.34) 38% 57%, transparent 57%),
-    linear-gradient(168deg, transparent 0 52%, rgba(229,219,193,0.58) 52% 68%, transparent 68%);
-  filter: blur(0.9px) saturate(0.82);
-  opacity: 0.72;
+    linear-gradient(142deg, transparent 0 27%, rgba(61,103,106,0.34) 27% 43%, transparent 43%),
+    linear-gradient(32deg, transparent 0 38%, rgba(67,116,109,0.3) 38% 57%, transparent 57%),
+    linear-gradient(168deg, transparent 0 52%, rgba(229,219,193,0.5) 52% 68%, transparent 68%);
+  filter: blur(1px) saturate(0.82);
+  opacity: 0.74;
 }
 
-.layer-sky {
-  z-index: 1;
-  opacity: 0 !important;
-}
-
-.layer-far {
-  z-index: 2;
-  opacity: 0.36 !important;
-  filter: blur(1.6px) saturate(0.75) !important;
-  background:
-    linear-gradient(180deg, transparent 0 58%, rgba(255,250,234,0.5) 58% 68%, transparent 68%) !important;
-}
-
-.layer-mid {
-  z-index: 4;
-  opacity: 1 !important;
-  filter: none !important;
-  left: 0 !important;
-  right: 0 !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  inset: 0 !important;
-  background:
-    linear-gradient(180deg, rgba(255,252,236,0.04) 0%, rgba(255,252,236,0.16) 100%),
-    linear-gradient(102deg, transparent 0 12%, rgba(201,219,201,0.26) 12% 23%, transparent 23%),
-    linear-gradient(258deg, transparent 0 15%, rgba(205,221,203,0.22) 15% 26%, transparent 26%),
-    linear-gradient(98deg, transparent 0 29%, rgba(247,239,215,0.92) 29% 46%, transparent 46%),
-    linear-gradient(82deg, transparent 0 54%, rgba(255,247,226,0.88) 54% 72%, transparent 72%) !important;
-  clip-path: polygon(47% 31%, 58% 31%, 97% 100%, 1% 100%);
-  box-shadow: 0 -24px 80px rgba(255, 247, 225, 0.24) inset;
-}
-
+.layer-sky,
+.layer-far,
+.layer-mid,
 .layer-near {
-  z-index: 5;
-  opacity: 0.78 !important;
-  inset: 0 !important;
-  background:
-    radial-gradient(ellipse at 18% 88%, rgba(69,113,94,0.36) 0 3%, transparent 8%),
-    radial-gradient(ellipse at 26% 82%, rgba(91,132,99,0.34) 0 4%, transparent 9%),
-    radial-gradient(ellipse at 77% 88%, rgba(72,106,88,0.32) 0 3%, transparent 8%),
-    radial-gradient(ellipse at 85% 78%, rgba(91,132,99,0.28) 0 4%, transparent 10%),
-    linear-gradient(98deg, transparent 0 26%, rgba(109,151,132,0.24) 26% 31%, transparent 31%),
-    linear-gradient(82deg, transparent 0 69%, rgba(109,151,132,0.2) 69% 74%, transparent 74%) !important;
+  opacity: 0 !important;
+  background: none !important;
 }
 
 .layer-haze {
   z-index: 6;
-  opacity: 0.22 !important;
+  opacity: 0.24 !important;
   background:
     radial-gradient(ellipse at 50% 38%, rgba(255,255,255,0.42) 0 18%, transparent 42%),
     linear-gradient(180deg, rgba(255,255,255,0.18) 0%, transparent 40%, rgba(255,255,255,0.08) 100%) !important;
@@ -96,18 +59,18 @@
 .layer-vignette {
   z-index: 7;
   background:
-    radial-gradient(circle at 50% 48%, transparent 0 56%, rgba(38,66,62,0.12) 82%, rgba(38,66,62,0.22) 100%),
+    radial-gradient(circle at 50% 48%, transparent 0 58%, rgba(38,66,62,0.12) 84%, rgba(38,66,62,0.22) 100%),
     linear-gradient(180deg, transparent 0 72%, rgba(226,213,188,0.18) 100%) !important;
 }
 
 .story-card {
   transform: scale(0.84);
   transform-origin: right bottom;
-  background: rgba(45, 67, 63, 0.28) !important;
+  background: rgba(45, 67, 63, 0.3) !important;
 }
 
 .progress-nav {
-  opacity: 0.42;
+  opacity: 0.44;
 }
 
 .build-badge {
@@ -120,14 +83,6 @@
 }
 
 @media (max-width: 520px) {
-  .viewport-card .world-canvas {
-    opacity: 0.1;
-  }
-
-  .layer-mid {
-    clip-path: polygon(43% 29%, 61% 29%, 100% 100%, 0 100%);
-  }
-
   .story-card {
     transform: scale(0.82);
     max-height: 22vh;
