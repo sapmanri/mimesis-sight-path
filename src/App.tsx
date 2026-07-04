@@ -9,7 +9,7 @@ import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.4.5 · PATH GENERATOR V2 · BUILD 070';
+const BUILD_LABEL = 'v0.4.6 · RESTRAINT PASS · BUILD 071';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
