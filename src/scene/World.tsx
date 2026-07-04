@@ -39,10 +39,20 @@ type TerrainDecal = {
   kind: 'dust' | 'moss' | 'crack';
 };
 
+type JointFeather = {
+  id: string;
+  position: [number, number, number];
+  scale: [number, number, number];
+  rotation: [number, number, number];
+  color: string;
+  opacity: number;
+};
+
 export function World({ scenes, activeIndex, mode }: WorldProps) {
   const roadPieces = useMemo(() => buildRoadPieces(scenes), [scenes]);
   const pebbles = useMemo(() => buildPebbles(scenes), [scenes]);
   const terrainDecals = useMemo(() => buildTerrainDecals(scenes), [scenes]);
+  const jointFeathers = useMemo(() => buildJointFeathers(scenes), [scenes]);
   const walkProgress = useRef(activeIndex);
 
   useFrame(({ camera }, delta) => {
@@ -86,6 +96,7 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
       <directionalLight position={[2.8, 2.9, 4.6]} intensity={0.36} color="#b7d6c8" />
       <MeshRoad pieces={roadPieces} activeIndex={activeIndex} />
       <TerrainDecals decals={terrainDecals} activeIndex={activeIndex} scenes={scenes} />
+      <JointFeathers feathers={jointFeathers} activeIndex={activeIndex} scenes={scenes} />
       <RoadPebbles pebbles={pebbles} activeIndex={activeIndex} scenes={scenes} />
     </>
   );
@@ -146,6 +157,23 @@ function TerrainDecals({ decals, activeIndex, scenes }: { decals: TerrainDecal[]
           <mesh key={decal.id} position={decal.position} rotation={decal.rotation} scale={decal.scale}>
             {decal.kind === 'crack' ? <boxGeometry args={[1, 0.08, 0.01]} /> : <circleGeometry args={[1, 18]} />}
             <meshBasicMaterial color={decal.color} transparent opacity={opacity} depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function JointFeathers({ feathers, activeIndex, scenes }: { feathers: JointFeather[]; activeIndex: number; scenes: ObservationScene[] }) {
+  return (
+    <group>
+      {feathers.map((feather) => {
+        const nearest = nearestSceneIndex(feather.position, scenes);
+        const opacity = feather.opacity * Math.max(0.32, 1 - Math.abs(nearest - activeIndex) * 0.08);
+        return (
+          <mesh key={feather.id} position={feather.position} rotation={feather.rotation} scale={feather.scale}>
+            <circleGeometry args={[1, 28]} />
+            <meshBasicMaterial color={feather.color} transparent opacity={opacity} depthWrite={false} side={THREE.DoubleSide} />
           </mesh>
         );
       })}
@@ -289,6 +317,40 @@ function makeEndCap(a: THREE.Vector3, b: THREE.Vector3, depth: number, seed = 0)
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function buildJointFeathers(scenes: ObservationScene[]): JointFeather[] {
+  const feathers: JointFeather[] = [];
+  const random = seededRandom(6211);
+
+  scenes.slice(1, -1).forEach((scene, index) => {
+    const prev = new THREE.Vector3(...scenes[index].position);
+    const current = new THREE.Vector3(...scene.position);
+    const next = new THREE.Vector3(...scenes[index + 2].position);
+    const direction = next.clone().sub(prev).normalize();
+    const normal = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const angle = Math.atan2(direction.x, direction.z);
+
+    for (let i = 0; i < 3; i += 1) {
+      const sideOffset = (i - 1) * (0.16 + random() * 0.08);
+      const alongOffset = (random() - 0.5) * 0.24;
+      const pos = current
+        .clone()
+        .add(direction.clone().multiplyScalar(alongOffset))
+        .add(normal.clone().multiplyScalar(sideOffset));
+
+      feathers.push({
+        id: `joint-feather-${index}-${i}`,
+        position: [pos.x, -0.533 + i * 0.001, pos.z],
+        rotation: [-Math.PI / 2, 0, angle + (random() - 0.5) * 0.28],
+        scale: [0.42 + random() * 0.3, 0.12 + random() * 0.1, 1],
+        color: i === 1 ? '#d9c99a' : random() > 0.5 ? '#b8bd8f' : '#8da985',
+        opacity: i === 1 ? 0.26 : 0.18,
+      });
+    }
+  });
+
+  return feathers;
 }
 
 function buildPebbles(scenes: ObservationScene[]): Pebble[] {
