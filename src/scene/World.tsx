@@ -1,10 +1,7 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
-import { LightCreature } from '../components/LightCreature';
-import { PathEnvironment } from '../components/PathEnvironment';
-import { weatherFog } from '../engine/pathPresets';
 
 type WorldProps = {
   scenes: ObservationScene[];
@@ -13,10 +10,11 @@ type WorldProps = {
 };
 
 type RoadPiece = {
-  geometry: THREE.BufferGeometry;
-  edgeLeft: THREE.TubeGeometry;
-  edgeRight: THREE.TubeGeometry;
-  center: THREE.Vector3;
+  top: THREE.BufferGeometry;
+  sideA: THREE.BufferGeometry;
+  sideB: THREE.BufferGeometry;
+  edgeA: THREE.TubeGeometry;
+  edgeB: THREE.TubeGeometry;
   index: number;
 };
 
@@ -30,53 +28,27 @@ type Pebble = {
 };
 
 export function World({ scenes, activeIndex, mode }: WorldProps) {
-  const lightRef = useRef<THREE.Group>(null);
   const activeScene = scenes[activeIndex];
   const activePosition = useMemo(() => new THREE.Vector3(...activeScene.position), [activeScene.position]);
   const roadPieces = useMemo(() => buildRoadPieces(scenes), [scenes]);
   const pebbles = useMemo(() => buildPebbles(scenes), [scenes]);
-  const mist = useMemo(() => buildMistPoints(), []);
-  const fog = weatherFog[activeScene.weather];
 
   useFrame(({ camera, clock }, delta) => {
-    const breathe = Math.sin(clock.elapsedTime * 0.32) * (mode === 'auto' ? 0.18 : 0.08);
-    const sideLook = Math.sin(clock.elapsedTime * 0.18 + activeIndex * 0.7) * 0.28;
-    const desired = activePosition.clone().add(new THREE.Vector3(sideLook, 1.32 + breathe, 4.2));
-    const target = activePosition.clone().add(new THREE.Vector3(0, -0.42, -1.5));
-
-    camera.position.lerp(desired, 1 - Math.pow(0.026, delta));
+    const breathe = Math.sin(clock.elapsedTime * 0.24) * (mode === 'auto' ? 0.08 : 0.03);
+    const desired = activePosition.clone().add(new THREE.Vector3(0, 1.18 + breathe, 5.0));
+    const target = activePosition.clone().add(new THREE.Vector3(0, -0.64, -1.6));
+    camera.position.lerp(desired, 1 - Math.pow(0.03, delta));
     camera.lookAt(target.x, target.y, target.z);
-
-    if (lightRef.current) {
-      const bob = Math.sin(clock.elapsedTime * 2.4) * 0.04;
-      lightRef.current.position.lerp(activePosition.clone().add(new THREE.Vector3(0.08, 0.42 + bob, -0.62)), 1 - Math.pow(0.018, delta));
-      lightRef.current.rotation.y = Math.sin(clock.elapsedTime * 0.8) * 0.28;
-      lightRef.current.rotation.z = Math.sin(clock.elapsedTime * 1.7) * 0.16;
-    }
   });
 
   return (
     <>
       <color attach="background" args={['transparent']} />
-      <fog attach="fog" args={[fog.color, fog.near * 0.8, fog.far * 1.25]} />
-      <ambientLight intensity={1.74} />
-      <directionalLight position={[-2.2, 4.5, 3.5]} intensity={2.5} color="#fff3cf" />
-      <pointLight position={[0, 1.4, 0.8]} intensity={2.2} color="#fff5ca" />
-
-      <mesh position={[0, -0.82, -16]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[8.5, 42, 1, 1]} />
-        <meshStandardMaterial color="#8eb2a7" roughness={1} transparent opacity={0.22} />
-      </mesh>
-
+      <ambientLight intensity={1.82} />
+      <directionalLight position={[-1.6, 4.2, 2.6]} intensity={2.4} color="#fff0c8" />
+      <directionalLight position={[2, 2.5, 4]} intensity={0.72} color="#9dc7bf" />
       <MeshRoad pieces={roadPieces} activeIndex={activeIndex} />
       <RoadPebbles pebbles={pebbles} activeIndex={activeIndex} scenes={scenes} />
-      <PathEnvironment scenes={scenes} activeIndex={activeIndex} />
-
-      <points geometry={mist}>
-        <pointsMaterial color="#fff7df" size={0.03} transparent opacity={0.18} depthWrite={false} />
-      </points>
-
-      <LightCreature ref={lightRef} />
     </>
   );
 }
@@ -85,17 +57,23 @@ function MeshRoad({ pieces, activeIndex }: { pieces: RoadPiece[]; activeIndex: n
   return (
     <group>
       {pieces.map((piece) => {
-        const focus = Math.max(0.45, 1 - Math.abs(piece.index - activeIndex) * 0.08);
+        const focus = Math.max(0.5, 1 - Math.abs(piece.index - activeIndex) * 0.06);
         return (
           <group key={piece.index}>
-            <mesh geometry={piece.geometry} receiveShadow>
-              <meshStandardMaterial color="#efe7cf" roughness={0.96} metalness={0} transparent opacity={0.94 * focus} side={THREE.DoubleSide} />
+            <mesh geometry={piece.top}>
+              <meshStandardMaterial color="#e3d4b6" roughness={0.98} transparent opacity={0.98 * focus} side={THREE.DoubleSide} />
             </mesh>
-            <mesh geometry={piece.edgeLeft}>
-              <meshBasicMaterial color="#55796e" transparent opacity={0.24 * focus} />
+            <mesh geometry={piece.sideA}>
+              <meshStandardMaterial color="#b7ad95" roughness={1} transparent opacity={0.42 * focus} side={THREE.DoubleSide} />
             </mesh>
-            <mesh geometry={piece.edgeRight}>
-              <meshBasicMaterial color="#fff6dc" transparent opacity={0.18 * focus} />
+            <mesh geometry={piece.sideB}>
+              <meshStandardMaterial color="#968d7c" roughness={1} transparent opacity={0.34 * focus} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh geometry={piece.edgeA}>
+              <meshBasicMaterial color="#6e877c" transparent opacity={0.42 * focus} />
+            </mesh>
+            <mesh geometry={piece.edgeB}>
+              <meshBasicMaterial color="#fff0cf" transparent opacity={0.3 * focus} />
             </mesh>
           </group>
         );
@@ -109,10 +87,10 @@ function RoadPebbles({ pebbles, activeIndex, scenes }: { pebbles: Pebble[]; acti
     <group>
       {pebbles.map((pebble) => {
         const nearest = nearestSceneIndex(pebble.position, scenes);
-        const opacity = pebble.opacity * Math.max(0.22, 1 - Math.abs(nearest - activeIndex) * 0.12);
+        const opacity = pebble.opacity * Math.max(0.2, 1 - Math.abs(nearest - activeIndex) * 0.14);
         return (
           <mesh key={pebble.id} position={pebble.position} scale={pebble.scale} rotation={pebble.rotation}>
-            <dodecahedronGeometry args={[0.08, 0]} />
+            <dodecahedronGeometry args={[0.075, 0]} />
             <meshStandardMaterial color={pebble.color} roughness={1} transparent opacity={opacity} />
           </mesh>
         );
@@ -124,50 +102,54 @@ function RoadPebbles({ pebbles, activeIndex, scenes }: { pebbles: Pebble[]; acti
 function buildRoadPieces(scenes: ObservationScene[]): RoadPiece[] {
   return scenes.slice(0, -1).map((scene, index) => {
     const next = scenes[index + 1];
-    const start = new THREE.Vector3(...scene.position).add(new THREE.Vector3(0, -0.68, 0));
-    const end = new THREE.Vector3(...next.position).add(new THREE.Vector3(0, -0.68, 0));
+    const start = new THREE.Vector3(...scene.position).add(new THREE.Vector3(0, -0.66, 0));
+    const end = new THREE.Vector3(...next.position).add(new THREE.Vector3(0, -0.66, 0));
     const direction = end.clone().sub(start).normalize();
     const normal = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
     const side = index % 2 === 0 ? 1 : -1;
-    const bend = 0.54 * side + Math.sin(index * 1.7) * 0.14;
-    const c1 = start.clone().lerp(end, 0.34).add(normal.clone().multiplyScalar(bend));
-    const c2 = start.clone().lerp(end, 0.68).add(normal.clone().multiplyScalar(bend * 0.72));
-    const curve = new THREE.CubicBezierCurve3(start, c1, c2, end);
-    const points = curve.getPoints(30);
-    const width = 1.18 + Math.sin(index * 0.8) * 0.18;
-
+    const bend = 0.62 * side + Math.sin(index * 1.5) * 0.16;
+    const curve = new THREE.CubicBezierCurve3(
+      start,
+      start.clone().lerp(end, 0.33).add(normal.clone().multiplyScalar(bend)),
+      start.clone().lerp(end, 0.68).add(normal.clone().multiplyScalar(bend * 0.72)),
+      end,
+    );
+    const data = makeEdgeData(curve.getPoints(34), 0.92 + Math.sin(index * 0.8) * 0.14, index);
     return {
-      geometry: buildRoadGeometry(points, width, index),
-      ...buildRoadEdges(points, width),
-      center: start.clone().lerp(end, 0.5),
+      top: makeTop(data.a, data.b),
+      sideA: makeSide(data.a, 0.44),
+      sideB: makeSide(data.b, 0.38),
+      edgeA: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.a.map((p) => p.clone().add(new THREE.Vector3(0, 0.018, 0)))), 64, 0.01, 8, false),
+      edgeB: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.b.map((p) => p.clone().add(new THREE.Vector3(0, 0.016, 0)))), 64, 0.008, 8, false),
       index,
     };
   });
 }
 
-function buildRoadGeometry(points: THREE.Vector3[], width: number, index: number) {
-  const vertices: number[] = [];
-  const indices: number[] = [];
-
+function makeEdgeData(points: THREE.Vector3[], width: number, index: number) {
+  const a: THREE.Vector3[] = [];
+  const b: THREE.Vector3[] = [];
   points.forEach((point, i) => {
     const prev = points[Math.max(0, i - 1)];
     const next = points[Math.min(points.length - 1, i + 1)];
     const tangent = next.clone().sub(prev).normalize();
     const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const pulse = Math.sin(i * 0.46 + index) * 0.12 + Math.sin(i * 0.17 + index * 1.4) * 0.06;
-    const localWidth = width * (0.86 + pulse);
-    const left = point.clone().add(normal.clone().multiplyScalar(localWidth * 0.5));
-    const right = point.clone().add(normal.clone().multiplyScalar(-localWidth * 0.5));
-    left.y += Math.sin(i * 0.6 + index) * 0.012;
-    right.y += Math.cos(i * 0.7 + index) * 0.012;
-    vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
+    const localWidth = width * (0.9 + Math.sin(i * 0.42 + index) * 0.1 + Math.sin(i * 0.15 + index * 1.4) * 0.05);
+    const lift = Math.sin(i * 0.54 + index) * 0.01;
+    a.push(point.clone().add(normal.clone().multiplyScalar(localWidth * 0.5)).add(new THREE.Vector3(0, lift, 0)));
+    b.push(point.clone().add(normal.clone().multiplyScalar(-localWidth * 0.5)).add(new THREE.Vector3(0, -lift * 0.7, 0)));
   });
+  return { a, b };
+}
 
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const a = i * 2;
-    indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+function makeTop(a: THREE.Vector3[], b: THREE.Vector3[]) {
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  a.forEach((point, i) => vertices.push(point.x, point.y, point.z, b[i].x, b[i].y, b[i].z));
+  for (let i = 0; i < a.length - 1; i += 1) {
+    const n = i * 2;
+    indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
   }
-
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
@@ -175,77 +157,53 @@ function buildRoadGeometry(points: THREE.Vector3[], width: number, index: number
   return geometry;
 }
 
-function buildRoadEdges(points: THREE.Vector3[], width: number) {
-  const leftPoints: THREE.Vector3[] = [];
-  const rightPoints: THREE.Vector3[] = [];
-
-  points.forEach((point, i) => {
-    const prev = points[Math.max(0, i - 1)];
-    const next = points[Math.min(points.length - 1, i + 1)];
-    const tangent = next.clone().sub(prev).normalize();
-    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const edgeWidth = width * (0.49 + Math.sin(i * 0.33) * 0.04);
-    leftPoints.push(point.clone().add(normal.clone().multiplyScalar(edgeWidth)).add(new THREE.Vector3(0, 0.022, 0)));
-    rightPoints.push(point.clone().add(normal.clone().multiplyScalar(-edgeWidth)).add(new THREE.Vector3(0, 0.018, 0)));
+function makeSide(edge: THREE.Vector3[], depth: number) {
+  const vertices: number[] = [];
+  const indices: number[] = [];
+  edge.forEach((point) => {
+    const down = point.clone().add(new THREE.Vector3(0, -depth, 0));
+    vertices.push(point.x, point.y - 0.004, point.z, down.x, down.y, down.z);
   });
-
-  return {
-    edgeLeft: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(leftPoints), 64, 0.012, 8, false),
-    edgeRight: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rightPoints), 64, 0.009, 8, false),
-  };
+  for (let i = 0; i < edge.length - 1; i += 1) {
+    const n = i * 2;
+    indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function buildPebbles(scenes: ObservationScene[]): Pebble[] {
   const pebbles: Pebble[] = [];
   const random = seededRandom(3501);
-
   scenes.slice(0, -1).forEach((scene, index) => {
     const next = scenes[index + 1];
     const start = new THREE.Vector3(...scene.position);
     const end = new THREE.Vector3(...next.position);
     const direction = end.clone().sub(start).normalize();
     const normal = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
-    const count = 9;
-
-    for (let i = 0; i < count; i += 1) {
-      const t = random();
-      const base = start.clone().lerp(end, t);
-      const side = random() > 0.5 ? 1 : -1;
-      const edge = 0.35 + random() * 0.62;
-      const pos = base.add(normal.clone().multiplyScalar(side * edge));
-      const s = 0.55 + random() * 1.2;
-
+    for (let i = 0; i < 4; i += 1) {
+      const base = start.clone().lerp(end, random());
+      const pos = base.add(normal.clone().multiplyScalar((random() > 0.5 ? 1 : -1) * (0.42 + random() * 0.38)));
+      const s = 0.42 + random() * 0.9;
       pebbles.push({
         id: `pebble-${index}-${i}`,
-        position: [pos.x, -0.61 + random() * 0.04, pos.z],
-        scale: [s, 0.35 + random() * 0.35, s * (0.65 + random() * 0.4)],
+        position: [pos.x, -0.58 + random() * 0.035, pos.z],
+        scale: [s, 0.28 + random() * 0.3, s * (0.64 + random() * 0.36)],
         rotation: [random() * Math.PI, random() * Math.PI, random() * Math.PI],
-        color: random() > 0.42 ? '#c9c0ad' : '#7f9b8f',
-        opacity: 0.32 + random() * 0.36,
+        color: random() > 0.5 ? '#c9c0ad' : '#748b7f',
+        opacity: 0.38 + random() * 0.36,
       });
     }
   });
-
   return pebbles;
-}
-
-function buildMistPoints() {
-  const geometry = new THREE.BufferGeometry();
-  const positions: number[] = [];
-  const random = seededRandom(901);
-
-  for (let i = 0; i < 90; i += 1) {
-    positions.push((random() - 0.5) * 4.8, random() * 2.4 - 0.15, -random() * 34);
-  }
-
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  return geometry;
 }
 
 function nearestSceneIndex(position: [number, number, number], scenes: ObservationScene[]) {
   let nearest = 0;
   let nearestDistance = Number.POSITIVE_INFINITY;
-
   scenes.forEach((scene, index) => {
     const dx = scene.position[0] - position[0];
     const dz = scene.position[2] - position[2];
@@ -255,14 +213,12 @@ function nearestSceneIndex(position: [number, number, number], scenes: Observati
       nearestDistance = distance;
     }
   });
-
   return nearest;
 }
 
 function seededRandom(seed: number) {
   let value = seed % 2147483647;
   if (value <= 0) value += 2147483646;
-
   return () => {
     value = (value * 16807) % 2147483647;
     return (value - 1) / 2147483646;
