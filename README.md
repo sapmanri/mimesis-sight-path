@@ -1,2 +1,27 @@
-# mimesis-sight-path
-Interactive observation experience powered by Three.js
+# MIMESIS Sight Path
+
+MIMESIS Sight Path는 여행을 보여주는 서비스가 아니라, 누군가의 시선을 따라 걸으며 관찰의 순서를 경험하는 인터랙티브 웹 프로젝트입니다.
+
+첫 번째 파일럿은 제주 웹매거진 최신호를 바탕으로 합니다. 사용자는 캐릭터를 조종하지 않습니다. 작은 빛 하나가 시선의 상징으로 움직이고, 관찰 지점 앞에 멈추면 글이 천천히 떠오릅니다.
+
+## Pilot 0.1
+
+**Jeju, 시선을 따라 걷다**
+
+- 13개의 관찰 지점
+- 세로형 모바일 우선 화면
+- Three.js / React Three Fiber 기반
+- 작은 흰빛이 시선의 주체
+- 스크롤 진행에 따라 카메라와 빛이 이동
+- 사물 앞에서 문장이 나타나는 구조
+
+## Core idea
+
+사진이나 영상을 시간순으로 소비하는 것이 아니라, 작성자가 실제로 무엇 앞에서 멈췄고 무엇을 보고 썼는지 따라가는 경험을 만든다.
+
+## Development
+
+```bash
+npm install
+npm run dev
+```
