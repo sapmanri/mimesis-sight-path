@@ -119,43 +119,62 @@ h1 {
   height: 100%;
 }
 
+.viewport-card .world-canvas {
+  opacity: 0.72;
+}
+
+.build-badge {
+  position: absolute;
+  z-index: 12;
+  right: 18px;
+  bottom: 18px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.26);
+  background: rgba(34, 54, 51, 0.32);
+  color: rgba(255,248,232,0.72);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  backdrop-filter: blur(10px);
+}
+
 .parallax-scene {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  background: linear-gradient(180deg, #78aaa6 0%, #9dbfaf 60%, #e7dcc8 100%);
+  background: linear-gradient(180deg, #6c9f9e 0%, #9dbfaf 52%, #e7dcc8 100%);
   transition: filter 900ms ease, background 900ms ease;
 }
 
 .parallax-layer {
   position: absolute;
-  inset: -8% -18%;
+  inset: -12% -24%;
   pointer-events: none;
   transition: transform 1.2s cubic-bezier(.22,.72,.16,1), opacity 900ms ease;
   will-change: transform;
 }
 
 .layer-sky {
-  opacity: 0.92;
+  opacity: 1;
   background:
-    radial-gradient(circle at 62% 24%, rgba(255,255,255,0.32) 0 5%, transparent 13%),
-    radial-gradient(ellipse at 22% 22%, rgba(255,255,255,0.16) 0 12%, transparent 30%),
-    linear-gradient(180deg, rgba(111,165,163,0.95) 0%, rgba(143,184,171,0.9) 70%, rgba(226,212,191,0.7) 100%);
+    radial-gradient(circle at 62% 24%, rgba(255,255,255,0.42) 0 5%, transparent 14%),
+    radial-gradient(ellipse at 22% 22%, rgba(255,255,255,0.22) 0 12%, transparent 30%),
+    linear-gradient(180deg, rgba(74,137,151,0.9) 0%, rgba(127,176,163,0.76) 62%, rgba(230,218,191,0.68) 100%);
 }
 
 .layer-haze {
   z-index: 2;
-  opacity: 0.72;
+  opacity: 0.6;
   background:
-    radial-gradient(ellipse at 50% 36%, rgba(255,255,255,0.18) 0 20%, transparent 44%),
+    radial-gradient(ellipse at 50% 36%, rgba(255,255,255,0.22) 0 20%, transparent 44%),
     linear-gradient(90deg, rgba(255,255,255,0.1), transparent 24%, transparent 76%, rgba(255,255,255,0.08));
   animation: haze-drift 18s ease-in-out infinite alternate;
 }
 
-.layer-far { z-index: 1; opacity: 0.46; filter: blur(1.4px); }
-.layer-mid { z-index: 3; opacity: 0.5; filter: blur(0.45px); }
-.layer-near { z-index: 4; opacity: 0.42; }
+.layer-far { z-index: 1; opacity: 0.72; filter: blur(1px); }
+.layer-mid { z-index: 3; opacity: 0.7; filter: blur(0.25px); }
+.layer-near { z-index: 4; opacity: 0.64; }
 .layer-vignette {
   z-index: 5;
   inset: 0;
@@ -167,9 +186,9 @@ h1 {
 .layer-far.village,
 .layer-mid.village {
   background:
-    linear-gradient(135deg, transparent 0 42%, rgba(231,222,202,0.4) 42% 58%, transparent 58%),
-    linear-gradient(90deg, transparent 0 36%, rgba(225,217,199,0.32) 36% 49%, transparent 49%),
-    radial-gradient(circle at 28% 65%, rgba(83,107,95,0.22) 0 8%, transparent 9%);
+    linear-gradient(135deg, transparent 0 35%, rgba(244,235,207,0.56) 35% 54%, transparent 54%),
+    linear-gradient(90deg, transparent 0 31%, rgba(230,221,198,0.48) 31% 46%, transparent 46%),
+    radial-gradient(circle at 28% 65%, rgba(55,84,76,0.3) 0 8%, transparent 9%);
 }
 
 .layer-far.road,
@@ -177,30 +196,30 @@ h1 {
 .layer-far.fogroad,
 .layer-mid.fogroad {
   background:
-    linear-gradient(116deg, transparent 0 36%, rgba(235,226,205,0.35) 36% 44%, transparent 44%),
-    linear-gradient(72deg, transparent 0 48%, rgba(255,247,225,0.3) 48% 56%, transparent 56%),
-    radial-gradient(ellipse at 48% 75%, rgba(246,238,215,0.24) 0 18%, transparent 42%);
+    linear-gradient(116deg, transparent 0 30%, rgba(246,236,210,0.62) 30% 46%, transparent 46%),
+    linear-gradient(72deg, transparent 0 46%, rgba(255,247,225,0.46) 46% 58%, transparent 58%),
+    radial-gradient(ellipse at 48% 75%, rgba(246,238,215,0.34) 0 18%, transparent 42%);
 }
 
 .layer-far.bridge,
 .layer-mid.bridge {
   background:
-    repeating-linear-gradient(84deg, transparent 0 18px, rgba(180,153,118,0.18) 18px 24px, transparent 24px 52px),
-    linear-gradient(108deg, transparent 0 38%, rgba(233,222,197,0.38) 38% 52%, transparent 52%);
+    repeating-linear-gradient(84deg, transparent 0 18px, rgba(180,153,118,0.28) 18px 24px, transparent 24px 52px),
+    linear-gradient(108deg, transparent 0 34%, rgba(233,222,197,0.56) 34% 55%, transparent 55%);
 }
 
 .layer-far.wing,
 .layer-mid.wing {
   background:
-    linear-gradient(16deg, transparent 0 48%, rgba(245,242,230,0.46) 48% 56%, transparent 56%),
-    radial-gradient(ellipse at 52% 58%, rgba(255,255,255,0.25) 0 12%, transparent 28%);
+    linear-gradient(16deg, transparent 0 42%, rgba(245,242,230,0.62) 42% 58%, transparent 58%),
+    radial-gradient(ellipse at 52% 58%, rgba(255,255,255,0.34) 0 12%, transparent 28%);
 }
 
 .layer-far.open,
 .layer-mid.open {
   background:
-    radial-gradient(ellipse at 50% 64%, rgba(239,229,204,0.18) 0 30%, transparent 54%),
-    linear-gradient(110deg, transparent 0 45%, rgba(241,231,206,0.28) 45% 52%, transparent 52%);
+    radial-gradient(ellipse at 50% 64%, rgba(239,229,204,0.28) 0 30%, transparent 54%),
+    linear-gradient(110deg, transparent 0 41%, rgba(241,231,206,0.5) 41% 55%, transparent 55%);
 }
 
 .layer-far.stonewall,
@@ -208,23 +227,23 @@ h1 {
 .layer-far.flowerwall,
 .layer-mid.flowerwall {
   background:
-    repeating-linear-gradient(0deg, transparent 0 28px, rgba(213,202,180,0.22) 28px 36px),
-    repeating-linear-gradient(90deg, transparent 0 40px, rgba(89,105,89,0.13) 40px 48px),
-    linear-gradient(108deg, transparent 0 40%, rgba(232,221,196,0.32) 40% 52%, transparent 52%);
+    repeating-linear-gradient(0deg, transparent 0 28px, rgba(213,202,180,0.38) 28px 36px),
+    repeating-linear-gradient(90deg, transparent 0 40px, rgba(89,105,89,0.22) 40px 48px),
+    linear-gradient(108deg, transparent 0 37%, rgba(232,221,196,0.52) 37% 55%, transparent 55%);
 }
 
 .layer-far.cliff,
 .layer-mid.cliff {
   background:
-    linear-gradient(122deg, transparent 0 32%, rgba(208,196,172,0.45) 32% 44%, transparent 44%),
-    radial-gradient(ellipse at 72% 78%, rgba(63,103,105,0.16) 0 28%, transparent 46%);
+    linear-gradient(122deg, transparent 0 26%, rgba(208,196,172,0.65) 26% 48%, transparent 48%),
+    radial-gradient(ellipse at 72% 78%, rgba(63,103,105,0.3) 0 28%, transparent 46%);
 }
 
 .layer-far.sand,
 .layer-mid.sand {
   background:
-    radial-gradient(ellipse at 48% 72%, rgba(229,213,184,0.32) 0 24%, transparent 46%),
-    linear-gradient(108deg, transparent 0 42%, rgba(236,224,198,0.34) 42% 52%, transparent 52%);
+    radial-gradient(ellipse at 48% 72%, rgba(229,213,184,0.48) 0 24%, transparent 46%),
+    linear-gradient(108deg, transparent 0 39%, rgba(236,224,198,0.54) 39% 55%, transparent 55%);
 }
 
 .layer-far.room,
@@ -232,21 +251,21 @@ h1 {
 .layer-far.library,
 .layer-mid.library {
   background:
-    repeating-linear-gradient(90deg, transparent 0 42px, rgba(80,63,53,0.12) 42px 48px),
-    linear-gradient(110deg, transparent 0 40%, rgba(225,214,193,0.28) 40% 52%, transparent 52%);
+    repeating-linear-gradient(90deg, transparent 0 42px, rgba(80,63,53,0.22) 42px 48px),
+    linear-gradient(110deg, transparent 0 36%, rgba(225,214,193,0.46) 36% 55%, transparent 55%);
 }
 
 .layer-near.grass,
 .layer-near.moss {
   background:
-    radial-gradient(ellipse at 24% 76%, rgba(112,143,105,0.28) 0 4%, transparent 8%),
-    radial-gradient(ellipse at 64% 82%, rgba(117,146,107,0.24) 0 5%, transparent 10%),
-    radial-gradient(ellipse at 72% 68%, rgba(255,244,210,0.13) 0 3%, transparent 7%);
+    radial-gradient(ellipse at 24% 76%, rgba(98,133,86,0.42) 0 4%, transparent 8%),
+    radial-gradient(ellipse at 64% 82%, rgba(91,134,90,0.38) 0 5%, transparent 10%),
+    radial-gradient(ellipse at 72% 68%, rgba(255,244,210,0.2) 0 3%, transparent 7%);
 }
 
 .layer-near.wood {
   background:
-    repeating-linear-gradient(92deg, transparent 0 44px, rgba(168,138,99,0.16) 44px 52px, transparent 52px 78px);
+    repeating-linear-gradient(92deg, transparent 0 44px, rgba(168,138,99,0.28) 44px 52px, transparent 52px 78px);
 }
 
 .layer-near.cloud,
@@ -255,9 +274,9 @@ h1 {
 .layer-near.light,
 .layer-near.dust {
   background:
-    radial-gradient(circle at 28% 74%, rgba(255,255,255,0.18) 0 4%, transparent 9%),
-    radial-gradient(circle at 76% 68%, rgba(255,247,214,0.16) 0 3%, transparent 8%),
-    radial-gradient(ellipse at 44% 88%, rgba(255,255,255,0.13) 0 12%, transparent 28%);
+    radial-gradient(circle at 28% 74%, rgba(255,255,255,0.28) 0 4%, transparent 9%),
+    radial-gradient(circle at 76% 68%, rgba(255,247,214,0.26) 0 3%, transparent 8%),
+    radial-gradient(ellipse at 44% 88%, rgba(255,255,255,0.2) 0 12%, transparent 28%);
 }
 
 .atmosphere-fog { filter: saturate(0.82) contrast(0.9) brightness(1.06); }
@@ -486,6 +505,13 @@ h1 {
     overflow: hidden;
     background: rgba(45, 67, 63, 0.38);
     backdrop-filter: blur(14px);
+  }
+
+  .build-badge {
+    right: 14px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    font-size: 8px;
+    opacity: 0.68;
   }
 
   .story-kicker {
