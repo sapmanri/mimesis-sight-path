@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
+import { activeMemoryBiome } from '../engine/memoryBiome';
 
 type MemoryPart = {
   id: string;
-  kind: 'isometric-room' | 'shelter' | 'wood-piece' | 'cowshed' | 'unknown-pack';
+  kind: 'isometric-room' | 'shelter' | 'wood-piece' | 'cowshed' | 'unknown-pack' | 'bedroom' | 'bathroom' | 'plant' | 'coffee' | 'lighthouse';
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
@@ -24,7 +25,9 @@ export function MemoryParts() {
 }
 
 function MemoryPartMesh({ part }: { part: MemoryPart }) {
-  if (part.kind === 'isometric-room') {
+  if (part.kind === 'isometric-room' || part.kind === 'bedroom' || part.kind === 'bathroom') {
+    const isBedroom = part.kind === 'bedroom';
+    const isBathroom = part.kind === 'bathroom';
     return (
       <group position={part.position} rotation={part.rotation} scale={part.scale}>
         <mesh position={[0, 0, 0]} scale={[0.86, 0.06, 0.72]}>
@@ -39,13 +42,60 @@ function MemoryPartMesh({ part }: { part: MemoryPart }) {
           <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial color="#777e70" roughness={1} transparent opacity={part.opacity * 0.66} />
         </mesh>
-        <mesh position={[0.12, 0.12, 0.12]} scale={[0.24, 0.06, 0.16]}>
+        <mesh position={[0.12, 0.12, 0.12]} scale={isBedroom ? [0.36, 0.08, 0.24] : [0.24, 0.06, 0.16]}>
           <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color="#b9a980" roughness={1} transparent opacity={part.opacity * 0.9} />
+          <meshStandardMaterial color={isBathroom ? '#d8d2c1' : '#b9a980'} roughness={1} transparent opacity={part.opacity * 0.9} />
         </mesh>
-        <mesh position={[-0.12, 0.2, 0.22]} scale={[0.08, 0.18, 0.08]}>
+        <mesh position={[-0.12, 0.2, 0.22]} scale={isBathroom ? [0.18, 0.18, 0.1] : [0.08, 0.18, 0.08]}>
+          {isBathroom ? <sphereGeometry args={[1, 14, 8]} /> : <boxGeometry args={[1, 1, 1]} />}
+          <meshStandardMaterial color={isBathroom ? '#c8c9bd' : '#6e7467'} roughness={1} transparent opacity={part.opacity * 0.82} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (part.kind === 'plant') {
+    return (
+      <group position={part.position} rotation={part.rotation} scale={part.scale}>
+        <mesh position={[0, 0.06, 0]} scale={[0.18, 0.12, 0.18]}>
+          <cylinderGeometry args={[0.55, 0.42, 1, 8]} />
+          <meshStandardMaterial color="#8b7258" roughness={1} transparent opacity={part.opacity} />
+        </mesh>
+        {[0, 1, 2].map((leaf) => (
+          <mesh key={leaf} position={[Math.sin(leaf * 2.1) * 0.08, 0.22 + leaf * 0.04, Math.cos(leaf * 2.1) * 0.08]} rotation={[0.5, leaf * 2.1, 0.2]} scale={[0.08, 0.22, 0.04]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color="#6f8069" roughness={1} transparent opacity={part.opacity * 0.78} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (part.kind === 'coffee') {
+    return (
+      <group position={part.position} rotation={part.rotation} scale={part.scale}>
+        <mesh>
+          <cylinderGeometry args={[0.18, 0.14, 0.24, 18]} />
+          <meshStandardMaterial color="#d9caa4" roughness={1} transparent opacity={part.opacity} />
+        </mesh>
+        <mesh position={[0, 0.13, 0]} scale={[1, 0.12, 1]}>
+          <cylinderGeometry args={[0.16, 0.16, 0.06, 18]} />
+          <meshStandardMaterial color="#5f4d3f" roughness={1} transparent opacity={part.opacity * 0.85} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (part.kind === 'lighthouse') {
+    return (
+      <group position={part.position} rotation={part.rotation} scale={part.scale}>
+        <mesh position={[0, 0.36, 0]} scale={[0.18, 0.72, 0.18]}>
+          <cylinderGeometry args={[0.55, 0.72, 1, 10]} />
+          <meshStandardMaterial color={part.color} roughness={1} transparent opacity={part.opacity} />
+        </mesh>
+        <mesh position={[0, 0.82, 0]} scale={[0.26, 0.12, 0.26]}>
           <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color="#6e7467" roughness={1} transparent opacity={part.opacity * 0.82} />
+          <meshBasicMaterial color="#eee4c6" transparent opacity={part.opacity * 0.5} />
         </mesh>
       </group>
     );
@@ -94,6 +144,7 @@ function MemoryPartMesh({ part }: { part: MemoryPart }) {
 }
 
 function makeMemoryParts(): MemoryPart[] {
+  const palette = activeMemoryBiome.palette;
   return [
     {
       id: 'memory-room-cliff-left',
@@ -101,8 +152,26 @@ function makeMemoryParts(): MemoryPart[] {
       position: [-1.78, -0.78, -10.8],
       rotation: [0.22, -0.74, -0.12],
       scale: [0.54, 0.54, 0.54],
-      color: '#a99b77',
+      color: palette.ground,
       opacity: 0.34,
+    },
+    {
+      id: 'memory-bedroom-buried',
+      kind: 'bedroom',
+      position: [1.74, -0.74, -16.2],
+      rotation: [0.12, 0.68, -0.08],
+      scale: [0.42, 0.42, 0.42],
+      color: '#a59675',
+      opacity: 0.3,
+    },
+    {
+      id: 'memory-bathroom-sunken',
+      kind: 'bathroom',
+      position: [-1.86, -0.92, -27.6],
+      rotation: [-0.08, -0.52, 0.1],
+      scale: [0.34, 0.34, 0.34],
+      color: '#b7b2a0',
+      opacity: 0.23,
     },
     {
       id: 'memory-room-far-right',
@@ -112,6 +181,33 @@ function makeMemoryParts(): MemoryPart[] {
       scale: [0.34, 0.34, 0.34],
       color: '#8c967f',
       opacity: 0.22,
+    },
+    {
+      id: 'memory-plant-left',
+      kind: 'plant',
+      position: [-0.94, -0.56, -12.8],
+      rotation: [0.1, -0.4, 0.2],
+      scale: [0.5, 0.5, 0.5],
+      color: '#6f8069',
+      opacity: 0.34,
+    },
+    {
+      id: 'memory-coffee-near',
+      kind: 'coffee',
+      position: [0.96, -0.54, -8.4],
+      rotation: [0.2, 0.3, -0.18],
+      scale: [0.5, 0.5, 0.5],
+      color: '#d9caa4',
+      opacity: 0.42,
+    },
+    {
+      id: 'memory-lighthouse-far',
+      kind: 'lighthouse',
+      position: [2.9, -0.2, -36.6],
+      rotation: [0.02, -0.24, 0.03],
+      scale: [0.42, 0.42, 0.42],
+      color: '#d8cfb8',
+      opacity: 0.24,
     },
     {
       id: 'memory-shelter-buried',
