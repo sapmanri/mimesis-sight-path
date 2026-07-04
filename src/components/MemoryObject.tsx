@@ -10,9 +10,12 @@ type MemoryObjectProps = {
 export function MemoryObject({ scene, active, opacity }: MemoryObjectProps) {
   const color = active ? '#f8f1e3' : scene.hue;
   const ink = '#243d3a';
+  const wash = active ? 0.18 : 0.08;
 
   return (
     <group>
+      <MemoryShadow opacity={opacity * 0.22} />
+      <PaperWash opacity={opacity * wash} />
       {scene.objectKit === 'door-kit' && <DoorObject color={color} ink={ink} opacity={opacity} />}
       {scene.objectKit === 'suitcase-kit' && <SuitcaseObject color={color} ink={ink} opacity={opacity} />}
       {scene.objectKit === 'airplane-wing-kit' && <WingObject color={color} ink={ink} opacity={opacity} />}
@@ -26,35 +29,66 @@ export function MemoryObject({ scene, active, opacity }: MemoryObjectProps) {
 }
 
 function PaperMaterial({ color, opacity }: { color: string; opacity: number }) {
-  return <meshStandardMaterial color={color} roughness={0.86} metalness={0.01} transparent opacity={opacity} />;
+  return <meshStandardMaterial color={color} roughness={0.9} metalness={0.01} transparent opacity={opacity} />;
 }
 
 function InkMaterial({ color, opacity }: { color: string; opacity: number }) {
   return <meshBasicMaterial color={color} transparent opacity={opacity} />;
 }
 
+function MemoryShadow({ opacity }: { opacity: number }) {
+  return (
+    <mesh position={[0.04, -0.08, -0.08]} rotation={[0, 0, -0.05]}>
+      <boxGeometry args={[0.86, 0.72, 0.035]} />
+      <meshBasicMaterial color="#486a62" transparent opacity={opacity} />
+    </mesh>
+  );
+}
+
+function PaperWash({ opacity }: { opacity: number }) {
+  return (
+    <mesh position={[0, 0, -0.05]} rotation={[0, 0, 0.04]}>
+      <boxGeometry args={[0.94, 0.84, 0.026]} />
+      <meshBasicMaterial color="#fff4df" transparent opacity={opacity} />
+    </mesh>
+  );
+}
+
+function EdgeLine({ position, size, opacity, ink }: { position: [number, number, number]; size: [number, number, number]; opacity: number; ink: string }) {
+  return (
+    <mesh position={position}>
+      <boxGeometry args={size} />
+      <InkMaterial color={ink} opacity={opacity} />
+    </mesh>
+  );
+}
+
 function DoorObject({ color, ink, opacity }: { color: string; ink: string; opacity: number }) {
   return (
-    <group>
+    <group rotation={[0, 0, -0.025]}>
       <mesh>
-        <boxGeometry args={[0.66, 0.9, 0.09]} />
+        <boxGeometry args={[0.64, 0.9, 0.09]} />
         <PaperMaterial color={color} opacity={opacity} />
       </mesh>
-      <mesh position={[0, 0.05, 0.06]}>
-        <boxGeometry args={[0.42, 0.58, 0.035]} />
-        <InkMaterial color={ink} opacity={opacity * 0.92} />
-      </mesh>
-      <mesh position={[0, 0.08, 0.085]}>
-        <boxGeometry args={[0.32, 0.2, 0.04]} />
+      <EdgeLine position={[0, 0.43, 0.08]} size={[0.58, 0.022, 0.025]} opacity={opacity * 0.58} ink={ink} />
+      <EdgeLine position={[0, -0.43, 0.08]} size={[0.58, 0.022, 0.025]} opacity={opacity * 0.4} ink={ink} />
+      <EdgeLine position={[-0.31, 0, 0.08]} size={[0.022, 0.82, 0.025]} opacity={opacity * 0.42} ink={ink} />
+      <EdgeLine position={[0.31, 0, 0.08]} size={[0.022, 0.82, 0.025]} opacity={opacity * 0.32} ink={ink} />
+      <mesh position={[0, 0.08, 0.105]}>
+        <boxGeometry args={[0.36, 0.2, 0.035]} />
         <PaperMaterial color="#f8f1e3" opacity={opacity} />
       </mesh>
-      <mesh position={[0, -0.18, 0.085]}>
-        <boxGeometry args={[0.32, 0.23, 0.04]} />
+      <mesh position={[0, -0.18, 0.105]}>
+        <boxGeometry args={[0.34, 0.24, 0.035]} />
         <PaperMaterial color="#f8f1e3" opacity={opacity} />
       </mesh>
-      <mesh position={[-0.19, -0.02, 0.11]}>
+      <mesh position={[-0.19, -0.02, 0.13]}>
         <sphereGeometry args={[0.025, 16, 16]} />
         <InkMaterial color={ink} opacity={opacity} />
+      </mesh>
+      <mesh position={[0.2, 0.32, 0.13]} rotation={[0, 0, -0.24]}>
+        <boxGeometry args={[0.12, 0.018, 0.018]} />
+        <InkMaterial color="#fff4df" opacity={opacity * 0.52} />
       </mesh>
     </group>
   );
@@ -67,9 +101,13 @@ function SuitcaseObject({ color, ink, opacity }: { color: string; ink: string; o
         <boxGeometry args={[0.62, 0.74, 0.1]} />
         <PaperMaterial color={color} opacity={opacity} />
       </mesh>
-      <mesh position={[0, 0.46, 0.07]}>
-        <boxGeometry args={[0.24, 0.08, 0.04]} />
+      <mesh position={[0, 0.45, 0.08]}>
+        <boxGeometry args={[0.28, 0.08, 0.04]} />
         <InkMaterial color={ink} opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 0.51, 0.09]}>
+        <boxGeometry args={[0.18, 0.034, 0.035]} />
+        <PaperMaterial color="#fff4df" opacity={opacity * 0.82} />
       </mesh>
       <mesh position={[-0.21, -0.42, 0.06]}>
         <sphereGeometry args={[0.035, 16, 16]} />
@@ -79,43 +117,58 @@ function SuitcaseObject({ color, ink, opacity }: { color: string; ink: string; o
         <sphereGeometry args={[0.035, 16, 16]} />
         <InkMaterial color={ink} opacity={opacity} />
       </mesh>
-      {[-0.18, 0, 0.18].map((x) => (
-        <mesh key={x} position={[x, 0, 0.065]}>
+      {[-0.19, 0, 0.19].map((x) => (
+        <mesh key={x} position={[x, 0, 0.075]}>
           <boxGeometry args={[0.018, 0.56, 0.025]} />
-          <InkMaterial color={ink} opacity={opacity * 0.68} />
+          <InkMaterial color={ink} opacity={opacity * 0.5} />
         </mesh>
       ))}
+      <mesh position={[0.16, 0.14, 0.095]} rotation={[0, 0, 0.3]}>
+        <boxGeometry args={[0.16, 0.018, 0.018]} />
+        <InkMaterial color="#fff4df" opacity={opacity * 0.58} />
+      </mesh>
     </group>
   );
 }
 
 function WingObject({ color, ink, opacity }: { color: string; ink: string; opacity: number }) {
   return (
-    <group rotation={[0, 0, -0.22]}>
-      <mesh>
-        <coneGeometry args={[0.18, 0.92, 3]} />
+    <group rotation={[0, 0, -0.28]}>
+      <mesh scale={[1.25, 0.72, 1]}>
+        <coneGeometry args={[0.18, 0.96, 3]} />
         <PaperMaterial color={color} opacity={opacity} />
       </mesh>
-      <mesh position={[0.1, -0.03, 0.075]} rotation={[0, 0, 0.32]}>
-        <boxGeometry args={[0.5, 0.025, 0.025]} />
-        <InkMaterial color={ink} opacity={opacity * 0.7} />
+      <mesh position={[0.08, -0.03, 0.075]} rotation={[0, 0, 0.32]}>
+        <boxGeometry args={[0.56, 0.025, 0.025]} />
+        <InkMaterial color={ink} opacity={opacity * 0.58} />
+      </mesh>
+      <mesh position={[-0.13, 0.08, 0.085]} rotation={[0, 0, -0.2]}>
+        <boxGeometry args={[0.26, 0.018, 0.018]} />
+        <InkMaterial color="#fff4df" opacity={opacity * 0.65} />
       </mesh>
     </group>
   );
 }
 
 function StoneWallObject({ color, ink, opacity }: { color: string; ink: string; opacity: number }) {
+  const stones = [
+    [-0.3, -0.04, 0, 0.24, 0.18],
+    [-0.06, 0.03, 0.02, 0.28, 0.22],
+    [0.22, -0.03, 0, 0.24, 0.18],
+    [-0.18, 0.21, -0.01, 0.25, 0.16],
+    [0.12, 0.22, 0.01, 0.3, 0.17],
+  ];
   return (
     <group>
-      {[-0.24, 0, 0.24].map((x, i) => (
-        <mesh key={x} position={[x, i % 2 ? 0.02 : -0.04, 0]}>
-          <boxGeometry args={[0.22, 0.18, 0.09]} />
-          <PaperMaterial color={i === 1 ? '#ded2bd' : color} opacity={opacity} />
+      {stones.map(([x, y, z, w, h], i) => (
+        <mesh key={i} position={[x, y, z]} rotation={[0, 0, i % 2 ? 0.04 : -0.03]}>
+          <boxGeometry args={[w, h, 0.09]} />
+          <PaperMaterial color={i % 2 ? '#ded2bd' : color} opacity={opacity} />
         </mesh>
       ))}
-      <Text position={[0, -0.28, 0.08]} fontSize={0.12} anchorX="center" anchorY="middle">
-        stone
-        <InkMaterial color={ink} opacity={opacity * 0.5} />
+      <Text position={[0, -0.32, 0.08]} fontSize={0.09} anchorX="center" anchorY="middle">
+        stone wall
+        <InkMaterial color={ink} opacity={opacity * 0.38} />
       </Text>
     </group>
   );
@@ -124,15 +177,19 @@ function StoneWallObject({ color, ink, opacity }: { color: string; ink: string; 
 function SeaObject({ color, ink, opacity }: { color: string; ink: string; opacity: number }) {
   return (
     <group>
-      {[0, 1, 2].map((i) => (
-        <mesh key={i} position={[0, 0.08 - i * 0.15, 0.04]} rotation={[0, 0, Math.sin(i) * 0.12]}>
-          <boxGeometry args={[0.62 - i * 0.08, 0.035, 0.04]} />
-          <InkMaterial color={i === 1 ? '#f8f1e3' : ink} opacity={opacity * (0.78 - i * 0.12)} />
+      <mesh position={[0, -0.02, -0.015]}>
+        <boxGeometry args={[0.88, 0.58, 0.05]} />
+        <PaperMaterial color={color} opacity={opacity * 0.38} />
+      </mesh>
+      {[0, 1, 2, 3].map((i) => (
+        <mesh key={i} position={[0.02 * i, 0.18 - i * 0.13, 0.06]} rotation={[0, 0, Math.sin(i) * 0.16]}>
+          <boxGeometry args={[0.7 - i * 0.08, 0.032, 0.035]} />
+          <InkMaterial color={i === 1 ? '#f8f1e3' : ink} opacity={opacity * (0.72 - i * 0.1)} />
         </mesh>
       ))}
-      <mesh>
-        <boxGeometry args={[0.78, 0.5, 0.06]} />
-        <PaperMaterial color={color} opacity={opacity * 0.42} />
+      <mesh position={[0.3, -0.18, 0.07]}>
+        <sphereGeometry args={[0.035, 12, 8]} />
+        <InkMaterial color="#fff4df" opacity={opacity * 0.6} />
       </mesh>
     </group>
   );
@@ -147,8 +204,14 @@ function FruitObject({ color, ink, opacity }: { color: string; ink: string; opac
       </mesh>
       <mesh position={[0, 0, 0.23]}>
         <sphereGeometry args={[0.21, 24, 12]} />
-        <InkMaterial color={ink} opacity={opacity * 0.42} />
+        <InkMaterial color={ink} opacity={opacity * 0.34} />
       </mesh>
+      {[-0.08, 0.02, 0.1].map((x, i) => (
+        <mesh key={x} position={[x, -0.02 + i * 0.04, 0.42]}>
+          <sphereGeometry args={[0.012, 8, 8]} />
+          <InkMaterial color="#fff4df" opacity={opacity * 0.7} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -160,10 +223,16 @@ function ShelfObject({ color, ink, opacity }: { color: string; ink: string; opac
         <boxGeometry args={[0.72, 0.74, 0.09]} />
         <PaperMaterial color={color} opacity={opacity} />
       </mesh>
-      {[-0.24, -0.08, 0.08, 0.24].map((x) => (
-        <mesh key={x} position={[x, 0, 0.07]}>
-          <boxGeometry args={[0.045, 0.56, 0.04]} />
-          <InkMaterial color={ink} opacity={opacity * 0.62} />
+      {[0.26, 0, -0.26].map((y) => (
+        <mesh key={y} position={[0, y, 0.075]}>
+          <boxGeometry args={[0.62, 0.018, 0.025]} />
+          <InkMaterial color={ink} opacity={opacity * 0.35} />
+        </mesh>
+      ))}
+      {[-0.24, -0.1, 0.04, 0.18, 0.3].map((x, i) => (
+        <mesh key={x} position={[x, 0.02 - (i % 2) * 0.08, 0.09]} rotation={[0, 0, i % 2 ? 0.04 : -0.02]}>
+          <boxGeometry args={[0.04, 0.48 + (i % 3) * 0.04, 0.04]} />
+          <InkMaterial color={ink} opacity={opacity * 0.48} />
         </mesh>
       ))}
     </group>
@@ -183,8 +252,14 @@ function BookObject({ color, ink, opacity }: { color: string; ink: string; opaci
       </mesh>
       <mesh position={[0, 0, 0.06]}>
         <boxGeometry args={[0.03, 0.58, 0.04]} />
-        <InkMaterial color={ink} opacity={opacity * 0.5} />
+        <InkMaterial color={ink} opacity={opacity * 0.42} />
       </mesh>
+      {[-0.1, 0.05, 0.16].map((x, i) => (
+        <mesh key={x} position={[x, 0.16 - i * 0.15, 0.09]}>
+          <boxGeometry args={[0.18, 0.012, 0.016]} />
+          <InkMaterial color={ink} opacity={opacity * 0.24} />
+        </mesh>
+      ))}
     </group>
   );
 }
