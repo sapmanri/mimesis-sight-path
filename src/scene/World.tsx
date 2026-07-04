@@ -7,23 +7,27 @@ import type { ObservationScene } from '../data/jeju';
 type WorldProps = {
   scenes: ObservationScene[];
   activeIndex: number;
+  mode: 'auto' | 'manual';
 };
 
-export function World({ scenes, activeIndex }: WorldProps) {
+export function World({ scenes, activeIndex, mode }: WorldProps) {
   const lightRef = useRef<THREE.Group>(null);
   const cameraTarget = scenes[activeIndex].position;
   const activePosition = useMemo(() => new THREE.Vector3(...cameraTarget), [cameraTarget]);
   const particlePoints = useMemo(() => buildMistPoints(), []);
 
   useFrame(({ camera, clock }, delta) => {
-    const drift = Math.sin(clock.elapsedTime * 0.32) * 0.06;
-    const desiredCamera = activePosition.clone().add(new THREE.Vector3(drift, 1.02, 3.1));
-    camera.position.lerp(desiredCamera, 1 - Math.pow(0.026, delta));
-    camera.lookAt(activePosition.x, activePosition.y + 0.02, activePosition.z - 0.36);
+    const director = getCameraDirector(activeIndex, clock.elapsedTime, mode);
+    const desiredCamera = activePosition.clone().add(director.offset);
+    const lookAt = activePosition.clone().add(director.lookOffset);
+
+    camera.position.lerp(desiredCamera, 1 - Math.pow(mode === 'auto' ? 0.022 : 0.032, delta));
+    camera.lookAt(lookAt.x, lookAt.y, lookAt.z);
 
     if (lightRef.current) {
       const pulse = Math.sin(clock.elapsedTime * 2.8) * 0.035;
-      lightRef.current.position.lerp(activePosition.clone().add(new THREE.Vector3(0.03, 0.55 + pulse, 0.16)), 1 - Math.pow(0.018, delta));
+      const lead = director.lightLead;
+      lightRef.current.position.lerp(activePosition.clone().add(new THREE.Vector3(lead.x, 0.55 + pulse, lead.z)), 1 - Math.pow(0.018, delta));
       lightRef.current.rotation.z += delta * 0.45;
     }
   });
@@ -61,6 +65,58 @@ export function World({ scenes, activeIndex }: WorldProps) {
       </group>
     </>
   );
+}
+
+function getCameraDirector(activeIndex: number, elapsed: number, mode: 'auto' | 'manual') {
+  const breathe = Math.sin(elapsed * 0.38) * (mode === 'auto' ? 0.12 : 0.06);
+  const glance = Math.sin(elapsed * 0.17 + activeIndex) * 0.1;
+  const shot = activeIndex % 6;
+
+  if (shot === 0) {
+    return {
+      offset: new THREE.Vector3(-0.78 + glance, 1.18 + breathe, 3.08),
+      lookOffset: new THREE.Vector3(0.08, 0.04, -0.48),
+      lightLead: { x: 0.06, z: 0.18 },
+    };
+  }
+
+  if (shot === 1) {
+    return {
+      offset: new THREE.Vector3(0.82 + glance, 0.92 + breathe, 2.78),
+      lookOffset: new THREE.Vector3(-0.12, 0.01, -0.38),
+      lightLead: { x: -0.02, z: 0.18 },
+    };
+  }
+
+  if (shot === 2) {
+    return {
+      offset: new THREE.Vector3(0.08 + glance, 2.15 + breathe, 1.74),
+      lookOffset: new THREE.Vector3(0, -0.18, -0.24),
+      lightLead: { x: 0.03, z: 0.16 },
+    };
+  }
+
+  if (shot === 3) {
+    return {
+      offset: new THREE.Vector3(-0.1 + glance, 0.7 + breathe, 2.18),
+      lookOffset: new THREE.Vector3(0.02, 0.02, -0.76),
+      lightLead: { x: 0.08, z: 0.22 },
+    };
+  }
+
+  if (shot === 4) {
+    return {
+      offset: new THREE.Vector3(1.05 + glance, 1.04 + breathe, 2.95),
+      lookOffset: new THREE.Vector3(-0.22, 0.06, -0.4),
+      lightLead: { x: -0.06, z: 0.2 },
+    };
+  }
+
+  return {
+    offset: new THREE.Vector3(-1.02 + glance, 0.98 + breathe, 2.88),
+    lookOffset: new THREE.Vector3(0.2, 0.02, -0.34),
+    lightLead: { x: 0.06, z: 0.16 },
+  };
 }
 
 function NarrativePath({ scenes }: { scenes: ObservationScene[] }) {
