@@ -1,20 +1,16 @@
 import { Canvas } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
-import { StoryCard } from './components/StoryCard';
-import { ProgressNav } from './components/ProgressNav';
 import { ParallaxLayers } from './components/ParallaxLayers';
-import { Soundscape } from './audio/Soundscape';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 11000;
-const BUILD_LABEL = 'v0.3.0 · MESH ROAD · BUILD 055';
+const BUILD_LABEL = 'v0.3.1 · ROAD ONLY · BUILD 056';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
-  const activeScene = useMemo(() => jejuScenes[activeIndex], [activeIndex]);
   const lastMoveAt = useRef(0);
   const lastManualAt = useRef(0);
 
@@ -63,32 +59,24 @@ export default function App() {
         if (current >= jejuScenes.length - 1) return 0;
         return current + 1;
       });
-    }, activeScene.dwellMs);
+    }, 7600);
 
     return () => window.clearTimeout(timer);
-  }, [activeIndex, activeScene.dwellMs, mode]);
+  }, [activeIndex, mode]);
 
   useEffect(() => {
     if (mode !== 'manual') return;
 
     const timer = window.setInterval(() => {
-      if (Date.now() - lastManualAt.current > AUTO_RESUME_MS) {
-        setMode('auto');
-      }
+      if (Date.now() - lastManualAt.current > AUTO_RESUME_MS) setMode('auto');
     }, 1000);
 
     return () => window.clearInterval(timer);
   }, [mode]);
 
-  const setSceneManually = (index: number) => {
-    lastManualAt.current = Date.now();
-    setMode('manual');
-    setActiveIndex(index);
-  };
-
   return (
-    <main className="app-shell">
-      <header className="topbar">
+    <main className="app-shell road-only-shell">
+      <header className="topbar road-only-topbar">
         <div>
           <p className="eyebrow">MIMESIS · OBSERVATION NO.001 · {BUILD_LABEL}</p>
           <h1>JEJU, 시선을 따라 걷다</h1>
@@ -101,18 +89,13 @@ export default function App() {
         </div>
       </header>
 
-      <section className="viewport-card">
-        <ParallaxLayers activeIndex={activeIndex} scene={activeScene} />
-        <Canvas className="world-canvas" camera={{ position: [0, 1.45, 4.2], fov: 42 }} dpr={[1, 2]} gl={{ alpha: true }}>
+      <section className="viewport-card road-only-viewport">
+        <ParallaxLayers activeIndex={activeIndex} scene={jejuScenes[activeIndex]} />
+        <Canvas className="world-canvas" camera={{ position: [0, 1.35, 4.8], fov: 40 }} dpr={[1, 2]} gl={{ alpha: true }}>
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
-        <Soundscape scene={activeScene} mode={mode} />
-        <StoryCard scene={activeScene} mode={mode} />
-        <ProgressNav scenes={jejuScenes} activeIndex={activeIndex} onChange={setSceneManually} />
         <div className="build-badge">{BUILD_LABEL}</div>
       </section>
-
-      <footer className="hint">{mode === 'auto' ? '이 장면은 스스로 머무를 시간을 정합니다.' : '잠시 뒤 다시 자동 호흡으로 돌아갑니다.'}</footer>
     </main>
   );
 }
