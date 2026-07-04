@@ -13,6 +13,10 @@ body {
   overflow: hidden;
 }
 
+button {
+  font: inherit;
+}
+
 .app-shell {
   position: relative;
   width: 100vw;
@@ -36,12 +40,32 @@ body {
   pointer-events: none;
 }
 
+.top-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  pointer-events: auto;
+}
+
 .eyebrow, .counter {
   margin: 0;
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: rgba(248, 242, 230, 0.75);
+}
+
+.mode-toggle {
+  margin-top: -3px;
+  border: 1px solid rgba(255,255,255,0.36);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(45, 67, 63, 0.32);
+  color: rgba(248, 242, 230, 0.82);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
 }
 
 h1 {
@@ -68,7 +92,9 @@ h1 {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 48%, rgba(255,244,213,0.11));
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0%, transparent 34%, rgba(44,67,63,0.22) 100%),
+    linear-gradient(180deg, rgba(255,255,255,0.04), transparent 48%, rgba(255,244,213,0.11));
 }
 
 .viewport-card canvas {
@@ -88,6 +114,10 @@ h1 {
   backdrop-filter: blur(18px);
   box-shadow: 0 22px 60px rgba(24, 49, 45, 0.18);
   animation: rise 0.7s ease both;
+}
+
+.story-card[data-mode='auto'] {
+  animation: rise 0.7s ease both, breathe-card 7.6s ease-in-out infinite;
 }
 
 .story-kicker {
@@ -185,6 +215,11 @@ h1 {
 @keyframes rise {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes breathe-card {
+  0%, 100% { box-shadow: 0 22px 60px rgba(24, 49, 45, 0.18); }
+  48% { box-shadow: 0 26px 70px rgba(255, 244, 213, 0.16); }
 }
 
 @media (max-width: 520px) {
