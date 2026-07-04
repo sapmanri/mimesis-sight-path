@@ -5,8 +5,8 @@ import { World } from './scene/World';
 import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
-const AUTO_RESUME_MS = 11000;
-const BUILD_LABEL = 'v0.3.1 · ROAD ONLY · BUILD 056';
+const AUTO_RESUME_MS = 18000;
+const BUILD_LABEL = 'v0.3.3 · SLOW WALK ROAD · BUILD 058';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -17,7 +17,7 @@ export default function App() {
   useEffect(() => {
     const move = (direction: 1 | -1, input: 'auto' | 'manual' = 'manual') => {
       const now = Date.now();
-      if (now - lastMoveAt.current < 620) return;
+      if (now - lastMoveAt.current < 1400) return;
       lastMoveAt.current = now;
 
       if (input === 'manual') {
@@ -32,14 +32,13 @@ export default function App() {
     };
 
     const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) < 14) return;
+      if (Math.abs(event.deltaY) < 18) return;
       move(event.deltaY > 0 ? 1 : -1, 'manual');
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'ArrowDown' || event.key === 'PageDown') move(1, 'manual');
       if (event.key === 'ArrowUp' || event.key === 'PageUp') move(-1, 'manual');
-      if (event.key === ' ') setMode((current) => (current === 'auto' ? 'manual' : 'auto'));
     };
 
     window.addEventListener('wheel', onWheel, { passive: true });
@@ -59,7 +58,7 @@ export default function App() {
         if (current >= jejuScenes.length - 1) return 0;
         return current + 1;
       });
-    }, 7600);
+    }, 12000);
 
     return () => window.clearTimeout(timer);
   }, [activeIndex, mode]);
@@ -83,9 +82,6 @@ export default function App() {
         </div>
         <div className="top-status">
           <p className="counter">{String(activeIndex + 1).padStart(2, '0')} / {jejuScenes.length}</p>
-          <button className="mode-toggle" onClick={() => setMode(mode === 'auto' ? 'manual' : 'auto')}>
-            {mode === 'auto' ? 'AUTO' : 'MANUAL'}
-          </button>
         </div>
       </header>
 
