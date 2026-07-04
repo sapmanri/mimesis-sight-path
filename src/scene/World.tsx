@@ -3,6 +3,8 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
+import { createSceneScatter, type ScatterItem } from '../engine/scatter';
+import { pathSegmentPresets, surfaceColor, weatherFog } from '../engine/pathPresets';
 
 type WorldProps = {
   scenes: ObservationScene[];
@@ -13,8 +15,10 @@ type WorldProps = {
 export function World({ scenes, activeIndex, mode }: WorldProps) {
   const lightRef = useRef<THREE.Group>(null);
   const cameraTarget = scenes[activeIndex].position;
+  const activeScene = scenes[activeIndex];
   const activePosition = useMemo(() => new THREE.Vector3(...cameraTarget), [cameraTarget]);
   const particlePoints = useMemo(() => buildMistPoints(), []);
+  const fog = weatherFog[activeScene.weather];
 
   useFrame(({ camera, clock }, delta) => {
     const director = getCameraDirector(activeIndex, clock.elapsedTime, mode);
@@ -34,19 +38,23 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
 
   return (
     <>
-      <color attach="background" args={["#78aaa6"]} />
-      <fog attach="fog" args={["#8fbab0", 3.8, 16]} />
+      <color attach="background" args={[fog.color]} />
+      <fog attach="fog" args={[fog.color, fog.near, fog.far]} />
       <ambientLight intensity={1.88} />
       <directionalLight position={[2, 5, 3]} intensity={2.35} />
       <pointLight position={[0, 2.2, 1.8]} intensity={2.8} color="#fff4d1" />
 
-      <NarrativePath scenes={scenes} />
+      <NarrativePath scenes={scenes} activeIndex={activeIndex} />
 
       <points geometry={particlePoints}>
         <pointsMaterial color="#fff7df" size={0.025} transparent opacity={0.22} depthWrite={false} />
       </points>
 
       <SightTrail scenes={scenes} />
+
+      {scenes.map((scene, index) => (
+        <SceneScatter key={`scatter-${scene.id}`} scene={scene} index={index} activeIndex={activeIndex} />
+      ))}
 
       {scenes.map((scene, index) => (
         <ObservationNode key={scene.id} scene={scene} active={index === activeIndex} index={index} activeIndex={activeIndex} />
@@ -119,23 +127,26 @@ function getCameraDirector(activeIndex: number, elapsed: number, mode: 'auto' | 
   };
 }
 
-function NarrativePath({ scenes }: { scenes: ObservationScene[] }) {
+function NarrativePath({ scenes, activeIndex }: { scenes: ObservationScene[]; activeIndex: number }) {
   const slabs = useMemo(() => buildPathSlabs(scenes), [scenes]);
 
   return (
     <group>
-      {slabs.map((slab, index) => (
-        <group key={index} position={slab.position} rotation={[0, slab.angle, 0]}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]}>
-            <boxGeometry args={[slab.width, slab.length, 0.035]} />
-            <meshStandardMaterial color={index % 2 === 0 ? '#e6decf' : '#ddd3c1'} roughness={0.94} transparent opacity={0.92} />
-          </mesh>
-          <mesh position={[0, -0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <boxGeometry args={[slab.width * 0.96, slab.length * 0.96, 0.018]} />
-            <meshBasicMaterial color="#fff4df" transparent opacity={0.08} />
-          </mesh>
-        </group>
-      ))}
+      {slabs.map((slab, index) => {
+        const opacity = Math.max(0.3, 0.92 - Math.abs(index - activeIndex) * 0.11);
+        return (
+          <group key={index} position={slab.position} rotation={[0, slab.angle, 0]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <boxGeometry args={[slab.width, slab.length, 0.035]} />
+              <meshStandardMaterial color={slab.color} roughness={0.94} transparent opacity={opacity} />
+            </mesh>
+            <mesh position={[0, -0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <boxGeometry args={[slab.width * 0.96, slab.length * 0.96, 0.018]} />
+              <meshBasicMaterial color="#fff4df" transparent opacity={0.08} />
+            </mesh>
+          </group>
+        );
+      })}
       {scenes.map((scene, index) => (
         <PathDetail key={scene.id} scene={scene} index={index} />
       ))}
@@ -158,6 +169,32 @@ function PathDetail({ scene, index }: { scene: ObservationScene; index: number }
         <meshBasicMaterial color="#486a62" transparent opacity={0.2} />
       </mesh>
     </group>
+  );
+}
+
+function SceneScatter({ scene, index, activeIndex }: { scene: ObservationScene; index: number; activeIndex: number }) {
+  const items = useMemo(() => createSceneScatter(scene, index), [scene, index]);
+  const distance = Math.abs(index - activeIndex);
+  const opacityMultiplier = Math.max(0.18, 1 - distance * 0.22);
+
+  return (
+    <group>
+      {items.map((item) => (
+        <ScatterMesh key={item.id} item={item} opacityMultiplier={opacityMultiplier} />
+      ))}
+    </group>
+  );
+}
+
+function ScatterMesh({ item, opacityMultiplier }: { item: ScatterItem; opacityMultiplier: number }) {
+  const elongated = item.kind.includes('handle') || item.kind.includes('line') || item.kind.includes('track') || item.kind.includes('strip');
+  const round = item.kind.includes('fruit') || item.kind.includes('seed') || item.kind.includes('stone') || item.kind.includes('glint');
+
+  return (
+    <mesh position={item.position} rotation={[-Math.PI / 2, 0, item.rotation]} scale={item.scale}>
+      {round ? <circleGeometry args={[1, 18]} /> : <boxGeometry args={elongated ? [2.4, 0.35, 0.08] : [1, 0.72, 0.08]} />}
+      <meshBasicMaterial color={item.color} transparent opacity={item.opacity * opacityMultiplier} />
+    </mesh>
   );
 }
 
@@ -214,15 +251,17 @@ function buildPathSlabs(scenes: ObservationScene[]) {
     const next = new THREE.Vector3(...scenes[index + 1].position);
     const midpoint = current.clone().lerp(next, 0.5);
     const direction = next.clone().sub(current);
+    const preset = pathSegmentPresets[scene.pathKind];
     const length = Math.max(1.2, Math.sqrt(direction.x * direction.x + direction.z * direction.z) + 0.42);
-    const angle = Math.atan2(direction.x, direction.z);
-    const width = index % 3 === 0 ? 1.34 : index % 3 === 1 ? 1.05 : 1.18;
+    const angle = Math.atan2(direction.x, direction.z) + preset.curve * 0.08 * (index % 2 === 0 ? 1 : -1);
+    const width = preset.width;
 
     return {
       position: [midpoint.x, -0.64, midpoint.z] as [number, number, number],
       angle,
       length,
       width,
+      color: surfaceColor[scene.surface],
     };
   });
 }
