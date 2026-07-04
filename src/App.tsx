@@ -6,7 +6,7 @@ import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.3.4 · CONTINUOUS WALK · BUILD 059';
+const BUILD_LABEL = 'v0.3.5 · DISTANT WALK · BUILD 060';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -87,7 +87,7 @@ export default function App() {
 
       <section className="viewport-card road-only-viewport">
         <ParallaxLayers activeIndex={activeIndex} scene={jejuScenes[activeIndex]} />
-        <Canvas className="world-canvas" camera={{ position: [0, 1.35, 4.8], fov: 40 }} dpr={[1, 2]} gl={{ alpha: true }}>
+        <Canvas className="world-canvas" camera={{ position: [0, 2.15, 8.4], fov: 34 }} dpr={[1, 2]} gl={{ alpha: true }}>
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
         <div className="build-badge">{BUILD_LABEL}</div>
