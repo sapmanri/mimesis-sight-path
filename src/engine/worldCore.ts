@@ -161,7 +161,10 @@ const MODELS: Record<string, ModelSpec> = {
   suitcase: { file: 'Old_Suitcase.glb', height: 0.5, tint: PALETTE.mint, preRotateX: -Math.PI / 2 },
   cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2' },
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 3.4, tint: PALETTE.white },
-  stone: { file: 'stone11.glb', height: 0.16, tint: '#6e7268', fitMaxDim: true },
+  stone: { file: 'stone11.glb', height: 0.24, tint: '#6e7268', fitMaxDim: true },
+  rock0: { file: 'Rock0.glb', height: 0.3, tint: '#79766a', fitMaxDim: true },
+  rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
+  rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },
 };
 
 const PALETTE_HUES = [0.07, 0.11, 0.29, 0.53]; // wood, sand, sage, teal
@@ -200,7 +203,7 @@ function applyPalette(group: THREE.Group, fallbackTint: string) {
         const l = Math.min(0.82, Math.max(0.16, hsl.l));
         c.setHSL(h, s, l);
       }
-      return new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0 });
+      return new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0, side: THREE.DoubleSide });
     });
     mesh.material = Array.isArray(mesh.material) ? remapped : remapped[0];
   });
@@ -308,11 +311,28 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
   });
   const kitSlots: { kit: string; slot: THREE.Group; seed: number }[] = [];
   group.add(buildMemoryObjects(scenes, anchors, kitSlots));
+
+  // 바위 산란 지점: 절벽 모서리(rim)와 벽면(face)
+  const rockSpots: { pos: THREE.Vector3; rotY: number; scale: number }[] = [];
+  {
+    const rrnd = seededRandom(6612);
+    for (let k = 0; k < 46; k += 1) {
+      const i = Math.floor(rrnd() * frames.length);
+      const f = frames[i];
+      const w = widthAt(f.t);
+      const side = rrnd() > 0.5 ? 1 : -1;
+      const onFace = rrnd() > 0.55;
+      const out = onFace ? w * (0.92 + rrnd() * 0.2) : w * (0.82 + rrnd() * 0.14);
+      const y = onFace ? f.p.y - 0.35 - rrnd() * 1.3 : f.p.y - 0.03;
+      const pos = f.p.clone().add(f.nor.clone().multiplyScalar(side * out)).setY(y);
+      rockSpots.push({ pos, rotY: rrnd() * Math.PI * 2, scale: 0.35 + rrnd() * 0.85 });
+    }
+  }
   const distant = buildDistantWorld();
   group.add(distant.group);
 
   // ---- 실물 모델 비동기 투입 (BUILD 075) ----
-  const ready = attachModels(kitSlots, distant.lighthouseSlot, loadModel).catch(() => {});
+  const ready = attachModels(kitSlots, distant.lighthouseSlot, rockSpots, group, loadModel).catch(() => {});
 
   // ---- lights ----
   const lights = new THREE.Group();
@@ -342,9 +362,28 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
 async function attachModels(
   kitSlots: { kit: string; slot: THREE.Group; seed: number }[],
   lighthouseSlot: THREE.Group,
+  rockSpots: { pos: THREE.Vector3; rotY: number; scale: number }[],
+  worldGroup: THREE.Group,
   loadModel: ModelLoader,
 ) {
   const tasks: Promise<void>[] = [];
+
+  // 바위 산란: 절벽 모서리와 벽면에 박힌 실물 바위
+  tasks.push(Promise.all([
+    loadKitModel('rock0', loadModel),
+    loadKitModel('rock3', loadModel),
+    loadKitModel('rock7', loadModel),
+  ]).then((variants) => {
+    const rockGroup = new THREE.Group();
+    rockSpots.forEach((spot, i) => {
+      const r = variants[i % variants.length].clone(true);
+      r.position.copy(spot.pos);
+      r.rotation.y = spot.rotY;
+      r.scale.setScalar(spot.scale);
+      rockGroup.add(r);
+    });
+    worldGroup.add(rockGroup);
+  }).then(() => undefined));
 
   // 캐리어: 프록시 대신 진짜 낡은 캐리어
   const suitcaseSlots = kitSlots.filter((k) => k.kit === 'suitcase-kit');
@@ -361,14 +400,30 @@ async function attachModels(
       wallSlots.forEach((k) => {
         const rnd = seededRandom(k.seed);
         k.slot.clear();
-        const n = k.kit === 'stone-wall-kit' ? 7 : 3;
-        for (let i = 0; i < n; i += 1) {
-          const s = stone.clone(true);
-          const course = k.kit === 'stone-wall-kit' ? i % 2 : 0;
-          s.position.set(-0.33 + (i * 0.11) + (rnd() - 0.5) * 0.03, course * 0.075, (rnd() - 0.5) * 0.05);
-          s.rotation.y = rnd() * Math.PI * 2;
-          s.scale.setScalar(0.6 + rnd() * 0.45);
-          k.slot.add(s);
+        // 담으로 읽히게: 아랫단 8개 촘촘히 + 윗단 6개 어긋나게
+        if (k.kit === 'stone-wall-kit') {
+          for (let i = 0; i < 8; i += 1) {
+            const s = stone.clone(true);
+            s.position.set(-0.49 + i * 0.14 + (rnd() - 0.5) * 0.02, 0, (rnd() - 0.5) * 0.03);
+            s.rotation.y = rnd() * Math.PI * 2;
+            s.scale.setScalar(0.85 + rnd() * 0.3);
+            k.slot.add(s);
+          }
+          for (let i = 0; i < 6; i += 1) {
+            const s = stone.clone(true);
+            s.position.set(-0.35 + i * 0.14 + (rnd() - 0.5) * 0.02, 0.11, (rnd() - 0.5) * 0.03);
+            s.rotation.y = rnd() * Math.PI * 2;
+            s.scale.setScalar(0.7 + rnd() * 0.28);
+            k.slot.add(s);
+          }
+        } else {
+          for (let i = 0; i < 3; i += 1) {
+            const s = stone.clone(true);
+            s.position.set((rnd() - 0.5) * 0.5, 0, (rnd() - 0.5) * 0.2);
+            s.rotation.y = rnd() * Math.PI * 2;
+            s.scale.setScalar(0.7 + rnd() * 0.5);
+            k.slot.add(s);
+          }
         }
       });
     }));
@@ -545,20 +600,21 @@ function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
   const rnd = seededRandom(4177);
   const matA = new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 });
   const matB = new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 });
-  const geo = new THREE.ConeGeometry(0.09, 0.22, 5);
-  for (let k = 0; k < 90; k += 1) {
+  const geo = new THREE.ConeGeometry(0.016, 0.16, 3); // 풀잎 한 가닥
+  for (let k = 0; k < 140; k += 1) {
     const i = Math.floor(rnd() * frames.length);
     const f = frames[i];
     const w = widthAt(f.t);
     const side = rnd() > 0.5 ? 1 : -1;
     const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * (w - 0.08 - rnd() * 0.15)));
     const cluster = new THREE.Group();
-    const n = 1 + Math.floor(rnd() * 3);
+    const n = 4 + Math.floor(rnd() * 4);
     for (let c = 0; c < n; c += 1) {
       const m = new THREE.Mesh(geo, rnd() > 0.5 ? matA : matB);
-      m.position.set((rnd() - 0.5) * 0.12, 0.08 + rnd() * 0.05, (rnd() - 0.5) * 0.12);
-      m.scale.setScalar(0.7 + rnd() * 0.9);
-      m.rotation.z = (rnd() - 0.5) * 0.5;
+      const lean = 0.18 + rnd() * 0.35;
+      m.position.set((rnd() - 0.5) * 0.07, 0.07 * (0.8 + rnd() * 0.5), (rnd() - 0.5) * 0.07);
+      m.scale.set(1, 0.7 + rnd() * 1.1, 1);
+      m.rotation.set((rnd() - 0.5) * lean, rnd() * Math.PI, (rnd() - 0.5) * lean);
       m.castShadow = true;
       cluster.add(m);
     }
@@ -735,6 +791,12 @@ const KITS: Record<string, KitFn> = {
     return g;
   },
 };
+
+// ---------- 워커: 걷는 시간의 실체 ----------
+// 카메라가 따라가는 사람. 자산 캐릭터가 오면 MODELS.walker로 교체 예정.
+export function createWalkerFigure() {
+  return KITS['person-kit'](seededRandom(77));
+}
 
 // ---------- distant world: 닿을 수 없는 기억 ----------
 function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group } {
