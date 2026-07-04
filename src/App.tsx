@@ -4,6 +4,7 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
+import { ParallaxLayers } from './components/ParallaxLayers';
 import { Soundscape } from './audio/Soundscape';
 
 const AUTO_RESUME_MS = 11000;
@@ -99,7 +100,8 @@ export default function App() {
       </header>
 
       <section className="viewport-card">
-        <Canvas camera={{ position: [0, 1.05, 3.25], fov: 38 }} dpr={[1, 2]}>
+        <ParallaxLayers activeIndex={activeIndex} scene={activeScene} />
+        <Canvas camera={{ position: [0, 1.05, 3.25], fov: 38 }} dpr={[1, 2]} gl={{ alpha: true }}>
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
         <Soundscape scene={activeScene} mode={mode} />
