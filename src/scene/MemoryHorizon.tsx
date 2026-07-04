@@ -10,10 +10,15 @@ type MemoryShard = {
   opacity: number;
 };
 
+type MemoryFragment = MemoryShard & {
+  kind: 'house' | 'stair' | 'chair' | 'glasses' | 'unknown';
+};
+
 export function MemoryHorizon() {
   const farRidges = useMemo(() => makeRidges(), []);
   const cloudLayers = useMemo(() => makeCloudLayers(), []);
   const strataShards = useMemo(() => makeStrataShards(), []);
+  const memoryFragments = useMemo(() => makeMemoryFragments(), []);
 
   return (
     <group>
@@ -42,7 +47,84 @@ export function MemoryHorizon() {
           </mesh>
         ))}
       </group>
+
+      <group>
+        {memoryFragments.map((fragment) => (
+          <MemoryFragmentMesh key={fragment.id} fragment={fragment} />
+        ))}
+      </group>
     </group>
+  );
+}
+
+function MemoryFragmentMesh({ fragment }: { fragment: MemoryFragment }) {
+  if (fragment.kind === 'glasses') {
+    return (
+      <group position={fragment.position} rotation={fragment.rotation} scale={fragment.scale}>
+        <mesh position={[-0.32, 0, 0]}>
+          <torusGeometry args={[0.22, 0.018, 8, 24]} />
+          <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+        </mesh>
+        <mesh position={[0.32, 0, 0]}>
+          <torusGeometry args={[0.22, 0.018, 8, 24]} />
+          <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+        </mesh>
+        <mesh position={[0, 0, 0]} scale={[0.34, 0.028, 0.028]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (fragment.kind === 'chair') {
+    return (
+      <group position={fragment.position} rotation={fragment.rotation} scale={fragment.scale}>
+        <mesh position={[0, 0.12, 0]} scale={[0.62, 0.08, 0.46]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+        </mesh>
+        <mesh position={[0, 0.42, -0.18]} scale={[0.62, 0.52, 0.07]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity * 0.9} />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (fragment.kind === 'stair') {
+    return (
+      <group position={fragment.position} rotation={fragment.rotation} scale={fragment.scale}>
+        {[0, 1, 2].map((step) => (
+          <mesh key={step} position={[0, step * 0.12, -step * 0.18]} scale={[0.72, 0.08, 0.2]}>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (fragment.kind === 'house') {
+    return (
+      <group position={fragment.position} rotation={fragment.rotation} scale={fragment.scale}>
+        <mesh position={[0, 0.2, 0]} scale={[0.58, 0.42, 0.46]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+        </mesh>
+        <mesh position={[0, 0.48, 0]} rotation={[0, 0, Math.PI / 4]} scale={[0.46, 0.46, 0.52]}>
+          <boxGeometry args={[1, 1, 1]} />
+          <meshStandardMaterial color="#7f806c" roughness={1} transparent opacity={fragment.opacity * 0.72} />
+        </mesh>
+      </group>
+    );
+  }
+
+  return (
+    <mesh position={fragment.position} rotation={fragment.rotation} scale={fragment.scale}>
+      <boxGeometry args={[1, 1, 1]} />
+      <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+    </mesh>
   );
 }
 
@@ -143,11 +225,70 @@ function makeCloudLayers(): MemoryShard[] {
   ];
 }
 
+function makeMemoryFragments(): MemoryFragment[] {
+  return [
+    {
+      id: 'fragment-village-house-left',
+      kind: 'house',
+      position: [-1.95, -1.06, -12.4],
+      scale: [0.58, 0.58, 0.58],
+      rotation: [0.12, -0.44, 0.08],
+      color: '#a49672',
+      opacity: 0.34,
+    },
+    {
+      id: 'fragment-village-house-far',
+      kind: 'house',
+      position: [1.8, -0.88, -28.6],
+      scale: [0.42, 0.42, 0.42],
+      rotation: [-0.08, 0.36, -0.05],
+      color: '#90977f',
+      opacity: 0.22,
+    },
+    {
+      id: 'fragment-stair-platform',
+      kind: 'stair',
+      position: [1.62, -0.92, -18.8],
+      scale: [0.78, 0.78, 0.78],
+      rotation: [0.14, -0.75, -0.12],
+      color: '#94896f',
+      opacity: 0.38,
+    },
+    {
+      id: 'fragment-beach-chair',
+      kind: 'chair',
+      position: [-1.7, -0.98, -23.4],
+      scale: [0.62, 0.62, 0.62],
+      rotation: [0.3, 0.52, -0.2],
+      color: '#b6a87d',
+      opacity: 0.32,
+    },
+    {
+      id: 'fragment-glasses',
+      kind: 'glasses',
+      position: [0.88, -0.74, -7.6],
+      scale: [0.54, 0.54, 0.54],
+      rotation: [0.52, -0.18, 0.36],
+      color: '#64756f',
+      opacity: 0.42,
+    },
+    {
+      id: 'fragment-unknown-fbx',
+      kind: 'unknown',
+      position: [-1.36, -1.15, -31.2],
+      scale: [0.62, 0.08, 0.36],
+      rotation: [0.18, 0.6, -0.2],
+      color: '#8d7f65',
+      opacity: 0.28,
+    },
+  ];
+}
+
 function makeStrataShards(): MemoryShard[] {
   const shards: MemoryShard[] = [];
   const random = seededRandom(9407);
 
-  for (let i = 0; i < 28; i += 1) {
+  for (let i = 0; i < 36; i += 1) {
     const z = -3 - random() * 31;
     const side = random() > 0.5 ? 1 : -1;
     const x = side * (0.95 + random() * 1.15);
