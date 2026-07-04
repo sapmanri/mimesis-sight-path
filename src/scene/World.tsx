@@ -13,9 +13,11 @@ export function World({ scenes, activeIndex }: WorldProps) {
   const lightRef = useRef<THREE.Group>(null);
   const cameraTarget = scenes[activeIndex].position;
   const activePosition = useMemo(() => new THREE.Vector3(...cameraTarget), [cameraTarget]);
+  const particlePoints = useMemo(() => buildMistPoints(), []);
 
   useFrame(({ camera, clock }, delta) => {
-    const desiredCamera = activePosition.clone().add(new THREE.Vector3(0, 1.05, 3.25));
+    const drift = Math.sin(clock.elapsedTime * 0.32) * 0.08;
+    const desiredCamera = activePosition.clone().add(new THREE.Vector3(drift, 1.05, 3.25));
     camera.position.lerp(desiredCamera, 1 - Math.pow(0.025, delta));
     camera.lookAt(activePosition.x, activePosition.y + 0.03, activePosition.z - 0.24);
 
@@ -29,20 +31,24 @@ export function World({ scenes, activeIndex }: WorldProps) {
   return (
     <>
       <color attach="background" args={["#78aaa6"]} />
-      <fog attach="fog" args={["#88b7ad", 4.5, 18]} />
-      <ambientLight intensity={1.8} />
-      <directionalLight position={[2, 5, 3]} intensity={2.4} />
+      <fog attach="fog" args={["#8fbab0", 3.8, 16]} />
+      <ambientLight intensity={1.85} />
+      <directionalLight position={[2, 5, 3]} intensity={2.35} />
       <pointLight position={[0, 2.2, 1.8]} intensity={2.8} color="#fff4d1" />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.66, -18]}>
-        <planeGeometry args={[5.4, 48]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.66, -16.8]}>
+        <planeGeometry args={[5.6, 44]} />
         <meshStandardMaterial color="#e6decf" roughness={0.9} />
       </mesh>
+
+      <points geometry={particlePoints}>
+        <pointsMaterial color="#fff7df" size={0.025} transparent opacity={0.22} depthWrite={false} />
+      </points>
 
       <SightTrail scenes={scenes} />
 
       {scenes.map((scene, index) => (
-        <ObservationNode key={scene.id} scene={scene} active={index === activeIndex} />
+        <ObservationNode key={scene.id} scene={scene} active={index === activeIndex} index={index} />
       ))}
 
       <group ref={lightRef}>
@@ -60,22 +66,30 @@ export function World({ scenes, activeIndex }: WorldProps) {
   );
 }
 
-function ObservationNode({ scene, active }: { scene: ObservationScene; active: boolean }) {
+function ObservationNode({ scene, active, index }: { scene: ObservationScene; active: boolean; index: number }) {
+  const isPrimary = index === 0 || index === 7 || index === 10 || index === 12;
+
   return (
     <group position={scene.position}>
-      <Float speed={0.82} rotationIntensity={0.035} floatIntensity={0.09}>
-        <mesh scale={active ? 1.2 : 0.9}>
-          <boxGeometry args={[0.72, 0.72, 0.08]} />
-          <meshStandardMaterial color={active ? '#f5eddc' : '#d2c8b8'} roughness={0.8} metalness={0.01} />
-        </mesh>
-        <Text position={[0, 0, 0.09]} fontSize={0.25} anchorX="center" anchorY="middle">
-          {scene.emoji}
-          <meshBasicMaterial color="#243d3a" />
-        </Text>
+      <Float speed={0.74} rotationIntensity={0.025} floatIntensity={0.07}>
+        <group scale={active ? scene.scale * 1.04 : scene.scale * 0.82}>
+          <mesh>
+            <boxGeometry args={isPrimary ? [0.86, 0.9, 0.09] : [0.68, 0.68, 0.08]} />
+            <meshStandardMaterial color={active ? '#f7efe0' : scene.hue} roughness={0.82} metalness={0.01} transparent opacity={active ? 1 : 0.58} />
+          </mesh>
+          <mesh position={[0.02, -0.04, -0.035]}>
+            <boxGeometry args={isPrimary ? [0.88, 0.92, 0.04] : [0.7, 0.7, 0.035]} />
+            <meshBasicMaterial color="#9aac9f" transparent opacity={0.13} />
+          </mesh>
+          <Text position={[0, 0, 0.095]} fontSize={isPrimary ? 0.25 : 0.22} anchorX="center" anchorY="middle">
+            {scene.emoji}
+            <meshBasicMaterial color="#243d3a" />
+          </Text>
+        </group>
       </Float>
 
       {active && (
-        <Text position={[0, -0.58, 0.08]} fontSize={0.105} anchorX="center" anchorY="middle">
+        <Text position={[0, -0.62, 0.08]} fontSize={0.105} anchorX="center" anchorY="middle">
           {scene.title}
           <meshBasicMaterial color="#fff9ed" />
         </Text>
@@ -87,11 +101,26 @@ function ObservationNode({ scene, active }: { scene: ObservationScene; active: b
 function SightTrail({ scenes }: { scenes: ObservationScene[] }) {
   const points = useMemo(() => scenes.map((scene) => new THREE.Vector3(...scene.position)), [scenes]);
   const curve = useMemo(() => new THREE.CatmullRomCurve3(points), [points]);
-  const tube = useMemo(() => new THREE.TubeGeometry(curve, 180, 0.008, 8, false), [curve]);
+  const tube = useMemo(() => new THREE.TubeGeometry(curve, 190, 0.007, 8, false), [curve]);
 
   return (
     <mesh geometry={tube}>
-      <meshBasicMaterial color="#fff4ca" transparent opacity={0.38} />
+      <meshBasicMaterial color="#fff4ca" transparent opacity={0.34} />
     </mesh>
   );
+}
+
+function buildMistPoints() {
+  const geometry = new THREE.BufferGeometry();
+  const positions: number[] = [];
+
+  for (let i = 0; i < 90; i += 1) {
+    const x = (Math.random() - 0.5) * 4.5;
+    const y = Math.random() * 2.4 - 0.2;
+    const z = -Math.random() * 34;
+    positions.push(x, y, z);
+  }
+
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  return geometry;
 }
