@@ -6,7 +6,7 @@ import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.3.5 · DISTANT WALK · BUILD 060';
+const BUILD_LABEL = 'v0.3.6 · CLOSED CAPS · BUILD 061';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
