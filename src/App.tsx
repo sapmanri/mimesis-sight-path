@@ -6,7 +6,7 @@ import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.3.3 · SLOW WALK ROAD · BUILD 058';
+const BUILD_LABEL = 'v0.3.4 · CONTINUOUS WALK · BUILD 059';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -58,7 +58,7 @@ export default function App() {
         if (current >= jejuScenes.length - 1) return 0;
         return current + 1;
       });
-    }, 12000);
+    }, 9000);
 
     return () => window.clearTimeout(timer);
   }, [activeIndex, mode]);
