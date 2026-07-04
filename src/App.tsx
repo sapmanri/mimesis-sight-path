@@ -5,11 +5,12 @@ import { World } from './scene/World';
 import { MemoryHorizon } from './scene/MemoryHorizon';
 import { MemoryParts } from './scene/MemoryParts';
 import { MemoryRoadSkin } from './scene/MemoryRoadSkin';
+import { MemoryClusters } from './scene/MemoryClusters';
 import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.4.6 · RESTRAINT PASS · BUILD 071';
+const BUILD_LABEL = 'v0.4.7 · MEMORY CLUSTERS · BUILD 072';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -93,6 +94,7 @@ export default function App() {
         <Canvas className="world-canvas" camera={{ position: [0, 2.15, 8.4], fov: 34 }} dpr={[1, 2]} gl={{ alpha: true }}>
           <MemoryHorizon />
           <MemoryParts />
+          <MemoryClusters />
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
           <MemoryRoadSkin activeIndex={activeIndex} scenes={jejuScenes} />
         </Canvas>
