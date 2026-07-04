@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
+import { MemoryObject } from '../components/MemoryObject';
 import { createSceneScatter, type ScatterItem } from '../engine/scatter';
 import { pathSegmentPresets, surfaceColor, weatherFog } from '../engine/pathPresets';
 
@@ -14,9 +15,8 @@ type WorldProps = {
 
 export function World({ scenes, activeIndex, mode }: WorldProps) {
   const lightRef = useRef<THREE.Group>(null);
-  const cameraTarget = scenes[activeIndex].position;
   const activeScene = scenes[activeIndex];
-  const activePosition = useMemo(() => new THREE.Vector3(...cameraTarget), [cameraTarget]);
+  const activePosition = useMemo(() => new THREE.Vector3(...activeScene.position), [activeScene.position]);
   const particlePoints = useMemo(() => buildMistPoints(), []);
   const fog = weatherFog[activeScene.weather];
 
@@ -199,7 +199,6 @@ function ScatterMesh({ item, opacityMultiplier }: { item: ScatterItem; opacityMu
 }
 
 function ObservationNode({ scene, active, index, activeIndex }: { scene: ObservationScene; active: boolean; index: number; activeIndex: number }) {
-  const isPrimary = index === 0 || index === 7 || index === 10 || index === 12;
   const distance = Math.abs(index - activeIndex);
   const focusOpacity = Math.max(0.14, 1 - distance * 0.28);
   const focusScale = active ? scene.scale * 1.05 : scene.scale * Math.max(0.64, 0.86 - distance * 0.04);
@@ -208,18 +207,7 @@ function ObservationNode({ scene, active, index, activeIndex }: { scene: Observa
     <group position={scene.position}>
       <Float speed={0.62} rotationIntensity={0.018} floatIntensity={0.045}>
         <group scale={focusScale}>
-          <mesh>
-            <boxGeometry args={isPrimary ? [0.86, 0.9, 0.09] : [0.68, 0.68, 0.08]} />
-            <meshStandardMaterial color={active ? '#f8f1e3' : scene.hue} roughness={0.86} metalness={0.01} transparent opacity={active ? 1 : focusOpacity} />
-          </mesh>
-          <mesh position={[0.02, -0.04, -0.035]}>
-            <boxGeometry args={isPrimary ? [0.88, 0.92, 0.04] : [0.7, 0.7, 0.035]} />
-            <meshBasicMaterial color="#9aac9f" transparent opacity={active ? 0.14 : 0.07} />
-          </mesh>
-          <Text position={[0, 0, 0.095]} fontSize={isPrimary ? 0.25 : 0.22} anchorX="center" anchorY="middle">
-            {scene.emoji}
-            <meshBasicMaterial color="#243d3a" transparent opacity={active ? 1 : Math.max(0.18, focusOpacity)} />
-          </Text>
+          <MemoryObject scene={scene} active={active} opacity={active ? 1 : focusOpacity} />
         </group>
       </Float>
 
