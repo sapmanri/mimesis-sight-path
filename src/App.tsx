@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { StoryCard } from './components/StoryCard';
@@ -8,6 +8,37 @@ import { ProgressNav } from './components/ProgressNav';
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const activeScene = useMemo(() => jejuScenes[activeIndex], [activeIndex]);
+  const lastMoveAt = useRef(0);
+
+  useEffect(() => {
+    const move = (direction: 1 | -1) => {
+      const now = Date.now();
+      if (now - lastMoveAt.current < 620) return;
+      lastMoveAt.current = now;
+      setActiveIndex((current) => {
+        const next = current + direction;
+        return Math.max(0, Math.min(jejuScenes.length - 1, next));
+      });
+    };
+
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) < 14) return;
+      move(event.deltaY > 0 ? 1 : -1);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowDown' || event.key === 'PageDown') move(1);
+      if (event.key === 'ArrowUp' || event.key === 'PageUp') move(-1);
+    };
+
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
 
   return (
     <main className="app-shell">
@@ -27,7 +58,7 @@ export default function App() {
         <ProgressNav scenes={jejuScenes} activeIndex={activeIndex} onChange={setActiveIndex} />
       </section>
 
-      <footer className="hint">스크롤 또는 점을 눌러 작은 빛의 시선을 따라가세요.</footer>
+      <footer className="hint">스크롤, 방향키, 또는 점을 눌러 작은 빛의 시선을 따라가세요.</footer>
     </main>
   );
 }
