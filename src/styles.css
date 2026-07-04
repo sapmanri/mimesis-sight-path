@@ -239,25 +239,126 @@ h1 {
 }
 
 @media (max-width: 520px) {
-  .app-shell { padding: 0; }
+  .app-shell {
+    padding: 0;
+    min-height: 100dvh;
+  }
+
   .viewport-card {
     width: 100vw;
-    height: 100vh;
+    height: 100dvh;
     border: 0;
     border-radius: 0;
   }
+
   .topbar {
-    left: 18px;
-    right: 18px;
+    top: max(16px, env(safe-area-inset-top));
+    left: 16px;
+    right: 16px;
+    align-items: flex-start;
+    gap: 10px;
   }
+
+  .topbar > div:first-child {
+    min-width: 0;
+    max-width: 58vw;
+  }
+
+  .eyebrow, .counter {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+  }
+
+  h1 {
+    margin-top: 7px;
+    font-size: 19px;
+    line-height: 1.18;
+  }
+
+  .top-status {
+    gap: 8px;
+    align-items: center;
+  }
+
+  .mode-toggle {
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+
   .sound-toggle {
-    right: 18px;
-    top: 82px;
+    right: 20px;
+    top: calc(max(16px, env(safe-area-inset-top)) + 108px);
+    padding: 8px 13px;
+    font-size: 10px;
   }
+
+  .progress-nav {
+    left: 18px;
+    top: calc(max(16px, env(safe-area-inset-top)) + 176px);
+    bottom: calc(148px + env(safe-area-inset-bottom));
+  }
+
+  .progress-nav span {
+    width: 20px;
+    height: 20px;
+  }
+
+  .progress-nav::before {
+    left: 10px;
+  }
+
+  .progress-nav small {
+    display: none;
+  }
+
   .story-card {
     left: 18px;
     right: 18px;
-    bottom: 88px;
+    bottom: calc(22px + env(safe-area-inset-bottom));
     width: auto;
+    max-height: 32vh;
+    padding: 20px 22px;
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  .story-kicker {
+    margin-bottom: 10px;
+    font-size: 10px;
+  }
+
+  .story-card h2 {
+    margin-bottom: 12px;
+    font-size: 24px;
+  }
+
+  .story-card p:last-child {
+    font-size: 17px;
+    line-height: 1.68;
+  }
+
+  .hint {
+    display: none;
+  }
+}
+
+@media (max-height: 720px) and (max-width: 520px) {
+  .story-card {
+    max-height: 28vh;
+    padding: 17px 20px;
+  }
+
+  .story-card h2 {
+    font-size: 21px;
+  }
+
+  .story-card p:last-child {
+    font-size: 15px;
+    line-height: 1.54;
+  }
+
+  .progress-nav {
+    top: calc(max(14px, env(safe-area-inset-top)) + 148px);
+    bottom: calc(126px + env(safe-area-inset-bottom));
   }
 }
