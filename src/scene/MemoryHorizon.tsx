@@ -11,7 +11,11 @@ type MemoryShard = {
 };
 
 type MemoryFragment = MemoryShard & {
-  kind: 'house' | 'stair' | 'chair' | 'glasses' | 'unknown';
+  kind: 'house' | 'stair' | 'chair' | 'glasses' | 'unknown' | 'snow-house' | 'terrain';
+};
+
+type CelestialMemory = MemoryShard & {
+  kind: 'earth' | 'moon' | 'asteroid';
 };
 
 export function MemoryHorizon() {
@@ -19,6 +23,7 @@ export function MemoryHorizon() {
   const cloudLayers = useMemo(() => makeCloudLayers(), []);
   const strataShards = useMemo(() => makeStrataShards(), []);
   const memoryFragments = useMemo(() => makeMemoryFragments(), []);
+  const celestialMemories = useMemo(() => makeCelestialMemories(), []);
 
   return (
     <group>
@@ -40,6 +45,12 @@ export function MemoryHorizon() {
       </group>
 
       <group>
+        {celestialMemories.map((memory) => (
+          <CelestialMemoryMesh key={memory.id} memory={memory} />
+        ))}
+      </group>
+
+      <group>
         {strataShards.map((shard) => (
           <mesh key={shard.id} position={shard.position} scale={shard.scale} rotation={shard.rotation}>
             <boxGeometry args={[1, 1, 1]} />
@@ -54,6 +65,39 @@ export function MemoryHorizon() {
         ))}
       </group>
     </group>
+  );
+}
+
+function CelestialMemoryMesh({ memory }: { memory: CelestialMemory }) {
+  if (memory.kind === 'earth') {
+    return (
+      <group position={memory.position} rotation={memory.rotation} scale={memory.scale}>
+        <mesh>
+          <sphereGeometry args={[1, 28, 16]} />
+          <meshBasicMaterial color={memory.color} transparent opacity={memory.opacity} depthWrite={false} />
+        </mesh>
+        <mesh rotation={[0.4, 0.2, 0.1]} scale={[1.04, 1.04, 1.04]}>
+          <sphereGeometry args={[1, 16, 10]} />
+          <meshBasicMaterial color="#e9e6d7" transparent opacity={memory.opacity * 0.18} depthWrite={false} wireframe />
+        </mesh>
+      </group>
+    );
+  }
+
+  if (memory.kind === 'moon') {
+    return (
+      <mesh position={memory.position} rotation={memory.rotation} scale={memory.scale}>
+        <sphereGeometry args={[1, 20, 12]} />
+        <meshBasicMaterial color={memory.color} transparent opacity={memory.opacity} depthWrite={false} />
+      </mesh>
+    );
+  }
+
+  return (
+    <mesh position={memory.position} rotation={memory.rotation} scale={memory.scale}>
+      <dodecahedronGeometry args={[1, 0]} />
+      <meshStandardMaterial color={memory.color} roughness={1} transparent opacity={memory.opacity} />
+    </mesh>
   );
 }
 
@@ -105,7 +149,8 @@ function MemoryFragmentMesh({ fragment }: { fragment: MemoryFragment }) {
     );
   }
 
-  if (fragment.kind === 'house') {
+  if (fragment.kind === 'house' || fragment.kind === 'snow-house') {
+    const roofColor = fragment.kind === 'snow-house' ? '#d9d7c8' : '#7f806c';
     return (
       <group position={fragment.position} rotation={fragment.rotation} scale={fragment.scale}>
         <mesh position={[0, 0.2, 0]} scale={[0.58, 0.42, 0.46]}>
@@ -114,9 +159,18 @@ function MemoryFragmentMesh({ fragment }: { fragment: MemoryFragment }) {
         </mesh>
         <mesh position={[0, 0.48, 0]} rotation={[0, 0, Math.PI / 4]} scale={[0.46, 0.46, 0.52]}>
           <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color="#7f806c" roughness={1} transparent opacity={fragment.opacity * 0.72} />
+          <meshStandardMaterial color={roofColor} roughness={1} transparent opacity={fragment.opacity * 0.72} />
         </mesh>
       </group>
+    );
+  }
+
+  if (fragment.kind === 'terrain') {
+    return (
+      <mesh position={fragment.position} rotation={fragment.rotation} scale={fragment.scale}>
+        <dodecahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial color={fragment.color} roughness={1} transparent opacity={fragment.opacity} />
+      </mesh>
     );
   }
 
@@ -225,6 +279,56 @@ function makeCloudLayers(): MemoryShard[] {
   ];
 }
 
+function makeCelestialMemories(): CelestialMemory[] {
+  return [
+    {
+      id: 'orbiting-memory-earth',
+      kind: 'earth',
+      position: [-4.1, 3.15, -46],
+      scale: [0.44, 0.44, 0.44],
+      rotation: [0.18, 0.42, -0.1],
+      color: '#8fa69a',
+      opacity: 0.16,
+    },
+    {
+      id: 'orbiting-memory-moon',
+      kind: 'moon',
+      position: [3.8, 2.85, -39],
+      scale: [0.26, 0.26, 0.26],
+      rotation: [0.1, 0.2, 0],
+      color: '#ddd8c7',
+      opacity: 0.22,
+    },
+    {
+      id: 'orbiting-memory-asteroid-a',
+      kind: 'asteroid',
+      position: [-2.9, 1.35, -27],
+      scale: [0.22, 0.16, 0.2],
+      rotation: [0.42, 0.8, 0.18],
+      color: '#9b9279',
+      opacity: 0.3,
+    },
+    {
+      id: 'orbiting-memory-asteroid-b',
+      kind: 'asteroid',
+      position: [2.45, 1.05, -22.5],
+      scale: [0.18, 0.24, 0.16],
+      rotation: [0.65, 1.6, -0.28],
+      color: '#7f836f',
+      opacity: 0.28,
+    },
+    {
+      id: 'orbiting-memory-asteroid-c',
+      kind: 'asteroid',
+      position: [1.2, 2.05, -34],
+      scale: [0.14, 0.11, 0.16],
+      rotation: [0.22, 1.2, 0.5],
+      color: '#b0a37e',
+      opacity: 0.2,
+    },
+  ];
+}
+
 function makeMemoryFragments(): MemoryFragment[] {
   return [
     {
@@ -244,6 +348,24 @@ function makeMemoryFragments(): MemoryFragment[] {
       rotation: [-0.08, 0.36, -0.05],
       color: '#90977f',
       opacity: 0.22,
+    },
+    {
+      id: 'fragment-snow-house-left',
+      kind: 'snow-house',
+      position: [-2.15, -0.64, -19.7],
+      scale: [0.38, 0.38, 0.38],
+      rotation: [0.08, 0.78, -0.08],
+      color: '#c6c1aa',
+      opacity: 0.3,
+    },
+    {
+      id: 'fragment-snow-cabin-far',
+      kind: 'snow-house',
+      position: [2.05, -0.56, -33.2],
+      scale: [0.28, 0.28, 0.28],
+      rotation: [-0.04, -0.42, 0.04],
+      color: '#b7b69f',
+      opacity: 0.2,
     },
     {
       id: 'fragment-stair-platform',
@@ -273,6 +395,24 @@ function makeMemoryFragments(): MemoryFragment[] {
       opacity: 0.42,
     },
     {
+      id: 'fragment-floating-terrain-a',
+      kind: 'terrain',
+      position: [-2.4, -1.28, -9.4],
+      scale: [0.44, 0.22, 0.38],
+      rotation: [0.5, 0.18, -0.28],
+      color: '#92886d',
+      opacity: 0.38,
+    },
+    {
+      id: 'fragment-floating-terrain-b',
+      kind: 'terrain',
+      position: [2.22, -1.36, -15.6],
+      scale: [0.38, 0.18, 0.48],
+      rotation: [0.25, 0.9, 0.22],
+      color: '#717d6f',
+      opacity: 0.34,
+    },
+    {
       id: 'fragment-unknown-fbx',
       kind: 'unknown',
       position: [-1.36, -1.15, -31.2],
@@ -288,7 +428,7 @@ function makeStrataShards(): MemoryShard[] {
   const shards: MemoryShard[] = [];
   const random = seededRandom(9407);
 
-  for (let i = 0; i < 36; i += 1) {
+  for (let i = 0; i < 40; i += 1) {
     const z = -3 - random() * 31;
     const side = random() > 0.5 ? 1 : -1;
     const x = side * (0.95 + random() * 1.15);
