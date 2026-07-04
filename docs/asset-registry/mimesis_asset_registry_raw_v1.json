@@ -1,0 +1,1774 @@
+{
+  "project": "MIMESIS Sight Path",
+  "registryVersion": "warehouse_raw_v1",
+  "assetCount": 123,
+  "totalBytes": 2325923013,
+  "items": [
+    {
+      "id": "150k",
+      "sourceFile": "150k.fbx",
+      "sourcePath": "/mnt/data/150k.fbx",
+      "sizeBytes": 9350156,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/150k.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "1elmla01hh_rock1_bytyrosmith_1",
+      "sourceFile": "1elmla01hh-Rock1_BYTyroSmith(1).zip",
+      "sourcePath": "/mnt/data/1elmla01hh-Rock1_BYTyroSmith(1).zip",
+      "sizeBytes": 7130398,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/1elmla01hh-Rock1_BYTyroSmith(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "3d_isometric_drawing_rooms",
+      "sourceFile": "3d_isometric_drawing_rooms.fbx",
+      "sourcePath": "/mnt/data/3d_isometric_drawing_rooms.fbx",
+      "sizeBytes": 12157308,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/3d_isometric_drawing_rooms.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "3ok8cthawqio_clock_constraints_for_animations_2",
+      "sourceFile": "3ok8cthawqio-Clock_Constraints_for_Animations(2).zip",
+      "sourcePath": "/mnt/data/3ok8cthawqio-Clock_Constraints_for_Animations(2).zip",
+      "sizeBytes": 5042530,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/3ok8cthawqio-Clock_Constraints_for_Animations(2).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "41_home_sunda_1",
+      "sourceFile": "41-home_sunda(1).zip",
+      "sourcePath": "/mnt/data/41-home_sunda(1).zip",
+      "sizeBytes": 22771424,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/41-home_sunda(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "50_haunted_sundanese_traditional_house_1",
+      "sourceFile": "50-haunted-sundanese-traditional-house(1).zip",
+      "sourcePath": "/mnt/data/50-haunted-sundanese-traditional-house(1).zip",
+      "sizeBytes": 7166456,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/50-haunted-sundanese-traditional-house(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "53_cottage_fbx_1",
+      "sourceFile": "53-cottage_fbx(1).zip",
+      "sourcePath": "/mnt/data/53-cottage_fbx(1).zip",
+      "sizeBytes": 19299,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/53-cottage_fbx(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "6dlly90x3j_rain_2",
+      "sourceFile": "6dlly90x3j-rain(2).zip",
+      "sourcePath": "/mnt/data/6dlly90x3j-rain(2).zip",
+      "sizeBytes": 7059321,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/6dlly90x3j-rain(2).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "6s3hqe2d6rr4_wood_1",
+      "sourceFile": "6s3hqe2d6rr4-Wood(1).zip",
+      "sourcePath": "/mnt/data/6s3hqe2d6rr4-Wood(1).zip",
+      "sizeBytes": 4654259,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/6s3hqe2d6rr4-Wood(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "85_rocks_1",
+      "sourceFile": "85-rocks(1).zip",
+      "sourcePath": "/mnt/data/85-rocks(1).zip",
+      "sizeBytes": 34031965,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/85-rocks(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "97_eolic_fbx_2",
+      "sourceFile": "97-eolic-fbx(2).rar",
+      "sourcePath": "/mnt/data/97-eolic-fbx(2).rar",
+      "sizeBytes": 160313,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/97-eolic-fbx(2).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "ancient_housebuildingfbx",
+      "sourceFile": "Ancient_HouseBuildingFBX.rar",
+      "sourcePath": "/mnt/data/Ancient_HouseBuildingFBX.rar",
+      "sizeBytes": 158820529,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Ancient_HouseBuildingFBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "assets_fbx_1",
+      "sourceFile": "Assets_fbx (1).zip",
+      "sourcePath": "/mnt/data/Assets_fbx (1).zip",
+      "sizeBytes": 1194432,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/Assets_fbx (1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "assets_fbx_2",
+      "sourceFile": "Assets_fbx (2).zip",
+      "sourcePath": "/mnt/data/Assets_fbx (2).zip",
+      "sizeBytes": 1194432,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/Assets_fbx (2).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "assets_fbx",
+      "sourceFile": "Assets_fbx.zip",
+      "sourcePath": "/mnt/data/Assets_fbx.zip",
+      "sizeBytes": 1415947,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/Assets_fbx.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "asteroid_1e_fbx",
+      "sourceFile": "Asteroid_1e_FBX.zip",
+      "sourcePath": "/mnt/data/Asteroid_1e_FBX.zip",
+      "sizeBytes": 54716625,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/Asteroid_1e_FBX.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "asteroid_2b_fbx_1",
+      "sourceFile": "Asteroid_2b_FBX (1).zip",
+      "sourcePath": "/mnt/data/Asteroid_2b_FBX (1).zip",
+      "sizeBytes": 36220430,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/Asteroid_2b_FBX (1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "asteroid_2b_fbx",
+      "sourceFile": "Asteroid_2b_FBX.zip",
+      "sourcePath": "/mnt/data/Asteroid_2b_FBX.zip",
+      "sizeBytes": 36220430,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/Asteroid_2b_FBX.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "bazaar_stand_collection",
+      "sourceFile": "BAZAAR_STAND.collection.fbx",
+      "sourcePath": "/mnt/data/BAZAAR_STAND.collection.fbx",
+      "sizeBytes": 190700,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/BAZAAR_STAND.collection.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "beach_chair",
+      "sourceFile": "Beach_Chair.fbx",
+      "sourcePath": "/mnt/data/Beach_Chair.fbx",
+      "sizeBytes": 1475440,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/Beach_Chair.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "bedroom",
+      "sourceFile": "Bedroom.fbx",
+      "sourcePath": "/mnt/data/Bedroom.fbx",
+      "sizeBytes": 168774000,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Bedroom.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "beer_barrel",
+      "sourceFile": "Beer_Barrel.zip",
+      "sourcePath": "/mnt/data/Beer_Barrel.zip",
+      "sizeBytes": 13289228,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/Beer_Barrel.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "beetle_fbx",
+      "sourceFile": "Beetle_-_FBX.FBX",
+      "sourcePath": "/mnt/data/Beetle_-_FBX.FBX",
+      "sizeBytes": 3086272,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/Beetle_-_FBX.FBX",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "big_ben",
+      "sourceFile": "Big_Ben.FBX",
+      "sourcePath": "/mnt/data/Big_Ben.FBX",
+      "sizeBytes": 23968,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/Big_Ben.FBX",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "blocks_1",
+      "sourceFile": "Blocks(1).FBX",
+      "sourcePath": "/mnt/data/Blocks(1).FBX",
+      "sizeBytes": 126448,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/Blocks(1).FBX",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "cactus_lowpoly_1",
+      "sourceFile": "Cactus_lowpoly(1).fbx",
+      "sourcePath": "/mnt/data/Cactus_lowpoly(1).fbx",
+      "sizeBytes": 4204064,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/Cactus_lowpoly(1).fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "cement_bags_on_pallet_fbx",
+      "sourceFile": "Cement_Bags_on_Pallet__FBX.rar",
+      "sourcePath": "/mnt/data/Cement_Bags_on_Pallet__FBX.rar",
+      "sizeBytes": 16823254,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/Cement_Bags_on_Pallet__FBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "cloud_polygon_blender_1",
+      "sourceFile": "Cloud_Polygon_Blender_1.fbx",
+      "sourcePath": "/mnt/data/Cloud_Polygon_Blender_1.fbx",
+      "sizeBytes": 3639484,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/Cloud_Polygon_Blender_1.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "collection_wooden_v01",
+      "sourceFile": "Collection_wooden_V01.FBX",
+      "sourcePath": "/mnt/data/Collection_wooden_V01.FBX",
+      "sizeBytes": 1949952,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/Collection_wooden_V01.FBX",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "earth",
+      "sourceFile": "Earth.fbx",
+      "sourcePath": "/mnt/data/Earth.fbx",
+      "sizeBytes": 100396,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/Earth.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "english_thatched_house_fbx",
+      "sourceFile": "English_thatched_house__FBX.rar",
+      "sourcePath": "/mnt/data/English_thatched_house__FBX.rar",
+      "sizeBytes": 8734582,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/English_thatched_house__FBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx_1",
+      "sourceFile": "FBX (1).rar",
+      "sourcePath": "/mnt/data/FBX (1).rar",
+      "sizeBytes": 25800758,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/FBX (1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx_1_2",
+      "sourceFile": "FBX (1).zip",
+      "sourcePath": "/mnt/data/FBX (1).zip",
+      "sizeBytes": 956918,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/FBX (1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx_2",
+      "sourceFile": "FBX (2).rar",
+      "sourcePath": "/mnt/data/FBX (2).rar",
+      "sizeBytes": 16083699,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/FBX (2).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx",
+      "sourceFile": "FBX.rar",
+      "sourcePath": "/mnt/data/FBX.rar",
+      "sizeBytes": 186363,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/FBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx_2",
+      "sourceFile": "FBX.zip",
+      "sourcePath": "/mnt/data/FBX.zip",
+      "sizeBytes": 74198,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/FBX.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx_bridge_1",
+      "sourceFile": "FBX_Bridge(1).rar",
+      "sourcePath": "/mnt/data/FBX_Bridge(1).rar",
+      "sizeBytes": 4154873,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/FBX_Bridge(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx_models",
+      "sourceFile": "FBX_Models.zip",
+      "sourcePath": "/mnt/data/FBX_Models.zip",
+      "sizeBytes": 9840563,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/FBX_Models.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "free_low_poly_vehicles_pack_by_rgsdev",
+      "sourceFile": "Free_Low_Poly_Vehicles_Pack_by_Rgsdev.zip",
+      "sourcePath": "/mnt/data/Free_Low_Poly_Vehicles_Pack_by_Rgsdev.zip",
+      "sizeBytes": 1443472,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/Free_Low_Poly_Vehicles_Pack_by_Rgsdev.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "free_red_towerfbx",
+      "sourceFile": "Free_Red_TowerFBX.rar",
+      "sourcePath": "/mnt/data/Free_Red_TowerFBX.rar",
+      "sizeBytes": 58491391,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Free_Red_TowerFBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "free_stair_platformfbx",
+      "sourceFile": "Free_stair_platformFBX.rar",
+      "sourcePath": "/mnt/data/Free_stair_platformFBX.rar",
+      "sizeBytes": 28485357,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/Free_stair_platformFBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "glb_mega_village_environment_4_houses",
+      "sourceFile": "GLB_Mega_Village_Environment_4_Houses.zip",
+      "sourcePath": "/mnt/data/GLB_Mega_Village_Environment_4_Houses.zip",
+      "sizeBytes": 265028749,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/GLB_Mega_Village_Environment_4_Houses.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "gunnedcar",
+      "sourceFile": "GunnedCar.fbx",
+      "sourcePath": "/mnt/data/GunnedCar.fbx",
+      "sizeBytes": 1884608,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/GunnedCar.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "hiker_gerald_fbx",
+      "sourceFile": "Hiker_Gerald_FBX.zip",
+      "sourcePath": "/mnt/data/Hiker_Gerald_FBX.zip",
+      "sizeBytes": 2101016,
+      "category": "characters",
+      "biomes": [
+        "walker"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/characters/Hiker_Gerald_FBX.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "house_1",
+      "sourceFile": "House_1.fbx",
+      "sourcePath": "/mnt/data/House_1.fbx",
+      "sizeBytes": 113422812,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/House_1.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "lamp_pillarfbx",
+      "sourceFile": "Lamp_PillarFBX.rar",
+      "sourcePath": "/mnt/data/Lamp_PillarFBX.rar",
+      "sizeBytes": 33548288,
+      "category": "architecture_interior",
+      "biomes": [
+        "floating-ruins",
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Lamp_PillarFBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "lighthouse_island_toy",
+      "sourceFile": "Lighthouse_island_toy.fbx",
+      "sourcePath": "/mnt/data/Lighthouse_island_toy.fbx",
+      "sizeBytes": 48428,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Lighthouse_island_toy.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "lowpolycars",
+      "sourceFile": "LowPolyCars.fbx",
+      "sourcePath": "/mnt/data/LowPolyCars.fbx",
+      "sizeBytes": 1871228,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/LowPolyCars.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "low_poly_house",
+      "sourceFile": "Low_poly_House.fbx",
+      "sourcePath": "/mnt/data/Low_poly_House.fbx",
+      "sizeBytes": 1609452,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Low_poly_House.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "low_poly_ufo_fbx",
+      "sourceFile": "Low_poly_ufo_FBX.zip",
+      "sourcePath": "/mnt/data/Low_poly_ufo_FBX.zip",
+      "sizeBytes": 41202506,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/Low_poly_ufo_FBX.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "m3a1_scout_car_fbx",
+      "sourceFile": "M3A1_scout_car_FBX.rar",
+      "sourcePath": "/mnt/data/M3A1_scout_car_FBX.rar",
+      "sizeBytes": 31917569,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/M3A1_scout_car_FBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "malecharacter",
+      "sourceFile": "MaleCharacter.fbx",
+      "sourcePath": "/mnt/data/MaleCharacter.fbx",
+      "sizeBytes": 40268332,
+      "category": "characters",
+      "biomes": [
+        "walker"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/characters/MaleCharacter.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "moon_2k",
+      "sourceFile": "Moon_2K.fbx",
+      "sourcePath": "/mnt/data/Moon_2K.fbx",
+      "sizeBytes": 33404,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/Moon_2K.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "olbrecht",
+      "sourceFile": "Olbrecht.fbx",
+      "sourcePath": "/mnt/data/Olbrecht.fbx",
+      "sizeBytes": 71532,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Olbrecht.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "olbrecht02",
+      "sourceFile": "Olbrecht02.fbx",
+      "sourcePath": "/mnt/data/Olbrecht02.fbx",
+      "sizeBytes": 71532,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Olbrecht02.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "old_bag_low",
+      "sourceFile": "Old_Bag_low.fbx",
+      "sourcePath": "/mnt/data/Old_Bag_low.fbx",
+      "sizeBytes": 387884,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/Old_Bag_low.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "old_suitcase",
+      "sourceFile": "Old_Suitcase.fbx",
+      "sourcePath": "/mnt/data/Old_Suitcase.fbx",
+      "sizeBytes": 200172,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/Old_Suitcase.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "pk01_1_fbx_signtra_collect_lot_01_v1_0_0",
+      "sourceFile": "PK01_1_FBX_SignTra_Collect_LOT_01_v1.0.0.zip",
+      "sourcePath": "/mnt/data/PK01_1_FBX_SignTra_Collect_LOT_01_v1.0.0.zip",
+      "sizeBytes": 192383,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/PK01_1_FBX_SignTra_Collect_LOT_01_v1.0.0.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "pack_of_items_1",
+      "sourceFile": "Pack_of_items(1).fbx",
+      "sourcePath": "/mnt/data/Pack_of_items(1).fbx",
+      "sizeBytes": 83592668,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/Pack_of_items(1).fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "partsforsale_1",
+      "sourceFile": "PartsForSale(1).fbx",
+      "sourcePath": "/mnt/data/PartsForSale(1).fbx",
+      "sizeBytes": 583920,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/PartsForSale(1).fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "radiation_warning_sign",
+      "sourceFile": "Radiation_Warning_Sign.rar",
+      "sourcePath": "/mnt/data/Radiation_Warning_Sign.rar",
+      "sizeBytes": 6922934,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/Radiation_Warning_Sign.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "realistic_man_fbx",
+      "sourceFile": "Realistic_man_Fbx.zip",
+      "sourcePath": "/mnt/data/Realistic_man_Fbx.zip",
+      "sizeBytes": 84649950,
+      "category": "characters",
+      "biomes": [
+        "walker"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/characters/Realistic_man_Fbx.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "roadblocker1",
+      "sourceFile": "RoadBlocker1.fbx",
+      "sourcePath": "/mnt/data/RoadBlocker1.fbx",
+      "sizeBytes": 85959,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/RoadBlocker1.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "roadblocker2",
+      "sourceFile": "RoadBlocker2.fbx",
+      "sourcePath": "/mnt/data/RoadBlocker2.fbx",
+      "sizeBytes": 71859,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/RoadBlocker2.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "roadsign_1",
+      "sourceFile": "RoadSign(1).fbx",
+      "sourcePath": "/mnt/data/RoadSign(1).fbx",
+      "sizeBytes": 4224912,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/RoadSign(1).fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "ruin02_fbx_1",
+      "sourceFile": "Ruin02_fbx(1).rar",
+      "sourcePath": "/mnt/data/Ruin02_fbx(1).rar",
+      "sizeBytes": 245246,
+      "category": "architecture_interior",
+      "biomes": [
+        "floating-ruins",
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Ruin02_fbx(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "ruins_fbx",
+      "sourceFile": "Ruins_fbx.rar",
+      "sourcePath": "/mnt/data/Ruins_fbx.rar",
+      "sizeBytes": 497352,
+      "category": "architecture_interior",
+      "biomes": [
+        "floating-ruins",
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Ruins_fbx.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "scavenger",
+      "sourceFile": "Scavenger.fbx",
+      "sourcePath": "/mnt/data/Scavenger.fbx",
+      "sizeBytes": 1621520,
+      "category": "characters",
+      "biomes": [
+        "walker"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/characters/Scavenger.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "shelter",
+      "sourceFile": "Shelter.fbx",
+      "sourcePath": "/mnt/data/Shelter.fbx",
+      "sizeBytes": 249460348,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Shelter.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "sign",
+      "sourceFile": "Sign.fbx",
+      "sourcePath": "/mnt/data/Sign.fbx",
+      "sizeBytes": 977712,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/Sign.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "signal_stop_fbx",
+      "sourceFile": "Signal_Stop_fbx.rar",
+      "sourcePath": "/mnt/data/Signal_Stop_fbx.rar",
+      "sizeBytes": 858214,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/Signal_Stop_fbx.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "snow_cabin_iso",
+      "sourceFile": "Snow_Cabin_iso.fbx",
+      "sourcePath": "/mnt/data/Snow_Cabin_iso.fbx",
+      "sizeBytes": 1936176,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room",
+        "winter-memory"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Snow_Cabin_iso.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "snowy_house_fbx",
+      "sourceFile": "Snowy_house(FBX).zip",
+      "sourcePath": "/mnt/data/Snowy_house(FBX).zip",
+      "sizeBytes": 16906742,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room",
+        "winter-memory"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Snowy_house(FBX).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "suitcase2",
+      "sourceFile": "Suitcase2.fbx",
+      "sourcePath": "/mnt/data/Suitcase2.fbx",
+      "sizeBytes": 358108,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/Suitcase2.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "tardis",
+      "sourceFile": "TARDIS.fbx",
+      "sourcePath": "/mnt/data/TARDIS.fbx",
+      "sizeBytes": 365088,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/TARDIS.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "tower_arlesfbx",
+      "sourceFile": "Tower_arlesFBX.rar",
+      "sourcePath": "/mnt/data/Tower_arlesFBX.rar",
+      "sizeBytes": 79893991,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Tower_arlesFBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "town_clock_fbx",
+      "sourceFile": "Town_clock_fbx.fbx",
+      "sourcePath": "/mnt/data/Town_clock_fbx.fbx",
+      "sizeBytes": 2889276,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/Town_clock_fbx.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "traffic_cone_fbx_1",
+      "sourceFile": "Traffic_cone_FBX(1).rar",
+      "sourcePath": "/mnt/data/Traffic_cone_FBX(1).rar",
+      "sizeBytes": 274768,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/Traffic_cone_FBX(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "traffic_signal_fbx_1",
+      "sourceFile": "Traffic_signal_FBX(1).rar",
+      "sourcePath": "/mnt/data/Traffic_signal_FBX(1).rar",
+      "sizeBytes": 244207,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/Traffic_signal_FBX(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "westsignfbx_1",
+      "sourceFile": "WestSignFBX(1).rar",
+      "sourcePath": "/mnt/data/WestSignFBX(1).rar",
+      "sizeBytes": 23450456,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/WestSignFBX(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "wooden_rowboat",
+      "sourceFile": "Wooden_Rowboat.fbx",
+      "sourcePath": "/mnt/data/Wooden_Rowboat.fbx",
+      "sizeBytes": 7221228,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/Wooden_Rowboat.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "axes",
+      "sourceFile": "axes.FBX",
+      "sourcePath": "/mnt/data/axes.FBX",
+      "sizeBytes": 62976,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/axes.FBX",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "bathrooms",
+      "sourceFile": "bathrooms_.fbx",
+      "sourcePath": "/mnt/data/bathrooms_.fbx",
+      "sizeBytes": 12923612,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/bathrooms_.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "block_low_fbx_1",
+      "sourceFile": "block_low_FBX(1).rar",
+      "sourcePath": "/mnt/data/block_low_FBX(1).rar",
+      "sizeBytes": 10040,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/block_low_FBX(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "box",
+      "sourceFile": "box.rar",
+      "sourcePath": "/mnt/data/box.rar",
+      "sizeBytes": 405620,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/box.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "cabina",
+      "sourceFile": "cabina.fbx",
+      "sourcePath": "/mnt/data/cabina.fbx",
+      "sizeBytes": 388876,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room",
+        "winter-memory"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/cabina.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "carmesh",
+      "sourceFile": "carMesh.fbx",
+      "sourcePath": "/mnt/data/carMesh.fbx",
+      "sizeBytes": 3384496,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/carMesh.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "carriage_fbx",
+      "sourceFile": "carriage_fbx.fbx",
+      "sourcePath": "/mnt/data/carriage_fbx.fbx",
+      "sizeBytes": 601008,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/carriage_fbx.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "classic_car_2",
+      "sourceFile": "classic_car_2.fbx",
+      "sourcePath": "/mnt/data/classic_car_2.fbx",
+      "sizeBytes": 9207020,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/classic_car_2.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "cliff_low_1",
+      "sourceFile": "cliff_low(1).fbx",
+      "sourcePath": "/mnt/data/cliff_low(1).fbx",
+      "sizeBytes": 3904924,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff",
+        "floating-ruins"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/cliff_low(1).fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "cloud",
+      "sourceFile": "cloud.fbx",
+      "sourcePath": "/mnt/data/cloud.fbx",
+      "sizeBytes": 2227500,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/cloud.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "coffee_model_corona",
+      "sourceFile": "coffee_model__corona.fbx",
+      "sourcePath": "/mnt/data/coffee_model__corona.fbx",
+      "sizeBytes": 1006656,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/coffee_model__corona.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "cowshed_fbx",
+      "sourceFile": "cowshed_FBX.rar",
+      "sourcePath": "/mnt/data/cowshed_FBX.rar",
+      "sizeBytes": 125851,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/cowshed_FBX.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "e9cb403o4yrk_item01_1",
+      "sourceFile": "e9cb403o4yrk-item01(1).zip",
+      "sourcePath": "/mnt/data/e9cb403o4yrk-item01(1).zip",
+      "sizeBytes": 6707178,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/e9cb403o4yrk-item01(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbx_2_2",
+      "sourceFile": "fbx (2).zip",
+      "sourcePath": "/mnt/data/fbx (2).zip",
+      "sizeBytes": 19347933,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/fbx (2).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "fbxglasses",
+      "sourceFile": "fbxGlasses.fbx",
+      "sourcePath": "/mnt/data/fbxGlasses.fbx",
+      "sizeBytes": 63936,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/fbxGlasses.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "female",
+      "sourceFile": "female.fbx",
+      "sourcePath": "/mnt/data/female.fbx",
+      "sizeBytes": 1243184,
+      "category": "characters",
+      "biomes": [
+        "walker"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/characters/female.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "female_base",
+      "sourceFile": "female_base.zip",
+      "sourcePath": "/mnt/data/female_base.zip",
+      "sizeBytes": 1680577,
+      "category": "characters",
+      "biomes": [
+        "walker"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/characters/female_base.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "firehydrant_1",
+      "sourceFile": "firehydrant(1).FBX",
+      "sourcePath": "/mnt/data/firehydrant(1).FBX",
+      "sizeBytes": 747184,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/firehydrant(1).FBX",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "g3yul469purk_debris_1",
+      "sourceFile": "g3yul469purk-debris(1).rar",
+      "sourcePath": "/mnt/data/g3yul469purk-debris(1).rar",
+      "sizeBytes": 7877186,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/g3yul469purk-debris(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "generic_spare_wheel_fbx",
+      "sourceFile": "generic_spare_wheel_fbx.zip",
+      "sourcePath": "/mnt/data/generic_spare_wheel_fbx.zip",
+      "sizeBytes": 1391939,
+      "category": "props",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/props/generic_spare_wheel_fbx.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "gu7u77vio0zk_simple_house_1",
+      "sourceFile": "gu7u77vio0zk-simple_house(1).zip",
+      "sourcePath": "/mnt/data/gu7u77vio0zk-simple_house(1).zip",
+      "sizeBytes": 6075149,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/gu7u77vio0zk-simple_house(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "homestead",
+      "sourceFile": "homestead.FBX",
+      "sourcePath": "/mnt/data/homestead.FBX",
+      "sizeBytes": 7874112,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/homestead.FBX",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "house_fbx",
+      "sourceFile": "house_fbx.zip",
+      "sourcePath": "/mnt/data/house_fbx.zip",
+      "sizeBytes": 33647429,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/house_fbx.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "idv52g8s4zr4_aio_bookshelf_2",
+      "sourceFile": "idv52g8s4zr4-AIO_BookShelf(2).7z",
+      "sourcePath": "/mnt/data/idv52g8s4zr4-AIO_BookShelf(2).7z",
+      "sizeBytes": 933440,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/idv52g8s4zr4-AIO_BookShelf(2).7z",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "isometric_rooms",
+      "sourceFile": "isometric_rooms.fbx",
+      "sourcePath": "/mnt/data/isometric_rooms.fbx",
+      "sizeBytes": 35107548,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/isometric_rooms.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "m57gfu447abk_wall_2",
+      "sourceFile": "m57gfu447abk-Wall(2).rar",
+      "sourcePath": "/mnt/data/m57gfu447abk-Wall(2).rar",
+      "sizeBytes": 4030305,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/m57gfu447abk-Wall(2).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "n19_e41_fbx_1",
+      "sourceFile": "n19_e41_fbx(1).rar",
+      "sourcePath": "/mnt/data/n19_e41_fbx(1).rar",
+      "sizeBytes": 136026148,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/n19_e41_fbx(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "naawkhr5zw1s_rock_1",
+      "sourceFile": "naawkhr5zw1s-Rock(1).7z",
+      "sourcePath": "/mnt/data/naawkhr5zw1s-Rock(1).7z",
+      "sizeBytes": 1378947,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/naawkhr5zw1s-Rock(1).7z",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "oil_truck_fbx_1",
+      "sourceFile": "oil-truck_fbx(1).rar",
+      "sourcePath": "/mnt/data/oil-truck_fbx(1).rar",
+      "sizeBytes": 91030,
+      "category": "vehicles",
+      "biomes": [
+        "lost-vehicle"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/vehicles/oil-truck_fbx(1).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "oz3cxs1hq03k_marblegrass_2",
+      "sourceFile": "oz3cxs1hq03k-marblegrass(2).zip",
+      "sourcePath": "/mnt/data/oz3cxs1hq03k-marblegrass(2).zip",
+      "sizeBytes": 11846651,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/oz3cxs1hq03k-marblegrass(2).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "payphone_fbx",
+      "sourceFile": "payphone_fbx.zip",
+      "sourcePath": "/mnt/data/payphone_fbx.zip",
+      "sizeBytes": 22829788,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/payphone_fbx.zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "pipe_a_01",
+      "sourceFile": "pipe_a_01.fbx",
+      "sourcePath": "/mnt/data/pipe_a_01.fbx",
+      "sizeBytes": 56928,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/pipe_a_01.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "pipe_a_a_01",
+      "sourceFile": "pipe_a_a_01.fbx",
+      "sourcePath": "/mnt/data/pipe_a_a_01.fbx",
+      "sizeBytes": 56928,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/pipe_a_a_01.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "projec2_3dview_3d",
+      "sourceFile": "projec2-3DView-{3D}.fbx",
+      "sourcePath": "/mnt/data/projec2-3DView-{3D}.fbx",
+      "sizeBytes": 20325248,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/projec2-3DView-{3D}.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "pxfpf20su7ls_brick_2",
+      "sourceFile": "pxfpf20su7ls-Brick(2).rar",
+      "sourcePath": "/mnt/data/pxfpf20su7ls-Brick(2).rar",
+      "sizeBytes": 3357511,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/pxfpf20su7ls-Brick(2).rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "sb43aqq8sjk0_grass_fbx_1",
+      "sourceFile": "sb43aqq8sjk0-Grass_fbx(1).zip",
+      "sourcePath": "/mnt/data/sb43aqq8sjk0-Grass_fbx(1).zip",
+      "sizeBytes": 217767,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff"
+      ],
+      "priority": 5,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/sb43aqq8sjk0-Grass_fbx(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "shapespark_interior_plants_kit",
+      "sourceFile": "shapespark_interior-plants_kit.fbx",
+      "sourcePath": "/mnt/data/shapespark_interior-plants_kit.fbx",
+      "sizeBytes": 32898028,
+      "category": "archive_unknown",
+      "biomes": [
+        "archive"
+      ],
+      "priority": 2,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/archive_unknown/shapespark_interior-plants_kit.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "stone11_1",
+      "sourceFile": "stone11(1).fbx",
+      "sourcePath": "/mnt/data/stone11(1).fbx",
+      "sizeBytes": 236956,
+      "category": "nature_terrain",
+      "biomes": [
+        "floating-cliff",
+        "floating-ruins"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/nature_terrain/stone11(1).fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "terrain",
+      "sourceFile": "terrain.fbx",
+      "sourcePath": "/mnt/data/terrain.fbx",
+      "sizeBytes": 50091984,
+      "category": "sky_special",
+      "biomes": [
+        "distant-world"
+      ],
+      "priority": 3,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/sky_special/terrain.fbx",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "trafficlightfbx",
+      "sourceFile": "trafficlightfbx.rar",
+      "sourcePath": "/mnt/data/trafficlightfbx.rar",
+      "sizeBytes": 13939795,
+      "category": "street_industrial",
+      "biomes": [
+        "forgotten-street"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/street_industrial/trafficlightfbx.rar",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "wrzuj36kxa80_pillar_model_1",
+      "sourceFile": "wrzuj36kxa80-Pillar_Model(1).zip",
+      "sourcePath": "/mnt/data/wrzuj36kxa80-Pillar_Model(1).zip",
+      "sizeBytes": 2074174,
+      "category": "architecture_interior",
+      "biomes": [
+        "floating-ruins",
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/wrzuj36kxa80-Pillar_Model(1).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    },
+    {
+      "id": "xfpzgroiyups_wall_2",
+      "sourceFile": "xfpzgroiyups-wall(2).zip",
+      "sourcePath": "/mnt/data/xfpzgroiyups-wall(2).zip",
+      "sizeBytes": 1065288,
+      "category": "architecture_interior",
+      "biomes": [
+        "forgotten-village",
+        "private-room"
+      ],
+      "priority": 4,
+      "status": "raw_uploaded_in_chat",
+      "repoTarget": "public/assets/warehouse/raw/architecture_interior/xfpzgroiyups-wall(2).zip",
+      "notes": "Needs visual inspection / conversion to GLB before production use."
+    }
+  ]
+}

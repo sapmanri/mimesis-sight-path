@@ -10,6 +10,7 @@
 // 검증: 이 모듈은 headless-gl로 실제 렌더링해 레퍼런스와 비교하며 다듬었다.
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { ObservationScene } from '../data/jeju';
 
 export const PALETTE = {
@@ -45,7 +46,108 @@ export type BuiltWorld = {
   fogColor: THREE.Color;
   /** scene-index progress (0..scenes.length-1) → curve t (0..1) */
   progressToT: (progress: number) => number;
+  /** 모든 실물 모델 로드/배치 완료 시점 (실패해도 resolve — 프록시 폴백 유지) */
+  ready: Promise<void>;
 };
+
+
+// ---------- BUILD 075: 실물 모델 시스템 ----------
+// 원칙: 모델은 팔레트를 통과해야만 세계에 들어온다 (원색 반입 금지).
+// 로드 실패 시 프로시저럴 프록시가 그대로 남는다 (폴백 안전).
+
+export type ModelLoader = (file: string) => Promise<THREE.Group>;
+
+type ModelSpec = {
+  file: string;
+  height: number;        // 정규화 목표 높이 (월드 유닛, 사람 키 = 0.9)
+  tint: string;          // 텍스처/무채색 재질의 대체 틴트
+  preRotateX?: number;   // 눕혀진 모델 세우기 등
+};
+
+const MODELS: Record<string, ModelSpec> = {
+  suitcase: { file: 'Old_Suitcase.glb', height: 0.5, tint: PALETTE.mint, preRotateX: -Math.PI / 2 },
+  cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2' },
+  lighthouse: { file: 'Lighthouse_island_toy.glb', height: 3.4, tint: PALETTE.white },
+  stone: { file: 'stone11.glb', height: 0.2, tint: PALETTE.basalt },
+};
+
+const PALETTE_HUES = [0.07, 0.11, 0.29, 0.53]; // wood, sand, sage, teal
+
+function remapHue(h: number) {
+  let best = PALETTE_HUES[0];
+  let bestD = 2;
+  for (const p of PALETTE_HUES) {
+    const d = Math.min(Math.abs(h - p), 1 - Math.abs(h - p));
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  return best;
+}
+
+/** 모든 재질을 팔레트 안으로 리맵. 명도는 살리고 색조를 우리 세계로 끌어온다. */
+function applyPalette(group: THREE.Group, fallbackTint: string) {
+  const fallback = new THREE.Color(fallbackTint);
+  group.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const remapped = mats.map((orig) => {
+      const o = orig as THREE.MeshStandardMaterial;
+      const c = new THREE.Color();
+      const src = o.color;
+      const isTexturedOrFlat = !!o.map || !src || (src.r > 0.92 && src.g > 0.92 && src.b > 0.92);
+      if (isTexturedOrFlat) {
+        c.copy(fallback);
+      } else {
+        const hsl = { h: 0, s: 0, l: 0 };
+        src.getHSL(hsl);
+        const h = hsl.s < 0.08 ? 0.11 : remapHue(hsl.h);
+        const s = Math.min(hsl.s * 0.55, 0.34);
+        const l = Math.min(0.82, Math.max(0.16, hsl.l));
+        c.setHSL(h, s, l);
+      }
+      return new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0 });
+    });
+    mesh.material = Array.isArray(mesh.material) ? remapped : remapped[0];
+  });
+}
+
+/** 바운딩박스 기준: 목표 높이로 스케일, 바닥을 y=0, 중심을 원점으로. */
+function normalizeModel(group: THREE.Group, spec: ModelSpec) {
+  if (spec.preRotateX) group.rotation.x = spec.preRotateX;
+  group.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(group);
+  const size = box.getSize(new THREE.Vector3());
+  const s = spec.height / Math.max(size.y, 1e-6);
+  group.scale.setScalar(s);
+  group.updateMatrixWorld(true);
+  const box2 = new THREE.Box3().setFromObject(group);
+  const center = box2.getCenter(new THREE.Vector3());
+  group.position.x -= center.x;
+  group.position.z -= center.z;
+  group.position.y -= box2.min.y;
+  const wrapper = new THREE.Group();
+  wrapper.add(group);
+  return wrapper;
+}
+
+const defaultLoader: ModelLoader = (file) =>
+  new Promise((resolve, reject) => {
+    new GLTFLoader().load(
+      `/assets/models/${file}`,
+      (gltf) => resolve(gltf.scene as unknown as THREE.Group),
+      undefined,
+      reject,
+    );
+  });
+
+async function loadKitModel(key: string, loadModel: ModelLoader) {
+  const spec = MODELS[key];
+  const raw = await loadModel(spec.file);
+  applyPalette(raw, spec.tint);
+  return normalizeModel(raw, spec);
+}
 
 function seededRandom(seed: number) {
   let v = seed % 2147483647;
@@ -57,7 +159,7 @@ function noise1(x: number) {
   return Math.sin(x * 1.7) * 0.55 + Math.sin(x * 3.7 + 1.3) * 0.3 + Math.sin(x * 7.1 + 4.2) * 0.15;
 }
 
-export function buildWorld(scenes: ObservationScene[]): BuiltWorld {
+export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = defaultLoader): BuiltWorld {
   const group = new THREE.Group();
 
   // ---- 1. path: ONE continuous centripetal catmull-rom, with lead-in/out ----
@@ -110,8 +212,13 @@ export function buildWorld(scenes: ObservationScene[]): BuiltWorld {
     const nor = new THREE.Vector3(-tan.z, 0, tan.x);
     return { p, tan, nor, w: widthAt(t) };
   });
-  group.add(buildMemoryObjects(scenes, anchors));
-  group.add(buildDistantWorld());
+  const kitSlots: { kit: string; slot: THREE.Group; seed: number }[] = [];
+  group.add(buildMemoryObjects(scenes, anchors, kitSlots));
+  const distant = buildDistantWorld();
+  group.add(distant.group);
+
+  // ---- 실물 모델 비동기 투입 (BUILD 075) ----
+  const ready = attachModels(kitSlots, distant.lighthouseSlot, loadModel).catch(() => {});
 
   // ---- lights ----
   const lights = new THREE.Group();
@@ -135,7 +242,61 @@ export function buildWorld(scenes: ObservationScene[]): BuiltWorld {
   lights.add(fill);
   group.add(lights);
 
-  return { group, curve, anchors, sun, fogColor: new THREE.Color(PALETTE.fog), progressToT };
+  return { group, curve, anchors, sun, fogColor: new THREE.Color(PALETTE.fog), progressToT, ready: ready as Promise<void> };
+}
+
+async function attachModels(
+  kitSlots: { kit: string; slot: THREE.Group; seed: number }[],
+  lighthouseSlot: THREE.Group,
+  loadModel: ModelLoader,
+) {
+  const tasks: Promise<void>[] = [];
+
+  // 캐리어: 프록시 대신 진짜 낡은 캐리어
+  const suitcaseSlots = kitSlots.filter((k) => k.kit === 'suitcase-kit');
+  if (suitcaseSlots.length) {
+    tasks.push(loadKitModel('suitcase', loadModel).then((model) => {
+      suitcaseSlots.forEach((k) => { k.slot.clear(); k.slot.add(model.clone(true)); });
+    }));
+  }
+
+  // 돌담: dodecahedron 대신 진짜 돌 메시로 담 쌓기
+  const wallSlots = kitSlots.filter((k) => k.kit === 'stone-wall-kit' || k.kit === 'sea-edge-kit');
+  if (wallSlots.length) {
+    tasks.push(loadKitModel('stone', loadModel).then((stone) => {
+      wallSlots.forEach((k) => {
+        const rnd = seededRandom(k.seed);
+        k.slot.clear();
+        const n = k.kit === 'stone-wall-kit' ? 9 : 4;
+        for (let i = 0; i < n; i += 1) {
+          const s = stone.clone(true);
+          const course = k.kit === 'stone-wall-kit' ? i % 2 : 0;
+          s.position.set(-0.5 + (i * 0.13) + (rnd() - 0.5) * 0.04, course * 0.13, (rnd() - 0.5) * 0.08);
+          s.rotation.y = rnd() * Math.PI * 2;
+          s.scale.setScalar(0.75 + rnd() * 0.6);
+          k.slot.add(s);
+        }
+      });
+    }));
+  }
+
+  // 길가의 오두막: 장면이 아니라 길 옆의 기억 (돌담길 부근)
+  const cabinHost = kitSlots.find((k) => k.kit === 'stone-wall-kit');
+  if (cabinHost) {
+    tasks.push(loadKitModel('cabin', loadModel).then((cabin) => {
+      cabin.position.set(1.6, -0.5, -1.4); // 길 옆, 살짝 아래 — 제 절벽 위에 앉은 느낌
+      cabin.rotation.y = -0.6;
+      cabinHost.slot.parent?.add(cabin);
+      cabin.position.add(cabinHost.slot.position);
+    }));
+  }
+
+  // 원경 등대섬
+  tasks.push(loadKitModel('lighthouse', loadModel).then((lh) => {
+    lighthouseSlot.add(lh);
+  }));
+
+  await Promise.allSettled(tasks);
 }
 
 // ---------- terrain ----------
@@ -303,7 +464,11 @@ function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
 }
 
 // ---------- memory object kits ----------
-function buildMemoryObjects(scenes: ObservationScene[], anchors: WorldAnchor[]) {
+function buildMemoryObjects(
+  scenes: ObservationScene[],
+  anchors: WorldAnchor[],
+  kitSlots: { kit: string; slot: THREE.Group; seed: number }[],
+) {
   const g = new THREE.Group();
   scenes.forEach((scene, i) => {
     const a = anchors[i];
@@ -318,6 +483,7 @@ function buildMemoryObjects(scenes: ObservationScene[], anchors: WorldAnchor[]) 
         m.receiveShadow = true;
       }
     });
+    kitSlots.push({ kit: scene.objectKit, slot: obj, seed: 500 + i * 91 });
     g.add(obj);
   });
   return g;
@@ -466,8 +632,9 @@ const KITS: Record<string, KitFn> = {
 };
 
 // ---------- distant world: 닿을 수 없는 기억 ----------
-function buildDistantWorld() {
+function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group } {
   const g = new THREE.Group();
+  const lighthouseSlot = new THREE.Group();
   const rnd = seededRandom(9010);
   const fogC = new THREE.Color(PALETTE.fog);
 
@@ -487,6 +654,11 @@ function buildDistantWorld() {
     else island.position.set(side * (9 + rnd() * 16), -2 + rnd() * 7, -32 - rnd() * 46);
     island.rotation.y = rnd() * Math.PI;
     g.add(island);
+    if (i === 2) {
+      // 등대는 이 섬 위에 앉는다 — 닿을 수 없는 랜드마크
+      lighthouseSlot.position.copy(island.position).add(new THREE.Vector3(0, 0.25, 0));
+      g.add(lighthouseSlot);
+    }
   }
 
   const cloudMat = new THREE.MeshBasicMaterial({ color: '#dfe7e5', transparent: true, opacity: 0.14, depthWrite: false });
@@ -511,5 +683,5 @@ function buildDistantWorld() {
     g.add(new THREE.Points(geo, mat));
   }
 
-  return g;
+  return { group: g, lighthouseSlot };
 }
