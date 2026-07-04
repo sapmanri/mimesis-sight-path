@@ -8,6 +8,7 @@ import { ParallaxLayers } from './components/ParallaxLayers';
 import { Soundscape } from './audio/Soundscape';
 
 const AUTO_RESUME_MS = 11000;
+const BUILD_LABEL = 'v0.2.1 · PARALLAX ROAD · BUILD 052';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -88,7 +89,7 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">MIMESIS · OBSERVATION NO.001</p>
+          <p className="eyebrow">MIMESIS · OBSERVATION NO.001 · {BUILD_LABEL}</p>
           <h1>JEJU, 시선을 따라 걷다</h1>
         </div>
         <div className="top-status">
@@ -101,12 +102,13 @@ export default function App() {
 
       <section className="viewport-card">
         <ParallaxLayers activeIndex={activeIndex} scene={activeScene} />
-        <Canvas camera={{ position: [0, 1.05, 3.25], fov: 38 }} dpr={[1, 2]} gl={{ alpha: true }}>
+        <Canvas className="world-canvas" camera={{ position: [0, 1.05, 3.25], fov: 38 }} dpr={[1, 2]} gl={{ alpha: true }}>
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
         <Soundscape scene={activeScene} mode={mode} />
         <StoryCard scene={activeScene} mode={mode} />
         <ProgressNav scenes={jejuScenes} activeIndex={activeIndex} onChange={setSceneManually} />
+        <div className="build-badge">{BUILD_LABEL}</div>
       </section>
 
       <footer className="hint">{mode === 'auto' ? '이 장면은 스스로 머무를 시간을 정합니다.' : '잠시 뒤 다시 자동 호흡으로 돌아갑니다.'}</footer>
