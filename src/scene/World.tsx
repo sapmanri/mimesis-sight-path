@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
 
@@ -37,15 +37,31 @@ type TerrainDecal = {
   kind: 'dust' | 'moss' | 'crack';
 };
 
-export function World({ scenes, activeIndex }: WorldProps) {
+export function World({ scenes, activeIndex, mode }: WorldProps) {
   const roadPieces = useMemo(() => buildRoadPieces(scenes), [scenes]);
   const pebbles = useMemo(() => buildPebbles(scenes), [scenes]);
   const terrainDecals = useMemo(() => buildTerrainDecals(scenes), [scenes]);
+  const walkProgress = useRef(activeIndex);
 
   useFrame(({ camera }, delta) => {
-    const desired = new THREE.Vector3(0, 1.55, 5.25);
-    const target = new THREE.Vector3(0, -0.68, -7.8);
-    camera.position.lerp(desired, 1 - Math.pow(0.004, delta));
+    const targetProgress = activeIndex;
+    const walkSpeed = mode === 'auto' ? 0.17 : 0.11;
+    const maxStep = walkSpeed * delta;
+    const distance = targetProgress - walkProgress.current;
+
+    if (Math.abs(distance) > 0.001) {
+      walkProgress.current += Math.sign(distance) * Math.min(Math.abs(distance), maxStep);
+    }
+
+    const walker = sampleScenePath(scenes, walkProgress.current);
+    const ahead = sampleScenePath(scenes, Math.min(scenes.length - 1, walkProgress.current + 0.7));
+    const direction = ahead.clone().sub(walker).normalize();
+    const normal = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const sideDrift = Math.sin(walkProgress.current * 0.9) * 0.18;
+    const desired = walker.clone().add(direction.clone().multiplyScalar(4.3)).add(normal.clone().multiplyScalar(sideDrift)).add(new THREE.Vector3(0, 1.25, 0));
+    const target = walker.clone().add(direction.clone().multiplyScalar(-1.35)).add(new THREE.Vector3(0, -0.58, 0));
+
+    camera.position.lerp(desired, 1 - Math.pow(0.018, delta));
     camera.lookAt(target.x, target.y, target.z);
   });
 
@@ -60,6 +76,16 @@ export function World({ scenes, activeIndex }: WorldProps) {
       <RoadPebbles pebbles={pebbles} activeIndex={activeIndex} scenes={scenes} />
     </>
   );
+}
+
+function sampleScenePath(scenes: ObservationScene[], progress: number) {
+  const clamped = Math.max(0, Math.min(scenes.length - 1, progress));
+  const index = Math.floor(clamped);
+  const nextIndex = Math.min(scenes.length - 1, index + 1);
+  const t = clamped - index;
+  const start = new THREE.Vector3(...scenes[index].position).add(new THREE.Vector3(0, -0.66, 0));
+  const end = new THREE.Vector3(...scenes[nextIndex].position).add(new THREE.Vector3(0, -0.66, 0));
+  return start.lerp(end, t);
 }
 
 function MeshRoad({ pieces, activeIndex }: { pieces: RoadPiece[]; activeIndex: number }) {
