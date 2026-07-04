@@ -168,7 +168,7 @@ function buildRoadPieces(scenes: ObservationScene[]): RoadPiece[] {
     const rawStart = new THREE.Vector3(...scene.position).add(new THREE.Vector3(0, -0.66, 0));
     const rawEnd = new THREE.Vector3(...next.position).add(new THREE.Vector3(0, -0.66, 0));
     const direction = rawEnd.clone().sub(rawStart).normalize();
-    const overlap = 0.92;
+    const overlap = 1.12;
     const start = rawStart.clone().add(direction.clone().multiplyScalar(index === 0 ? 0 : -overlap));
     const end = rawEnd.clone().add(direction.clone().multiplyScalar(index === scenes.length - 2 ? 0 : overlap));
     const normal = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
@@ -180,13 +180,13 @@ function buildRoadPieces(scenes: ObservationScene[]): RoadPiece[] {
       start.clone().lerp(end, 0.69).add(normal.clone().multiplyScalar(bend * 0.68)),
       end,
     );
-    const data = makeEdgeData(curve.getPoints(46), 1.16 + Math.sin(index * 0.8) * 0.18, index);
+    const data = makeEdgeData(curve.getPoints(54), 1.2 + Math.sin(index * 0.8) * 0.18, index);
     return {
       top: makeTop(data.a, data.b),
       sideA: makeSide(data.a, 0.62, index),
       sideB: makeSide(data.b, 0.56, index + 3),
-      edgeA: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.a.map((p) => p.clone().add(new THREE.Vector3(0, 0.02, 0)))), 80, 0.012, 8, false),
-      edgeB: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.b.map((p) => p.clone().add(new THREE.Vector3(0, 0.018, 0)))), 80, 0.01, 8, false),
+      edgeA: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.a.map((p) => p.clone().add(new THREE.Vector3(0, 0.02, 0)))), 88, 0.012, 8, false),
+      edgeB: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.b.map((p) => p.clone().add(new THREE.Vector3(0, 0.018, 0)))), 88, 0.01, 8, false),
       index,
     };
   });
@@ -195,17 +195,26 @@ function buildRoadPieces(scenes: ObservationScene[]): RoadPiece[] {
 function makeEdgeData(points: THREE.Vector3[], width: number, index: number) {
   const a: THREE.Vector3[] = [];
   const b: THREE.Vector3[] = [];
+  const last = points.length - 1;
+
   points.forEach((point, i) => {
     const prev = points[Math.max(0, i - 1)];
-    const next = points[Math.min(points.length - 1, i + 1)];
+    const next = points[Math.min(last, i + 1)];
     const tangent = next.clone().sub(prev).normalize();
     const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
-    const chipped = i % 6 === 0 ? 0.12 : i % 10 === 0 ? -0.09 : 0;
-    const localWidth = width * (0.94 + Math.sin(i * 0.37 + index) * 0.13 + Math.sin(i * 0.16 + index * 1.7) * 0.07) + chipped;
-    const lift = Math.sin(i * 0.5 + index) * 0.018 + Math.sin(i * 0.17) * 0.008;
+    const t = last === 0 ? 0.5 : i / last;
+    const endDistance = Math.min(t, 1 - t);
+    const taper = THREE.MathUtils.smoothstep(endDistance, 0, 0.24);
+    const shoulder = THREE.MathUtils.smoothstep(endDistance, 0.12, 0.42);
+    const chipped = (i % 6 === 0 ? 0.1 : i % 10 === 0 ? -0.08 : 0) * shoulder;
+    const organic = 0.95 + Math.sin(i * 0.34 + index) * 0.11 + Math.sin(i * 0.14 + index * 1.7) * 0.06;
+    const localWidth = width * (0.34 + taper * 0.66) * organic + chipped;
+    const lift = (Math.sin(i * 0.5 + index) * 0.016 + Math.sin(i * 0.17) * 0.007) * shoulder;
+
     a.push(point.clone().add(normal.clone().multiplyScalar(localWidth * 0.5)).add(new THREE.Vector3(0, lift, 0)));
     b.push(point.clone().add(normal.clone().multiplyScalar(-localWidth * 0.5)).add(new THREE.Vector3(0, -lift * 0.62, 0)));
   });
+
   return { a, b };
 }
 
@@ -228,10 +237,13 @@ function makeSide(edge: THREE.Vector3[], depth: number, seed = 0) {
   const vertices: number[] = [];
   const indices: number[] = [];
   edge.forEach((point, i) => {
-    const roughDepth = depth * (0.86 + Math.sin(i * 0.45 + seed) * 0.18 + Math.sin(i * 0.17 + seed * 0.4) * 0.1);
-    const shoulder = Math.sin(i * 0.33 + seed) * 0.012;
+    const t = edge.length <= 1 ? 0.5 : i / (edge.length - 1);
+    const endDistance = Math.min(t, 1 - t);
+    const shoulder = THREE.MathUtils.smoothstep(endDistance, 0.08, 0.32);
+    const roughDepth = depth * (0.7 + shoulder * 0.3) * (0.88 + Math.sin(i * 0.45 + seed) * 0.15 + Math.sin(i * 0.17 + seed * 0.4) * 0.08);
+    const edgeLift = Math.sin(i * 0.33 + seed) * 0.01 * shoulder;
     const down = point.clone().add(new THREE.Vector3(0, -roughDepth, 0));
-    vertices.push(point.x, point.y - 0.004 + shoulder, point.z, down.x, down.y, down.z);
+    vertices.push(point.x, point.y - 0.004 + edgeLift, point.z, down.x, down.y, down.z);
   });
   for (let i = 0; i < edge.length - 1; i += 1) {
     const n = i * 2;
