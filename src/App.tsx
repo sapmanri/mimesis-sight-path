@@ -6,6 +6,7 @@ import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
 import { ParallaxLayers } from './components/ParallaxLayers';
 import { Soundscape } from './audio/Soundscape';
+import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 11000;
 const BUILD_LABEL = 'v0.2.2 · PHOTO DEPTH ROAD · BUILD 053';
