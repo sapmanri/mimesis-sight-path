@@ -9,7 +9,7 @@ import { Soundscape } from './audio/Soundscape';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 11000;
-const BUILD_LABEL = 'v0.2.3 · CLEAR ROAD · BUILD 054';
+const BUILD_LABEL = 'v0.3.0 · MESH ROAD · BUILD 055';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -103,7 +103,7 @@ export default function App() {
 
       <section className="viewport-card">
         <ParallaxLayers activeIndex={activeIndex} scene={activeScene} />
-        <Canvas className="world-canvas" camera={{ position: [0, 1.05, 3.25], fov: 38 }} dpr={[1, 2]} gl={{ alpha: true }}>
+        <Canvas className="world-canvas" camera={{ position: [0, 1.45, 4.2], fov: 42 }} dpr={[1, 2]} gl={{ alpha: true }}>
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
         <Soundscape scene={activeScene} mode={mode} />
