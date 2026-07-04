@@ -13,6 +13,8 @@ type RoadPiece = {
   top: THREE.BufferGeometry;
   sideA: THREE.BufferGeometry;
   sideB: THREE.BufferGeometry;
+  capStart: THREE.BufferGeometry;
+  capEnd: THREE.BufferGeometry;
   edgeA: THREE.TubeGeometry;
   edgeB: THREE.TubeGeometry;
   index: number;
@@ -115,6 +117,12 @@ function MeshRoad({ pieces, activeIndex }: { pieces: RoadPiece[]; activeIndex: n
             <mesh geometry={piece.sideB}>
               <meshStandardMaterial color="#6f6651" roughness={1} transparent opacity={0.62 * focus} side={THREE.DoubleSide} />
             </mesh>
+            <mesh geometry={piece.capStart}>
+              <meshStandardMaterial color="#81765d" roughness={1} transparent opacity={0.7 * focus} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh geometry={piece.capEnd}>
+              <meshStandardMaterial color="#81765d" roughness={1} transparent opacity={0.7 * focus} side={THREE.DoubleSide} />
+            </mesh>
             <mesh geometry={piece.edgeA}>
               <meshBasicMaterial color="#5f7e68" transparent opacity={0.58 * focus} />
             </mesh>
@@ -185,6 +193,8 @@ function buildRoadPieces(scenes: ObservationScene[]): RoadPiece[] {
       top: makeTop(data.a, data.b),
       sideA: makeSide(data.a, 0.62, index),
       sideB: makeSide(data.b, 0.56, index + 3),
+      capStart: makeEndCap(data.a[0], data.b[0], 0.6, index),
+      capEnd: makeEndCap(data.a[data.a.length - 1], data.b[data.b.length - 1], 0.58, index + 9),
       edgeA: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.a.map((p) => p.clone().add(new THREE.Vector3(0, 0.02, 0)))), 88, 0.012, 8, false),
       edgeB: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(data.b.map((p) => p.clone().add(new THREE.Vector3(0, 0.018, 0)))), 88, 0.01, 8, false),
       index,
@@ -249,6 +259,31 @@ function makeSide(edge: THREE.Vector3[], depth: number, seed = 0) {
     const n = i * 2;
     indices.push(n, n + 2, n + 1, n + 1, n + 2, n + 3);
   }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeEndCap(a: THREE.Vector3, b: THREE.Vector3, depth: number, seed = 0) {
+  const center = a.clone().lerp(b, 0.5);
+  const width = a.distanceTo(b);
+  const capDepth = depth * (0.88 + Math.sin(seed * 0.61) * 0.08);
+  const bottomInset = Math.min(width * 0.18, 0.08);
+  const insetA = a.clone().lerp(center, bottomInset / Math.max(width, 0.001));
+  const insetB = b.clone().lerp(center, bottomInset / Math.max(width, 0.001));
+  const bottomA = insetA.clone().add(new THREE.Vector3(0, -capDepth, 0));
+  const bottomB = insetB.clone().add(new THREE.Vector3(0, -capDepth * 0.95, 0));
+
+  const vertices = [
+    a.x, a.y - 0.002, a.z,
+    b.x, b.y - 0.002, b.z,
+    bottomB.x, bottomB.y, bottomB.z,
+    bottomA.x, bottomA.y, bottomA.z,
+    center.x, center.y - capDepth * 0.52, center.z,
+  ];
+  const indices = [0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4, 0, 3, 2, 0, 2, 1];
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
