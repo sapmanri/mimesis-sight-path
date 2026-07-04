@@ -1,4 +1,4 @@
-/* v0.3.5 distant walking road pass */
+/* v0.3.8 clean road view pass */
 
 .viewport-card .world-canvas {
   opacity: 1;
@@ -6,7 +6,7 @@
 }
 
 .road-only-shell {
-  background: linear-gradient(180deg, #6caebc 0%, #9bc4bf 48%, #d9c8a5 100%) !important;
+  background: linear-gradient(180deg, #6caebc 0%, #9bc4bf 52%, #d9c8a5 100%) !important;
 }
 
 .road-only-viewport {
@@ -15,87 +15,26 @@
 
 .parallax-scene {
   overflow: hidden;
-  background: linear-gradient(180deg, #69aebe 0%, #a9cfc5 52%, #dbc7a2 100%) !important;
+  background: linear-gradient(180deg, #6caebc 0%, #b8d8d0 58%, #e1d2af 100%) !important;
 }
 
-.parallax-scene::before {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  background:
-    radial-gradient(ellipse at 24% 18%, rgba(255,255,255,0.48) 0 8%, transparent 23%),
-    radial-gradient(ellipse at 68% 16%, rgba(255,255,255,0.54) 0 6%, transparent 19%),
-    radial-gradient(ellipse at 84% 30%, rgba(255,255,255,0.32) 0 7%, transparent 21%);
-  opacity: 0.82;
-  animation: photo-cloud-drift 64s ease-in-out infinite alternate;
-}
-
-.parallax-scene::after {
-  content: '';
-  position: absolute;
-  z-index: 1;
-  left: -18%;
-  right: -18%;
-  top: 29%;
-  height: 30%;
-  background:
-    linear-gradient(151deg, transparent 0 28%, rgba(49,92,93,0.34) 28% 43%, transparent 43%),
-    linear-gradient(31deg, transparent 0 38%, rgba(72,116,102,0.3) 38% 56%, transparent 56%),
-    linear-gradient(166deg, transparent 0 55%, rgba(219,205,174,0.34) 55% 70%, transparent 70%);
-  opacity: 0.82;
-}
-
-.layer-sky {
-  z-index: 0;
-  opacity: 0.62 !important;
-  background:
-    radial-gradient(ellipse at 42% 21%, rgba(255,255,255,0.22) 0 10%, transparent 27%),
-    radial-gradient(ellipse at 72% 27%, rgba(255,255,255,0.2) 0 8%, transparent 24%) !important;
-  animation: photo-cloud-drift 72s ease-in-out infinite alternate !important;
-}
-
-.layer-far {
-  z-index: 2;
-  top: 31%;
-  height: 31%;
-  opacity: 0.82 !important;
-  background:
-    linear-gradient(148deg, transparent 0 30%, rgba(57,99,96,0.42) 30% 43%, transparent 43%),
-    linear-gradient(32deg, transparent 0 43%, rgba(69,119,105,0.34) 43% 61%, transparent 61%) !important;
-}
-
-.layer-mid {
-  z-index: 3;
-  top: 41%;
-  height: 30%;
-  opacity: 0.76 !important;
-  background:
-    linear-gradient(156deg, transparent 0 25%, rgba(91,121,95,0.5) 25% 38%, transparent 38%),
-    linear-gradient(27deg, transparent 0 48%, rgba(112,132,96,0.42) 48% 63%, transparent 63%) !important;
-}
-
-.layer-near {
-  z-index: 4;
-  top: 14%;
-  height: 44%;
-  opacity: 0.36 !important;
-  background:
-    radial-gradient(ellipse at 18% 18%, rgba(255,255,255,0.34) 0 8%, transparent 24%),
-    radial-gradient(ellipse at 82% 32%, rgba(255,255,255,0.28) 0 7%, transparent 22%) !important;
-  animation: photo-cloud-drift 46s ease-in-out infinite alternate !important;
-}
-
+.parallax-scene::before,
+.parallax-scene::after,
+.layer-sky,
+.layer-far,
+.layer-mid,
+.layer-near,
 .layer-haze,
 .layer-vignette {
   display: none !important;
   opacity: 0 !important;
   background: none !important;
   animation: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
 }
 
 .road-only-topbar,
-.build-badge,
 .mode-toggle,
 .story-card,
 .progress-nav,
@@ -104,7 +43,18 @@
   display: none !important;
 }
 
-@keyframes photo-cloud-drift {
-  from { transform: translate3d(-6px, -2px, 0) scale(1.01); }
-  to { transform: translate3d(10px, 3px, 0) scale(1.02); }
+.build-badge {
+  display: block !important;
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  z-index: 50;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(246, 238, 210, 0.78);
+  color: rgba(70, 80, 64, 0.82);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  opacity: 0.88;
 }
