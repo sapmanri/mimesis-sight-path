@@ -125,7 +125,8 @@ function makeCliffTexture() {
       const streak = n(0, y, 9) * 0.6 + n(0, y, 23) * 0.4;        // 길이축 세로줄
       const strata = n(x, 0, 5);                                    // 깊이축 지층
       const pit = n(x, y, 13);
-      let v = 1 + (streak - 0.5) * 0.3 + (strata - 0.5) * 0.16 + (pit - 0.5) * 0.14 + (rnd() - 0.5) * 0.06;
+      const fade = 1 - Math.pow(x / S, 1.6); // 아래로 갈수록 질감 소멸
+      let v = 1 + ((streak - 0.5) * 0.3 + (strata - 0.5) * 0.16 + (pit - 0.5) * 0.14 + (rnd() - 0.5) * 0.06) * fade;
       // 상단 모서리 AO 띠 (u가 0 근처)
       const rim = Math.max(0, 1 - (x / S) * 7);
       v *= 1 - rim * 0.22;
@@ -323,7 +324,7 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
       const side = rrnd() > 0.5 ? 1 : -1;
       const onFace = rrnd() > 0.55;
       const out = onFace ? w * (0.92 + rrnd() * 0.2) : w * (0.82 + rrnd() * 0.14);
-      const y = onFace ? f.p.y - 0.35 - rrnd() * 1.3 : f.p.y - 0.03;
+      const y = onFace ? f.p.y - 0.25 - rrnd() * 0.55 : f.p.y - 0.03;
       const pos = f.p.clone().add(f.nor.clone().multiplyScalar(side * out)).setY(y);
       rockSpots.push({ pos, rotY: rrnd() * Math.PI * 2, scale: 0.35 + rrnd() * 0.85 });
     }
@@ -463,13 +464,13 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     new THREE.Color(PALETTE.cliffLow),
     new THREE.Color(PALETTE.cliffDeep),
   ];
-  const ringInsetBase = [0, 0.05, 0.14, 0.3, 0.5];
-  const RINGS = 5;
+  const ringInsetBase = [0, 0.06, 0.18, 0.38];
+  const RINGS = 4;
 
   type Ring = { L: THREE.Vector3; R: THREE.Vector3 };
   const cross: Ring[][] = frames.map((f, i) => {
     const w = widthAt(f.t);
-    const depth = 2.9 + noise1(i * 0.05) * 1.1;
+    const depth = 1.5 + noise1(i * 0.05) * 0.55;
     const rings: Ring[] = [];
     for (let r = 0; r < RINGS; r += 1) {
       const v = r / (RINGS - 1);
@@ -539,8 +540,10 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
         const s0 = strata[Math.floor(si)];
         const s1 = strata[Math.min(strata.length - 1, Math.ceil(si))];
         const base = r === 0 ? cSandEdge : s0.clone().lerp(s1, si - Math.floor(si));
-        const tint = 1 + noise1(i * 0.6 + r * 9.2 + (side === 'L' ? 0 : 40)) * 0.1;
-        const c = r >= RINGS - 1 ? base.clone().lerp(new THREE.Color(PALETTE.fog), 0.45) : base.clone();
+        const tint = 1 + noise1(i * 0.6 + r * 9.2 + (side === 'L' ? 0 : 40)) * 0.1 * (1 - v);
+        // 아래로 갈수록 안개에 잠긴다 — 레퍼런스처럼 길 끄트머리 바로 밑까지
+        const sink = Math.pow(v, 1.4);
+        const c = base.clone().lerp(new THREE.Color(PALETTE.fog), sink * 0.92);
         col.push(c.r * tint, c.g * tint, c.b * tint);
       });
     });
@@ -560,7 +563,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     const pos: number[] = [];
     const col: number[] = [];
     const idx: number[] = [];
-    const deep = new THREE.Color(PALETTE.cliffDeep).lerp(new THREE.Color(PALETTE.fog), 0.5);
+    const deep = new THREE.Color(PALETTE.fog);
     cross.forEach((rings) => {
       const lastRing = rings[rings.length - 1];
       pos.push(lastRing.L.x, lastRing.L.y, lastRing.L.z, lastRing.R.x, lastRing.R.y, lastRing.R.z);
