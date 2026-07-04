@@ -20,6 +20,7 @@ public/assets/warehouse/
     stone/
     wall/
     stair_platform/
+    terrain/
   02_nature/
     grass/
     rock/
@@ -27,9 +28,11 @@ public/assets/warehouse/
     cactus/
     cloud/
     rain/
+    snow/
   03_architecture/
     house/
     cottage/
+    cabin/
     ruin/
     sunda_house/
     haunted_house/
@@ -54,6 +57,7 @@ public/assets/warehouse/
     cloud/
     rain/
     light/
+    celestial/
   99_archive/
 ```
 
@@ -82,6 +86,7 @@ public/assets/warehouse/
 | Blocks | `Blocks(1).FBX` | 지형 보강, 길 옆 부품 | ★★★☆☆ | low poly 질감 확인 필요 |
 | Block Low | `block_low_FBX(1).rar` | 지형 보강, 폐허 조각 | ★★★☆☆ | 배경용 |
 | Stair Platform | `Free_stair_platformFBX.rar` | 끊어진 계단, 기억의 층위, 길 옆 매몰 구조 | ★★★★★ | BUILD 066 프록시로 자리 배치 시작 |
+| Terrain | `terrain.fbx` | 떠다니는 지형 파편, 길 아래 기억층 | ★★★★★ | BUILD 067 프록시로 terrain fragment 배치 시작 |
 
 ### 02 Nature
 
@@ -95,6 +100,7 @@ public/assets/warehouse/
 | Rock1 TyroSmith | `1elmla01hh-Rock1_BYTyroSmith(1).zip` | 포인트 바위 | ★★★★☆ | 스케일 확인 필요 |
 | Wood | `6s3hqe2d6rr4-Wood(1).zip` | 나무 조각, 다리 주변, 폐허 | ★★★★☆ | 기억 오브젝트 후보 |
 | Cactus Lowpoly | `Cactus_lowpoly(1).fbx` | 건조한 섬/특정 기억 장면 | ★★★☆☆ | 현재 제주 길에는 보류 |
+| Snow / Winter Atmosphere | `Snowy_house(FBX).zip`, `Snow_Cabin_iso.fbx` | 고립된 겨울 기억, 먼 집 파편 | ★★★★★ | BUILD 067 프록시로 snow-house 배치 시작 |
 | Rain FX | `6dlly90x3j-rain(2).zip` | 비 오는 기억, 전환 효과 | ★★★★☆ | 나중에 카드/장면별 날씨에 사용 |
 
 ### 03 Architecture
@@ -105,6 +111,8 @@ public/assets/warehouse/
 | Simple House | `gu7u77vio0zk-simple_house(1).zip` | 작은 집, 원거리 마을 | ★★★★★ | low poly라 잘 맞을 가능성 높음 |
 | Cottage | `53-cottage_fbx(1).zip` | 따뜻한 기억의 집 | ★★★★★ | MIMESIS 톤과 잘 맞음 |
 | Mega Village / 4 Houses | `GLB_Mega_Village_Environment_4_Houses.zip` | 기억 저편의 마을, 파편화된 집 지층 | ★★★★★ | BUILD 066 프록시로 house fragment 배치 시작 |
+| Snowy House | `Snowy_house(FBX).zip` | 고립된 겨울 집, 멀어진 기억의 목적지 | ★★★★★ | 직접 로드 전 프록시 배치 |
+| Snow Cabin | `Snow_Cabin_iso.fbx` | 조용한 겨울 오두막, 희미한 집의 기억 | ★★★★★ | 직접 로드 전 프록시 배치 |
 | Home Sunda | `41-home_sunda(1).zip` | 이국적 기억 공간 | ★★★★☆ | 특정 챕터용 |
 | Haunted Sundanese Traditional House | `50-haunted-sundanese-traditional-house(1).zip` | 상실/밤/폐허 장면 | ★★★★☆ | 밝은 길 단계에서는 보류 |
 | Ruin02 | `Ruin02_fbx(1).rar` | 폐허, 기억의 잔해 | ★★★★★ | 길 옆 중경 오브젝트 후보 |
@@ -145,11 +153,15 @@ public/assets/warehouse/
 |---|---|---|---|---|
 | Scavenger | `Scavenger.fbx` | 임시 인간 캐릭터, 나중의 walker 후보 | ★★★★☆ | 현재는 숨김. 길 완성 후 테스트 |
 
-### 07 Structures / Energy / FX
+### 07 Structures / Energy / FX / Celestial
 
 | Asset | Original file | Use | Priority | Notes |
 |---|---|---|---|---|
 | Eolic / Wind Turbine | `97-eolic-fbx(2).rar` | 원거리 랜드마크, 바람의 기억 | ★★★★☆ | 하늘/먼 산 레이어 안정 후 사용 |
+| Earth | `Earth.fbx` | 기억 공간 바깥의 행성감, 멀어진 현실 | ★★★★☆ | BUILD 067 프록시로 희미한 구체 배치 시작 |
+| Moon 2K | `Moon_2K.fbx` | 밤/거리감/희미한 기억 | ★★★★★ | BUILD 067 프록시로 원거리 달 배치 시작 |
+| Asteroid 2b | `Asteroid_2b_FBX.zip`, `Asteroid_2b_FBX (1).zip` | 떠다니는 기억 파편, 붕괴된 지형 | ★★★★★ | 중복 파일 있음. 하나만 정리 필요 |
+| Asteroid 1e | `Asteroid_1e_FBX.zip` | 떠다니는 기억 파편, 붕괴된 지형 | ★★★★★ | BUILD 067 프록시로 소행성 배치 시작 |
 
 ## 우선 투입 후보
 
@@ -163,6 +175,8 @@ public/assets/warehouse/
 7. Cottage / Simple House / Mega Village
 8. Stair Platform
 9. Glasses
+10. Snow Cabin / Snowy House
+11. Asteroid / Terrain fragments
 
 ## 보류 후보
 
