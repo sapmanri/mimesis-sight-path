@@ -27,26 +27,23 @@ type Pebble = {
   opacity: number;
 };
 
-export function World({ scenes, activeIndex, mode }: WorldProps) {
-  const activeScene = scenes[activeIndex];
-  const activePosition = useMemo(() => new THREE.Vector3(...activeScene.position), [activeScene.position]);
+export function World({ scenes, activeIndex }: WorldProps) {
   const roadPieces = useMemo(() => buildRoadPieces(scenes), [scenes]);
   const pebbles = useMemo(() => buildPebbles(scenes), [scenes]);
 
-  useFrame(({ camera, clock }, delta) => {
-    const breathe = Math.sin(clock.elapsedTime * 0.24) * (mode === 'auto' ? 0.08 : 0.03);
-    const desired = activePosition.clone().add(new THREE.Vector3(0, 1.18 + breathe, 5.0));
-    const target = activePosition.clone().add(new THREE.Vector3(0, -0.64, -1.6));
-    camera.position.lerp(desired, 1 - Math.pow(0.03, delta));
+  useFrame(({ camera }, delta) => {
+    const desired = new THREE.Vector3(0, 1.55, 5.25);
+    const target = new THREE.Vector3(0, -0.68, -7.8);
+    camera.position.lerp(desired, 1 - Math.pow(0.004, delta));
     camera.lookAt(target.x, target.y, target.z);
   });
 
   return (
     <>
       <color attach="background" args={['transparent']} />
-      <ambientLight intensity={1.82} />
-      <directionalLight position={[-1.6, 4.2, 2.6]} intensity={2.4} color="#fff0c8" />
-      <directionalLight position={[2, 2.5, 4]} intensity={0.72} color="#9dc7bf" />
+      <ambientLight intensity={1.6} />
+      <directionalLight position={[-1.6, 4.2, 2.6]} intensity={2.15} color="#fff0c8" />
+      <directionalLight position={[2, 2.5, 4]} intensity={0.55} color="#9dc7bf" />
       <MeshRoad pieces={roadPieces} activeIndex={activeIndex} />
       <RoadPebbles pebbles={pebbles} activeIndex={activeIndex} scenes={scenes} />
     </>
@@ -57,23 +54,23 @@ function MeshRoad({ pieces, activeIndex }: { pieces: RoadPiece[]; activeIndex: n
   return (
     <group>
       {pieces.map((piece) => {
-        const focus = Math.max(0.5, 1 - Math.abs(piece.index - activeIndex) * 0.06);
+        const focus = Math.max(0.68, 1 - Math.abs(piece.index - activeIndex) * 0.035);
         return (
           <group key={piece.index}>
             <mesh geometry={piece.top}>
-              <meshStandardMaterial color="#e3d4b6" roughness={0.98} transparent opacity={0.98 * focus} side={THREE.DoubleSide} />
+              <meshStandardMaterial color="#d9c8a5" roughness={0.98} transparent opacity={0.99 * focus} side={THREE.DoubleSide} />
             </mesh>
             <mesh geometry={piece.sideA}>
-              <meshStandardMaterial color="#b7ad95" roughness={1} transparent opacity={0.42 * focus} side={THREE.DoubleSide} />
+              <meshStandardMaterial color="#9e937b" roughness={1} transparent opacity={0.62 * focus} side={THREE.DoubleSide} />
             </mesh>
             <mesh geometry={piece.sideB}>
-              <meshStandardMaterial color="#968d7c" roughness={1} transparent opacity={0.34 * focus} side={THREE.DoubleSide} />
+              <meshStandardMaterial color="#7f7869" roughness={1} transparent opacity={0.5 * focus} side={THREE.DoubleSide} />
             </mesh>
             <mesh geometry={piece.edgeA}>
-              <meshBasicMaterial color="#6e877c" transparent opacity={0.42 * focus} />
+              <meshBasicMaterial color="#54776d" transparent opacity={0.58 * focus} />
             </mesh>
             <mesh geometry={piece.edgeB}>
-              <meshBasicMaterial color="#fff0cf" transparent opacity={0.3 * focus} />
+              <meshBasicMaterial color="#fff0cf" transparent opacity={0.42 * focus} />
             </mesh>
           </group>
         );
@@ -87,7 +84,7 @@ function RoadPebbles({ pebbles, activeIndex, scenes }: { pebbles: Pebble[]; acti
     <group>
       {pebbles.map((pebble) => {
         const nearest = nearestSceneIndex(pebble.position, scenes);
-        const opacity = pebble.opacity * Math.max(0.2, 1 - Math.abs(nearest - activeIndex) * 0.14);
+        const opacity = pebble.opacity * Math.max(0.3, 1 - Math.abs(nearest - activeIndex) * 0.12);
         return (
           <mesh key={pebble.id} position={pebble.position} scale={pebble.scale} rotation={pebble.rotation}>
             <dodecahedronGeometry args={[0.075, 0]} />
