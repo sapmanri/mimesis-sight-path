@@ -1,0 +1,115 @@
+export type ObservationScene = {
+  id: number;
+  title: string;
+  objectLabel: string;
+  emoji: string;
+  position: [number, number, number];
+  text: string;
+};
+
+export const jejuScenes: ObservationScene[] = [
+  {
+    id: 1,
+    title: '집문',
+    objectLabel: 'old green door',
+    emoji: '🚪',
+    position: [0, 0, 0],
+    text: '문은 늘\n떠나는 쪽보다\n돌아오는 쪽을\n더 오래 기억한다.',
+  },
+  {
+    id: 2,
+    title: '캐리어 손잡이',
+    objectLabel: 'suitcase handle',
+    emoji: '🧳',
+    position: [0.7, 0.1, -3],
+    text: '여행은\n발보다 먼저\n손에서 시작됐다.',
+  },
+  {
+    id: 3,
+    title: '앞사람 뒷모습',
+    objectLabel: 'back view',
+    emoji: '〰️',
+    position: [-0.55, 0.1, -6],
+    text: '공항에서는\n모두가 등을 보인다.\n각자의 목적지를\n앞에 둔 채.',
+  },
+  {
+    id: 4,
+    title: '비행기 날개',
+    objectLabel: 'airplane wing',
+    emoji: '✈️',
+    position: [0.45, 0.2, -9],
+    text: '날개는\n아무 말 없이\n도시를 접었다.',
+  },
+  {
+    id: 5,
+    title: '하얀 구름',
+    objectLabel: 'cloud layer',
+    emoji: '☁️',
+    position: [-0.3, 0.45, -12],
+    text: '어디에도 닿지 않은 시간이\n잠깐\n하얗게 지나갔다.',
+  },
+  {
+    id: 6,
+    title: '돌담길',
+    objectLabel: 'stone wall path',
+    emoji: '🪨',
+    position: [0.55, 0, -15],
+    text: '제주는\n큰 풍경보다 먼저\n돌의 높이로\n나를 맞았다.',
+  },
+  {
+    id: 7,
+    title: '능소화 담장',
+    objectLabel: 'orange flower wall',
+    emoji: '🌺',
+    position: [-0.65, 0.2, -18],
+    text: '꽃은\n담장을 넘으려고 핀 게 아니라\n거기까지 와버린 것 같았다.',
+  },
+  {
+    id: 8,
+    title: '돌담 끝 바다',
+    objectLabel: 'sea beyond wall',
+    emoji: '🌊',
+    position: [0.1, 0.2, -21],
+    text: '바다는\n갑자기 나타나지 않았다.\n돌담 끝에서\n슬며시 열렸다.',
+  },
+  {
+    id: 9,
+    title: '작은 수박',
+    objectLabel: 'small watermelon',
+    emoji: '🍉',
+    position: [0.62, 0.05, -24],
+    text: '작은 것은\n가끔\n사람을 오래 붙잡는다.',
+  },
+  {
+    id: 10,
+    title: 'CD장',
+    objectLabel: 'old cd shelf',
+    emoji: '💿',
+    position: [-0.4, 0.1, -27],
+    text: '취향은\n사라지는 게 아니라\n먼지를 쓰고\n그 자리에 남아 있었다.',
+  },
+  {
+    id: 11,
+    title: '안개 낀 길',
+    objectLabel: 'foggy road',
+    emoji: '🌫️',
+    position: [0.35, 0.05, -30],
+    text: '보이지 않는 길도\n길이라는 걸\n안개가 알려주었다.',
+  },
+  {
+    id: 12,
+    title: '낡은 책',
+    objectLabel: 'old book',
+    emoji: '📖',
+    position: [-0.55, 0.15, -33],
+    text: '책은\n읽히기 전에도\n이미 오래\n누군가를 기다린 얼굴이었다.',
+  },
+  {
+    id: 13,
+    title: '다시 하늘',
+    objectLabel: 'white sky',
+    emoji: '🕊️',
+    position: [0, 0.45, -36],
+    text: '그리고 다시.\n눈을 감았다 뜨면\n일상은\n조금 다른 빛으로 놓여 있었다.',
+  },
+];
