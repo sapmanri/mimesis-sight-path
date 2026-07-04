@@ -1,4 +1,4 @@
-/* v0.3.8 clean road view pass */
+/* v0.3.9 clean distant world pass */
 
 .viewport-card .world-canvas {
   opacity: 1;
@@ -20,10 +20,6 @@
 
 .parallax-scene::before,
 .parallax-scene::after,
-.layer-sky,
-.layer-far,
-.layer-mid,
-.layer-near,
 .layer-haze,
 .layer-vignette {
   display: none !important;
@@ -32,6 +28,59 @@
   animation: none !important;
   filter: none !important;
   backdrop-filter: none !important;
+}
+
+.layer-sky {
+  display: block !important;
+  z-index: 0;
+  top: 0;
+  height: 44%;
+  opacity: 0.34 !important;
+  background:
+    radial-gradient(ellipse at 24% 30%, rgba(255,255,255,0.68) 0 7%, transparent 18%),
+    radial-gradient(ellipse at 72% 24%, rgba(255,255,255,0.52) 0 6%, transparent 16%) !important;
+  animation: clean-cloud-drift 74s ease-in-out infinite alternate !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.layer-far {
+  display: block !important;
+  z-index: 1;
+  left: -18%;
+  right: -18%;
+  top: 36%;
+  height: 22%;
+  opacity: 0.22 !important;
+  background:
+    linear-gradient(151deg, transparent 0 31%, rgba(65, 104, 98, 0.58) 31% 44%, transparent 44%),
+    linear-gradient(29deg, transparent 0 43%, rgba(84, 122, 105, 0.5) 43% 60%, transparent 60%) !important;
+  animation: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.layer-mid {
+  display: block !important;
+  z-index: 2;
+  left: -12%;
+  right: -12%;
+  top: 46%;
+  height: 18%;
+  opacity: 0.16 !important;
+  background:
+    linear-gradient(157deg, transparent 0 25%, rgba(110, 133, 98, 0.58) 25% 39%, transparent 39%),
+    linear-gradient(24deg, transparent 0 50%, rgba(132, 139, 96, 0.46) 50% 64%, transparent 64%) !important;
+  animation: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.layer-near {
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  animation: none !important;
 }
 
 .road-only-topbar,
@@ -57,4 +106,9 @@
   letter-spacing: 0.04em;
   pointer-events: none;
   opacity: 0.88;
+}
+
+@keyframes clean-cloud-drift {
+  from { transform: translate3d(-4px, -1px, 0) scale(1); }
+  to { transform: translate3d(7px, 2px, 0) scale(1.01); }
 }
