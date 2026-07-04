@@ -13,6 +13,15 @@ type WorldProps = {
   mode: 'auto' | 'manual';
 };
 
+type PathSlab = {
+  position: [number, number, number];
+  angle: number;
+  length: number;
+  width: number;
+  color: string;
+  roughness: number;
+};
+
 export function World({ scenes, activeIndex, mode }: WorldProps) {
   const lightRef = useRef<THREE.Group>(null);
   const activeScene = scenes[activeIndex];
@@ -144,11 +153,47 @@ function NarrativePath({ scenes, activeIndex }: { scenes: ObservationScene[]; ac
               <boxGeometry args={[slab.width * 0.96, slab.length * 0.96, 0.018]} />
               <meshBasicMaterial color="#fff4df" transparent opacity={0.08} />
             </mesh>
+            <PathEdges slab={slab} opacity={opacity} />
+            <PathSurfaceMarks slab={slab} index={index} opacity={opacity} />
           </group>
         );
       })}
       {scenes.map((scene, index) => (
         <PathDetail key={scene.id} scene={scene} index={index} />
+      ))}
+    </group>
+  );
+}
+
+function PathEdges({ slab, opacity }: { slab: PathSlab; opacity: number }) {
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * slab.width * 0.52, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <boxGeometry args={[0.035, slab.length * 0.94, 0.045]} />
+          <meshBasicMaterial color="#fff4df" transparent opacity={opacity * 0.18} />
+        </mesh>
+      ))}
+      {[-1, 1].map((side) => (
+        <mesh key={`shadow-${side}`} position={[side * slab.width * 0.58, -0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <boxGeometry args={[0.045, slab.length * 0.9, 0.03]} />
+          <meshBasicMaterial color="#476862" transparent opacity={opacity * 0.08} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function PathSurfaceMarks({ slab, index, opacity }: { slab: PathSlab; index: number; opacity: number }) {
+  const marks = useMemo(() => buildSurfaceMarks(slab, index), [slab, index]);
+
+  return (
+    <group>
+      {marks.map((mark) => (
+        <mesh key={mark.id} position={mark.position} rotation={[-Math.PI / 2, 0, mark.rotation]}>
+          {mark.round ? <circleGeometry args={[mark.size, 14]} /> : <boxGeometry args={[mark.size * 2.2, mark.size * 0.55, 0.012]} />}
+          <meshBasicMaterial color={mark.color} transparent opacity={mark.opacity * opacity} />
+        </mesh>
       ))}
     </group>
   );
@@ -250,8 +295,42 @@ function buildPathSlabs(scenes: ObservationScene[]) {
       length,
       width,
       color: surfaceColor[scene.surface],
+      roughness: preset.roughness,
     };
   });
+}
+
+function buildSurfaceMarks(slab: PathSlab, index: number) {
+  const random = seededRandom(307 + index * 83);
+  const marks: Array<{
+    id: string;
+    position: [number, number, number];
+    rotation: number;
+    size: number;
+    color: string;
+    opacity: number;
+    round: boolean;
+  }> = [];
+  const count = Math.round(5 + slab.length * (2 + slab.roughness * 5));
+
+  for (let i = 0; i < count; i += 1) {
+    const nearEdge = random() > 0.56;
+    const x = (random() - 0.5) * slab.width * (nearEdge ? 0.95 : 0.58);
+    const z = (random() - 0.5) * slab.length * 0.9;
+    const t = random();
+
+    marks.push({
+      id: `${index}-mark-${i}`,
+      position: [x, 0.025 + random() * 0.006, z],
+      rotation: random() * Math.PI,
+      size: 0.014 + random() * (nearEdge ? 0.045 : 0.026),
+      color: t < 0.5 ? '#fff4df' : t < 0.78 ? '#486a62' : '#9aac9f',
+      opacity: nearEdge ? 0.18 + random() * 0.16 : 0.08 + random() * 0.08,
+      round: random() > 0.42,
+    });
+  }
+
+  return marks;
 }
 
 function buildMistPoints() {
@@ -267,4 +346,14 @@ function buildMistPoints() {
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   return geometry;
+}
+
+function seededRandom(seed: number) {
+  let value = seed % 2147483647;
+  if (value <= 0) value += 2147483646;
+
+  return () => {
+    value = (value * 16807) % 2147483647;
+    return (value - 1) / 2147483646;
+  };
 }
