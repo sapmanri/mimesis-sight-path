@@ -22,6 +22,27 @@ type PathSlab = {
   roughness: number;
 };
 
+type RibbonSegment = {
+  id: string;
+  geometry: THREE.BufferGeometry;
+  leftEdge: THREE.TubeGeometry;
+  rightEdge: THREE.TubeGeometry;
+  color: string;
+  roughness: number;
+  focusIndex: number;
+  marks: SurfaceMark[];
+};
+
+type SurfaceMark = {
+  id: string;
+  position: [number, number, number];
+  rotation: number;
+  size: number;
+  color: string;
+  opacity: number;
+  round: boolean;
+};
+
 export function World({ scenes, activeIndex, mode }: WorldProps) {
   const lightRef = useRef<THREE.Group>(null);
   const activeScene = scenes[activeIndex];
@@ -90,74 +111,64 @@ function getCameraDirector(activeIndex: number, elapsed: number, mode: 'auto' | 
   const shot = activeIndex % 6;
 
   if (shot === 0) {
-    return {
-      offset: new THREE.Vector3(-0.78 + glance, 1.18 + breathe, 3.08),
-      lookOffset: new THREE.Vector3(0.08, 0.04, -0.48),
-      lightLead: { x: 0.06, z: 0.18 },
-    };
+    return { offset: new THREE.Vector3(-0.78 + glance, 1.18 + breathe, 3.08), lookOffset: new THREE.Vector3(0.08, 0.04, -0.48), lightLead: { x: 0.06, z: 0.18 } };
   }
 
   if (shot === 1) {
-    return {
-      offset: new THREE.Vector3(0.82 + glance, 0.92 + breathe, 2.78),
-      lookOffset: new THREE.Vector3(-0.12, 0.01, -0.38),
-      lightLead: { x: -0.02, z: 0.18 },
-    };
+    return { offset: new THREE.Vector3(0.82 + glance, 0.92 + breathe, 2.78), lookOffset: new THREE.Vector3(-0.12, 0.01, -0.38), lightLead: { x: -0.02, z: 0.18 } };
   }
 
   if (shot === 2) {
-    return {
-      offset: new THREE.Vector3(0.08 + glance, 2.15 + breathe, 1.74),
-      lookOffset: new THREE.Vector3(0, -0.18, -0.24),
-      lightLead: { x: 0.03, z: 0.16 },
-    };
+    return { offset: new THREE.Vector3(0.08 + glance, 2.15 + breathe, 1.74), lookOffset: new THREE.Vector3(0, -0.18, -0.24), lightLead: { x: 0.03, z: 0.16 } };
   }
 
   if (shot === 3) {
-    return {
-      offset: new THREE.Vector3(-0.1 + glance, 0.7 + breathe, 2.18),
-      lookOffset: new THREE.Vector3(0.02, 0.02, -0.76),
-      lightLead: { x: 0.08, z: 0.22 },
-    };
+    return { offset: new THREE.Vector3(-0.1 + glance, 0.7 + breathe, 2.18), lookOffset: new THREE.Vector3(0.02, 0.02, -0.76), lightLead: { x: 0.08, z: 0.22 } };
   }
 
   if (shot === 4) {
-    return {
-      offset: new THREE.Vector3(1.05 + glance, 1.04 + breathe, 2.95),
-      lookOffset: new THREE.Vector3(-0.22, 0.06, -0.4),
-      lightLead: { x: -0.06, z: 0.2 },
-    };
+    return { offset: new THREE.Vector3(1.05 + glance, 1.04 + breathe, 2.95), lookOffset: new THREE.Vector3(-0.22, 0.06, -0.4), lightLead: { x: -0.06, z: 0.2 } };
   }
 
-  return {
-    offset: new THREE.Vector3(-1.02 + glance, 0.98 + breathe, 2.88),
-    lookOffset: new THREE.Vector3(0.2, 0.02, -0.34),
-    lightLead: { x: 0.06, z: 0.16 },
-  };
+  return { offset: new THREE.Vector3(-1.02 + glance, 0.98 + breathe, 2.88), lookOffset: new THREE.Vector3(0.2, 0.02, -0.34), lightLead: { x: 0.06, z: 0.16 } };
 }
 
 function NarrativePath({ scenes, activeIndex }: { scenes: ObservationScene[]; activeIndex: number }) {
   const slabs = useMemo(() => buildPathSlabs(scenes), [scenes]);
+  const ribbonSegments = useMemo(() => buildRibbonSegments(scenes), [scenes]);
 
   return (
     <group>
       {slabs.map((slab, index) => {
-        const opacity = Math.max(0.3, 0.92 - Math.abs(index - activeIndex) * 0.11);
+        const opacity = Math.max(0.12, 0.42 - Math.abs(index - activeIndex) * 0.08);
         return (
           <group key={index} position={slab.position} rotation={[0, slab.angle, 0]}>
             <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <boxGeometry args={[slab.width, slab.length, 0.035]} />
-              <meshStandardMaterial color={slab.color} roughness={0.94} transparent opacity={opacity} />
+              <boxGeometry args={[slab.width * 1.08, slab.length, 0.025]} />
+              <meshStandardMaterial color={slab.color} roughness={0.96} transparent opacity={opacity} />
             </mesh>
-            <mesh position={[0, -0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-              <boxGeometry args={[slab.width * 0.96, slab.length * 0.96, 0.018]} />
-              <meshBasicMaterial color="#fff4df" transparent opacity={0.08} />
-            </mesh>
-            <PathEdges slab={slab} opacity={opacity} />
-            <PathSurfaceMarks slab={slab} index={index} opacity={opacity} />
           </group>
         );
       })}
+
+      {ribbonSegments.map((segment) => {
+        const opacity = Math.max(0.32, 0.95 - Math.abs(segment.focusIndex - activeIndex) * 0.12);
+        return (
+          <group key={segment.id}>
+            <mesh geometry={segment.geometry}>
+              <meshStandardMaterial color={segment.color} roughness={0.94} transparent opacity={opacity} side={THREE.DoubleSide} />
+            </mesh>
+            <mesh geometry={segment.leftEdge}>
+              <meshBasicMaterial color="#fff4df" transparent opacity={opacity * 0.18} />
+            </mesh>
+            <mesh geometry={segment.rightEdge}>
+              <meshBasicMaterial color="#486a62" transparent opacity={opacity * 0.1} />
+            </mesh>
+            <RibbonSurfaceMarks marks={segment.marks} opacity={opacity} />
+          </group>
+        );
+      })}
+
       {scenes.map((scene, index) => (
         <PathDetail key={scene.id} scene={scene} index={index} />
       ))}
@@ -165,28 +176,7 @@ function NarrativePath({ scenes, activeIndex }: { scenes: ObservationScene[]; ac
   );
 }
 
-function PathEdges({ slab, opacity }: { slab: PathSlab; opacity: number }) {
-  return (
-    <group>
-      {[-1, 1].map((side) => (
-        <mesh key={side} position={[side * slab.width * 0.52, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <boxGeometry args={[0.035, slab.length * 0.94, 0.045]} />
-          <meshBasicMaterial color="#fff4df" transparent opacity={opacity * 0.18} />
-        </mesh>
-      ))}
-      {[-1, 1].map((side) => (
-        <mesh key={`shadow-${side}`} position={[side * slab.width * 0.58, -0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <boxGeometry args={[0.045, slab.length * 0.9, 0.03]} />
-          <meshBasicMaterial color="#476862" transparent opacity={opacity * 0.08} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function PathSurfaceMarks({ slab, index, opacity }: { slab: PathSlab; index: number; opacity: number }) {
-  const marks = useMemo(() => buildSurfaceMarks(slab, index), [slab, index]);
-
+function RibbonSurfaceMarks({ marks, opacity }: { marks: SurfaceMark[]; opacity: number }) {
   return (
     <group>
       {marks.map((mark) => (
@@ -290,7 +280,7 @@ function buildPathSlabs(scenes: ObservationScene[]) {
     const width = preset.width;
 
     return {
-      position: [midpoint.x, -0.64, midpoint.z] as [number, number, number],
+      position: [midpoint.x, -0.66, midpoint.z] as [number, number, number],
       angle,
       length,
       width,
@@ -300,33 +290,110 @@ function buildPathSlabs(scenes: ObservationScene[]) {
   });
 }
 
-function buildSurfaceMarks(slab: PathSlab, index: number) {
-  const random = seededRandom(307 + index * 83);
-  const marks: Array<{
-    id: string;
-    position: [number, number, number];
-    rotation: number;
-    size: number;
-    color: string;
-    opacity: number;
-    round: boolean;
-  }> = [];
-  const count = Math.round(5 + slab.length * (2 + slab.roughness * 5));
+function buildRibbonSegments(scenes: ObservationScene[]): RibbonSegment[] {
+  return scenes.slice(0, -1).map((scene, index) => {
+    const next = scenes[index + 1];
+    const preset = pathSegmentPresets[scene.pathKind];
+    const start = new THREE.Vector3(...scene.position).add(new THREE.Vector3(0, -0.67, 0));
+    const end = new THREE.Vector3(...next.position).add(new THREE.Vector3(0, -0.67, 0));
+    const direction = end.clone().sub(start).normalize();
+    const perpendicular = new THREE.Vector3(-direction.z, 0, direction.x);
+    const side = index % 2 === 0 ? 1 : -1;
+    const curveStrength = preset.curve * 0.68 * side;
+    const c1 = start.clone().lerp(end, 0.34).add(perpendicular.clone().multiplyScalar(curveStrength));
+    const c2 = start.clone().lerp(end, 0.66).add(perpendicular.clone().multiplyScalar(curveStrength * 0.72));
+    const curve = new THREE.CubicBezierCurve3(start, c1, c2, end);
+    const samples = curve.getPoints(18);
+    const width = preset.width * 0.98;
+    const geometry = buildRibbonGeometry(samples, width, index);
+    const { left, right } = buildRibbonEdgeCurves(samples, width);
+
+    return {
+      id: `${scene.id}-${next.id}`,
+      geometry,
+      leftEdge: new THREE.TubeGeometry(left, 48, 0.008, 6, false),
+      rightEdge: new THREE.TubeGeometry(right, 48, 0.006, 6, false),
+      color: surfaceColor[scene.surface],
+      roughness: preset.roughness,
+      focusIndex: index,
+      marks: buildRibbonSurfaceMarks(samples, width, preset.roughness, index),
+    };
+  });
+}
+
+function buildRibbonGeometry(points: THREE.Vector3[], width: number, index: number) {
+  const vertices: number[] = [];
+  const indices: number[] = [];
+
+  points.forEach((point, i) => {
+    const prev = points[Math.max(0, i - 1)];
+    const next = points[Math.min(points.length - 1, i + 1)];
+    const tangent = next.clone().sub(prev).normalize();
+    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+    const breathingWidth = width * (0.9 + Math.sin(i * 0.55 + index) * 0.05);
+    const left = point.clone().add(normal.clone().multiplyScalar(breathingWidth * 0.5));
+    const right = point.clone().add(normal.clone().multiplyScalar(-breathingWidth * 0.5));
+    left.y += Math.sin(i * 0.7 + index) * 0.008;
+    right.y += Math.cos(i * 0.64 + index) * 0.008;
+    vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
+  });
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const a = i * 2;
+    indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function buildRibbonEdgeCurves(points: THREE.Vector3[], width: number) {
+  const leftPoints: THREE.Vector3[] = [];
+  const rightPoints: THREE.Vector3[] = [];
+
+  points.forEach((point, i) => {
+    const prev = points[Math.max(0, i - 1)];
+    const next = points[Math.min(points.length - 1, i + 1)];
+    const tangent = next.clone().sub(prev).normalize();
+    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+    leftPoints.push(point.clone().add(normal.clone().multiplyScalar(width * 0.52)).add(new THREE.Vector3(0, 0.018, 0)));
+    rightPoints.push(point.clone().add(normal.clone().multiplyScalar(-width * 0.52)).add(new THREE.Vector3(0, 0.012, 0)));
+  });
+
+  return {
+    left: new THREE.CatmullRomCurve3(leftPoints),
+    right: new THREE.CatmullRomCurve3(rightPoints),
+  };
+}
+
+function buildRibbonSurfaceMarks(points: THREE.Vector3[], width: number, roughness: number, index: number): SurfaceMark[] {
+  const random = seededRandom(907 + index * 157);
+  const marks: SurfaceMark[] = [];
+  const count = Math.round(10 + points.length * (0.45 + roughness * 0.7));
 
   for (let i = 0; i < count; i += 1) {
-    const nearEdge = random() > 0.56;
-    const x = (random() - 0.5) * slab.width * (nearEdge ? 0.95 : 0.58);
-    const z = (random() - 0.5) * slab.length * 0.9;
+    const baseIndex = Math.floor(random() * (points.length - 2)) + 1;
+    const point = points[baseIndex];
+    const prev = points[baseIndex - 1];
+    const next = points[baseIndex + 1];
+    const tangent = next.clone().sub(prev).normalize();
+    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+    const edgeBias = random() > 0.58 ? 0.42 : 0.22;
+    const offset = (random() - 0.5) * width * edgeBias;
+    const position = point.clone().add(normal.multiplyScalar(offset)).add(new THREE.Vector3(0, 0.035 + random() * 0.01, 0));
     const t = random();
 
     marks.push({
-      id: `${index}-mark-${i}`,
-      position: [x, 0.025 + random() * 0.006, z],
+      id: `ribbon-${index}-mark-${i}`,
+      position: [position.x, position.y, position.z],
       rotation: random() * Math.PI,
-      size: 0.014 + random() * (nearEdge ? 0.045 : 0.026),
-      color: t < 0.5 ? '#fff4df' : t < 0.78 ? '#486a62' : '#9aac9f',
-      opacity: nearEdge ? 0.18 + random() * 0.16 : 0.08 + random() * 0.08,
-      round: random() > 0.42,
+      size: 0.012 + random() * 0.04,
+      color: t < 0.5 ? '#fff4df' : t < 0.76 ? '#486a62' : '#9aac9f',
+      opacity: 0.08 + random() * (0.16 + roughness * 0.15),
+      round: random() > 0.4,
     });
   }
 
