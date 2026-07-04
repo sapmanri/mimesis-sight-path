@@ -4,11 +4,12 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { MemoryHorizon } from './scene/MemoryHorizon';
 import { MemoryParts } from './scene/MemoryParts';
+import { MemoryRoadSkin } from './scene/MemoryRoadSkin';
 import { ParallaxLayers } from './components/ParallaxLayers';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.4.4 · MEMORY BIOME · BUILD 069';
+const BUILD_LABEL = 'v0.4.5 · PATH GENERATOR V2 · BUILD 070';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -93,6 +94,7 @@ export default function App() {
           <MemoryHorizon />
           <MemoryParts />
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
+          <MemoryRoadSkin activeIndex={activeIndex} scenes={jejuScenes} />
         </Canvas>
         <div className="build-badge">{BUILD_LABEL}</div>
       </section>
