@@ -6,6 +6,8 @@ export type ObservationScene = {
   position: [number, number, number];
   scale: number;
   hue: string;
+  dwellMs: number;
+  soundTone: number;
   text: string;
 };
 
@@ -18,6 +20,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0, 0, 0],
     scale: 1.18,
     hue: '#eee5d3',
+    dwellMs: 9200,
+    soundTone: 174,
     text: '문은 늘\n떠나는 쪽보다\n돌아오는 쪽을\n더 오래 기억한다.',
   },
   {
@@ -28,6 +32,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0.64, 0.08, -2.8],
     scale: 0.92,
     hue: '#cfd9c4',
+    dwellMs: 6500,
+    soundTone: 196,
     text: '여행은\n발보다 먼저\n손에서 시작됐다.',
   },
   {
@@ -38,6 +44,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [-0.48, 0.12, -5.6],
     scale: 0.82,
     hue: '#d7cbb8',
+    dwellMs: 7600,
+    soundTone: 207,
     text: '공항에서는\n모두가 등을 보인다.\n각자의 목적지를\n앞에 둔 채.',
   },
   {
@@ -48,6 +56,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0.42, 0.18, -8.4],
     scale: 0.86,
     hue: '#dce3d7',
+    dwellMs: 7200,
+    soundTone: 220,
     text: '날개는\n아무 말 없이\n도시를 접었다.',
   },
   {
@@ -58,6 +68,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [-0.24, 0.44, -11.2],
     scale: 0.78,
     hue: '#e9e7dc',
+    dwellMs: 8600,
+    soundTone: 247,
     text: '어디에도 닿지 않은 시간이\n잠깐\n하얗게 지나갔다.',
   },
   {
@@ -68,6 +80,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0.5, -0.02, -14],
     scale: 0.9,
     hue: '#d0c6b3',
+    dwellMs: 9400,
+    soundTone: 185,
     text: '제주는\n큰 풍경보다 먼저\n돌의 높이로\n나를 맞았다.',
   },
   {
@@ -78,6 +92,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [-0.62, 0.18, -16.8],
     scale: 0.86,
     hue: '#dcc5a7',
+    dwellMs: 8800,
+    soundTone: 233,
     text: '꽃은\n담장을 넘으려고 핀 게 아니라\n거기까지 와버린 것 같았다.',
   },
   {
@@ -88,6 +104,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0.08, 0.18, -19.6],
     scale: 1.02,
     hue: '#dce5d8',
+    dwellMs: 11000,
+    soundTone: 164,
     text: '바다는\n갑자기 나타나지 않았다.\n돌담 끝에서\n슬며시 열렸다.',
   },
   {
@@ -98,6 +116,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0.56, 0.04, -22.4],
     scale: 0.78,
     hue: '#d8d5b9',
+    dwellMs: 6200,
+    soundTone: 262,
     text: '작은 것은\n가끔\n사람을 오래 붙잡는다.',
   },
   {
@@ -108,6 +128,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [-0.36, 0.1, -25.2],
     scale: 0.92,
     hue: '#cec4b5',
+    dwellMs: 9000,
+    soundTone: 196,
     text: '취향은\n사라지는 게 아니라\n먼지를 쓰고\n그 자리에 남아 있었다.',
   },
   {
@@ -118,6 +140,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0.3, 0.04, -28],
     scale: 1.08,
     hue: '#e3ded0',
+    dwellMs: 9800,
+    soundTone: 175,
     text: '보이지 않는 길도\n길이라는 걸\n안개가 알려주었다.',
   },
   {
@@ -128,6 +152,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [-0.52, 0.14, -30.8],
     scale: 0.86,
     hue: '#d8ccb8',
+    dwellMs: 10200,
+    soundTone: 147,
     text: '책은\n읽히기 전에도\n이미 오래\n누군가를 기다린 얼굴이었다.',
   },
   {
@@ -138,6 +164,8 @@ export const jejuScenes: ObservationScene[] = [
     position: [0, 0.42, -33.6],
     scale: 1,
     hue: '#e8e6d9',
+    dwellMs: 11500,
+    soundTone: 220,
     text: '그리고 다시.\n눈을 감았다 뜨면\n일상은\n조금 다른 빛으로 놓여 있었다.',
   },
 ];
