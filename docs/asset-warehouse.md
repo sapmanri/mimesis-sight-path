@@ -19,6 +19,7 @@ public/assets/warehouse/
     cliff/
     stone/
     wall/
+    stair_platform/
   02_nature/
     grass/
     rock/
@@ -33,6 +34,7 @@ public/assets/warehouse/
     sunda_house/
     haunted_house/
     pillar/
+    village/
   04_props/
     suitcase/
     sign/
@@ -41,6 +43,8 @@ public/assets/warehouse/
     clock/
     item_pack/
     debris/
+    glasses/
+    beach_chair/
   05_vehicles/
     boat/
     truck/
@@ -77,6 +81,7 @@ public/assets/warehouse/
 | Brick | `pxfpf20su7ls-Brick(2).rar` | 길 가장자리, 오래된 구조물 | ★★★☆☆ | 조각/부품용 |
 | Blocks | `Blocks(1).FBX` | 지형 보강, 길 옆 부품 | ★★★☆☆ | low poly 질감 확인 필요 |
 | Block Low | `block_low_FBX(1).rar` | 지형 보강, 폐허 조각 | ★★★☆☆ | 배경용 |
+| Stair Platform | `Free_stair_platformFBX.rar` | 끊어진 계단, 기억의 층위, 길 옆 매몰 구조 | ★★★★★ | BUILD 066 프록시로 자리 배치 시작 |
 
 ### 02 Nature
 
@@ -99,6 +104,7 @@ public/assets/warehouse/
 | House | `house_fbx.zip` | 섬 위의 집, 기억의 목적지 | ★★★★★ | 핵심 오브젝트 후보 |
 | Simple House | `gu7u77vio0zk-simple_house(1).zip` | 작은 집, 원거리 마을 | ★★★★★ | low poly라 잘 맞을 가능성 높음 |
 | Cottage | `53-cottage_fbx(1).zip` | 따뜻한 기억의 집 | ★★★★★ | MIMESIS 톤과 잘 맞음 |
+| Mega Village / 4 Houses | `GLB_Mega_Village_Environment_4_Houses.zip` | 기억 저편의 마을, 파편화된 집 지층 | ★★★★★ | BUILD 066 프록시로 house fragment 배치 시작 |
 | Home Sunda | `41-home_sunda(1).zip` | 이국적 기억 공간 | ★★★★☆ | 특정 챕터용 |
 | Haunted Sundanese Traditional House | `50-haunted-sundanese-traditional-house(1).zip` | 상실/밤/폐허 장면 | ★★★★☆ | 밝은 길 단계에서는 보류 |
 | Ruin02 | `Ruin02_fbx(1).rar` | 폐허, 기억의 잔해 | ★★★★★ | 길 옆 중경 오브젝트 후보 |
@@ -117,10 +123,13 @@ public/assets/warehouse/
 | Traffic Cone | `Traffic_cone_FBX(1).rar` | 공사 중인 기억, 임시 경계 | ★★★☆☆ | 장면용 |
 | Fire Hydrant | `firehydrant(1).FBX` | 도시 소품, 스케일 기준 | ★★★☆☆ | 특정 챕터용 |
 | Clock Constraints | `3ok8cthawqio-Clock_Constraints_for_Animations(2).zip` | 시간, 기억, 멈춤 상징 | ★★★★★ | MIMESIS 핵심 상징과 잘 맞음 |
+| Glasses | `fbxGlasses.fbx` | 시선, 관찰, 잃어버린 관점 | ★★★★★ | BUILD 066 프록시로 길 아래 파편 배치 시작 |
+| Beach Chair | `Beach_Chair.fbx` | 휴식의 기억, 비어 있는 자리 | ★★★★☆ | BUILD 066 프록시로 침식된 의자 배치 시작 |
 | Parts For Sale | `PartsForSale(1).fbx` | 시장/상점/분해된 기억 | ★★★☆☆ | 소품 묶음 가능 |
 | Pack of Items | `Pack_of_items(1).fbx` | 장면 디테일, 생활감 | ★★★★☆ | 추후 분해해서 사용 |
 | Item01 | `e9cb403o4yrk-item01(1).zip` | 소품/바닥 디테일 | ★★★☆☆ | 내용 확인 필요 |
 | Debris | `g3yul469purk-debris(1).rar` | 폐허, 길 이음새, 지면 디테일 | ★★★★★ | 지금 길 개선에도 활용 가능 |
+| FBX Unknown Pack | `FBX.zip` | 미확인 묶음 | ★★☆☆☆ | 내용 확인 후 재분류 |
 | n19_e41 | `n19_e41_fbx(1).rar` | 미확인 | ★★☆☆☆ | 내용 확인 후 재분류 |
 
 ### 05 Vehicles
@@ -151,7 +160,9 @@ public/assets/warehouse/
 4. Bridge
 5. Cloud Polygon
 6. Wooden Rowboat
-7. Cottage / Simple House
+7. Cottage / Simple House / Mega Village
+8. Stair Platform
+9. Glasses
 
 ## 보류 후보
 
