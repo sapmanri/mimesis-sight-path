@@ -219,9 +219,9 @@ function buildTrailAssets(scenes: ObservationScene[]): TrailAsset[] {
         id: `${scene.id}-${index}-${i}-${surfaceKind}`,
         kind: surfaceKind,
         position: [position.x, -0.66 + random() * 0.06, position.z],
-        rotation: getRotation(surfaceKind, direction, random()),
+        rotation: getRotation(surfaceKind, direction, random),
         scale: getScale(surfaceKind, scaleBase, random()),
-        opacity: getOpacity(surfaceKind, random()),
+        opacity: getOpacity(surfaceKind, random),
       });
     }
 
