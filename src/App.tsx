@@ -2,15 +2,12 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
-import { MemoryHorizon } from './scene/MemoryHorizon';
-import { MemoryParts } from './scene/MemoryParts';
-import { MemoryRoadSkin } from './scene/MemoryRoadSkin';
-import { MemoryClusters } from './scene/MemoryClusters';
-import { ParallaxLayers } from './components/ParallaxLayers';
+import { StoryCard } from './components/StoryCard';
+import { ProgressNav } from './components/ProgressNav';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.4.7 · MEMORY CLUSTERS · BUILD 072';
+const BUILD_LABEL = 'v0.5.0 · WORLD CORE · BUILD 073';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -62,7 +59,7 @@ export default function App() {
         if (current >= jejuScenes.length - 1) return 0;
         return current + 1;
       });
-    }, 9000);
+    }, jejuScenes[activeIndex].dwellMs ?? 9000);
 
     return () => window.clearTimeout(timer);
   }, [activeIndex, mode]);
@@ -77,11 +74,17 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [mode]);
 
+  const handleNavChange = (index: number) => {
+    lastManualAt.current = Date.now();
+    setMode('manual');
+    setActiveIndex(index);
+  };
+
   return (
-    <main className="app-shell road-only-shell">
+    <main className="app-shell world-core-shell">
       <header className="topbar road-only-topbar">
         <div>
-          <p className="eyebrow">MIMESIS · OBSERVATION NO.001 · {BUILD_LABEL}</p>
+          <p className="eyebrow">MIMESIS · OBSERVATION NO.001</p>
           <h1>JEJU, 시선을 따라 걷다</h1>
         </div>
         <div className="top-status">
@@ -89,15 +92,19 @@ export default function App() {
         </div>
       </header>
 
-      <section className="viewport-card road-only-viewport">
-        <ParallaxLayers activeIndex={activeIndex} scene={jejuScenes[activeIndex]} />
-        <Canvas className="world-canvas" camera={{ position: [0, 2.15, 8.4], fov: 34 }} dpr={[1, 2]} gl={{ alpha: true }}>
-          <MemoryHorizon />
-          <MemoryParts />
-          <MemoryClusters />
+      <section className="viewport-card world-core-viewport">
+        <Canvas
+          className="world-canvas"
+          camera={{ position: [0, 3.1, 8.4], fov: 42 }}
+          dpr={[1, 2]}
+          shadows
+        >
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
-          <MemoryRoadSkin activeIndex={activeIndex} scenes={jejuScenes} />
         </Canvas>
+        <div className="atmosphere-grain" aria-hidden="true" />
+        <div className="atmosphere-vignette" aria-hidden="true" />
+        <ProgressNav scenes={jejuScenes} activeIndex={activeIndex} onChange={handleNavChange} />
+        <StoryCard scene={jejuScenes[activeIndex]} mode={mode} />
         <div className="build-badge">{BUILD_LABEL}</div>
       </section>
     </main>

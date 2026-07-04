@@ -112,3 +112,42 @@
   from { transform: translate3d(-4px, -1px, 0) scale(1); }
   to { transform: translate3d(7px, 2px, 0) scale(1.01); }
 }
+
+/* ===== BUILD 073 · WORLD CORE ===== */
+/* 배경은 안개와 같은 색이어야 한다. 세계와 화면의 경계가 사라지도록. */
+
+.world-core-shell {
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(255, 243, 214, 0.10), transparent 42%),
+    linear-gradient(180deg, #517b8e 0%, #4a7285 46%, #46687a 100%) !important;
+}
+
+.world-core-viewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.world-core-viewport .world-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* 필름 그레인 — 렌더가 '화면'이 아니라 '기억'처럼 보이게 하는 마지막 층 */
+.atmosphere-grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+}
+
+.atmosphere-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(24, 42, 52, 0.34) 100%);
+}

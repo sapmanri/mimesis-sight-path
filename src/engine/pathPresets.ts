@@ -28,6 +28,8 @@ export type WeatherState =
 
 export type ObjectKit =
   | 'door-kit'
+  | 'person-kit'
+  | 'cloud-kit'
   | 'suitcase-kit'
   | 'book-kit'
   | 'cup-kit'
@@ -69,6 +71,8 @@ export const weatherFog: Record<WeatherState, { color: string; near: number; far
 };
 
 export const objectKitVariants: Record<ObjectKit, string[]> = {
+  'person-kit': ['back-view'],
+  'cloud-kit': ['empty'],
   'door-kit': ['door-panel', 'handle', 'threshold-shadow', 'weathered-frame'],
   'suitcase-kit': ['full-suitcase', 'half-buried', 'handle-only', 'wheel-track', 'strap-fragment'],
   'book-kit': ['open-book', 'closed-book', 'yellowed-page', 'page-stack'],
