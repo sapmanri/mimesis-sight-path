@@ -1,0 +1,119 @@
+/* v0.2.2 photo-depth road experiment
+   This file deliberately overrides the softer prototype styles so the change is obvious. */
+
+.viewport-card .world-canvas {
+  opacity: 0.42;
+  mix-blend-mode: screen;
+}
+
+.parallax-scene {
+  background:
+    linear-gradient(180deg, #5f969f 0%, #75aaa5 42%, #d7c9a8 100%) !important;
+}
+
+.parallax-scene::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: -8% -18%;
+  opacity: 0.72;
+  background:
+    radial-gradient(ellipse at 66% 24%, rgba(255,255,255,0.62) 0 8%, transparent 22%),
+    linear-gradient(150deg, transparent 0 36%, rgba(77,121,123,0.42) 36% 45%, transparent 45%),
+    linear-gradient(28deg, transparent 0 44%, rgba(34,83,93,0.35) 44% 50%, transparent 50%),
+    linear-gradient(162deg, transparent 0 51%, rgba(238,229,199,0.42) 51% 61%, transparent 61%);
+  filter: blur(1.1px) saturate(0.9);
+}
+
+.parallax-scene::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  opacity: 0.45;
+  background:
+    radial-gradient(ellipse at 32% 30%, rgba(255,255,255,0.32) 0 11%, transparent 28%),
+    radial-gradient(ellipse at 74% 36%, rgba(255,255,255,0.24) 0 8%, transparent 24%),
+    linear-gradient(180deg, transparent 0 58%, rgba(238,226,198,0.36) 100%);
+  animation: photo-cloud-drift 22s ease-in-out infinite alternate;
+}
+
+.layer-sky {
+  z-index: 1;
+  opacity: 0.8 !important;
+  background:
+    radial-gradient(ellipse at 58% 18%, rgba(255,255,255,0.58) 0 4%, transparent 16%),
+    radial-gradient(ellipse at 22% 21%, rgba(255,255,255,0.28) 0 14%, transparent 34%),
+    radial-gradient(ellipse at 78% 27%, rgba(255,255,255,0.2) 0 12%, transparent 32%) !important;
+}
+
+.layer-far {
+  z-index: 2;
+  opacity: 0.78 !important;
+  filter: blur(0.9px) saturate(0.78) !important;
+  background:
+    linear-gradient(153deg, transparent 0 24%, rgba(46,89,95,0.45) 24% 39%, transparent 39%),
+    linear-gradient(28deg, transparent 0 36%, rgba(56,105,102,0.44) 36% 51%, transparent 51%),
+    linear-gradient(168deg, transparent 0 52%, rgba(230,217,188,0.48) 52% 66%, transparent 66%) !important;
+}
+
+.layer-mid {
+  z-index: 4;
+  opacity: 0.92 !important;
+  filter: none !important;
+  background:
+    linear-gradient(108deg, transparent 0 27%, rgba(240,232,207,0.9) 27% 46%, transparent 46%),
+    linear-gradient(82deg, transparent 0 44%, rgba(249,241,218,0.72) 44% 59%, transparent 59%),
+    radial-gradient(ellipse at 52% 78%, rgba(97,134,123,0.34) 0 12%, transparent 30%) !important;
+  clip-path: polygon(8% 100%, 29% 52%, 43% 42%, 57% 45%, 78% 68%, 95% 100%);
+}
+
+.layer-near {
+  z-index: 5;
+  opacity: 0.88 !important;
+  background:
+    radial-gradient(ellipse at 22% 84%, rgba(65,105,91,0.56) 0 3%, transparent 7%),
+    radial-gradient(ellipse at 31% 77%, rgba(89,129,101,0.48) 0 4%, transparent 8%),
+    radial-gradient(ellipse at 72% 82%, rgba(73,104,89,0.44) 0 3%, transparent 8%),
+    linear-gradient(103deg, transparent 0 31%, rgba(241,232,207,0.64) 31% 42%, transparent 42%) !important;
+}
+
+.layer-haze {
+  z-index: 6;
+  opacity: 0.32 !important;
+  background:
+    radial-gradient(ellipse at 49% 38%, rgba(255,255,255,0.28) 0 18%, transparent 40%),
+    linear-gradient(90deg, rgba(255,255,255,0.16), transparent 30%, transparent 68%, rgba(255,255,255,0.12)) !important;
+}
+
+.layer-vignette {
+  z-index: 7;
+  background:
+    radial-gradient(circle at 50% 46%, transparent 0 51%, rgba(38,66,62,0.14) 80%, rgba(38,66,62,0.25) 100%),
+    linear-gradient(180deg, transparent 0 64%, rgba(226,213,188,0.22) 100%) !important;
+}
+
+.story-card {
+  transform: scale(0.92);
+  transform-origin: right bottom;
+  background: rgba(45, 67, 63, 0.32) !important;
+}
+
+.progress-nav {
+  opacity: 0.58;
+}
+
+@keyframes photo-cloud-drift {
+  from { transform: translate3d(-14px, -4px, 0) scale(1.02); }
+  to { transform: translate3d(18px, 6px, 0) scale(1.04); }
+}
+
+@media (max-width: 520px) {
+  .viewport-card .world-canvas {
+    opacity: 0.38;
+  }
+
+  .story-card {
+    transform: scale(0.9);
+  }
+}
