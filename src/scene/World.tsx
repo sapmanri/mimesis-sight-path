@@ -36,18 +36,18 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
     const aheadT = Math.min(1, t + 0.06);
     const ahead = world.curve.getPoint(aheadT);
     const dir = ahead.clone().sub(walker).setY(0).normalize();
-    const sideDrift = Math.sin(walkProgress.current * 0.72) * 0.3;
+    const sideDrift = Math.sin(walkProgress.current * 0.72) * 0.15;
     const nor = new THREE.Vector3(-dir.z, 0, dir.x);
 
     const desired = walker
       .clone()
-      .add(dir.clone().multiplyScalar(-5.0))
+      .add(dir.clone().multiplyScalar(-3.8))
       .add(nor.clone().multiplyScalar(sideDrift))
-      .add(new THREE.Vector3(0, 3.1, 0));
+      .add(new THREE.Vector3(0, 2.15, 0));
     const target = walker
       .clone()
-      .add(dir.clone().multiplyScalar(5.2))
-      .add(new THREE.Vector3(0, -0.75, 0));
+      .add(dir.clone().multiplyScalar(4.4))
+      .add(new THREE.Vector3(0, -0.5, 0));
 
     camera.position.lerp(desired, 1 - Math.pow(0.045, delta));
     camera.lookAt(target.x, target.y, target.z);

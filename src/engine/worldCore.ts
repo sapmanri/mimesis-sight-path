@@ -88,13 +88,15 @@ export function buildWorld(scenes: ObservationScene[]): BuiltWorld {
     frames.push({ t, p, tan, nor });
   }
 
-  // width profile: narrow causeway + plaza swells at each scene stop
+  // width profile: 좁은 오솔길. 광장은 상시가 아니라 '중요한 기억을 만나는 순간'의 이벤트다.
+  // importance가 낮은 장면은 거의 부풀지 않는다.
   const sceneT = pts.map((_, i) => tOf(i));
+  const plazaBoost = scenes.map((s) => 0.14 + Math.max(0, (s.importance ?? 1) - 1.0) * 0.95);
   const widthAt = (t: number) => {
-    let w = 0.62;
-    for (const st of sceneT) {
-      const d = Math.abs(t - st) * span;
-      w += 1.7 * Math.exp(-d * d * 3.2);
+    let w = 0.24;
+    for (let k = 0; k < sceneT.length; k += 1) {
+      const d = Math.abs(t - sceneT[k]) * span;
+      w += plazaBoost[k] * Math.exp(-d * d * 4.2);
     }
     return w * (1 + noise1(t * 40) * 0.1);
   };
@@ -155,16 +157,17 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
   type Ring = { L: THREE.Vector3; R: THREE.Vector3 };
   const cross: Ring[][] = frames.map((f, i) => {
     const w = widthAt(f.t);
-    const depth = 4.2 + noise1(i * 0.05) * 1.6;
+    const depth = 2.9 + noise1(i * 0.05) * 1.1;
     const rings: Ring[] = [];
     for (let r = 0; r < RINGS; r += 1) {
       const v = r / (RINGS - 1);
       const drop = Math.pow(v, 1.35) * depth;
-      const chunkL = noise1(i * 0.09 + r * 3.1) * 0.5 + noise1(i * 0.32 + r * 8.3) * 0.22;
-      const chunkR = noise1(i * 0.09 + r * 3.1 + 50) * 0.5 + noise1(i * 0.32 + r * 8.3 + 50) * 0.22;
+      const fine = Math.min(1, w * 1.15); // 좁을수록 침식도 섬세하게
+      const chunkL = (noise1(i * 0.09 + r * 3.1) * 0.5 + noise1(i * 0.32 + r * 8.3) * 0.22) * fine;
+      const chunkR = (noise1(i * 0.09 + r * 3.1 + 50) * 0.5 + noise1(i * 0.32 + r * 8.3 + 50) * 0.22) * fine;
       const inset = ringInsetBase[r] * w;
-      const hwL = Math.max(0.1, w - inset + (r === 0 ? 0 : chunkL * (0.3 + v * 0.7)));
-      const hwR = Math.max(0.1, w - inset + (r === 0 ? 0 : chunkR * (0.3 + v * 0.7)));
+      const hwL = Math.max(0.06, w - inset + (r === 0 ? 0 : chunkL * (0.3 + v * 0.7)));
+      const hwR = Math.max(0.06, w - inset + (r === 0 ? 0 : chunkR * (0.3 + v * 0.7)));
       const y = f.p.y - drop + (r === 0 ? noise1(i * 0.2) * 0.03 : noise1(i * 0.18 + r * 7) * 0.3 * v);
       rings.push({
         L: f.p.clone().add(f.nor.clone().multiplyScalar(hwL)).setY(y),
