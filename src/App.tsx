@@ -4,8 +4,8 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
+import { Soundscape } from './audio/Soundscape';
 
-const AUTO_DWELL_MS = 7600;
 const AUTO_RESUME_MS = 11000;
 
 export default function App() {
@@ -43,30 +43,38 @@ export default function App() {
       if (event.key === ' ') setMode((current) => (current === 'auto' ? 'manual' : 'auto'));
     };
 
-    const autoTimer = window.setInterval(() => {
-      const now = Date.now();
-
-      if (mode === 'manual' && now - lastManualAt.current > AUTO_RESUME_MS) {
-        setMode('auto');
-        return;
-      }
-
-      if (mode !== 'auto') return;
-
-      setActiveIndex((current) => {
-        if (current >= jejuScenes.length - 1) return 0;
-        return current + 1;
-      });
-    }, AUTO_DWELL_MS);
-
     window.addEventListener('wheel', onWheel, { passive: true });
     window.addEventListener('keydown', onKeyDown);
 
     return () => {
-      window.clearInterval(autoTimer);
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
     };
+  }, []);
+
+  useEffect(() => {
+    if (mode !== 'auto') return;
+
+    const timer = window.setTimeout(() => {
+      setActiveIndex((current) => {
+        if (current >= jejuScenes.length - 1) return 0;
+        return current + 1;
+      });
+    }, activeScene.dwellMs);
+
+    return () => window.clearTimeout(timer);
+  }, [activeIndex, activeScene.dwellMs, mode]);
+
+  useEffect(() => {
+    if (mode !== 'manual') return;
+
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastManualAt.current > AUTO_RESUME_MS) {
+        setMode('auto');
+      }
+    }, 1000);
+
+    return () => window.clearInterval(timer);
   }, [mode]);
 
   const setSceneManually = (index: number) => {
@@ -94,11 +102,12 @@ export default function App() {
         <Canvas camera={{ position: [0, 1.05, 3.25], fov: 38 }} dpr={[1, 2]}>
           <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
         </Canvas>
+        <Soundscape scene={activeScene} mode={mode} />
         <StoryCard scene={activeScene} mode={mode} />
         <ProgressNav scenes={jejuScenes} activeIndex={activeIndex} onChange={setSceneManually} />
       </section>
 
-      <footer className="hint">{mode === 'auto' ? '가만히 두면, 우리가 정한 호흡으로 길을 걷습니다.' : '잠시 뒤 다시 자동 호흡으로 돌아갑니다.'}</footer>
+      <footer className="hint">{mode === 'auto' ? '이 장면은 스스로 머무를 시간을 정합니다.' : '잠시 뒤 다시 자동 호흡으로 돌아갑니다.'}</footer>
     </main>
   );
 }
