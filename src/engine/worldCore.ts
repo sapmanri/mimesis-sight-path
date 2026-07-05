@@ -476,6 +476,47 @@ export function buildWorld(
     }
   }
 
+  // [decoration] BUILD 086: 벼랑 가장자리 담 스팟 — 길을 막지 않고 양옆을 따라간다
+  // Vase: "돌담을 가로로 놓지 말고, 길 양끝 벼랑 쪽에 두 배 높이로"
+  const edgeWallSpots: { pos: THREE.Vector3; rotY: number; scale: number }[] = [];
+  if (on('decoration')) {
+    const EW = SPEC.decoration.edgeWall;
+    const ewRnd = worldRng(7781);
+    scenes.forEach((sc, i) => {
+      if (sc.objectKit !== 'stone-wall-kit') return;
+      const centerT = sceneT[i];
+      const spanT = (EW.spanScenes / Math.max(1, scenes.length - 1));
+      // 곡선 위를 일정 월드 간격으로 걸어가며 양쪽 벼랑 끝에 돌을 놓는다
+      let walkT = Math.max(0, centerT - spanT);
+      const endT = Math.min(1, centerT + spanT);
+      let prev = curve.getPoint(walkT);
+      while (walkT < endT) {
+        walkT += 0.0006;
+        const pcur = curve.getPoint(walkT);
+        if (pcur.distanceTo(prev) < EW.step) continue;
+        prev = pcur;
+        const tanH = curve.getTangent(walkT).setY(0).normalize();
+        const norH = new THREE.Vector3(-tanH.z, 0, tanH.x);
+        const w = widthAt(walkT);
+        for (const side of [-1, 1]) {
+          for (let c = 0; c < EW.courses; c += 1) {
+            // 위 단으로 갈수록 살짝 좁아지고 성긴다 — 손으로 쌓은 담
+            if (c > 0 && ewRnd() < 0.22) continue;
+            const out = w - EW.inset - c * 0.03 + (ewRnd() - 0.5) * 0.05;
+            const pos = pcur.clone()
+              .add(norH.clone().multiplyScalar(side * out))
+              .setY(pcur.y - 0.05 + c * EW.courseHeight);
+            edgeWallSpots.push({
+              pos,
+              rotY: ewRnd() * Math.PI * 2,
+              scale: EW.scale[0] + ewRnd() * (EW.scale[1] - EW.scale[0]),
+            });
+          }
+        }
+      }
+    });
+  }
+
   // [landscape] 원경 — 닿을 수 없는 기억
   const distant = on('landscape')
     ? buildDistantWorld()
@@ -484,7 +525,7 @@ export function buildWorld(
 
   // [assets] 실물 GLB 비동기 투입 (BUILD 075). 끄면 프록시만 남는 고속 프리뷰.
   const ready = on('assets')
-    ? attachModels(kitSlots, distant.lighthouseSlot, rockSpots, wingSpots, group, loadModel).catch(() => {})
+    ? attachModels(kitSlots, distant.lighthouseSlot, rockSpots, wingSpots, edgeWallSpots, group, loadModel).catch(() => {})
     : Promise.resolve();
 
   // [light] 빛 생성기. sun은 BuiltWorld 계약상 항상 생성 (그림자 타겟 추적용).
@@ -518,6 +559,7 @@ async function attachModels(
   lighthouseSlot: THREE.Group,
   rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[],
   wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number }[],
+  edgeWallSpots: { pos: THREE.Vector3; rotY: number; scale: number }[],
   worldGroup: THREE.Group,
   loadModel: ModelLoader,
 ) {
@@ -552,19 +594,35 @@ async function attachModels(
     }));
   }
 
-  // 돌담/돌무더기: AssetSet 규칙으로 조립 (BUILD 084 — Set 단위 제작 원칙)
-  const wallSlots = kitSlots.filter((k) => k.kit === 'stone-wall-kit' || k.kit === 'sea-edge-kit');
-  if (wallSlots.length) {
-    const wallSet = ASSET_SETS[SPEC.decoration.stoneWallSet] ?? ASSET_SETS['stone-wall-01'];
+  // 돌담: BUILD 086 — 길을 막지 않는다. 양쪽 벼랑 끝을 따라 쌓인 담 (edgeWallSpots)
+  const wallSet = ASSET_SETS[SPEC.decoration.stoneWallSet] ?? ASSET_SETS['stone-wall-01'];
+  const wallSlots = kitSlots.filter((k) => k.kit === 'stone-wall-kit');
+  if (edgeWallSpots.length || wallSlots.length) {
+    tasks.push(Promise.all(wallSet.pieces.map((p) => loadKitModel(p, loadModel))).then((loaded) => {
+      wallSlots.forEach((k) => k.slot.clear()); // 가로막던 프록시 철거
+      const wrnd = worldRng(7783);
+      const wallGroup = new THREE.Group();
+      edgeWallSpots.forEach((spot) => {
+        const piece = loaded[Math.floor(wrnd() * loaded.length)].clone(true);
+        piece.position.copy(spot.pos);
+        piece.rotation.y = spot.rotY;
+        piece.scale.multiplyScalar(spot.scale);
+        wallGroup.add(piece);
+      });
+      worldGroup.add(wallGroup);
+    }));
+  }
+
+  // 바다 끝 돌무더기: AssetSet 규칙 유지 (BUILD 084)
+  const seaSlots = kitSlots.filter((k) => k.kit === 'sea-edge-kit');
+  if (seaSlots.length) {
     const edgeSet = ASSET_SETS[SPEC.decoration.seaEdgeSet] ?? ASSET_SETS['sea-edge-01'];
-    const pieceKeys = [...new Set([...wallSet.pieces, ...edgeSet.pieces])];
-    tasks.push(Promise.all(pieceKeys.map((p) => loadKitModel(p, loadModel))).then((loaded) => {
-      const pieceOf = (key: string) => loaded[pieceKeys.indexOf(key)];
-      wallSlots.forEach((k) => {
+    tasks.push(Promise.all(edgeSet.pieces.map((p) => loadKitModel(p, loadModel))).then((loaded) => {
+      const pieceOf = (key: string) => loaded[edgeSet.pieces.indexOf(key)];
+      seaSlots.forEach((k) => {
         const rnd = worldRng(k.seed);
         k.slot.clear();
-        const set = k.kit === 'stone-wall-kit' ? wallSet : edgeSet;
-        k.slot.add(buildAssetSet(set, pieceOf, rnd));
+        k.slot.add(buildAssetSet(edgeSet, pieceOf, rnd));
       });
     }));
   }
@@ -870,17 +928,10 @@ const KITS: Record<string, KitFn> = {
     return g;
   },
   'airplane-wing-kit': () => new THREE.Group(), // 판자 제거 — 실물 비행기는 attachModels에서
-  'stone-wall-kit': (rnd) => {
-    const g = new THREE.Group();
-    const mat = std(PALETTE.basalt);
-    for (let i = 0; i < 8; i += 1) {
-      const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12, 0), mat);
-      s.position.set(-0.6 + i * 0.17 + (rnd() - 0.5) * 0.04, 0.1 + (i % 2) * 0.14, (rnd() - 0.5) * 0.05);
-      s.scale.set(1 + rnd() * 0.5, 0.8 + rnd() * 0.4, 0.9);
-      s.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
-      g.add(s);
-    }
-    return g;
+  'stone-wall-kit': () => {
+    // BUILD 086: 이 기억의 실체는 '담 사이를 걷는 것' — 담은 벼랑 담 생성기가 세운다.
+    // 길을 가로막던 프록시는 철거.
+    return new THREE.Group();
   },
   'sea-edge-kit': (rnd) => {
     const g = new THREE.Group();

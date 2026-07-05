@@ -135,6 +135,15 @@ export type WorldSpec = {
     stoneWallSet: string;
     /** 바다 끝 Set id (BUILD 084) */
     seaEdgeSet: string;
+    /** BUILD 086: 벼랑 가장자리 담 — 길을 막지 않고 양옆 벼랑을 따라 쌓인다 */
+    edgeWall: {
+      spanScenes: number;   // 담 장면 앵커 앞뒤로 몇 장면 폭만큼 이어지는가
+      step: number;         // 돌 간격 (월드 유닛)
+      courses: number;      // 단 수 (높이 = courses × courseHeight)
+      courseHeight: number; // 단 높이
+      inset: number;        // 벼랑 끝에서 안쪽으로 들어온 거리
+      scale: [number, number];
+    };
   };
 
   /** 빛 생성기 */
@@ -211,6 +220,8 @@ export const JEJU_SPEC: WorldSpec = {
     grassCount: 140,
     stoneWallSet: 'stone-wall-02', // BUILD 084: RockSet06 재투입 (백색 괴물 원인 해결됨)
     seaEdgeSet: 'sea-edge-01',
+    // BUILD 086: Vase — "길 양끝 벼랑 쪽에, 두 배 높이로"
+    edgeWall: { spanScenes: 0.85, step: 0.21, courses: 3, courseHeight: 0.17, inset: 0.15, scale: [1.15, 1.55] },
   },
   light: {
     hemiSky: '#b9d2d8',

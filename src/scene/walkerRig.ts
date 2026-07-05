@@ -17,8 +17,12 @@ import * as THREE from 'three';
 const AXIS_X = new THREE.Vector3(1, 0, 0);
 
 export type WalkerRig = {
-  /** dt초 진행. speed01: 0(정지 직전)~1(전력 질주), moving: 이동 중 여부 */
-  update: (dt: number, speed01: number, moving: boolean, elapsed: number) => void;
+  /**
+   * dt초 진행. speed01: 0(걷기)~1(전력 질주), moving: 이동 중 여부,
+   * distDelta: 이번 프레임 실제 이동 거리(월드 유닛) — 보폭은 여기서 나온다.
+   * BUILD 086: 발이 땅을 밀어야 몸이 간다. 위상은 시간이 아니라 거리로 굴린다.
+   */
+  update: (dt: number, speed01: number, moving: boolean, elapsed: number, distDelta: number) => void;
   /** 도착: 웅크려 살펴보기 (한 번 재생 후 자동 복귀) */
   playInspect: () => void;
   stopInspect: () => void;
@@ -83,13 +87,15 @@ export function createWalkerRig(root: THREE.Object3D, animations: THREE.Animatio
     stopInspect() {
       if (inspecting && inspect) { inspect.fadeOut(0.3); inspecting = false; }
     },
-    update(dt, speed01, moving, elapsed) {
+    update(dt, speed01, moving, elapsed, distDelta) {
       mixer.update(dt);
       if (inspecting) return; // 클립이 뼈를 소유
 
       if (moving) {
-        const freq = 1.55 + speed01 * 1.25;        // 걷기 → 뛰기 스텝 빈도
-        phase += dt * freq * Math.PI * 2;
+        // 보폭: 걸을 때 ~0.42u, 뛸 때 ~0.72u (신장 0.9 캐릭터, 초당 2보 기준).
+        // 한 사이클 = 두 걸음 → 위상 += 거리/보폭 × π
+        const stride = 0.42 + speed01 * 0.3;
+        phase += (distDelta / stride) * Math.PI;
         const s = Math.sin(phase);
         const amp = 0.4 + speed01 * 0.34;          // 다리 스윙
         rotX(b.thighL!, -s * amp);
