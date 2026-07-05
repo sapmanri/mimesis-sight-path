@@ -165,6 +165,7 @@ export const PROP_CATALOG: PropDef[] = [
   // BUILD 113
   { id: 'cowshed', label: '외양간', cat: '구조물' },
   { id: 'moon', label: '달', cat: '하늘' },
+  { id: 'lamp', label: '남포등 (불빛)', cat: '구조물' }, // BUILD 117
   // 하늘
   { id: 'cloud', label: '뭉게구름', cat: '하늘' },
   { id: 'cloud-dark', label: '먹구름', cat: '하늘' },
@@ -235,6 +236,34 @@ function makeGrass(rnd: () => number) {
     tuft.add(blade);
   }
   return tuft;
+}
+
+/** BUILD 117: 진짜 등불 (Vase 업로드 촛불 랜턴) — 실패 시 절차 등불 폴백 */
+export async function loadHandLanternAsset(loadModel: ModelLoader = defaultLoader): Promise<THREE.Group> {
+  try {
+    const g = await loadKitModel('handlantern', loadModel);
+    g.traverse((n) => {
+      const mesh = n as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const m = mesh.material as THREE.MeshStandardMaterial;
+      if (/flame/i.test(mesh.name) || /flame/i.test(m?.name ?? '')) {
+        m.emissive = new THREE.Color('#ffd27a');
+        m.emissiveIntensity = 2.4;
+      }
+      if (/glass/i.test(mesh.name) || /glass/i.test(m?.name ?? '')) {
+        m.transparent = true;
+        m.opacity = 0.35;
+        m.emissive = new THREE.Color('#ffca6e');
+        m.emissiveIntensity = 0.25;
+      }
+    });
+    const glow = new THREE.PointLight('#ffca6e', 2.4, 6.5, 1.8);
+    glow.position.y = 0.066; // 불꽃 실측 높이 (0.204/0.5 × 0.16)
+    g.add(glow);
+    return g;
+  } catch {
+    return makeHandLantern();
+  }
 }
 
 /** BUILD 116: 손에 쥐는 등불 — 워커의 손 뼈에 매달린다. 밤길의 동반자 */
@@ -333,6 +362,13 @@ export async function createPropObject(
       case 'piggy': case 'bear': case 'deer': case 'boar': case 'wolf':
         return await loadKitModel(objId, loadModel);
       case 'cowshed': return await loadKitModel('cowshed', loadModel);
+      case 'lamp': {
+        const g = await loadKitModel('lamp', loadModel);
+        const glow = new THREE.PointLight('#ffd9a0', 1.7, 3.6, 2);
+        glow.position.y = 1.05;
+        g.add(glow);
+        return g;
+      }
       case 'moon': {
         // BUILD 113: 달은 스스로 빛난다 — 은은한 자체발광, 밤 프리셋의 씨앗
         const g = await loadKitModel('moon', loadModel);

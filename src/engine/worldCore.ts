@@ -244,6 +244,9 @@ export const MODELS: Record<string, ModelSpec> = {
   // BUILD 113: 창고에서 깨어난 것들
   cowshed: { file: 'Cowshed.glb', height: 1.7, tint: '#8a7a63', fitMaxDim: true }, // 방향 미검증 — 스크린샷 보고 preRotateX 보정 예정
   moon: { file: 'Moon.glb', height: 1.2, tint: '#e9e4d4', fitMaxDim: true },
+  // BUILD 117: Vase의 등불들
+  handlantern: { file: 'HandLantern.glb', height: 0.16, tint: '#c9b795', keepLook: true },
+  lamp: { file: 'Lamp.glb', height: 1.35, tint: '#5a5148' },
   // BUILD 107: 카탈로그 확장 등록
   stone11: { file: 'stone11.glb', height: 0.5, tint: '#6b6e63', fitMaxDim: true },
   rogue: { file: 'RogueHooded.glb', height: 0.95, tint: '#8f8a7a', keepLook: true },

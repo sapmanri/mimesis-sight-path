@@ -17,7 +17,7 @@
   "fantasy": "🌌 Fantasy",
   "theme-kits": "🎬 Theme Kits"
  },
- "assetCount": 163,
+ "assetCount": 166,
  "totalBytes": 2667920289,
  "items": [
   {
@@ -2223,6 +2223,47 @@
    "productionRef": null,
    "notes": "253MB — 4채 마을 환경, World Kit 1호 후보",
    "catalogIds": []
+  },
+  {
+   "id": "flashlight_with_candle",
+   "sourceFile": "Flashlight_with_candle.fbx",
+   "release": "assets-v4",
+   "sizeBytes": 3269100,
+   "downloadUrl": "https://github.com/sapmanri/mimesis-sight-path/releases/tag/assets-v4",
+   "category": "props",
+   "subcategory": "lantern",
+   "status": "in_production",
+   "productionRef": "handlantern",
+   "catalogIds": [],
+   "notes": "BUILD 117: 워커 손 등불 본체 (걷는 사람 탭 토글) — 원본 릴리즈 업로드는 Vase 수동 대기"
+  },
+  {
+   "id": "lamp",
+   "sourceFile": "Lamp.fbx",
+   "release": "assets-v4",
+   "sizeBytes": 5895916,
+   "downloadUrl": "https://github.com/sapmanri/mimesis-sight-path/releases/tag/assets-v4",
+   "category": "props",
+   "subcategory": "lantern",
+   "status": "in_production",
+   "productionRef": "lamp",
+   "catalogIds": [
+    "lamp"
+   ],
+   "notes": "BUILD 117: 남포등 (불빛) — 원본 릴리즈 업로드는 Vase 수동 대기"
+  },
+  {
+   "id": "fbx_4",
+   "sourceFile": "FBX__4_.rar",
+   "release": "assets-v4",
+   "sizeBytes": 1012593,
+   "downloadUrl": "https://github.com/sapmanri/mimesis-sight-path/releases/tag/assets-v4",
+   "category": "_uninspected",
+   "subcategory": null,
+   "status": "needs_inspection",
+   "productionRef": null,
+   "catalogIds": [],
+   "notes": "랜턴 팩 추정 (메시 21개, 6.6×10×14u) — 검수 대기"
   }
  ]
 }

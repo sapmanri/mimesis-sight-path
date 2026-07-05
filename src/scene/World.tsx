@@ -6,7 +6,7 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultL
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
-import { createPropObject, createPropAnimated, ANIMATED_PROPS, makeHandLantern, type PlacedProp } from '../engine/props';
+import { createPropObject, createPropAnimated, ANIMATED_PROPS, loadHandLanternAsset, type PlacedProp } from '../engine/props';
 import { footsteps } from './footsteps';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
@@ -234,6 +234,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   // BUILD 099: 사용자 카메라 — 마우스가 잡으면 따르고, 4초 놓아두면 자동으로 되돌아간다
   const userCam = useRef({ blend: 0, az: 0, el: 0.45, dist: 5.5, lastInput: -99, dragging: false });
   const walkerPos = useRef<THREE.Vector3 | null>(null); // BUILD 098: 실제 위치 — 커브는 안내선일 뿐
+  const lanternRef = useRef<THREE.Group | null>(null); // BUILD 117: 진자 등불 래퍼
   const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
   // BUILD 101: 길 탭은 '정확히 그 지점'으로 — 분수 진행도 타깃. activeIndex 동기화가 덮지 않게 잠근다.
   const tapLock = useRef<number | null>(null);
@@ -253,7 +254,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, spec.walker.timeScale);
-      // BUILD 116: 등불 — 손 뼈에 매달린다. 걸음을 따라 흔들리는 밤길의 동반자.
+      // BUILD 116→117: 등불 — 손 뼈에 진자로 매달린다. 뼈가 어떻게 돌아도 등불은 중력을 안다.
       if ((spec.walker as { lantern?: boolean }).lantern) {
         let hand: THREE.Object3D | null = null;
         group.traverse((n) => {
@@ -267,10 +268,15 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           group.updateMatrixWorld(true);
           const ws = new THREE.Vector3();
           h.getWorldScale(ws);
-          const lantern = makeHandLantern();
-          lantern.scale.setScalar(1 / Math.max(ws.x, 1e-6)); // 뼈 누적 스케일 상쇄 — 월드 기준 실측 크기
-          lantern.position.set(0, 0.02, 0.01);
-          h.add(lantern);
+          const wrapper = new THREE.Group();
+          wrapper.scale.setScalar(1 / Math.max(ws.x, 1e-6)); // 뼈 누적 스케일 상쇄 — 월드 기준 실측 크기
+          h.add(wrapper);
+          lanternRef.current = wrapper;
+          loadHandLanternAsset().then((lantern) => {
+            if (!alive) return;
+            lantern.position.y = -0.17; // 고리 꼭대기가 손바닥에 걸리도록
+            wrapper.add(lantern);
+          });
         }
       }
       // BUILD 104: 마법 의자 — 앉을 때 샤라락. 좌면은 정규화 높이의 47% 지점.
@@ -671,6 +677,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         arr[i * 6 + 5] = z;
       }
       rain.lines.geometry.attributes.position.needsUpdate = true;
+    }
+
+    // BUILD 117: 등불 진자 — 뼈의 회전을 상쇄해 늘 곧게 매달린다
+    if (lanternRef.current && lanternRef.current.parent) {
+      const q = new THREE.Quaternion();
+      lanternRef.current.parent.getWorldQuaternion(q);
+      lanternRef.current.quaternion.copy(q.invert());
     }
 
     // 로밍: 걷다가, 멈춰 서서 두리번, 다시 걷는다 — 제멋대로, 그러나 길을 따라
