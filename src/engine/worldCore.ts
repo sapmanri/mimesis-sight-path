@@ -230,6 +230,17 @@ export const MODELS: Record<string, ModelSpec> = {
   walker: { file: 'LittleBoy.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'LittleBoy_texture.png', clipSpeeds: { walk: 1.48, run: 5.207 } },
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   chair: { file: 'Chair.glb', height: 0.64, tint: '#7e937f' }, // BUILD 104: 마법 의자 — 앉을 때 샤라락
+  // BUILD 110: 동물들 — 소만 걷는다(스킨+클립 5종 이식본). 나머지는 길가에 선 조각들.
+  cow: { file: 'Cow.glb', height: 0.95, tint: '#c9c2b4', keepLook: true },
+  dog: { file: 'Dog.glb', height: 0.34, tint: '#8a7a5f' },
+  duck: { file: 'Duck.glb', height: 0.22, tint: '#d8d2bd' },
+  chicky: { file: 'Chicky.glb', height: 0.17, tint: '#d9c98e' },
+  horse: { file: 'horse.glb', height: 1.05, tint: '#7d6a52' },
+  piggy: { file: 'Piggy.glb', height: 0.4, tint: '#c9a091' },
+  bear: { file: 'bear.glb', height: 0.85, tint: '#6b5a48' },
+  deer: { file: 'deer.glb', height: 0.8, tint: '#9a8365' },
+  boar: { file: 'boar.glb', height: 0.5, tint: '#6e6154' },
+  wolf: { file: 'wolf.glb', height: 0.55, tint: '#75787a' },
   // BUILD 107: 카탈로그 확장 등록
   stone11: { file: 'stone11.glb', height: 0.5, tint: '#6b6e63', fitMaxDim: true },
   rogue: { file: 'RogueHooded.glb', height: 0.95, tint: '#8f8a7a', keepLook: true },
@@ -357,7 +368,27 @@ export async function loadKitModelWithClips(key: string, loadModel: ModelLoader)
     raw.traverse((n) => { if (needles.some((x) => n.name.includes(x))) doomed.push(n); });
     doomed.forEach((n) => n.parent?.remove(n));
   }
-  applyPalette(raw, spec.tint);
+  if (spec.keepLook) {
+    // BUILD 110: 소는 자기 무늬를 입고 걷는다 — 워커와 같은 문법 (조명 밀수 차단·높이안개는 예외 없음)
+    stripLights(raw);
+    raw.traverse((node) => {
+      const mesh = node as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false; // 스킨드 메시: 뼈 이동 시 오컬링 방지
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mats.forEach((m) => {
+        const std = m as THREE.MeshStandardMaterial;
+        std.roughness = 1;
+        std.metalness = 0;
+        applyHeightFog(std);
+        std.needsUpdate = true;
+      });
+    });
+  } else {
+    applyPalette(raw, spec.tint);
+  }
   return { group: normalizeModel(raw, spec), animations: loaded.animations };
 }
 

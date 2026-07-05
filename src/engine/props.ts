@@ -22,7 +22,7 @@ export type PlacedProp = {
 export type PropDef = { id: string; label: string; cat: string };
 
 /** BUILD 109: 애니메이션이 있는 배치물 — 로밍 AI를 켤 수 있다 (동물들이 오면 여기 등록) */
-export const ANIMATED_PROPS = new Set(['rogue', 'scavenger']);
+export const ANIMATED_PROPS = new Set(['rogue', 'scavenger', 'cow']);
 
 function makeStreetlamp(rnd: () => number) {
   const g = new THREE.Group();
@@ -151,6 +151,17 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'person', label: '사람 실루엣', cat: '사람' },
   { id: 'rogue', label: '두건 나그네', cat: '사람' },
   { id: 'scavenger', label: '방랑자', cat: '사람' },
+  // 동물 (BUILD 110) — 소는 로밍 가능, 나머지는 정적
+  { id: 'cow', label: '젖소', cat: '동물' },
+  { id: 'dog', label: '강아지', cat: '동물' },
+  { id: 'duck', label: '오리', cat: '동물' },
+  { id: 'chicky', label: '병아리', cat: '동물' },
+  { id: 'horse', label: '말', cat: '동물' },
+  { id: 'piggy', label: '돼지', cat: '동물' },
+  { id: 'bear', label: '곰', cat: '동물' },
+  { id: 'deer', label: '사슴', cat: '동물' },
+  { id: 'boar', label: '멧돼지', cat: '동물' },
+  { id: 'wolf', label: '늑대', cat: '동물' },
   // 하늘
   { id: 'cloud', label: '뭉게구름', cat: '하늘' },
   { id: 'cloud-dark', label: '먹구름', cat: '하늘' },
@@ -231,6 +242,7 @@ export async function createPropAnimated(
   try {
     if (objId === 'rogue') return await loadKitModelWithClips('rogue', loadModel);
     if (objId === 'scavenger') return await loadKitModelWithClips('scavenger', loadModel);
+    if (objId === 'cow') return await loadKitModelWithClips('cow', loadModel); // BUILD 110
     return null;
   } catch {
     return null;
@@ -287,6 +299,10 @@ export async function createPropObject(
       case 'oldcar': return makeOldCar(rnd);
       case 'rogue': return await loadKitModel('rogue', loadModel);
       case 'scavenger': return await loadKitModel('scavenger', loadModel);
+      // BUILD 110: 동물들
+      case 'cow': case 'dog': case 'duck': case 'chicky': case 'horse':
+      case 'piggy': case 'bear': case 'deer': case 'boar': case 'wolf':
+        return await loadKitModel(objId, loadModel);
       default: return null;
     }
   } catch {
