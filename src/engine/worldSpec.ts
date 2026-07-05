@@ -131,6 +131,12 @@ export type WorldSpec = {
     rockCount: number;
     /** 풀잎 다발 수 (길 가장자리) */
     grassCount: number;
+    /** BUILD 089: 릴 실측 초록 — 짙은 수풀 / 중간 잎 / 밝은 풀 (릴 화면 점유율 13%) */
+    vegetation: {
+      bushCount: number;
+      treeCount: number;
+      greens: [string, string, string];
+    };
     /** 돌담 Set id (BUILD 084) */
     stoneWallSet: string;
     /** 바다 끝 Set id (BUILD 084) */
@@ -237,7 +243,12 @@ export const JEJU_SPEC: WorldSpec = {
   },
   decoration: {
     rockCount: 46,
-    grassCount: 140,
+    grassCount: 230, // BUILD 089: 릴만큼 무성하진 않게, 그러나 살아 있게
+    vegetation: {
+      bushCount: 30,
+      treeCount: 9,
+      greens: ['#2e5a40', '#4a8761', '#7bb489'], // 릴 채집값 (밝은 톤은 물빛 제거 보정)
+    },
     stoneWallSet: 'stone-wall-02', // BUILD 084: RockSet06 재투입 (백색 괴물 원인 해결됨)
     seaEdgeSet: 'sea-edge-01',
     // BUILD 086: Vase — "길 양끝 벼랑 쪽에, 두 배 높이로"

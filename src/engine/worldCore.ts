@@ -476,6 +476,11 @@ export function buildWorld(
     }
   }
 
+  // [decoration] BUILD 089: 식생 — 수풀과 작은 나무 (기억 앵커 주변은 비워둔다)
+  if (on('decoration')) {
+    group.add(buildVegetation(frames, widthAt, anchors.map((a) => a.p)));
+  }
+
   // [decoration] BUILD 086: 벼랑 가장자리 담 스팟 — 길을 막지 않고 양옆을 따라간다
   // Vase: "돌담을 가로로 놓지 말고, 길 양끝 벼랑 쪽에 두 배 높이로"
   const edgeWallSpots: { pos: THREE.Vector3; rotY: number; scale: number }[] = [];
@@ -861,6 +866,71 @@ function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
     }
     cluster.position.copy(p);
     g.add(cluster);
+  }
+  return g;
+}
+
+// ---------- BUILD 089: VERDANT ----------
+// 릴 실측: 초록이 화면의 13%를 차지하며 세계를 살아 있게 한다.
+// 수풀(낮은 덤불)과 작은 나무를 벼랑 가장자리에 심는다 — 절차 생성, 에셋 불요.
+function buildVegetation(frames: Frame[], widthAt: (t: number) => number, anchors: THREE.Vector3[]) {
+  const g = new THREE.Group();
+  const V = SPEC.decoration.vegetation;
+  const rnd = worldRng(9317);
+  const mats = V.greens.map((c) => std(c));
+  const trunkMat = std('#6d5638');
+  const blobGeo = new THREE.IcosahedronGeometry(1, 0);
+  const nearAnchor = (p: THREE.Vector3) => anchors.some((a) => a.distanceTo(p) < 1.3);
+
+  // 수풀: 눌린 다면체 2~4덩이 뭉치
+  for (let k = 0; k < V.bushCount; k += 1) {
+    const f = frames[Math.floor(rnd() * frames.length)];
+    const w = widthAt(f.t);
+    const side = rnd() > 0.5 ? 1 : -1;
+    const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * (w - 0.12 - rnd() * 0.2)));
+    if (nearAnchor(p)) continue;
+    const bush = new THREE.Group();
+    const n = 2 + Math.floor(rnd() * 3);
+    for (let b = 0; b < n; b += 1) {
+      const m = new THREE.Mesh(blobGeo, mats[Math.floor(rnd() * 2)]); // 짙은/중간 톤만
+      const r = 0.09 + rnd() * 0.1;
+      m.scale.set(r * (1 + rnd() * 0.4), r * 0.62, r * (1 + rnd() * 0.4));
+      m.position.set((rnd() - 0.5) * 0.16, r * 0.5, (rnd() - 0.5) * 0.16);
+      m.rotation.y = rnd() * Math.PI;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      bush.add(m);
+    }
+    bush.position.copy(p);
+    g.add(bush);
+  }
+
+  // 작은 나무: 밑동 + 눌린 캐노피 2~3층 — 릴의 둥근 활엽 실루엣
+  for (let k = 0; k < V.treeCount; k += 1) {
+    const f = frames[Math.floor(rnd() * frames.length)];
+    const w = widthAt(f.t);
+    const side = rnd() > 0.5 ? 1 : -1;
+    const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * (w - 0.1 - rnd() * 0.12)));
+    if (nearAnchor(p)) continue;
+    const tree = new THREE.Group();
+    const h = 0.55 + rnd() * 0.5;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.042, h * 0.42, 5), trunkMat);
+    trunk.position.y = h * 0.21;
+    trunk.castShadow = true;
+    tree.add(trunk);
+    const layers = 2 + (rnd() > 0.5 ? 1 : 0);
+    for (let c = 0; c < layers; c += 1) {
+      const m = new THREE.Mesh(blobGeo, mats[Math.min(2, c + (rnd() > 0.6 ? 1 : 0))]);
+      const r = (0.2 - c * 0.045) * (h / 0.8);
+      m.scale.set(r * (1 + rnd() * 0.3), r * 0.7, r * (1 + rnd() * 0.3));
+      m.position.set((rnd() - 0.5) * 0.06, h * 0.42 + c * r * 0.95, (rnd() - 0.5) * 0.06);
+      m.rotation.y = rnd() * Math.PI;
+      m.castShadow = true;
+      tree.add(m);
+    }
+    tree.rotation.z = (rnd() - 0.5) * 0.08; // 바닷바람에 살짝 기운
+    tree.position.copy(p);
+    g.add(tree);
   }
   return g;
 }
