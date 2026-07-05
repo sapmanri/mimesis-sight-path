@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
 import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../engine/worldCore';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
-import { createWalkerRig, type WalkerRig } from './walkerRig';
+import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
@@ -61,12 +61,14 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
 
   useEffect(() => {
     let alive = true;
-    loadWalkerAsset().then(({ group, animations }) => {
+    loadWalkerAsset().then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
       walker.clear();
       walker.add(group);
-      // BUILD 085: 스캐빈저 절차 보행 리그. 클립엔 보행이 없어 뼈를 직접 구동한다.
-      rigRef.current = createWalkerRig(group, animations, spec.walker.timeScale);
+      // BUILD 091: 보행 클립이 있으면 클립 리그 (미끄러짐 최종 해법: 속도-배속 동기).
+      // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).
+      rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds) : null)
+        ?? createWalkerRig(group, animations, spec.walker.timeScale);
     }).catch(() => { /* 실패 시 프로시저럴 실루엣 유지 */ });
     return () => { alive = false; };
   }, [walker, spec]);
@@ -226,7 +228,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       // 도착: 기억 앞에 웅크려 들여다본다 (머무름이 깊은 장면에서만)
       if (wasMoving.current && !moving) {
         const scene = scenes[Math.round(charProgress.current)];
-        if ((scene?.stillness ?? 0) >= 0.65) rig.playInspect(); // BUILD 087: 캐리어 앞에서도 웅크린다
+        const st = scene?.stillness ?? 0;
+        // BUILD 091: 깊은 머무름에선 바닥에 앉아 바라본다. 그 밖에선 들여다본다.
+        if (st >= 1.3) rig.playInspect('sit');
+        else if (st >= 0.65) rig.playInspect('pickup');
       }
       if (!wasMoving.current && moving) rig.stopInspect();
       const bob = moving && !rig.inspecting() ? Math.abs(Math.sin(rig.phase())) * (0.012 + speed01 * 0.014) : 0;

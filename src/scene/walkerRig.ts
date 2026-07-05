@@ -23,8 +23,8 @@ export type WalkerRig = {
    * BUILD 086: 발이 땅을 밀어야 몸이 간다. 위상은 시간이 아니라 거리로 굴린다.
    */
   update: (dt: number, speed01: number, moving: boolean, elapsed: number, distDelta: number) => void;
-  /** 도착: 웅크려 살펴보기 (한 번 재생 후 자동 복귀) */
-  playInspect: () => void;
+  /** 도착 동작. kind: 'pickup'(들여다보기) | 'sit'(바닥에 앉기) — 지원 안 하면 무시 */
+  playInspect: (kind?: 'pickup' | 'sit') => void;
   stopInspect: () => void;
   inspecting: () => boolean;
   /** 현재 걸음 위상 (bob 동기화용) */
@@ -128,6 +128,101 @@ export function createWalkerRig(root: THREE.Object3D, animations: THREE.Animatio
         limbBones.forEach((o) => o.quaternion.slerp(base.get(o)!, k));
         if (b.spine) rotX(b.spine, lean + Math.sin(elapsed * 1.3) * 0.018);
       }
+    },
+  };
+}
+
+
+// ---------- BUILD 091: CLIP RIG ----------
+// 전문가가 구운 클립을 빌려 입는다 (KayKit 등: Walking_A / Running_A / Idle 명명 규약).
+// 미끄러짐의 최종 해법: timeScale = 실제 이동속도 ÷ 클립 고유속도.
+// 발이 클립 안에서 정확히 땅을 무는 속도로만 재생된다.
+//
+// 머무름 동작: PickUp(들여다보기), 깊은 머무름에선 Sit_Floor(앉아서 바라보기).
+
+export function createClipRig(
+  root: THREE.Object3D,
+  animations: THREE.AnimationClip[],
+  natural: { walk: number; run: number },
+): WalkerRig | null {
+  const clip = (n: string) => animations.find((a) => a.name === n) ?? null;
+  const cWalk = clip('Walking_A');
+  const cRun = clip('Running_A');
+  const cIdle = clip('Idle');
+  if (!cWalk || !cRun || !cIdle) return null;
+
+  const mixer = new THREE.AnimationMixer(root);
+  const walk = mixer.clipAction(cWalk);
+  const run = mixer.clipAction(cRun);
+  const idle = mixer.clipAction(cIdle);
+  const mk = (n: string, once = true) => {
+    const c = clip(n);
+    if (!c) return null;
+    const a = mixer.clipAction(c);
+    if (once) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+    return a;
+  };
+  const pickup = mk('PickUp') ?? mk('Interact');
+  const sitDown = mk('Sit_Floor_Down');
+  const sitIdle = mk('Sit_Floor_Idle', false);
+  const standUp = mk('Sit_Floor_StandUp');
+
+  let current: THREE.AnimationAction = idle;
+  idle.play();
+  const FADE = 0.32;
+  const switchTo = (a: THREE.AnimationAction, fade = FADE) => {
+    if (current === a) return;
+    a.reset().fadeIn(fade).play();
+    current.fadeOut(fade);
+    current = a;
+  };
+
+  type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp';
+  let gesture: Gesture = 'none';
+  mixer.addEventListener('finished', (e) => {
+    const a = (e as unknown as { action: THREE.AnimationAction }).action;
+    if (a === sitDown && gesture === 'sitDown' && sitIdle) { switchTo(sitIdle, 0.25); gesture = 'sit'; }
+    else if (a === standUp && gesture === 'standUp') { switchTo(idle, 0.3); gesture = 'none'; }
+    else if (a === pickup && gesture === 'pickup') { switchTo(idle, 0.4); gesture = 'none'; }
+  });
+
+  // 걷기↔뛰기 전환 문턱: 두 고유속도의 기하평균 부근
+  const runGate = Math.sqrt(natural.walk * natural.run);
+
+  return {
+    inspecting: () => gesture !== 'none',
+    phase: () => 0, // 상하 흔들림은 클립 안에 있다 — 홀더 bob은 끈다
+    playInspect(kind = 'pickup') {
+      if (gesture !== 'none') return;
+      if (kind === 'sit' && sitDown && sitIdle) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
+      else if (pickup) { gesture = 'pickup'; switchTo(pickup, 0.3); }
+    },
+    stopInspect() {
+      if (gesture === 'sit' || gesture === 'sitDown') {
+        if (standUp) { gesture = 'standUp'; switchTo(standUp, 0.2); }
+        else { gesture = 'none'; switchTo(idle, 0.25); }
+      } else if (gesture === 'pickup') {
+        gesture = 'none';
+        switchTo(idle, 0.25);
+      }
+    },
+    update(dt, _speed01, moving, _elapsed, distDelta) {
+      const v = dt > 0 ? distDelta / dt : 0;
+      if (gesture === 'none') {
+        if (moving && v > 0.02) {
+          const target = v > runGate ? run : walk;
+          switchTo(target);
+          // 미끄러짐의 최종 해법 — 발이 땅을 무는 속도로만 재생한다
+          const nat = target === run ? natural.run : natural.walk;
+          target.timeScale = THREE.MathUtils.clamp(v / nat, 0.55, 1.9);
+        } else {
+          switchTo(idle, 0.45);
+        }
+      } else if (moving && (gesture === 'sit' || gesture === 'pickup')) {
+        // 앉거나 들여다보는 중에 출발 명령 — 일어나며 끊는다
+        this.stopInspect();
+      }
+      mixer.update(dt);
     },
   };
 }

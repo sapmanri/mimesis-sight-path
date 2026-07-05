@@ -211,6 +211,7 @@ type ModelSpec = {
   strip?: string;        // BUILD 084: 이 부분문자열을 이름에 포함한 메시 제거 (원본 에셋의 조명판 등)
   keepLook?: boolean;    // BUILD 085: 팔레트 미적용 — 원래 텍스처/색 보존 (워커 등 주인공급)
   texture?: string;      // BUILD 085: 수동 바인딩할 텍스처 파일명 (FBX 변환에서 누락된 경우)
+  clipSpeeds?: { walk: number; run: number }; // BUILD 091: 클립 고유속도 (원척, u/s)
 };
 
 const MODELS: Record<string, ModelSpec> = {
@@ -225,7 +226,9 @@ const MODELS: Record<string, ModelSpec> = {
   rockD: { file: 'RockD.glb', height: 0.22, tint: '#7c7666', fitMaxDim: true },
   caveA: { file: 'CaveA.glb', height: 1.15, tint: '#8a7d68', fitMaxDim: true },
   caveB: { file: 'CaveB.glb', height: 0.95, tint: '#7e7361', fitMaxDim: true },
-  walker: { file: 'Scavenger.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Scavenger_texture.png' }, // BUILD 085: Vase 제공 캐릭터, 원래 룩 보존
+  // BUILD 091: KayKit Rogue Hooded (CC0) — 전문 제작 클립 76개. 걸음을 빌려 입는다.
+  // clipSpeeds: 원척 기준 클립 고유속도 실측값 (스탠스 발 후방속). 정규화 스케일 곱해 사용.
+  walker: { file: 'RogueHooded.glb', height: 0.9, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.674, run: 3.484 } }, // 접지 기준 정밀 실측
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
   rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },
@@ -294,6 +297,7 @@ function normalizeModel(group: THREE.Group, spec: ModelSpec) {
   const denom = spec.fitMaxDim ? Math.max(size.x, size.y, size.z) : size.y;
   const s = spec.height / Math.max(denom, 1e-6);
   group.scale.setScalar(s);
+  group.userData.normScale = s; // BUILD 091: 클립 속도 환산용
   group.updateMatrixWorld(true);
   const box2 = new THREE.Box3().setFromObject(group);
   const center = box2.getCenter(new THREE.Vector3());
@@ -362,7 +366,11 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader) {
     applyPalette(gltf.scene, spec.tint);
   }
   const group = normalizeModel(gltf.scene, spec);
-  return { group, animations: gltf.animations };
+  const ns = (gltf.scene.userData.normScale as number) ?? 1;
+  const clipSpeeds = spec.clipSpeeds
+    ? { walk: spec.clipSpeeds.walk * ns, run: spec.clipSpeeds.run * ns }
+    : null;
+  return { group, animations: gltf.animations, clipSpeeds };
 }
 
 function seededRandom(seed: number) {
