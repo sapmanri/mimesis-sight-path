@@ -53,6 +53,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
   const charProgress = useRef(activeIndex); // 캐릭터의 현재 위치 (장면 단위 진행도)
   const charSpeed = useRef(0);              // 현재 속도 (월드 유닛/초)
   const charYaw = useRef(0);                // BUILD 087: 몸의 방향 — 스냅하지 않고 돌아선다
+  const walkerPos = useRef<THREE.Vector3 | null>(null); // BUILD 098: 실제 위치 — 커브는 안내선일 뿐
   const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
   const prevWalkerPos = useRef<THREE.Vector3 | null>(null);
   const faceVelocity = useRef(new THREE.Vector3()); // BUILD 090: 가드 리드용 속도 벡터
@@ -191,28 +192,60 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
         let targetSpeed = J.gait === 'run' ? spec.walker.runSpeed : spec.walker.walkSpeed;
         if (remainingWorld < 1.1) targetSpeed = Math.min(targetSpeed, spec.walker.walkSpeed); // 도착 전 감속
         charSpeed.current += (targetSpeed - charSpeed.current) * Math.min(1, delta * 2.6);
-        const stepProg = (charSpeed.current * delta) / dWdP;
+        // BUILD 098: 진행도는 '접선 방향으로 실제 나아간 만큼'만 오른다
+        const tanH = world.curve.getTangent(t0).setY(0).normalize();
+        const headAlign = Math.max(0.25, Math.cos(charYaw.current - Math.atan2(tanH.x, tanH.z)) * Math.sign(remaining) || 0.25);
+        const stepProg = (charSpeed.current * delta * Math.abs(headAlign)) / dWdP;
         charProgress.current += Math.sign(remaining) * Math.min(Math.abs(remaining), stepProg);
       }
     } else {
       charSpeed.current = 0;
     }
 
+    // ---- BUILD 098: 추적점 팔로워 (Vase의 패스파인더) ----
+    // 커브는 '안내선'이다. 몸은 안내선 위 0.42u 앞의 점을 바라보며
+    // 자기 방향으로만 전진한다 — 속도와 몸이 늘 같은 곳을 향하므로 스키가 없다.
+    // 안내선에서 벗어나면 허용치(0.12u) 밖에서만 스프링으로 당겨온다.
     const t = world.progressToT(charProgress.current);
-    const pos = world.curve.getPoint(t);
-    const aheadT = Math.min(1, t + 0.06);
-    const ahead = world.curve.getPoint(aheadT);
-    const tangent = ahead.clone().sub(pos).setY(0).normalize();
-    // BUILD 087: 몸은 '가는 방향'을 본다. 돌아올 때는 돌아서서 걷는다 — 뒷걸음질 금지.
+    const anchor = world.curve.getPoint(t); // 안내선 위의 내 자리
+    const t1n = world.progressToT(Math.min(scenes.length - 1, charProgress.current + 0.01));
+    const dWdPn = Math.max(0.05, world.curve.getPoint(t1n).distanceTo(anchor) / 0.01);
     const facing = moving ? Math.sign(remaining) || 1 : (Math.abs(charYaw.current) > Math.PI / 2 ? -1 : 1);
-    const dir = tangent.clone().multiplyScalar(moving ? facing : 1);
+    const tangent = world.curve.getTangent(t).setY(0).normalize();
+
+    if (!walkerPos.current) walkerPos.current = anchor.clone();
+    const pos = walkerPos.current;
+
     if (moving) {
-      const targetYaw = Math.atan2(tangent.x * facing, tangent.z * facing);
-      let dYaw = targetYaw - charYaw.current;
+      // 추적점: 안내선을 따라 0.42u 앞 (진행 방향으로)
+      const lookP = charProgress.current + facing * (0.42 / dWdPn);
+      const pursuit = world.curve.getPoint(world.progressToT(
+        Math.max(0, Math.min(scenes.length - 1, lookP)),
+      ));
+      let dYaw = Math.atan2(pursuit.x - pos.x, pursuit.z - pos.z) - charYaw.current;
       while (dYaw > Math.PI) dYaw -= Math.PI * 2;
       while (dYaw < -Math.PI) dYaw += Math.PI * 2;
-      charYaw.current += dYaw * Math.min(1, delta * 5.5); // ~0.35초에 돌아선다
+      // 회전 속도: 기본 3.4 rad/s, 크게 어긋났을수록 빨리 (되돌아설 때)
+      const turnRate = 3.4 + Math.abs(dYaw) * 3.2;
+      charYaw.current += THREE.MathUtils.clamp(dYaw, -turnRate * delta, turnRate * delta);
+      // 몸의 방향으로 전진
+      pos.x += Math.sin(charYaw.current) * charSpeed.current * delta;
+      pos.z += Math.cos(charYaw.current) * charSpeed.current * delta;
+      // 허용치 스프링: 벼랑길이니 너무 멀어지면 안 된다
+      const nor = new THREE.Vector3(-tangent.z, 0, tangent.x);
+      const off = (pos.x - anchor.x) * nor.x + (pos.z - anchor.z) * nor.z;
+      const tol = 0.12;
+      if (Math.abs(off) > tol) {
+        const pull = (Math.abs(off) - tol) * Math.sign(off) * Math.min(1, delta * 6);
+        pos.x -= nor.x * pull;
+        pos.z -= nor.z * pull;
+      }
+    } else {
+      // 머무를 때는 안내선의 자리로 조용히 수렴
+      pos.lerp(anchor, Math.min(1, delta * 3));
     }
+    pos.y = anchor.y; // 지면은 안내선이 정의한다
+    const dir = tangent.clone().multiplyScalar(moving ? facing : 1);
 
     // 이번 프레임 실제 이동 거리 → 보폭 동기 (발이 미끄러지지 않는다)
     const distDelta = prevWalkerPos.current ? pos.distanceTo(prevWalkerPos.current) : 0;

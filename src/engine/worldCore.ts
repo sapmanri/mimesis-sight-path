@@ -235,7 +235,7 @@ const MODELS: Record<string, ModelSpec> = {
 
 // ---------- BUILD 093: WALKER ROSTER ----------
 // 여덟 아이가 번갈아 이 길을 걷는다. 로드마다 한 명이 뽑힌다 — 오늘의 걷는 사람.
-// (Kid2는 텍스처 미동봉+클립 규약 혼재로 로스터 제외, 파일은 보류)
+// BUILD 098: Kid2 복권 — 열한 명이 걷는다
 export const WALKER_ROSTER: ModelSpec[] = [
   MODELS.walker, // LittleBoy (BUILD 092)
   { file: 'Kid1.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid1_texture.png', clipSpeeds: { walk: 0.007, run: 0.023 } },
@@ -248,6 +248,9 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // BUILD 097: Kid9(신규, 로우폴리 본체), Kid10(애니 미동봉 → c9 클립 이식, fbx 본체로 축 정합)
   { file: 'Kid9.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid9_texture.png', clipSpeeds: { walk: 0.0071, run: 0.0192 } },
   { file: 'Kid10.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid10_texture.png', clipSpeeds: { walk: 3.125, run: 8.43 } }, // 슬라이드 스윕 확정 (걷기 2%·뛰기 11%)
+  // BUILD 098: Kid2 구제 — 자기 FBX 애니로 재빌드 (지난번 glb 경로가 문제였다).
+  // 텍스처는 원래 없는 단색 디자인 (#e7e7e7 석고 아이). 고유속도는 월드 실측.
+  { file: 'Kid2.glb', height: 0.9, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 1.3328, run: 3.5529 } },
 ];
 
 

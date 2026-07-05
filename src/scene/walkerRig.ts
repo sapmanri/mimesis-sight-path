@@ -192,6 +192,7 @@ export function createClipRig(
   // BUILD 094: '평균'이 아니라 '사이클 최저점'을 땅에 맞춘다 — 평균 정합은 접지 순간 발을 묻는다.
   // rollingMin: 즉시 내려가고, 천천히(0.12u/s) 올라오는 최저점 추적기.
   let rollingMin = Infinity;
+  let gestureGrace = 0; // BUILD 098: 제스처 직후 접지 보정을 서두르지 않는다 (일어날 때 튕김 방지)
   // 발자국 감지: 발이 접지 문턱을 뚫고 내려오는 순간
   let contactL = false;
   let contactR = false;
@@ -216,8 +217,8 @@ export function createClipRig(
   mixer.addEventListener('finished', (e) => {
     const a = (e as unknown as { action: THREE.AnimationAction }).action;
     if (a === sitDown && gesture === 'sitDown' && sitIdle) { switchTo(sitIdle, 0.25); gesture = 'sit'; }
-    else if (a === standUp && gesture === 'standUp') { switchTo(idle, 0.3); gesture = 'none'; }
-    else if (a === pickup && gesture === 'pickup') { switchTo(idle, 0.4); gesture = 'none'; }
+    else if (a === standUp && gesture === 'standUp') { switchTo(idle, 0.3); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
+    else if (a === pickup && gesture === 'pickup') { switchTo(idle, 0.4); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
   });
 
   // 걷기↔뛰기 전환 문턱: 두 고유속도의 기하평균 부근
@@ -237,10 +238,12 @@ export function createClipRig(
     stopInspect() {
       if (gesture === 'sit' || gesture === 'sitDown') {
         if (standUp) { gesture = 'standUp'; switchTo(standUp, 0.2); }
-        else { gesture = 'none'; switchTo(idle, 0.4); }
+        else { gesture = 'none'; switchTo(idle, 0.55); gestureGrace = 0.9; rollingMin = Infinity; } // 전환 클립이 없으면 더 느리게 일어난다
       } else if (gesture === 'pickup') {
         gesture = 'none';
         switchTo(idle, 0.25);
+        gestureGrace = 0.5;
+        rollingMin = Infinity;
       }
     },
     update(dt, _speed01, moving, _elapsed, distDelta) {
@@ -274,7 +277,9 @@ export function createClipRig(
         const minNow = Math.min(ly, ry);
         rollingMin = Math.min(minNow, (rollingMin === Infinity ? minNow : rollingMin) + 0.12 * dt);
         const err = (rollingMin - sole) - ground;
-        groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.4), Math.min(1, dt * 8));
+        gestureGrace = Math.max(0, gestureGrace - dt);
+        const rate = gestureGrace > 0 ? 2.2 : 8; // 일어난 직후엔 천천히 자리를 찾는다
+        groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.4), Math.min(1, dt * rate));
         root.position.y = baseY + groundCorr;
 
         // 발자국: 발이 접지 대역(표면+2.5cm)으로 '진입'하는 순간, 이동 중일 때만
