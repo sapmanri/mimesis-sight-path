@@ -346,6 +346,21 @@ export const defaultLoader: ModelLoader = (file) =>
     );
   });
 
+/** BUILD 109: 클립 동반 로더 — 로밍하는 것들(나그네, 훗날의 동물들)을 위해 */
+export async function loadKitModelWithClips(key: string, loadModel: ModelLoader) {
+  const spec = MODELS[key];
+  const loaded = await loadModel(spec.file);
+  const raw = loaded.scene;
+  if (spec.strip) {
+    const needles = spec.strip.split(',');
+    const doomed: THREE.Object3D[] = [];
+    raw.traverse((n) => { if (needles.some((x) => n.name.includes(x))) doomed.push(n); });
+    doomed.forEach((n) => n.parent?.remove(n));
+  }
+  applyPalette(raw, spec.tint);
+  return { group: normalizeModel(raw, spec), animations: loaded.animations };
+}
+
 export async function loadKitModel(key: string, loadModel: ModelLoader) {
   const spec = MODELS[key];
   const raw = (await loadModel(spec.file)).scene;
@@ -487,13 +502,13 @@ export function buildWorld(
 
   // [memoryPoints] 장면별 기억 오브젝트 (kit 슬롯 + 비행기 앵커)
   const kitSlots: { kit: string; slot: THREE.Group; seed: number }[] = [];
-  const wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number }[] = [];
+  const wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number; sceneIndex: number }[] = [];
   if (on('memoryPoints')) {
     group.add(buildMemoryObjects(scenes, anchors, kitSlots));
     scenes.forEach((s, i) => {
       if (s.objectKit === 'airplane-wing-kit') {
         const a = anchors[i];
-        wingSpots.push({ p: a.p.clone(), tan: a.tan.clone(), nor: a.nor.clone(), side: i % 2 === 0 ? 1 : -1 });
+        wingSpots.push({ p: a.p.clone(), tan: a.tan.clone(), nor: a.nor.clone(), side: i % 2 === 0 ? 1 : -1, sceneIndex: i });
       }
     });
   }
@@ -635,7 +650,7 @@ async function attachModels(
   kitSlots: { kit: string; slot: THREE.Group; seed: number }[],
   lighthouseSlot: THREE.Group,
   rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[],
-  wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number }[],
+  wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number; sceneIndex: number }[],
   edgeWallSpots: { pos: THREE.Vector3; rotY: number; scale: number }[],
   worldGroup: THREE.Group,
   loadModel: ModelLoader,
@@ -730,6 +745,7 @@ async function attachModels(
           .add(new THREE.Vector3(0, -0.15, 0)); // 허공 멀리, 안개에 반쯤 잠긴 채
         p.rotation.y = Math.atan2(w.tan.x, w.tan.z) + 0.25;
         p.rotation.z = 0.06;
+        p.traverse((n) => { n.userData.sceneIndex = w.sceneIndex; }); // BUILD 109: 비행기도 클릭 선택
         worldGroup.add(p);
       });
     }));

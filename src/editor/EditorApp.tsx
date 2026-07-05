@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { World } from '../scene/World';
-import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, type PlacedProp } from '../engine/props';
+import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, ANIMATED_PROPS, type PlacedProp } from '../engine/props';
 import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { WALKER_ROSTER } from '../engine/worldCore';
@@ -529,6 +529,13 @@ export function EditorApp() {
                       <b>키보드로 조정</b>
                       화살표 이동 · PgUp/Dn 높이 · R/F 회전 · T/G 기울임 · −/= 크기 · Shift 크게 · Del 삭제
                     </div>
+                    {ANIMATED_PROPS.has(pp.obj) && (
+                      <label className="ed-check">
+                        <input type="checkbox" checked={pp.roam ?? false}
+                          onChange={(e) => edit((d) => { const q = (d.props ?? []).find((x) => x.id === selProp); if (q) q.roam = e.target.checked; })} />
+                        길 따라 로밍 (뷰어에서 걷는다)
+                      </label>
+                    )}
                     <button type="button" className={pickTarget === 'prop-repos' ? 'ed-pickbtn on' : 'ed-pickbtn'}
                       onClick={() => setPickTarget((v) => (v === 'prop-repos' ? null : 'prop-repos'))}>
                       {pickTarget === 'prop-repos' ? '클릭 대기 중… (취소)' : '⌖ 자리 다시 찍기'}

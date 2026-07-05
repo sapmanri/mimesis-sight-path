@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import {
-  KITS, MODELS, loadKitModel, makeCloudPuff, defaultLoader, type ModelLoader,
+  KITS, MODELS, loadKitModel, loadKitModelWithClips, makeCloudPuff, defaultLoader, type ModelLoader,
 } from './worldCore';
 
 export type PlacedProp = {
@@ -15,9 +15,14 @@ export type PlacedProp = {
   rotY: number;            // 좌우 회전 (라디안)
   rotX: number;            // 위아래 기울임 (라디안)
   scale: number;           // 크기 배율
+  /** BUILD 109: 애니 배치물의 자동 로밍 — 길을 따라 제멋대로 왔다갔다 */
+  roam?: boolean;
 };
 
 export type PropDef = { id: string; label: string; cat: string };
+
+/** BUILD 109: 애니메이션이 있는 배치물 — 로밍 AI를 켤 수 있다 (동물들이 오면 여기 등록) */
+export const ANIMATED_PROPS = new Set(['rogue', 'scavenger']);
 
 function makeStreetlamp(rnd: () => number) {
   const g = new THREE.Group();
@@ -39,6 +44,10 @@ function makeStreetlamp(rnd: () => number) {
   );
   bulb.position.set(0.2, 1.085, 0);
   g.add(bulb);
+  // BUILD 109: 진짜 불빛 — 소소한 광원이 세계를 있어 보이게 한다 (Vase)
+  const glow = new THREE.PointLight('#ffd9a0', 1.7, 3.4, 2);
+  glow.position.copy(bulb.position);
+  g.add(glow);
   g.rotation.y = rnd() * Math.PI * 2;
   return g;
 }
@@ -68,6 +77,28 @@ function makeOldCar(rnd: () => number) {
     g.add(wh);
   });
   g.rotation.z = 0.02 + rnd() * 0.02; // 살짝 주저앉음
+  g.rotation.y = rnd() * Math.PI * 2;
+  return g;
+}
+
+function makeLantern(rnd: () => number) {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.34, 5), std('#6d5638'));
+  post.position.y = 0.17;
+  post.castShadow = true;
+  g.add(post);
+  const cage = new THREE.Mesh(
+    new THREE.BoxGeometry(0.07, 0.09, 0.07),
+    new THREE.MeshStandardMaterial({ color: '#fff3cf', emissive: '#ffca6e', emissiveIntensity: 1.6, roughness: 0.5, transparent: true, opacity: 0.92 }),
+  );
+  cage.position.y = 0.38;
+  g.add(cage);
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.045, 4), std('#4a5049'));
+  cap.position.y = 0.445;
+  g.add(cap);
+  const glow = new THREE.PointLight('#ffca6e', 1.4, 2.6, 2);
+  glow.position.y = 0.38;
+  g.add(glow);
   g.rotation.y = rnd() * Math.PI * 2;
   return g;
 }
@@ -105,7 +136,8 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'door', label: '초록 대문', cat: '구조물' },
   { id: 'wall-stone', label: '돌담 조각', cat: '구조물' },
   { id: 'chair', label: '의자', cat: '구조물' },
-  { id: 'streetlamp', label: '가로등', cat: '구조물' },
+  { id: 'streetlamp', label: '가로등 (불빛)', cat: '구조물' },
+  { id: 'lantern', label: '랜턴 (불빛)', cat: '구조물' },
   { id: 'oldcar', label: '낡은 차', cat: '구조물' },
   { id: 'plane', label: '비행기', cat: '구조물' },
   // 기억 사물
@@ -191,6 +223,20 @@ function makeGrass(rnd: () => number) {
   return tuft;
 }
 
+/** 로밍용: 클립 동반 로드 */
+export async function createPropAnimated(
+  objId: string,
+  loadModel: ModelLoader = defaultLoader,
+): Promise<{ group: THREE.Group; animations: THREE.AnimationClip[] } | null> {
+  try {
+    if (objId === 'rogue') return await loadKitModelWithClips('rogue', loadModel);
+    if (objId === 'scavenger') return await loadKitModelWithClips('scavenger', loadModel);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** 카탈로그 id → 3D 오브젝트. 에셋류는 비동기 로드, 절차류는 즉시. */
 export async function createPropObject(
   objId: string,
@@ -237,6 +283,7 @@ export async function createPropObject(
       case 'stone-tall': return await loadKitModel('stone11', loadModel);
       case 'slab': return await loadKitModel(rnd() > 0.5 ? 'caveA' : 'caveB', loadModel);
       case 'streetlamp': return makeStreetlamp(rnd);
+      case 'lantern': return makeLantern(rnd);
       case 'oldcar': return makeOldCar(rnd);
       case 'rogue': return await loadKitModel('rogue', loadModel);
       case 'scavenger': return await loadKitModel('scavenger', loadModel);

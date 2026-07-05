@@ -6,7 +6,7 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultL
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
-import { createPropObject, type PlacedProp } from '../engine/props';
+import { createPropObject, createPropAnimated, ANIMATED_PROPS, type PlacedProp } from '../engine/props';
 import { footsteps } from './footsteps';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
@@ -125,12 +125,65 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   }, [spec.weather?.kind, spec.weather?.rainAmount]);
 
   // BUILD 100: 배치물 — 문서의 props를 3D로. id+obj+seed가 같으면 재사용 없이 단순 재생성(에디터 디바운스가 폭주를 막는다).
+  // BUILD 109: 로밍 — 애니메이션 있는 배치물은 길을 따라 제멋대로 왔다갔다 한다.
   const propsGroup = useMemo(() => new THREE.Group(), []);
+  type Roamer = {
+    holder: THREE.Group;
+    mixer: THREE.AnimationMixer;
+    walkAction: THREE.AnimationAction | null;
+    idleAction: THREE.AnimationAction | null;
+    prog: number;
+    target: number;
+    pauseT: number;
+    yaw: number;
+    lateral: number;
+  };
+  const roamers = useRef<Roamer[]>([]);
   useEffect(() => {
     let alive = true;
     propsGroup.clear();
+    roamers.current = [];
     (props ?? []).forEach((pp, i) => {
       const seed = pp.id.split('').reduce((a, c) => a + c.charCodeAt(0), 7) + i * 131;
+      const wantRoam = pp.roam && ANIMATED_PROPS.has(pp.obj);
+      if (wantRoam) {
+        createPropAnimated(pp.obj).then((res) => {
+          if (!alive || !res) return;
+          const holder = new THREE.Group();
+          holder.add(res.group);
+          holder.scale.setScalar(pp.scale);
+          holder.userData.propId = pp.id;
+          // 시작 진행도: 배치 지점을 커브에 투영
+          let bestP = 0;
+          let bestD = Infinity;
+          for (let q = 0; q <= scenes.length - 1; q += 0.05) {
+            const a = world.curve.getPoint(world.progressToT(q));
+            const d = Math.hypot(a.x - pp.position[0], a.z - pp.position[2]);
+            if (d < bestD) { bestD = d; bestP = q; }
+          }
+          const mixer = new THREE.AnimationMixer(res.group);
+          const walkClip = res.animations.find((c) => /walking_a$|^walk(ing)?(_loop)?$|\|walk/i.test(c.name))
+            ?? res.animations.find((c) => /walk/i.test(c.name)) ?? res.animations[0] ?? null;
+          const idleClip = res.animations.find((c) => /^idle(_[a-z])?$/i.test(c.name))
+            ?? res.animations.find((c) => /idle/i.test(c.name) && !/melee|ranged|combat|block/i.test(c.name))
+            ?? null;
+          const roamer: Roamer = {
+            holder,
+            mixer,
+            walkAction: walkClip ? mixer.clipAction(walkClip) : null,
+            idleAction: idleClip ? mixer.clipAction(idleClip) : null,
+            prog: bestP,
+            target: bestP,
+            pauseT: 1 + Math.random() * 2,
+            yaw: 0,
+            lateral: (seed % 2 === 0 ? 1 : -1) * (0.1 + (seed % 7) * 0.02),
+          };
+          roamer.idleAction?.play();
+          propsGroup.add(holder);
+          roamers.current.push(roamer);
+        });
+        return;
+      }
       createPropObject(pp.obj, seed).then((obj) => {
         if (!alive || !obj) return;
         const holder = new THREE.Group();
@@ -144,7 +197,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       });
     });
     return () => { alive = false; };
-  }, [props, propsGroup]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props, propsGroup, world]);
 
   // ---- BUILD 086: 캐릭터 주권 ----
   // 캐릭터는 카메라에 떠밀려 다니지 않는다. 자기 속도로 걷고, 자기 보폭으로 딛는다.
@@ -583,6 +637,43 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         arr[i * 6 + 5] = z;
       }
       rain.lines.geometry.attributes.position.needsUpdate = true;
+    }
+
+    // 로밍: 걷다가, 멈춰 서서 두리번, 다시 걷는다 — 제멋대로, 그러나 길을 따라
+    for (const R of roamers.current) {
+      const N = scenes.length - 1;
+      if (R.pauseT > 0) {
+        R.pauseT -= delta;
+        if (R.pauseT <= 0) {
+          R.target = Math.max(0, Math.min(N, R.prog + (Math.random() > 0.5 ? 1 : -1) * (0.6 + Math.random() * 1.8)));
+          if (R.walkAction) { R.walkAction.reset().fadeIn(0.3).play(); R.idleAction?.fadeOut(0.3); }
+        }
+      } else {
+        const dir = Math.sign(R.target - R.prog) || 1;
+        const t0 = world.progressToT(R.prog);
+        const a0 = world.curve.getPoint(t0);
+        const t1 = world.progressToT(Math.min(N, R.prog + 0.01));
+        const dWdP2 = Math.max(0.05, world.curve.getPoint(t1).distanceTo(a0) / 0.01);
+        R.prog += dir * (0.5 * delta) / dWdP2;
+        if ((dir > 0 && R.prog >= R.target) || (dir < 0 && R.prog <= R.target)) {
+          R.prog = R.target;
+          R.pauseT = 2 + Math.random() * 5;
+          if (R.idleAction) { R.idleAction.reset().fadeIn(0.3).play(); R.walkAction?.fadeOut(0.3); }
+          else R.walkAction?.fadeOut(0.3);
+        }
+        const tanR = world.curve.getTangent(world.progressToT(R.prog)).setY(0).normalize();
+        const wantYaw = Math.atan2(tanR.x * dir, tanR.z * dir);
+        let dY = wantYaw - R.yaw;
+        while (dY > Math.PI) dY -= Math.PI * 2;
+        while (dY < -Math.PI) dY += Math.PI * 2;
+        R.yaw += dY * Math.min(1, delta * 6);
+      }
+      const pt = world.curve.getPoint(world.progressToT(R.prog));
+      const tanP = world.curve.getTangent(world.progressToT(R.prog)).setY(0).normalize();
+      const norP = new THREE.Vector3(-tanP.z, 0, tanP.x);
+      R.holder.position.copy(pt).add(norP.multiplyScalar(R.lateral));
+      R.holder.rotation.y = R.yaw;
+      R.mixer.update(delta);
     }
 
     // 번개 시퀀스: 강-약 두 번 번쩍, 6~16초 간격
