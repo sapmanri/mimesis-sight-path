@@ -12,24 +12,17 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { ObservationScene } from '../data/jeju';
+import { JEJU_SPEC, type WorldPalette, type WorldSpec } from './worldSpec';
 
-export const PALETTE = {
-  fog: '#4a7285',
-  sandTop: '#d6c9a4',
-  sandEdge: '#c2b490',
-  cliffHigh: '#b0a181',
-  cliffMid: '#8b7d66',
-  cliffLow: '#66604f',
-  cliffDeep: '#4f5a63',
-  basalt: '#5d6159',
-  doorGreen: '#7d9b7f',
-  mint: '#9fbfa4',
-  white: '#e8e4d8',
-  plant: '#75906c',
-  plantDark: '#5c7a58',
-  silhouette: '#4a4842',
-  hat: '#c9bda1',
-} as const;
+// BUILD 082: 팔레트의 원본은 이제 worldSpec에 있다.
+// PALETTE는 "현재 빌드 중인 세계의 활성 팔레트" — buildWorld(spec)가 갈아끼운다.
+export const PALETTE: WorldPalette = { ...JEJU_SPEC.palette };
+
+// 현재 빌드 중인 세계의 명세. buildWorld 진입 시 교체된다.
+let SPEC: WorldSpec = JEJU_SPEC;
+// 모든 프로시저럴 시드의 오프셋. seed=0 이면 레거시 제주와 동일 출력.
+let WORLD_SEED = 0;
+const worldRng = (base: number) => seededRandom(base + WORLD_SEED);
 
 export type WorldAnchor = {
   p: THREE.Vector3;
@@ -56,9 +49,10 @@ export type BuiltWorld = {
 // ---------- BUILD 080: 높이 안개 (진짜로 잠기는 안개) ----------
 // 버텍스 칠하기가 아니라, 조명 계산이 끝난 픽셀을 높이에 따라 안개색으로 섞는다.
 // 경계선이 사라지고, 모든 오브젝트가 같은 높이에서 함께 잠긴다.
+// BUILD 082: 원본은 spec.atmosphere — buildWorld 진입 시 갱신된다.
 const HEIGHT_FOG = {
-  top: -0.1,     // 이 높이부터 잠기기 시작
-  bottom: -0.85, // 이 높이에서 완전히 안개
+  top: JEJU_SPEC.atmosphere.heightFogTop,     // 이 높이부터 잠기기 시작
+  bottom: JEJU_SPEC.atmosphere.heightFogBottom, // 이 높이에서 완전히 안개
 };
 
 function applyHeightFog(mat: THREE.MeshStandardMaterial) {
@@ -104,8 +98,8 @@ function makeValueNoise(w: number, h: number, seed: number) {
 function makeGroundTexture() {
   const S = 256;
   const data = new Uint8Array(S * S * 4);
-  const n = makeValueNoise(S, S, 7133);
-  const rnd = seededRandom(9241);
+  const n = makeValueNoise(S, S, 7133 + WORLD_SEED);
+  const rnd = worldRng(9241);
   for (let y = 0; y < S; y += 1) {
     for (let x = 0; x < S; x += 1) {
       const blotch = n(x, y, 3) * 0.5 + n(x, y, 7) * 0.3 + n(x, y, 19) * 0.2; // 얼룩
@@ -145,8 +139,8 @@ function makeGroundTexture() {
 function makeCliffTexture() {
   const S = 256;
   const data = new Uint8Array(S * S * 4);
-  const n = makeValueNoise(S, S, 4517);
-  const rnd = seededRandom(3391);
+  const n = makeValueNoise(S, S, 4517 + WORLD_SEED);
+  const rnd = worldRng(3391);
   for (let y = 0; y < S; y += 1) {
     for (let x = 0; x < S; x += 1) {
       // x = 깊이(u): 위(0)가 밝고 아래로 침식. y = 길이(v): 세로 스트릭.
@@ -302,13 +296,25 @@ function noise1(x: number) {
   return Math.sin(x * 1.7) * 0.55 + Math.sin(x * 3.7 + 1.3) * 0.3 + Math.sin(x * 7.1 + 4.2) * 0.15;
 }
 
-export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = defaultLoader): BuiltWorld {
+export function buildWorld(
+  scenes: ObservationScene[],
+  loadModel: ModelLoader = defaultLoader,
+  spec: WorldSpec = JEJU_SPEC,
+): BuiltWorld {
+  // ---- 0. BUILD 082: 명세 활성화. 이 아래의 모든 생성기는 spec을 읽는다. ----
+  SPEC = spec;
+  WORLD_SEED = spec.meta.seed | 0;
+  Object.assign(PALETTE, spec.palette);
+  HEIGHT_FOG.top = spec.atmosphere.heightFogTop;
+  HEIGHT_FOG.bottom = spec.atmosphere.heightFogBottom;
+
   const group = new THREE.Group();
 
   // ---- 1. path: ONE continuous centripetal catmull-rom, with lead-in/out ----
+  const P = spec.path;
   const pts = scenes.map((s, i) => {
-    const meander = Math.sin(i * 1.35) * 2.6 + Math.sin(i * 0.55 + 1.2) * 1.4;
-    return new THREE.Vector3(s.position[0] * 3.2 + meander, s.position[1] * 1.2, i * -7.2);
+    const meander = Math.sin(i * 1.35) * P.meanderA + Math.sin(i * 0.55 + 1.2) * P.meanderB;
+    return new THREE.Vector3(s.position[0] * P.lateralScale + meander, s.position[1] * 1.2, i * -P.sceneSpacing);
   });
   const first = pts[0];
   const second = pts[1];
@@ -322,7 +328,7 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
   const tOf = (i: number) => (i + 1) / span;
   const progressToT = (progress: number) => tOf(Math.max(0, Math.min(scenes.length - 1, progress)));
 
-  const SAMPLES = 520;
+  const SAMPLES = P.samples;
   type Frame = { t: number; p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3 };
   const frames: Frame[] = [];
   for (let i = 0; i <= SAMPLES; i += 1) {
@@ -336,14 +342,14 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
   // width profile: 좁은 오솔길. 광장은 상시가 아니라 '중요한 기억을 만나는 순간'의 이벤트다.
   // importance가 낮은 장면은 거의 부풀지 않는다.
   const sceneT = pts.map((_, i) => tOf(i));
-  const plazaBoost = scenes.map((s) => 0.14 + Math.max(0, (s.importance ?? 1) - 1.0) * 0.95);
+  const plazaBoost = scenes.map((s) => P.plazaBase + Math.max(0, (s.importance ?? 1) - 1.0) * P.plazaImportanceGain);
   const widthAt = (t: number) => {
-    let w = 0.24;
+    let w = P.baseHalfWidth;
     for (let k = 0; k < sceneT.length; k += 1) {
       const d = Math.abs(t - sceneT[k]) * span;
       w += plazaBoost[k] * Math.exp(-d * d * 4.2);
     }
-    return w * (1 + noise1(t * 40) * 0.1);
+    return w * (1 + noise1(t * 40) * P.widthNoise);
   };
 
   group.add(buildTerrain(frames, widthAt));
@@ -370,8 +376,8 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
   // 바위 산란 지점: 절벽 모서리(rim)와 벽면(face)
   const rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[] = [];
   {
-    const rrnd = seededRandom(6612);
-    for (let k = 0; k < 46; k += 1) {
+    const rrnd = worldRng(6612);
+    for (let k = 0; k < SPEC.decoration.rockCount; k += 1) {
       const i = Math.floor(rrnd() * frames.length);
       const f = frames[i];
       const w = widthAt(f.t);
@@ -390,10 +396,11 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
   const ready = attachModels(kitSlots, distant.lighthouseSlot, rockSpots, wingSpots, group, loadModel).catch(() => {});
 
   // ---- lights ----
+  const L = spec.light;
   const lights = new THREE.Group();
-  lights.add(new THREE.HemisphereLight(new THREE.Color('#b9d2d8'), new THREE.Color('#c8a97e'), 0.55));
-  const sun = new THREE.DirectionalLight(new THREE.Color('#ffe7c2'), 1.35);
-  sun.position.set(6, 11, 5);
+  lights.add(new THREE.HemisphereLight(new THREE.Color(L.hemiSky), new THREE.Color(L.hemiGround), L.hemiIntensity));
+  const sun = new THREE.DirectionalLight(new THREE.Color(L.sunColor), L.sunIntensity);
+  sun.position.set(...L.sunPosition);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 1;
@@ -406,8 +413,8 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
   sun.shadow.radius = 4;
   lights.add(sun);
   lights.add(sun.target);
-  const fill = new THREE.DirectionalLight(new THREE.Color('#9fc4c9'), 0.22);
-  fill.position.set(-5, 3, -4);
+  const fill = new THREE.DirectionalLight(new THREE.Color(L.fillColor), L.fillIntensity);
+  fill.position.set(...L.fillPosition);
   lights.add(fill);
   group.add(lights);
 
@@ -458,7 +465,7 @@ async function attachModels(
   if (wallSlots.length) {
     tasks.push(loadKitModel('stone', loadModel).then((stone) => {
       wallSlots.forEach((k) => {
-        const rnd = seededRandom(k.seed);
+        const rnd = worldRng(k.seed);
         k.slot.clear();
         // 담으로 읽히게: 아랫단 8개 촘촘히 + 윗단 6개 어긋나게
         if (k.kit === 'stone-wall-kit') {
@@ -539,12 +546,12 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     new THREE.Color(PALETTE.cliffDeep),
   ];
   const ringInsetBase = [0, 0.09, 0.26];
-  const RINGS = 3;
+  const RINGS = SPEC.terrain.rings;
 
   type Ring = { L: THREE.Vector3; R: THREE.Vector3 };
   const cross: Ring[][] = frames.map((f, i) => {
     const w = widthAt(f.t);
-    const depth = 0.85 + noise1(i * 0.05) * 0.3;
+    const depth = SPEC.terrain.cliffDepth + noise1(i * 0.05) * SPEC.terrain.cliffDepthNoise;
     const rings: Ring[] = [];
     for (let r = 0; r < RINGS; r += 1) {
       const v = r / (RINGS - 1);
@@ -673,11 +680,11 @@ function colorMesh(
 
 function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
-  const rnd = seededRandom(4177);
+  const rnd = worldRng(4177);
   const matA = new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 });
   const matB = new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 });
   const geo = new THREE.ConeGeometry(0.016, 0.16, 3); // 풀잎 한 가닥
-  for (let k = 0; k < 140; k += 1) {
+  for (let k = 0; k < SPEC.decoration.grassCount; k += 1) {
     const i = Math.floor(rnd() * frames.length);
     const f = frames[i];
     const w = widthAt(f.t);
@@ -710,7 +717,7 @@ function buildMemoryObjects(
   scenes.forEach((scene, i) => {
     const a = anchors[i];
     const kit = KITS[scene.objectKit] ?? KITS.default;
-    const obj = kit(seededRandom(100 + i * 37));
+    const obj = kit(worldRng(100 + i * 37));
     const side = i % 2 === 0 ? 1 : -1;
     obj.position.copy(a.p).add(a.nor.clone().multiplyScalar(side * a.w * 0.45));
     obj.rotation.y = Math.atan2(a.tan.x, a.tan.z) + (side > 0 ? 0.4 : -0.4);
@@ -867,7 +874,7 @@ export function createWalkerFigure() {
 function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group } {
   const g = new THREE.Group();
   const lighthouseSlot = new THREE.Group();
-  const rnd = seededRandom(9010);
+  const rnd = worldRng(9010);
   const fogC = new THREE.Color(PALETTE.fog);
 
   const topMat = std('#' + new THREE.Color(PALETTE.sandEdge).lerp(fogC, 0.3).getHexString());

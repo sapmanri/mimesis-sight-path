@@ -3,17 +3,20 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
 import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../engine/worldCore';
+import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 
 type WorldProps = {
   scenes: ObservationScene[];
   activeIndex: number;
   mode: 'auto' | 'manual';
+  /** BUILD 082: 세계 명세. 생략 시 제주 프리셋. */
+  spec?: WorldSpec;
 };
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode }: WorldProps) {
-  const world = useMemo(() => buildWorld(scenes), [scenes]);
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProps) {
+  const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
   // 워커: 프로시저럴 실루엣으로 시작, Peasant 로드 완료 시 교체
   const walker = useMemo(() => {
     const holder = new THREE.Group();
@@ -37,7 +40,7 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
       const idleClip = animations.find((a) => /idle/i.test(a.name));
       if (walkClip) {
         const walk = mixer.clipAction(walkClip);
-        walk.timeScale = 0.72; // 천천히 걷는다
+        walk.timeScale = spec.walker.timeScale; // 천천히 걷는다
         actionsRef.current.walk = walk;
       }
       if (idleClip) {
@@ -47,7 +50,7 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
       }
     }).catch(() => { /* 실패 시 프로시저럴 실루엣 유지 */ });
     return () => { alive = false; };
-  }, [walker]);
+  }, [walker, spec]);
 
   useEffect(() => {
     gl.shadowMap.enabled = true;
