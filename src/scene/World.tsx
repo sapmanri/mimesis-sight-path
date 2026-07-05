@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
-import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../engine/worldCore';
+import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, PALETTE } from '../engine/worldCore';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
@@ -109,6 +109,11 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, spec.walker.timeScale);
+      // BUILD 104: 마법 의자 — 앉을 때 샤라락. 좌면은 정규화 높이의 47% 지점.
+      loadKitModel('chair', defaultLoader).then((chairObj) => {
+        if (!alive) return;
+        rigRef.current?.setChairAsset?.(chairObj, 0.64 * 0.47);
+      }).catch(() => { /* 의자가 없으면 조용히 땅에 앉는다 */ });
     }).catch(() => { /* 실패 시 프로시저럴 실루엣 유지 */ });
     return () => { alive = false; };
   }, [walker, spec]);

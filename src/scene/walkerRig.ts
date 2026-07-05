@@ -26,6 +26,8 @@ export type WalkerRig = {
   /** 도착 동작. kind: 'pickup'(들여다보기) | 'sit'(바닥에 앉기) — 지원 안 하면 무시 */
   playInspect: (kind?: 'pickup' | 'sit') => void;
   stopInspect: () => void;
+  /** BUILD 104: 마법 의자 자산 주입 (클립 리그 전용, 선택) */
+  setChairAsset?: (obj: THREE.Group, seatY: number) => void;
   inspecting: () => boolean;
   /** 현재 걸음 위상 (bob 동기화용) */
   phase: () => number;
@@ -204,6 +206,16 @@ export function createClipRig(
   let feetAnchor: { x: number; z: number } | null = null;
   let feetOffX = 0;
   let feetOffZ = 0;
+  // BUILD 104: 마법 의자 — 앉기 전에 샤라락 나타났다가, 일어나면 샤라락 사라진다.
+  // 앉기 클립들은 애초에 '의자 높이'로 만들어졌다. 의자를 주는 것이 클립의 설계를 존중하는 길.
+  let chairAsset: THREE.Group | null = null;
+  let chairSeatY = 0.29;
+  let chair: THREE.Group | null = null;
+  let chairPhase: 'in' | 'hold' | 'out' | 'none' = 'none';
+  let chairT = 0;
+  let chairPending = false; // 앉기 초반 힙을 실측해 '의자 높이 클립'에게만 의자를 준다
+  let sitClock = 0;
+  let chairProbe = 0;
   // 발자국 감지: 발이 접지 문턱을 뚫고 내려오는 순간
   let contactL = false;
   let contactR = false;
@@ -238,8 +250,18 @@ export function createClipRig(
   return {
     inspecting: () => gesture !== 'none',
     phase: () => 0, // 상하 흔들림은 클립 안에 있다 — 홀더 bob은 끈다
+    setChairAsset(obj: THREE.Group, seatY: number) {
+      chairAsset = obj;
+      chairSeatY = seatY;
+    },
     playInspect(kind = 'pickup') {
       if (gesture !== 'none') return;
+      // 마법 의자: 클립이 '의자 높이'인지 0.5초 뒤 실측해 결정 (바닥 앉기 클립은 바닥이 어울린다)
+      if (kind === 'sit' && chairAsset && root.parent && sitIdle) {
+        chairPending = true;
+        sitClock = 0;
+        chairProbe = 0;
+      }
       // 발 앵커: 지금 발이 있는 자리 (홀더 로컬)
       // BUILD 102.1: 반드시 '부모 로컬' 좌표로 — 월드 축으로 재고 로컬 축(root.position)에
       // 보정하면, 몸이 회전해 있을 때 좌표계가 어긋나 양의 피드백 → 앉는 순간 떠밀려간다.
@@ -259,6 +281,7 @@ export function createClipRig(
       else if (sitIdle) { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 들여다보기가 없으면 앉는다
     },
     stopInspect() {
+      if (chair && chairPhase !== 'none' && chairPhase !== 'out') { chairPhase = 'out'; chairT = 0; }
       if (gesture === 'sit' || gesture === 'sitDown') {
         if (standUp) { gesture = 'standUp'; switchTo(standUp, 0.2); }
         else { gesture = 'none'; switchTo(idle, 0.85); gestureGrace = 1.1; rollingMin = Infinity; } // 전환 클립이 없으면 더 느리게 일어난다
@@ -288,8 +311,48 @@ export function createClipRig(
       mixer.update(dt);
 
       // 앉기 침하: 앉는 동안 0.26u 가라앉고, 일어나면 같은 호흡으로 떠오른다
-      // BUILD 103: 적응형 침하 — 고정 0.26u는 어떤 아이에겐 반신욕이었다 (클립마다 힙 높이가 다르다).
-      // 지금 힙의 '침하 전' 높이를 실측해, 엉덩이가 땅에 살짝 닿는 만큼(0.14u)만 가라앉는다.
+      // 마법 의자 판정: 앉기 0.5초 — 힙이 좌면보다 높이 머물면 의자 높이 클립이다
+      if (chairPending && (gesture === 'sit' || gesture === 'sitDown') && hipsBone && root.parent) {
+        sitClock += dt;
+        // 0.35~0.7s 구간의 최대 raw로 판정 (침하 진행분은 sitSink로 되돌려 계산)
+        if (sitClock > 0.35) {
+          hipsBone.getWorldPosition(fw);
+          root.parent.worldToLocal(fw);
+          chairProbe = Math.max(chairProbe, fw.y + sitSink);
+        }
+        if (sitClock > 0.7) {
+          chairPending = false;
+          if (chairProbe > chairSeatY + 0.02 && chairAsset) {
+            if (!chair) {
+              chair = chairAsset;
+              root.parent.add(chair);
+            }
+            chair.position.set(0, 0, -0.06);
+            chair.rotation.set(0, 0, 0);
+            chair.scale.setScalar(0.001);
+            chair.visible = true;
+            chairPhase = 'in';
+            chairT = 0;
+          }
+        }
+      }
+      if (gesture !== 'sit' && gesture !== 'sitDown') chairPending = false;
+
+      // 마법 의자 등장/퇴장: 살짝 튀어올랐다 자리잡는 팝 (0.45s), 사라질 땐 빨려들 듯 (0.28s)
+      if (chair && chairPhase === 'in') {
+        chairT += dt;
+        const k = Math.min(1, chairT / 0.45);
+        const pop = k < 0.7 ? (k / 0.7) * 1.12 : 1.12 - ((k - 0.7) / 0.3) * 0.12;
+        chair.scale.setScalar(Math.max(0.001, pop));
+        if (k >= 1) chairPhase = 'hold';
+      } else if (chair && chairPhase === 'out') {
+        chairT += dt;
+        const k = Math.min(1, chairT / 0.28);
+        chair.scale.setScalar(Math.max(0.001, 1 - k));
+        if (k >= 1) { chair.visible = false; chairPhase = 'none'; }
+      }
+
+      // BUILD 103→104: 적응형 침하 — 의자가 있으면 '좌면'에, 없으면 땅(0.14)에 엉덩이를 맞춘다.
       let sinkTarget = 0;
       if ((gesture === 'sit' || gesture === 'sitDown') && hipsBone && root.parent) {
         hipsBone.getWorldPosition(fw);
@@ -302,7 +365,10 @@ export function createClipRig(
           footR.getWorldPosition(fw); root.parent.worldToLocal(fw); footMin = Math.min(footMin, fw.y);
           footMin += sitSink;
         }
-        sinkTarget = THREE.MathUtils.clamp(Math.min(hipsRaw - 0.14, footMin + 0.1), 0, 0.34);
+        const onChair = chairPhase === 'in' || chairPhase === 'hold';
+        const seatTop = onChair ? chairSeatY + 0.03 : 0.14;
+        const footCap = onChair ? footMin + 0.3 : footMin + 0.1;
+        sinkTarget = THREE.MathUtils.clamp(Math.min(hipsRaw - seatTop, footCap), 0, 0.34);
       }
       sitSink += (sinkTarget - sitSink) * Math.min(1, dt * 1.8);
 
