@@ -648,7 +648,14 @@ export function EditorApp() {
                   </label>
                 </>
               )}
-              <h4>태양</h4>
+              <h4>시간</h4>
+              <div className="ed-wh-chips">
+                <button type="button" className={(doc.spec.weather?.time ?? 'day') === 'day' ? 'ed-chip on' : 'ed-chip'}
+                  onClick={() => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), time: 'day' }; })}>☀️ 낮</button>
+                <button type="button" className={doc.spec.weather?.time === 'night' ? 'ed-chip on' : 'ed-chip'}
+                  onClick={() => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), time: 'night' }; })}>🌙 밤</button>
+              </div>
+              <h4>{doc.spec.weather?.time === 'night' ? '달 (태양의 자리)' : '태양'}</h4>
               <label>빛의 세기 <em>{doc.spec.light.sunIntensity.toFixed(2)}</em>
                 <input type="range" min="0.2" max="2.4" step="0.05" value={doc.spec.light.sunIntensity}
                   onChange={(e) => edit((d) => { d.spec.light.sunIntensity = Number(e.target.value); })} />

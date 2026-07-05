@@ -657,9 +657,14 @@ export function buildWorld(
   const wDim = wKind === 'rain' ? 0.48 : wKind === 'cloudy' ? 0.72 : 1;
   const wGray = wKind === 'rain' ? 0.55 : wKind === 'cloudy' ? 0.35 : 0;
   const wTint = (hex: string) => new THREE.Color(hex).lerp(new THREE.Color('#8d979c'), wGray);
+  // BUILD 115: 밤 — 태양의 자리를 달이 이어받는다. 그림자 리그는 그대로, 빛의 성질만 바뀐다.
+  const night = (spec.weather?.time ?? 'day') === 'night';
   const lights = new THREE.Group();
-  lights.add(new THREE.HemisphereLight(wTint(L.hemiSky), wTint(L.hemiGround), L.hemiIntensity * (0.7 + wDim * 0.3)));
-  const sun = new THREE.DirectionalLight(wTint(L.sunColor), L.sunIntensity * wDim);
+  const hemiSky = night ? '#233245' : L.hemiSky;
+  const hemiGround = night ? '#141a23' : L.hemiGround;
+  lights.add(new THREE.HemisphereLight(wTint(hemiSky), wTint(hemiGround), L.hemiIntensity * (0.7 + wDim * 0.3) * (night ? 0.55 : 1)));
+  const sunColor = night ? new THREE.Color('#c3d2ee').lerp(new THREE.Color('#8d979c'), wGray) : wTint(L.sunColor);
+  const sun = new THREE.DirectionalLight(sunColor, L.sunIntensity * wDim * (night ? 0.3 : 1));
   sun.position.set(...L.sunPosition);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -679,6 +684,7 @@ export function buildWorld(
   if (on('light')) group.add(lights);
 
   const fogColor = new THREE.Color(PALETTE.fog).lerp(new THREE.Color('#48545c'), wGray);
+  if (night) fogColor.lerp(new THREE.Color('#0d1420'), 0.75); // BUILD 115: 밤하늘·밤안개
   return { group, curve, anchors, sun, fogColor, progressToT, ready: ready as Promise<void> };
 }
 

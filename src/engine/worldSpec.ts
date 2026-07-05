@@ -76,6 +76,8 @@ export type WorldSpec = {
     lightning?: boolean;
     /** 먹구름/구름 양 0~1 (기본 0.5) */
     cloudAmount?: number;
+    /** BUILD 115: 낮과 밤 — 밤에는 태양의 자리를 달이 이어받는다 */
+    time?: 'day' | 'night';
   };
   meta: {
     name: string;

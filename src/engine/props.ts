@@ -318,7 +318,7 @@ export async function createPropObject(
           m.emissiveIntensity = 0.9;
         });
         // BUILD 114: 달은 보이기만 하는 게 아니라 비춘다 — 가로등의 문법을 하늘로
-        const moonlight = new THREE.PointLight('#dfe6f0', 2.2, 30, 1.6);
+        const moonlight = new THREE.PointLight('#dfe6f0', 6.5, 55, 1.2); // BUILD 115: 하늘에 걸어도 위력이 닿게
         g.add(moonlight);
         return g;
       }
