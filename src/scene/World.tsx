@@ -50,6 +50,27 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const rigRef = useRef<WalkerRig | null>(null);
   const { gl } = useThree();
 
+  // BUILD 107: 빗줄기 — 900가닥이 걷는 사람 주위에서 순환한다
+  const rain = useMemo(() => {
+    if (spec.weather?.kind !== 'rain') return null;
+    const N = 900;
+    const pos = new Float32Array(N * 6);
+    const drops = new Float32Array(N * 4); // x,y,z,speed
+    for (let i = 0; i < N; i += 1) {
+      drops[i * 4] = (Math.random() - 0.5) * 26;
+      drops[i * 4 + 1] = Math.random() * 14;
+      drops[i * 4 + 2] = (Math.random() - 0.5) * 26;
+      drops[i * 4 + 3] = 7 + Math.random() * 4;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.LineBasicMaterial({ color: '#cdd9de', transparent: true, opacity: 0.38 });
+    const lines = new THREE.LineSegments(geo, mat);
+    lines.frustumCulled = false;
+    return { lines, drops, N };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.weather?.kind]);
+
   // BUILD 100: 배치물 — 문서의 props를 3D로. id+obj+seed가 같으면 재사용 없이 단순 재생성(에디터 디바운스가 폭주를 막는다).
   const propsGroup = useMemo(() => new THREE.Group(), []);
   useEffect(() => {
@@ -484,12 +505,39 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // 태양은 걷는 사람을 따라간다 (그림자 카메라가 항상 근처를 비추도록)
     world.sun.position.copy(pos).add(new THREE.Vector3(6, 11, 5));
     world.sun.target.position.copy(pos);
+
+    // 빗줄기: 떨어지고, 바닥에 닿으면 하늘로 되돌아간다 (사람을 따라다니는 26u 상자)
+    if (rain) {
+      const arr = rain.lines.geometry.attributes.position.array as Float32Array;
+      const D = rain.drops;
+      const windX = Math.sin(clock.elapsedTime * 0.4) * 0.7;
+      for (let i = 0; i < rain.N; i += 1) {
+        D[i * 4 + 1] -= D[i * 4 + 3] * delta;
+        D[i * 4] += windX * delta;
+        if (D[i * 4 + 1] < -1.5) {
+          D[i * 4] = (Math.random() - 0.5) * 26;
+          D[i * 4 + 1] = 12 + Math.random() * 3;
+          D[i * 4 + 2] = (Math.random() - 0.5) * 26;
+        }
+        const x = pos.x + D[i * 4];
+        const y = pos.y + D[i * 4 + 1];
+        const z = pos.z + D[i * 4 + 2];
+        arr[i * 6] = x;
+        arr[i * 6 + 1] = y;
+        arr[i * 6 + 2] = z;
+        arr[i * 6 + 3] = x + windX * 0.02;
+        arr[i * 6 + 4] = y + 0.16;
+        arr[i * 6 + 5] = z;
+      }
+      rain.lines.geometry.attributes.position.needsUpdate = true;
+    }
   });
 
   return (
     <>
-      <color attach="background" args={[PALETTE.fog]} />
-      <fog attach="fog" args={[PALETTE.fog, 12, 58]} />
+      <color attach="background" args={[world.fogColor]} />
+      <fog attach="fog" args={[world.fogColor, spec.weather?.kind === 'rain' ? 9 : 12, spec.weather?.kind === 'rain' ? 44 : 58]} />
+      {rain && <primitive object={rain.lines} />}
       <primitive
         object={world.group}
         onPointerDown={(onGroundPick || onScenePick) ? (e: { point: THREE.Vector3; object: THREE.Object3D; stopPropagation: () => void }) => {

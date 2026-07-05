@@ -67,6 +67,8 @@ export type WorldPalette = {
 };
 
 export type WorldSpec = {
+  /** BUILD 107: 날씨 — 맑음/흐림/비. 조명·안개·구름·빗줄기가 함께 바뀐다. */
+  weather?: { kind: 'clear' | 'cloudy' | 'rain' };
   meta: {
     name: string;
     description?: string;

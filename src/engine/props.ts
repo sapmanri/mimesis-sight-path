@@ -19,10 +19,83 @@ export type PlacedProp = {
 
 export type PropDef = { id: string; label: string; cat: string };
 
+function makeStreetlamp(rnd: () => number) {
+  const g = new THREE.Group();
+  const iron = std('#4a5049');
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.022, 1.15, 6), iron);
+  pole.position.y = 0.575;
+  pole.castShadow = true;
+  g.add(pole);
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 6), iron);
+  arm.rotation.z = Math.PI / 2;
+  arm.position.set(0.1, 1.13, 0);
+  g.add(arm);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.07, 6), iron);
+  head.position.set(0.2, 1.12, 0);
+  g.add(head);
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 6),
+    new THREE.MeshStandardMaterial({ color: '#ffe9b0', emissive: '#ffcf7a', emissiveIntensity: 1.4, roughness: 0.6 }),
+  );
+  bulb.position.set(0.2, 1.085, 0);
+  g.add(bulb);
+  g.rotation.y = rnd() * Math.PI * 2;
+  return g;
+}
+
+function makeOldCar(rnd: () => number) {
+  const g = new THREE.Group();
+  const bodyCol = ['#7e937f', '#9a8a6a', '#7a8a96'][Math.floor(rnd() * 3)];
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.3), std(bodyCol));
+  body.position.y = 0.14;
+  body.castShadow = true;
+  g.add(body);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.13, 0.26), std(bodyCol));
+  cabin.position.set(-0.04, 0.28, 0);
+  cabin.castShadow = true;
+  g.add(cabin);
+  const glass = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.08, 0.24), std('#b9c8c9'));
+  glass.position.set(-0.04, 0.285, 0);
+  g.add(glass);
+  const wheelGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.05, 8);
+  const wheelMat = std('#3d3a35');
+  [[0.2, 0.14], [0.2, -0.14], [-0.22, 0.14], [-0.22, -0.14]].forEach(([x, z], i) => {
+    const wh = new THREE.Mesh(wheelGeo, wheelMat);
+    wh.rotation.x = Math.PI / 2;
+    // 낡은 차: 바퀴 하나는 바람이 빠졌다
+    const flat = i === 3 ? 0.02 : 0;
+    wh.position.set(x, 0.06 - flat, z);
+    g.add(wh);
+  });
+  g.rotation.z = 0.02 + rnd() * 0.02; // 살짝 주저앉음
+  g.rotation.y = rnd() * Math.PI * 2;
+  return g;
+}
+
+function makeCup(rnd: () => number) {
+  const g = new THREE.Group();
+  const col = ['#f4f0e7', '#a7b49a', '#c9a68a'][Math.floor(rnd() * 3)];
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.06, 10), std(col));
+  body.position.y = 0.03;
+  body.castShadow = true;
+  g.add(body);
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.006, 6, 10), std(col));
+  handle.position.set(0.04, 0.032, 0);
+  g.add(handle);
+  const coffee = new THREE.Mesh(new THREE.CircleGeometry(0.028, 10), std('#5a4632'));
+  coffee.rotation.x = -Math.PI / 2;
+  coffee.position.y = 0.058;
+  g.add(coffee);
+  g.rotation.y = rnd() * Math.PI * 2;
+  return g;
+}
+
 export const PROP_CATALOG: PropDef[] = [
   // 자연
   { id: 'rock-small', label: '작은 바위', cat: '자연' },
   { id: 'rock-big', label: '큰 바위', cat: '자연' },
+  { id: 'stone-tall', label: '선 돌', cat: '자연' },
+  { id: 'slab', label: '바위 슬랩 (대형)', cat: '자연' },
   { id: 'bush', label: '수풀', cat: '자연' },
   { id: 'tree', label: '작은 나무', cat: '자연' },
   { id: 'grass', label: '풀 다발', cat: '자연' },
@@ -30,19 +103,25 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'cabin', label: '오두막', cat: '구조물' },
   { id: 'lighthouse', label: '등대', cat: '구조물' },
   { id: 'door', label: '초록 대문', cat: '구조물' },
-  { id: 'plane', label: '비행기', cat: '구조물' },
   { id: 'wall-stone', label: '돌담 조각', cat: '구조물' },
   { id: 'chair', label: '의자', cat: '구조물' },
+  { id: 'streetlamp', label: '가로등', cat: '구조물' },
+  { id: 'oldcar', label: '낡은 차', cat: '구조물' },
+  { id: 'plane', label: '비행기', cat: '구조물' },
   // 기억 사물
   { id: 'suitcase', label: '캐리어', cat: '기억 사물' },
   { id: 'book', label: '책 무더기', cat: '기억 사물' },
   { id: 'cup', label: '찻잔', cat: '기억 사물' },
   { id: 'fruit', label: '과일', cat: '기억 사물' },
   { id: 'cd-shelf', label: 'CD 선반', cat: '기억 사물' },
-  { id: 'person', label: '사람 실루엣', cat: '기억 사물' },
   { id: 'sea-edge', label: '바다의 가장자리', cat: '기억 사물' },
+  // 사람
+  { id: 'person', label: '사람 실루엣', cat: '사람' },
+  { id: 'rogue', label: '두건 나그네', cat: '사람' },
+  { id: 'scavenger', label: '방랑자', cat: '사람' },
   // 하늘
   { id: 'cloud', label: '뭉게구름', cat: '하늘' },
+  { id: 'cloud-dark', label: '먹구름', cat: '하늘' },
 ];
 
 export const PROP_CATEGORIES = [...new Set(PROP_CATALOG.map((p) => p.cat))];
@@ -140,12 +219,27 @@ export async function createPropObject(
       case 'chair': return await loadKitModel('chair', loadModel);
       case 'suitcase': return await loadKitModel('suitcase', loadModel);
       case 'book': return KITS['book-kit'](rnd);
-      case 'cup': return KITS['cup-kit'](rnd);
+      case 'cup': return makeCup(rnd);
       case 'fruit': return KITS['fruit-kit'](rnd);
       case 'cd-shelf': return KITS['cd-shelf-kit'](rnd);
       case 'person': return KITS['person-kit'](rnd);
       case 'sea-edge': return KITS['sea-edge-kit'](rnd);
       case 'cloud': return makeCloudPuff(rnd, 1.4 + rnd() * 1.8);
+      case 'cloud-dark': {
+        const c = makeCloudPuff(rnd, 1.6 + rnd() * 2.2);
+        c.traverse((n) => {
+          if ((n as THREE.Mesh).isMesh) {
+            ((n as THREE.Mesh).material as THREE.MeshStandardMaterial) = std('#5d686e');
+          }
+        });
+        return c;
+      }
+      case 'stone-tall': return await loadKitModel('stone11', loadModel);
+      case 'slab': return await loadKitModel(rnd() > 0.5 ? 'caveA' : 'caveB', loadModel);
+      case 'streetlamp': return makeStreetlamp(rnd);
+      case 'oldcar': return makeOldCar(rnd);
+      case 'rogue': return await loadKitModel('rogue', loadModel);
+      case 'scavenger': return await loadKitModel('scavenger', loadModel);
       default: return null;
     }
   } catch {

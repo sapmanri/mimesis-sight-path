@@ -230,6 +230,10 @@ export const MODELS: Record<string, ModelSpec> = {
   walker: { file: 'LittleBoy.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'LittleBoy_texture.png', clipSpeeds: { walk: 1.48, run: 5.207 } },
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   chair: { file: 'Chair.glb', height: 0.64, tint: '#7e937f' }, // BUILD 104: 마법 의자 — 앉을 때 샤라락
+  // BUILD 107: 카탈로그 확장 등록
+  stone11: { file: 'stone11.glb', height: 0.5, tint: '#6b6e63', fitMaxDim: true },
+  rogue: { file: 'RogueHooded.glb', height: 0.95, tint: '#8f8a7a', keepLook: true },
+  scavenger: { file: 'Scavenger.glb', height: 0.95, tint: '#8f8a7a', keepLook: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
   rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },
 };
@@ -586,7 +590,7 @@ export function buildWorld(
 
   // [landscape] 원경 — 닿을 수 없는 기억
   const distant = on('landscape')
-    ? buildDistantWorld()
+    ? buildDistantWorld(spec.weather?.kind ?? 'clear')
     : { group: new THREE.Group(), lighthouseSlot: new THREE.Group() };
   if (on('landscape')) group.add(distant.group);
 
@@ -597,9 +601,14 @@ export function buildWorld(
 
   // [light] 빛 생성기. sun은 BuiltWorld 계약상 항상 생성 (그림자 타겟 추적용).
   const L = spec.light;
+  // BUILD 107: 날씨 — 흐리면 빛이 재를 머금고, 비가 오면 세계가 어두워진다
+  const wKind = spec.weather?.kind ?? 'clear';
+  const wDim = wKind === 'rain' ? 0.48 : wKind === 'cloudy' ? 0.72 : 1;
+  const wGray = wKind === 'rain' ? 0.55 : wKind === 'cloudy' ? 0.35 : 0;
+  const wTint = (hex: string) => new THREE.Color(hex).lerp(new THREE.Color('#8d979c'), wGray);
   const lights = new THREE.Group();
-  lights.add(new THREE.HemisphereLight(new THREE.Color(L.hemiSky), new THREE.Color(L.hemiGround), L.hemiIntensity));
-  const sun = new THREE.DirectionalLight(new THREE.Color(L.sunColor), L.sunIntensity);
+  lights.add(new THREE.HemisphereLight(wTint(L.hemiSky), wTint(L.hemiGround), L.hemiIntensity * (0.7 + wDim * 0.3)));
+  const sun = new THREE.DirectionalLight(wTint(L.sunColor), L.sunIntensity * wDim);
   sun.position.set(...L.sunPosition);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -613,12 +622,13 @@ export function buildWorld(
   sun.shadow.radius = 4;
   lights.add(sun);
   lights.add(sun.target);
-  const fill = new THREE.DirectionalLight(new THREE.Color(L.fillColor), L.fillIntensity);
+  const fill = new THREE.DirectionalLight(wTint(L.fillColor), L.fillIntensity * wDim);
   fill.position.set(...L.fillPosition);
   lights.add(fill);
   if (on('light')) group.add(lights);
 
-  return { group, curve, anchors, sun, fogColor: new THREE.Color(PALETTE.fog), progressToT, ready: ready as Promise<void> };
+  const fogColor = new THREE.Color(PALETTE.fog).lerp(new THREE.Color('#48545c'), wGray);
+  return { group, curve, anchors, sun, fogColor, progressToT, ready: ready as Promise<void> };
 }
 
 async function attachModels(
@@ -1198,9 +1208,9 @@ function buildVegetation(frames: Frame[], widthAt: (t: number) => number, anchor
 }
 
 // BUILD 100: 뭉게구름 — 알파 막이 아니라 덩어리. props 카탈로그에서도 쓴다.
-export function makeCloudPuff(rnd: () => number, scale: number) {
+export function makeCloudPuff(rnd: () => number, scale: number, color?: string) {
   const cloud = new THREE.Group();
-  const mat = std('#e9eef0');
+  const mat = std(color ?? '#e9eef0');
   const geo = new THREE.IcosahedronGeometry(1, 0);
   const n = 4 + Math.floor(rnd() * 4);
   for (let i = 0; i < n; i += 1) {
@@ -1375,7 +1385,7 @@ export function createWalkerFigure() {
 }
 
 // ---------- distant world: 닿을 수 없는 기억 ----------
-function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group } {
+function buildDistantWorld(wKindD: string = 'clear', ): { group: THREE.Group; lighthouseSlot: THREE.Group } {
   const g = new THREE.Group();
   const lighthouseSlot = new THREE.Group();
   const rnd = worldRng(9010);
@@ -1389,9 +1399,11 @@ function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group 
   g.add(lighthouseSlot);
 
   // BUILD 100: 구름 재탄생 — 알파 막이 아니라 덩어리. 눌린 다면체 뭉치의 뭉게구름.
-  for (let i = 0; i < 7; i += 1) {
-    const c = makeCloudPuff(rnd, 1.6 + rnd() * 2.6);
-    c.position.set((rnd() - 0.5) * 44, 4 + rnd() * 8, -26 - rnd() * 42);
+  const stormy = wKindD !== 'clear';
+  const puffN = stormy ? 12 : 7;
+  for (let i = 0; i < puffN; i += 1) {
+    const c = makeCloudPuff(rnd, (stormy ? 2.2 : 1.6) + rnd() * 2.6, stormy ? (wKindD === 'rain' ? '#59646b' : '#8b959a') : undefined);
+    c.position.set((rnd() - 0.5) * 46, (stormy ? 3 : 4) + rnd() * (stormy ? 6 : 8), -24 - rnd() * 42);
     g.add(c);
   }
 

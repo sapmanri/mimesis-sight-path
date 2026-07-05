@@ -527,6 +527,16 @@ export function EditorApp() {
 
           {tab === 'env' && (
             <div className="ed-fields">
+              <label>날씨
+                <select
+                  value={doc.spec.weather?.kind ?? 'clear'}
+                  onChange={(e) => edit((d) => { d.spec.weather = { kind: e.target.value as 'clear' | 'cloudy' | 'rain' }; })}
+                >
+                  <option value="clear">맑음</option>
+                  <option value="cloudy">흐림</option>
+                  <option value="rain">비</option>
+                </select>
+              </label>
               <h4>식생</h4>
               <label>풀 다발 <em>{doc.spec.decoration.grassCount}</em>
                 <input type="range" min="0" max="500" step="10" value={doc.spec.decoration.grassCount} onChange={(e) => edit((d) => { d.spec.decoration.grassCount = Number(e.target.value); })} />
