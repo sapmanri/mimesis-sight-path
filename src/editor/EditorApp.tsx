@@ -23,14 +23,22 @@ type WorldDoc = { version: 1; name: string; blueprints: SceneBlueprint[]; spec: 
 
 // ---------- BUILD 100: 자유 카메라 (WASD/화살표 + 우클릭 드래그 룩) ----------
 // 다른 에디터들과 같은 문법 — 멀리 날아가 오브젝트를 찍는다.
-function FlyRig() {
+function FlyRig({ home }: { home?: [number, number, number] }) {
   const { camera, gl } = useThree();
+  const homeRef = useRef(home);
+  homeRef.current = home;
+  const goHome = (cam: THREE.Camera) => {
+    const h = homeRef.current ?? [0, 0, 0];
+    cam.position.set(h[0] + 2.6, h[1] + 2.1, h[2] + 3.6);
+    cam.lookAt(h[0], h[1] + 0.5, h[2]);
+  };
   const keys = useRef<Record<string, boolean>>({});
   const look = useRef({ dragging: false, px: 0, py: 0, yaw: 0, pitch: 0, init: false });
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+      if (e.key.toLowerCase() === 'h') { goHome(camera); look.current.init = false; return; } // 홈 — 기억 곁으로
       keys.current[e.key.toLowerCase()] = true;
       if (e.key.startsWith('Arrow')) e.preventDefault();
     };
@@ -67,7 +75,13 @@ function FlyRig() {
       window.removeEventListener('pointerup', up);
     };
   }, [gl]);
+  const booted = useRef(false);
   useFrame((_, dt) => {
+    if (!booted.current) {
+      booted.current = true;
+      goHome(camera); // 처음 열면 캐릭터/기억을 바라보며 시작
+      look.current.init = false;
+    }
     const L = look.current;
     if (!L.init) {
       // 현재 카메라 방향에서 시작
@@ -351,7 +365,7 @@ export function EditorApp() {
         {/* ---- 중: 살아있는 프리뷰 ---- */}
         <main className="ed-preview">
           <Canvas className={pickTarget ? 'ed-canvas ed-picking' : 'ed-canvas'} camera={{ position: [0, 3.1, 8.4], fov: 42 }} dpr={[1, 1.5]} shadows>
-            <FlyRig />
+            <FlyRig home={(doc.blueprints[sel]?.position ?? [0, 0, 0]) as [number, number, number]} />
             <PropsLayer
               list={doc.props ?? []}
               selected={selProp}
@@ -389,7 +403,7 @@ export function EditorApp() {
               {pickTarget === 'scene' ? '지면을 클릭하면 이 기억의 자리가 됩니다' : pickTarget === 'prop-new' ? '지면을 클릭하면 그 자리에 배치됩니다' : '지면을 클릭하면 그리로 옮깁니다'} · ESC 취소
             </div>
           )}
-          <div className="ed-flyhint">카메라: WASD + Q/E · 우클릭 드래그 시선 · Shift 가속{selProp ? ' — 선택물: 화살표 · R/F · T/G · −/=' : ''}</div>
+          <div className="ed-flyhint">카메라: WASD + Q/E · 우클릭 드래그 시선 · H 홈 · Shift 가속{selProp ? ' — 선택물: 화살표 · R/F · T/G · −/=' : ''}</div>
           <div className="ed-preview-bar">
             <button type="button" onClick={() => setSel((v) => Math.max(0, v - 1))}>←</button>
             <span>{String(sel + 1).padStart(2, '0')} / {doc.blueprints.length} · {cur?.title}</span>
@@ -527,15 +541,52 @@ export function EditorApp() {
 
           {tab === 'env' && (
             <div className="ed-fields">
-              <label>날씨
+              <h4>날씨</h4>
+              <label>하늘
                 <select
                   value={doc.spec.weather?.kind ?? 'clear'}
-                  onChange={(e) => edit((d) => { d.spec.weather = { kind: e.target.value as 'clear' | 'cloudy' | 'rain' }; })}
+                  onChange={(e) => edit((d) => { d.spec.weather = { ...(d.spec.weather ?? {}), kind: e.target.value as 'clear' | 'cloudy' | 'rain' }; })}
                 >
                   <option value="clear">맑음</option>
                   <option value="cloudy">흐림</option>
                   <option value="rain">비</option>
                 </select>
+              </label>
+              <label>구름 양 <em>{Math.round((doc.spec.weather?.cloudAmount ?? 0.5) * 100)}%</em>
+                <input type="range" min="0" max="1" step="0.05" value={doc.spec.weather?.cloudAmount ?? 0.5}
+                  onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), cloudAmount: Number(e.target.value) }; })} />
+              </label>
+              {(doc.spec.weather?.kind ?? 'clear') === 'rain' && (
+                <>
+                  <label>빗줄기 세기 <em>{Math.round((doc.spec.weather?.rainAmount ?? 0.6) * 100)}%</em>
+                    <input type="range" min="0.05" max="1" step="0.05" value={doc.spec.weather?.rainAmount ?? 0.6}
+                      onChange={(e) => edit((d) => { d.spec.weather = { kind: 'rain', ...(d.spec.weather ?? {}), rainAmount: Number(e.target.value) }; })} />
+                  </label>
+                  <label className="ed-check">
+                    <input type="checkbox" checked={doc.spec.weather?.lightning ?? false}
+                      onChange={(e) => edit((d) => { d.spec.weather = { kind: 'rain', ...(d.spec.weather ?? {}), lightning: e.target.checked }; })} />
+                    번개
+                  </label>
+                </>
+              )}
+              <h4>태양</h4>
+              <label>빛의 세기 <em>{doc.spec.light.sunIntensity.toFixed(2)}</em>
+                <input type="range" min="0.2" max="2.4" step="0.05" value={doc.spec.light.sunIntensity}
+                  onChange={(e) => edit((d) => { d.spec.light.sunIntensity = Number(e.target.value); })} />
+              </label>
+              <label>해의 방위 <em>{Math.round(Math.atan2(doc.spec.light.sunPosition[0], doc.spec.light.sunPosition[2]) * 180 / Math.PI)}°</em>
+                <input type="range" min={-Math.PI} max={Math.PI} step="0.05"
+                  value={Math.atan2(doc.spec.light.sunPosition[0], doc.spec.light.sunPosition[2])}
+                  onChange={(e) => edit((d) => {
+                    const az = Number(e.target.value);
+                    const r = Math.hypot(d.spec.light.sunPosition[0], d.spec.light.sunPosition[2]) || 8;
+                    d.spec.light.sunPosition[0] = Math.sin(az) * r;
+                    d.spec.light.sunPosition[2] = Math.cos(az) * r;
+                  })} />
+              </label>
+              <label>해의 높이 <em>{doc.spec.light.sunPosition[1].toFixed(0)}u</em>
+                <input type="range" min="2" max="24" step="0.5" value={doc.spec.light.sunPosition[1]}
+                  onChange={(e) => edit((d) => { d.spec.light.sunPosition[1] = Number(e.target.value); })} />
               </label>
               <h4>식생</h4>
               <label>풀 다발 <em>{doc.spec.decoration.grassCount}</em>

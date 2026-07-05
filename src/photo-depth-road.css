@@ -368,3 +368,7 @@
   .memory-card { left: 10px; right: 10px; bottom: 12px; max-width: none; }
   .memory-photo { width: 76px; }
 }
+
+/* BUILD 108: 타자기 커서 */
+.memory-caret { opacity: 0.55; animation: caretBlink 0.9s steps(1) infinite; margin-left: 1px; }
+@keyframes caretBlink { 50% { opacity: 0; } }

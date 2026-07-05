@@ -590,7 +590,7 @@ export function buildWorld(
 
   // [landscape] 원경 — 닿을 수 없는 기억
   const distant = on('landscape')
-    ? buildDistantWorld(spec.weather?.kind ?? 'clear')
+    ? buildDistantWorld(spec.weather?.kind ?? 'clear', spec.weather?.cloudAmount ?? 0.5)
     : { group: new THREE.Group(), lighthouseSlot: new THREE.Group() };
   if (on('landscape')) group.add(distant.group);
 
@@ -1385,7 +1385,7 @@ export function createWalkerFigure() {
 }
 
 // ---------- distant world: 닿을 수 없는 기억 ----------
-function buildDistantWorld(wKindD: string = 'clear', ): { group: THREE.Group; lighthouseSlot: THREE.Group } {
+function buildDistantWorld(wKindD: string = 'clear', cloudAmt: number = 0.5, ): { group: THREE.Group; lighthouseSlot: THREE.Group } {
   const g = new THREE.Group();
   const lighthouseSlot = new THREE.Group();
   const rnd = worldRng(9010);
@@ -1400,7 +1400,7 @@ function buildDistantWorld(wKindD: string = 'clear', ): { group: THREE.Group; li
 
   // BUILD 100: 구름 재탄생 — 알파 막이 아니라 덩어리. 눌린 다면체 뭉치의 뭉게구름.
   const stormy = wKindD !== 'clear';
-  const puffN = stormy ? 12 : 7;
+  const puffN = Math.round((stormy ? 8 : 4) + cloudAmt * (stormy ? 14 : 10));
   for (let i = 0; i < puffN; i += 1) {
     const c = makeCloudPuff(rnd, (stormy ? 2.2 : 1.6) + rnd() * 2.6, stormy ? (wKindD === 'rain' ? '#59646b' : '#8b959a') : undefined);
     c.position.set((rnd() - 0.5) * 46, (stormy ? 3 : 4) + rnd() * (stormy ? 6 : 8), -24 - rnd() * 42);

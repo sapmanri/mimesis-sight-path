@@ -50,10 +50,63 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const rigRef = useRef<WalkerRig | null>(null);
   const { gl } = useThree();
 
-  // BUILD 107: 빗줄기 — 900가닥이 걷는 사람 주위에서 순환한다
+  // BUILD 108: 3D 폴라로이드 — 에디터에서 붙인 사진이 길 위에 선다.
+  // 흰 액자, 가는 다리, 길을 등지고 살짝 기운 채.
+  const photosGroup = useMemo(() => new THREE.Group(), []);
+  useEffect(() => {
+    photosGroup.clear();
+    const texLoader = new THREE.TextureLoader();
+    scenes.forEach((sc, i) => {
+      const photo = (sc as { photo?: string }).photo;
+      if (!photo) return;
+      const a = world.anchors[i];
+      if (!a) return;
+      const holder = new THREE.Group();
+      const side = i % 2 === 0 ? -1 : 1; // 기억 사물의 반대편
+      holder.position.copy(a.p).add(a.nor.clone().multiplyScalar(side * a.w * 0.52));
+      holder.rotation.y = Math.atan2(a.tan.x, a.tan.z) + (side > 0 ? -0.5 : 0.5) + Math.PI;
+      holder.rotation.z = 0.03;
+      // 액자
+      const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.36, 0.012),
+        new THREE.MeshStandardMaterial({ color: '#fffdf6', roughness: 0.85 }),
+      );
+      frame.position.y = 0.62;
+      frame.castShadow = true;
+      holder.add(frame);
+      // 다리 (가는 각목 둘)
+      const legMat = new THREE.MeshStandardMaterial({ color: '#8a6a4a', roughness: 0.9 });
+      [-0.1, 0.1].forEach((x) => {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.46, 5), legMat);
+        leg.position.set(x, 0.23, -0.012);
+        holder.add(leg);
+      });
+      // 사진
+      texLoader.load(photo, (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const img = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.26, 0.26),
+          new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 }),
+        );
+        img.position.set(0, 0.035, 0.008);
+        frame.add(img);
+      });
+      photosGroup.add(holder);
+    });
+  }, [scenes, world, photosGroup]);
+
+  // BUILD 108: 번개 — 비 오는 밤, 세계가 두 번 깜빡인다
+  const lightning = useMemo(() => {
+    if (spec.weather?.kind !== 'rain' || !spec.weather?.lightning) return null;
+    const flash = new THREE.AmbientLight('#dfe9f2', 0);
+    return { flash, nextAt: 4 + Math.random() * 8, seq: -1, t: 0 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.weather?.kind, spec.weather?.lightning]);
+
+  // BUILD 107: 빗줄기 — 걷는 사람 주위에서 순환한다
   const rain = useMemo(() => {
     if (spec.weather?.kind !== 'rain') return null;
-    const N = 900;
+    const N = Math.round(250 + (spec.weather?.rainAmount ?? 0.6) * 1400);
     const pos = new Float32Array(N * 6);
     const drops = new Float32Array(N * 4); // x,y,z,speed
     for (let i = 0; i < N; i += 1) {
@@ -69,7 +122,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     lines.frustumCulled = false;
     return { lines, drops, N };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec.weather?.kind]);
+  }, [spec.weather?.kind, spec.weather?.rainAmount]);
 
   // BUILD 100: 배치물 — 문서의 props를 3D로. id+obj+seed가 같으면 재사용 없이 단순 재생성(에디터 디바운스가 폭주를 막는다).
   const propsGroup = useMemo(() => new THREE.Group(), []);
@@ -503,7 +556,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     }
 
     // 태양은 걷는 사람을 따라간다 (그림자 카메라가 항상 근처를 비추도록)
-    world.sun.position.copy(pos).add(new THREE.Vector3(6, 11, 5));
+    world.sun.position.copy(pos).add(new THREE.Vector3(...spec.light.sunPosition)); // BUILD 108: 해의 자리는 스펙이 정한다
     world.sun.target.position.copy(pos);
 
     // 빗줄기: 떨어지고, 바닥에 닿으면 하늘로 되돌아간다 (사람을 따라다니는 26u 상자)
@@ -531,6 +584,22 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       }
       rain.lines.geometry.attributes.position.needsUpdate = true;
     }
+
+    // 번개 시퀀스: 강-약 두 번 번쩍, 6~16초 간격
+    if (lightning) {
+      const Lg = lightning;
+      Lg.t += delta;
+      if (Lg.seq < 0 && Lg.t > Lg.nextAt) { Lg.seq = 0; Lg.t = 0; }
+      if (Lg.seq >= 0) {
+        const seqT = Lg.t;
+        let inten = 0;
+        if (seqT < 0.09) inten = 3.2 * (1 - seqT / 0.09);
+        else if (seqT < 0.19) inten = 0;
+        else if (seqT < 0.3) inten = 1.8 * (1 - (seqT - 0.19) / 0.11);
+        else { Lg.seq = -1; Lg.t = 0; Lg.nextAt = 6 + Math.random() * 10; }
+        Lg.flash.intensity = inten;
+      }
+    }
   });
 
   return (
@@ -538,6 +607,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       <color attach="background" args={[world.fogColor]} />
       <fog attach="fog" args={[world.fogColor, spec.weather?.kind === 'rain' ? 9 : 12, spec.weather?.kind === 'rain' ? 44 : 58]} />
       {rain && <primitive object={rain.lines} />}
+      {lightning && <primitive object={lightning.flash} />}
       <primitive
         object={world.group}
         onPointerDown={(onGroundPick || onScenePick) ? (e: { point: THREE.Vector3; object: THREE.Object3D; stopPropagation: () => void }) => {
@@ -555,6 +625,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         } : undefined}
       />
       <primitive object={propsGroup} />
+      <primitive object={photosGroup} />
       <primitive object={walker} />
       <primitive object={tinker.group} />
       <primitive object={tinker.trail} />
