@@ -5,20 +5,31 @@ import { World } from './scene/World';
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
 import { TouchTrail } from './components/TouchTrail';
-import { EditorPanel } from './components/EditorPanel';
 import { footsteps } from './scene/footsteps';
+import { compileScenes } from './engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.22.0 · TOUCH & TUNE · BUILD 095';
+const BUILD_LABEL = 'v0.23.0 · THE STUDIO · BUILD 096';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const [muted, setMuted] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [spec, setSpec] = useState<WorldSpec>(JEJU_SPEC);
+  // BUILD 096: 에디터 문서로 열기 (?draft=1) — 에디터가 지은 세계를 그대로 걷는다
+  const [draft] = useState(() => {
+    if (!new URLSearchParams(window.location.search).has('draft')) return null;
+    try {
+      const d = JSON.parse(localStorage.getItem('mimesis:world-draft:v1') ?? '');
+      if (d?.blueprints?.length && d?.spec) {
+        return { scenes: compileScenes(d.blueprints), spec: d.spec as WorldSpec };
+      }
+    } catch { /* 기본 세계로 */ }
+    return null;
+  });
+  const scenes = draft?.scenes ?? jejuScenes;
+  const [spec] = useState<WorldSpec>(draft?.spec ?? JEJU_SPEC);
   const lastMoveAt = useRef(0);
   const lastManualAt = useRef(0);
 
@@ -48,7 +59,7 @@ export default function App() {
 
       setActiveIndex((current) => {
         const next = current + direction;
-        return Math.max(0, Math.min(jejuScenes.length - 1, next));
+        return Math.max(0, Math.min(scenes.length - 1, next));
       });
     };
 
@@ -93,10 +104,10 @@ export default function App() {
 
     const timer = window.setTimeout(() => {
       setActiveIndex((current) => {
-        if (current >= jejuScenes.length - 1) return 0;
+        if (current >= scenes.length - 1) return 0;
         return current + 1;
       });
-    }, jejuScenes[activeIndex].dwellMs ?? 9000);
+    }, scenes[activeIndex].dwellMs ?? 9000);
 
     return () => window.clearTimeout(timer);
   }, [activeIndex, mode]);
@@ -125,7 +136,7 @@ export default function App() {
           <h1>JEJU, 시선을 따라 걷다</h1>
         </div>
         <div className="top-status">
-          <p className="counter">{String(activeIndex + 1).padStart(2, '0')} / {jejuScenes.length}</p>
+          <p className="counter">{String(activeIndex + 1).padStart(2, '0')} / {scenes.length}</p>
         </div>
       </header>
 
@@ -136,12 +147,12 @@ export default function App() {
           dpr={[1, 2]}
           shadows
         >
-          <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} spec={spec} />
+          <World activeIndex={activeIndex} scenes={scenes} mode={mode} spec={spec} />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />
         <div className="atmosphere-vignette" aria-hidden="true" />
-        <ProgressNav scenes={jejuScenes} activeIndex={activeIndex} onChange={handleNavChange} />
-        <StoryCard scene={jejuScenes[activeIndex]} mode={mode} />
+        <ProgressNav scenes={scenes} activeIndex={activeIndex} onChange={handleNavChange} />
+        <StoryCard scene={scenes[activeIndex]} mode={mode} />
         <div className="float-controls">
           <button
             type="button"
@@ -149,21 +160,8 @@ export default function App() {
             aria-label={muted ? '소리 켜기' : '소리 끄기'}
             onClick={() => { footsteps.unlock(); footsteps.setMuted(!muted); setMuted(!muted); }}
           >{muted ? '🔇' : '🔊'}</button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="월드 에디터"
-            onClick={() => setEditorOpen((v) => !v)}
-          >⚙</button>
         </div>
         <div className="build-badge">{BUILD_LABEL}</div>
-        {editorOpen && (
-          <EditorPanel
-            spec={spec}
-            onApply={(next) => { setSpec(next); setEditorOpen(false); }}
-            onClose={() => setEditorOpen(false)}
-          />
-        )}
       </section>
       <TouchTrail />
     </main>

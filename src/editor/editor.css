@@ -1,0 +1,147 @@
+/* ===== MIMESIS WORLD EDITOR — 스튜디오 ===== */
+/* 뷰어가 '작품'이라면 여긴 '작업실' — 어둡고 차분한 청록 위에 크림빛 도구들. */
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: 'Noto Sans KR', -apple-system, system-ui, sans-serif;
+  background: #1d2e34;
+  color: rgba(238, 243, 238, 0.92);
+  font-size: 13px;
+}
+
+.ed-root { display: flex; flex-direction: column; height: 100%; }
+
+/* ---- 상단 ---- */
+.ed-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: #16242a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.ed-brand { font-size: 12px; letter-spacing: 0.14em; font-weight: 700; color: #d8c48f; white-space: nowrap; }
+.ed-brand span { font-weight: 400; opacity: 0.75; }
+.ed-docname {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-size: 13px;
+}
+.ed-top-actions { display: flex; align-items: center; gap: 8px; }
+.ed-saved { font-size: 11px; opacity: 0.45; margin-right: 4px; white-space: nowrap; }
+.ed-top-actions button {
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ed-top-actions button:hover { background: rgba(255, 255, 255, 0.1); }
+.ed-top-actions .ed-primary { background: #d8c48f; border-color: #d8c48f; color: #2b3a34; font-weight: 600; }
+
+/* ---- 본문 3열 ---- */
+.ed-body { flex: 1; display: grid; grid-template-columns: 250px 1fr 320px; min-height: 0; }
+
+/* 좌: 기억 목록 */
+.ed-scenes { border-right: 1px solid rgba(255, 255, 255, 0.07); overflow-y: auto; padding: 12px; }
+.ed-col-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ed-col-head h3 { margin: 0; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.6; }
+.ed-col-head button {
+  padding: 5px 10px; border: none; border-radius: 8px;
+  background: rgba(216, 196, 143, 0.9); color: #2b3a34; cursor: pointer; font-weight: 600;
+}
+.ed-scenes ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ed-scenes li {
+  display: flex; align-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.ed-scenes li.on { background: rgba(216, 196, 143, 0.14); outline: 1px solid rgba(216, 196, 143, 0.4); }
+.ed-scene-pick {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 10px;
+  border: none; background: none; color: inherit; cursor: pointer; text-align: left;
+}
+.ed-emoji { width: 20px; text-align: center; }
+.ed-scene-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-hasphoto { font-size: 10px; opacity: 0.7; }
+.ed-scene-ops { display: flex; gap: 2px; padding-right: 6px; opacity: 0; transition: opacity 0.15s; }
+.ed-scenes li:hover .ed-scene-ops { opacity: 0.8; }
+.ed-scene-ops button { border: none; background: none; color: inherit; cursor: pointer; font-size: 10px; padding: 3px; }
+.ed-scene-ops button:hover { color: #d8c48f; }
+
+/* 중: 프리뷰 */
+.ed-preview { position: relative; min-width: 0; background: #46687a; }
+.ed-canvas { width: 100% !important; height: 100% !important; }
+.ed-preview-bar {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(22, 36, 42, 0.82);
+  backdrop-filter: blur(4px);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ed-preview-bar button { border: none; background: none; color: #d8c48f; font-size: 15px; cursor: pointer; }
+
+/* 우: 인스펙터 */
+.ed-inspector { border-left: 1px solid rgba(255, 255, 255, 0.07); overflow-y: auto; display: flex; flex-direction: column; }
+.ed-tabs { display: flex; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+.ed-tabs button {
+  flex: 1; padding: 11px 4px;
+  border: none; background: none; color: inherit; cursor: pointer;
+  font-size: 12px; opacity: 0.55;
+  border-bottom: 2px solid transparent;
+}
+.ed-tabs button.on { opacity: 1; border-bottom-color: #d8c48f; color: #d8c48f; }
+
+.ed-fields { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.ed-fields h4 { margin: 8px 0 0; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; }
+.ed-fields label { display: block; font-size: 12px; opacity: 0.9; }
+.ed-fields label em { float: right; font-style: normal; opacity: 0.55; font-variant-numeric: tabular-nums; }
+.ed-fields input[type='text'], .ed-fields input[type='number'], .ed-fields input:not([type]),
+.ed-fields textarea, .ed-fields select {
+  width: 100%; margin-top: 5px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit; font-size: 12.5px; font-family: inherit;
+  resize: vertical;
+}
+.ed-fields input[type='range'] { width: 100%; margin-top: 6px; accent-color: #d8c48f; }
+.ed-fields input[type='color'] { width: 100%; height: 32px; margin-top: 5px; border: none; border-radius: 8px; background: none; padding: 0; cursor: pointer; }
+.ed-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ed-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+
+.ed-photo { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.ed-photo small { opacity: 0.5; }
+.ed-photo > button {
+  padding: 9px; border: 1px dashed rgba(255, 255, 255, 0.25); border-radius: 10px;
+  background: none; color: inherit; cursor: pointer;
+}
+.ed-photo-thumb { position: relative; }
+.ed-photo-thumb img { width: 100%; border-radius: 10px; display: block; }
+.ed-photo-thumb button {
+  position: absolute; top: 8px; right: 8px;
+  padding: 4px 9px; border: none; border-radius: 7px;
+  background: rgba(22, 36, 42, 0.85); color: #fff; cursor: pointer; font-size: 11px;
+}
+
+/* 모바일: 세로 스택 */
+@media (max-width: 900px) {
+  .ed-body { grid-template-columns: 1fr; grid-template-rows: auto 46vh auto; overflow-y: auto; }
+  .ed-scenes { border-right: none; border-bottom: 1px solid rgba(255,255,255,0.07); max-height: 30vh; }
+  .ed-inspector { border-left: none; border-top: 1px solid rgba(255,255,255,0.07); }
+  .ed-top { flex-wrap: wrap; }
+}

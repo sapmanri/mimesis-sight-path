@@ -20,6 +20,8 @@ export type SceneBlueprint = {
   importance: number;
   stillness: number;
   soundTone: number;
+  /** BUILD 096: 에디터에서 첨부한 사진 (dataURL 또는 URL) — 폴라로이드 액자(예정)용 */
+  photo?: string;
 };
 
 export type RuntimeScene = SceneBlueprint & {

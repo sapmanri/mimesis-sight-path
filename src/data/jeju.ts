@@ -2,7 +2,7 @@ import { compileScenes, type RuntimeScene, type SceneBlueprint } from '../engine
 
 export type ObservationScene = RuntimeScene;
 
-const jejuBlueprints: SceneBlueprint[] = [
+export const jejuBlueprints: SceneBlueprint[] = [
   {
     id: 1,
     title: '집문',
