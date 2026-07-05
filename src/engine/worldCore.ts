@@ -52,6 +52,34 @@ export type BuiltWorld = {
 
 
 
+
+// ---------- BUILD 080: 높이 안개 (진짜로 잠기는 안개) ----------
+// 버텍스 칠하기가 아니라, 조명 계산이 끝난 픽셀을 높이에 따라 안개색으로 섞는다.
+// 경계선이 사라지고, 모든 오브젝트가 같은 높이에서 함께 잠긴다.
+const HEIGHT_FOG = {
+  top: -0.1,     // 이 높이부터 잠기기 시작
+  bottom: -0.85, // 이 높이에서 완전히 안개
+};
+
+function applyHeightFog(mat: THREE.MeshStandardMaterial) {
+  // 주의: mix는 sRGB 인코딩된 최종 색 위에서 돌므로, 안개색도 sRGB 값 그대로 써야 배경과 정확히 섞인다
+  const hex = parseInt(PALETTE.fog.slice(1), 16);
+  const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
+  const glsl = (n: number) => n.toFixed(4);
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vHFy;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvHFy = (modelMatrix * vec4(transformed, 1.0)).y;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vHFy;')
+      .replace(
+        '#include <fog_fragment>',
+        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), 1.0 - smoothstep(${glsl(HEIGHT_FOG.bottom)}, ${glsl(HEIGHT_FOG.top)}, vHFy));`,
+      );
+  };
+  return mat;
+}
+
 // ---------- BUILD 076: 프로시저럴 표면 질감 ----------
 // 레퍼런스의 "낡음"은 모델이 아니라 표면에 있다.
 // DataTexture라 브라우저/헤드리스 양쪽에서 동일하게 생성·검증된다.
@@ -161,7 +189,7 @@ type ModelSpec = {
 const MODELS: Record<string, ModelSpec> = {
   suitcase: { file: 'Old_Suitcase.glb', height: 0.42, tint: PALETTE.mint, preRotateX: -Math.PI / 2 },
   cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2' },
-  lighthouse: { file: 'Lighthouse_island_toy.glb', height: 3.4, tint: PALETTE.white },
+  lighthouse: { file: 'Lighthouse_island_toy.glb', height: 9, tint: PALETTE.white },
   stone: { file: 'stone11.glb', height: 0.24, tint: '#6e7268', fitMaxDim: true },
   rock0: { file: 'Rock0.glb', height: 0.3, tint: '#79766a', fitMaxDim: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
@@ -204,7 +232,7 @@ function applyPalette(group: THREE.Group, fallbackTint: string) {
         const l = Math.min(0.82, Math.max(0.16, hsl.l));
         c.setHSL(h, s, l);
       }
-      return new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0, side: THREE.DoubleSide });
+      return applyHeightFog(new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0, side: THREE.DoubleSide }));
     });
     mesh.material = Array.isArray(mesh.material) ? remapped : remapped[0];
   });
@@ -542,8 +570,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
         const base = r === 0 ? cSandEdge : s0.clone().lerp(s1, si - Math.floor(si));
         const tint = 1 + noise1(i * 0.6 + r * 9.2 + (side === 'L' ? 0 : 40)) * 0.1 * (1 - v);
         // 아래로 갈수록 안개에 잠긴다 — 레퍼런스처럼 길 끄트머리 바로 밑까지
-        const sink = Math.pow(v, 1.05);
-        const c = base.clone().lerp(new THREE.Color(PALETTE.fog), sink * 0.97);
+        const c = base.clone();
         col.push(c.r * tint, c.g * tint, c.b * tint);
       });
     });
@@ -591,7 +618,7 @@ function colorMesh(
   if (uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: map ?? null });
+  const mat = applyHeightFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: map ?? null }));
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = castShadow;
   mesh.receiveShadow = receiveShadow;
@@ -654,7 +681,7 @@ function buildMemoryObjects(
 }
 
 function std(color: string) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0 });
+  return applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0 }));
 }
 
 type KitFn = (rnd: () => number) => THREE.Group;
@@ -811,32 +838,14 @@ function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group 
   const topMat = std('#' + new THREE.Color(PALETTE.sandEdge).lerp(fogC, 0.3).getHexString());
   const rockMat = std('#' + new THREE.Color(PALETTE.cliffMid).lerp(fogC, 0.35).getHexString());
 
-  for (let i = 0; i < 7; i += 1) {
-    const island = new THREE.Group();
-    const w = 2.5 + rnd() * 4;
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(w, w * 0.85, 0.5, 9), topMat);
-    const under = new THREE.Mesh(new THREE.ConeGeometry(w * 0.85, w * 1.1, 9), rockMat);
-    under.rotation.x = Math.PI;
-    under.position.y = -0.8;
-    island.add(top, under);
-    const side = rnd() > 0.5 ? 1 : -1;
-    if (i < 2) island.position.set((rnd() - 0.5) * 14, 1 + rnd() * 5, -55 - rnd() * 25);
-    else island.position.set(side * (9 + rnd() * 16), -2 + rnd() * 7, -32 - rnd() * 46);
-    island.rotation.y = rnd() * Math.PI;
-    g.add(island);
-    if (i === 2) {
-      // 등대섬: 안개에 반쯤 잠기되 실루엣은 읽히는 거리
-      island.position.set(7.5, 0.6, -24);
-      island.scale.setScalar(0.55);
-      lighthouseSlot.position.copy(island.position).add(new THREE.Vector3(0, 0.16, 0));
-      g.add(lighthouseSlot);
-    }
-  }
+  // 부유 섬 제거 (BUILD 080). 원경의 주인공은 이제 등대와 구름이다.
+  lighthouseSlot.position.set(-13, -0.4, -42);
+  g.add(lighthouseSlot);
 
-  const cloudMat = new THREE.MeshBasicMaterial({ color: '#dfe7e5', transparent: true, opacity: 0.14, depthWrite: false });
-  for (let i = 0; i < 6; i += 1) {
+  const cloudMat = new THREE.MeshBasicMaterial({ color: '#e3eae8', transparent: true, opacity: 0.2, depthWrite: false });
+  for (let i = 0; i < 9; i += 1) {
     const c = new THREE.Mesh(new THREE.CircleGeometry(1, 24), cloudMat);
-    c.scale.set(6 + rnd() * 8, 0.9 + rnd() * 0.8, 1);
+    c.scale.set(9 + rnd() * 12, 1.1 + rnd() * 1.1, 1);
     c.position.set((rnd() - 0.5) * 40, 3 + rnd() * 8, -30 - rnd() * 40);
     g.add(c);
   }
