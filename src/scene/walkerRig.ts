@@ -144,6 +144,7 @@ export function createClipRig(
   root: THREE.Object3D,
   animations: THREE.AnimationClip[],
   natural: { walk: number; run: number },
+  onStep?: (intensity: number) => void,
 ): WalkerRig | null {
   // 클립 명명은 팩마다 다르다 — 후보군으로 찾는다 (KayKit / Mixamo 계열)
   const clip = (...names: string[]) => {
@@ -179,13 +180,24 @@ export function createClipRig(
     root.traverse((o) => { if (f) return; if (res.some((re) => re.test(o.name))) f = o; });
     return f;
   };
-  const footL = findBone(/LeftFoot$/i, /^footl$/i, /foot\.l/i);
-  const footR = findBone(/RightFoot$/i, /^footr$/i, /foot\.r/i);
-  // 밑창 두께: 발목 뼈에서 발바닥까지 ≈ 신장의 3.5% (0.9 캐릭터 → 0.032).
-  // 스킨드 메시의 bbox는 포즈를 반영하지 않아 실측 기준으로 못 쓴다.
-  const sole = 0.032;
+  // 발끝(ToeBase) 뼈가 있으면 그걸 쓴다 — 발바닥에 가장 가깝다. 없으면 발목.
+  const toeL = findBone(/LeftToeBase$/i, /LeftToe/i);
+  const toeR = findBone(/RightToeBase$/i, /RightToe/i);
+  const footL = toeL ?? findBone(/LeftFoot$/i, /^footl$/i, /foot\.l/i);
+  const footR = toeR ?? findBone(/RightFoot$/i, /^footr$/i, /foot\.r/i);
+  // 밑창: 발끝 뼈 기준 얇게, 발목 기준이면 두껍게
+  const sole = toeL ? 0.012 : 0.035;
   const baseY = root.position.y;
   let groundCorr = 0;
+  // BUILD 094: '평균'이 아니라 '사이클 최저점'을 땅에 맞춘다 — 평균 정합은 접지 순간 발을 묻는다.
+  // rollingMin: 즉시 내려가고, 천천히(0.12u/s) 올라오는 최저점 추적기.
+  let rollingMin = Infinity;
+  // 발자국 감지: 발이 접지 문턱을 뚫고 내려오는 순간
+  let contactL = false;
+  let contactR = false;
+  let lastStepL = -1;
+  let lastStepR = -1;
+  let stepClock = 0;
   const fw = new THREE.Vector3();
   const pw = new THREE.Vector3();
 
@@ -249,17 +261,36 @@ export function createClipRig(
       }
       mixer.update(dt);
 
-      // 접지 보정: 최저 발이 홀더(길 표면) 높이에 닿도록 (게스처 중엔 동결 — 앉은 발은 기준이 아니다)
+      // 접지 보정 + 발자국 (게스처 중엔 동결 — 앉은 발은 기준이 아니다)
       if (footL && footR && gesture === 'none' && root.parent) {
         root.updateMatrixWorld(true);
         footL.getWorldPosition(fw);
         const ly = fw.y;
         footR.getWorldPosition(fw);
-        const minFoot = Math.min(ly, fw.y);
+        const ry = fw.y;
         root.parent.getWorldPosition(pw);
-        const err = (minFoot - sole) - pw.y;
-        groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.25), Math.min(1, dt * 10)); // 하향 보정은 넉넉히 (Mixamo 힙 기준선은 1u 이상 뜨기도 한다)
+        const ground = pw.y;
+        // 사이클 최저점 추적: 즉시 하강, 완만 상승 — 가장 깊이 딛는 순간이 기준
+        const minNow = Math.min(ly, ry);
+        rollingMin = Math.min(minNow, (rollingMin === Infinity ? minNow : rollingMin) + 0.12 * dt);
+        const err = (rollingMin - sole) - ground;
+        groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.4), Math.min(1, dt * 8));
         root.position.y = baseY + groundCorr;
+
+        // 발자국: 발이 접지 대역(표면+2.5cm)으로 '진입'하는 순간, 이동 중일 때만
+        stepClock += dt;
+        if (onStep && moving && v > 0.05) {
+          // 히스테리시스: 진입 2.5cm / 이탈 4.5cm — 문턱 채터링 방지. 발별 쿨다운 0.22s.
+          const inL = contactL ? ly - sole < ground + 0.045 : ly - sole < ground + 0.025;
+          const inR = contactR ? ry - sole < ground + 0.045 : ry - sole < ground + 0.025;
+          if (inL && !contactL && stepClock - lastStepL > 0.22) { onStep(Math.min(1, v / 2.0)); lastStepL = stepClock; }
+          if (inR && !contactR && stepClock - lastStepR > 0.22) { onStep(Math.min(1, v / 2.0)); lastStepR = stepClock; }
+          contactL = inL;
+          contactR = inR;
+        } else {
+          contactL = false;
+          contactR = false;
+        }
       }
     },
   };

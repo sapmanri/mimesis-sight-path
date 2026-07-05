@@ -6,6 +6,7 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../eng
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
+import { createFootsteps } from './footsteps';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
 // BUILD 090: 액자 수호 규칙 값 — 에디터 Camera 패널 노출 예정
@@ -67,7 +68,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       walker.add(group);
       // BUILD 091: 보행 클립이 있으면 클립 리그 (미끄러짐 최종 해법: 속도-배속 동기).
       // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).
-      rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds) : null)
+      const feet = createFootsteps();
+      rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, feet.step) : null)
         ?? createWalkerRig(group, animations, spec.walker.timeScale);
     }).catch(() => { /* 실패 시 프로시저럴 실루엣 유지 */ });
     return () => { alive = false; };
