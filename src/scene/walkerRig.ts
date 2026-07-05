@@ -92,27 +92,34 @@ export function createWalkerRig(root: THREE.Object3D, animations: THREE.Animatio
       if (inspecting) return; // 클립이 뼈를 소유
 
       if (moving) {
-        // 보폭: 걸을 때 ~0.42u, 뛸 때 ~0.72u (신장 0.9 캐릭터, 초당 2보 기준).
-        // 한 사이클 = 두 걸음 → 위상 += 거리/보폭 × π
-        const stride = 0.42 + speed01 * 0.3;
+        // ---- BUILD 087: 발을 땅에 붙인다 ----
+        // 접지(발이 몸 아래를 지나는 순간) 위상에서 발끝의 후방 속도가
+        // 몸의 전진 속도와 같아야 발이 미끄러지지 않는다.
+        //   발 속도 ≈ amp × legLen × ω,  ω = π × v / stride
+        //   → amp = stride / (π × legLen)
+        // 보폭은 속도에 따라 줄고 늘어난다 (천천히 걸으면 종종걸음이 아니라 짧은 걸음).
+        const v = dt > 0 ? distDelta / dt : 0;
+        const stride = Math.min(0.66, Math.max(0.2, 0.2 + v * 0.26));
         phase += (distDelta / stride) * Math.PI;
+        const LEG = 0.42; // 신장 0.9 캐릭터의 다리 길이
+        const amp = Math.min(0.62, stride / (Math.PI * LEG));
         const s = Math.sin(phase);
-        const amp = 0.4 + speed01 * 0.34;          // 다리 스윙
         rotX(b.thighL!, -s * amp);
         rotX(b.thighR!, s * amp);
         if (b.defThighL) rotX(b.defThighL, -s * amp);
         if (b.defThighR) rotX(b.defThighR, s * amp);
-        const bend = 0.5 + speed01 * 0.5;          // 무릎 접힘 (뒤로 갈 때)
-        rotX(b.shinL!, Math.max(0, Math.sin(phase + Math.PI * 0.4)) * bend);
-        rotX(b.shinR!, Math.max(0, Math.sin(phase + Math.PI * 1.4)) * bend);
-        const armAmp = 0.2 + speed01 * 0.3;        // 팔은 다리 반대 위상
+        // 무릎: 스윙(뒤→앞 복귀) 중에만 접힌다. 접지 다리는 곧게 — 그래야 땅을 민다
+        const bend = amp * (1.15 + speed01 * 0.55);
+        rotX(b.shinL!, Math.max(0, Math.sin(phase + Math.PI * 0.45)) * bend);
+        rotX(b.shinR!, Math.max(0, Math.sin(phase + Math.PI * 1.45)) * bend);
+        const armAmp = amp * 0.55;                 // 팔은 다리 반대 위상
         if (b.armL) rotX(b.armL, s * armAmp);
         if (b.armR) rotX(b.armR, -s * armAmp);
         if (b.defArmL) rotX(b.defArmL, s * armAmp);
         if (b.defArmR) rotX(b.defArmR, -s * armAmp);
-        if (b.foreL) rotX(b.foreL, 0.2 + Math.max(0, s) * 0.15);
-        if (b.foreR) rotX(b.foreR, 0.2 + Math.max(0, -s) * 0.15);
-        lean += ((0.05 + speed01 * 0.18) - lean) * Math.min(1, dt * 5);
+        if (b.foreL) rotX(b.foreL, 0.18 + Math.max(0, s) * 0.14);
+        if (b.foreR) rotX(b.foreR, 0.18 + Math.max(0, -s) * 0.14);
+        lean += ((0.04 + speed01 * 0.17) - lean) * Math.min(1, dt * 5);
         if (b.spine) rotX(b.spine, lean);
       } else {
         // 정지: 팔다리는 기본 자세로 서서히, 숨은 조용히

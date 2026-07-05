@@ -143,6 +143,12 @@ export type WorldSpec = {
       courseHeight: number; // 단 높이
       inset: number;        // 벼랑 끝에서 안쪽으로 들어온 거리
       scale: [number, number];
+      /** BUILD 087: 구간 리듬 — 담은 이어지다 끊어지다 한다 */
+      segMin: number;       // 구간 최소 길이 (월드 유닛)
+      segMax: number;
+      gapMin: number;       // 빈틈 최소 길이
+      gapMax: number;
+      bothChance: number;   // 양쪽에 함께 설 확률 (나머지는 좌/우 반반)
     };
   };
 
@@ -163,6 +169,9 @@ export type WorldSpec = {
   walker: {
     /** 걸음 애니메이션 배속 (0.72 = 천천히 걷는다) */
     timeScale: number;
+    /** BUILD 087: 호흡의 값들 — 에디터 Walker 패널에서 노출 예정 */
+    walkSpeed: number; // 월드 유닛/초
+    runSpeed: number;
   };
 };
 
@@ -221,7 +230,11 @@ export const JEJU_SPEC: WorldSpec = {
     stoneWallSet: 'stone-wall-02', // BUILD 084: RockSet06 재투입 (백색 괴물 원인 해결됨)
     seaEdgeSet: 'sea-edge-01',
     // BUILD 086: Vase — "길 양끝 벼랑 쪽에, 두 배 높이로"
-    edgeWall: { spanScenes: 0.85, step: 0.21, courses: 3, courseHeight: 0.17, inset: 0.15, scale: [1.15, 1.55] },
+    // BUILD 087: 만리장성 금지 — 담은 구간으로 끊어진다. 한쪽 조금, 다른 쪽 조금, 가끔 양쪽.
+    edgeWall: {
+      spanScenes: 0.85, step: 0.21, courses: 3, courseHeight: 0.17, inset: 0.15, scale: [1.15, 1.55],
+      segMin: 1.3, segMax: 3.0, gapMin: 0.9, gapMax: 2.4, bothChance: 0.2,
+    },
   },
   light: {
     hemiSky: '#b9d2d8',
@@ -236,6 +249,8 @@ export const JEJU_SPEC: WorldSpec = {
   },
   walker: {
     timeScale: 0.72,
+    walkSpeed: 0.85,
+    runSpeed: 1.7,
   },
 };
 

@@ -214,7 +214,7 @@ type ModelSpec = {
 };
 
 const MODELS: Record<string, ModelSpec> = {
-  suitcase: { file: 'Old_Suitcase.glb', height: 0.42, tint: '#7e937f', preRotateX: -Math.PI / 2 }, // BUILD 084: mint→낡은 세이지 (안개 속 발광 완화)
+  suitcase: { file: 'Old_Suitcase.glb', height: 0.3, tint: '#7e937f', preRotateX: -Math.PI / 2 }, // BUILD 087: 여행용 캐리어 크기 (0.42는 길을 침범했다)
   cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2', strip: 'areaLight,aiSkyDomeLight,camera,pCube10,Oak_Tree,nRigid' }, // BUILD 085: 디오라마 받침판(7.5유닛 pCube10)/나무/조명/카메라 제거 — 건물만
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 9, tint: PALETTE.white },
   stone: { file: 'stone11.glb', height: 0.24, tint: '#6e7268', fitMaxDim: true },
@@ -482,26 +482,53 @@ export function buildWorld(
   if (on('decoration')) {
     const EW = SPEC.decoration.edgeWall;
     const ewRnd = worldRng(7781);
-    scenes.forEach((sc, i) => {
-      if (sc.objectKit !== 'stone-wall-kit') return;
-      const centerT = sceneT[i];
-      const spanT = (EW.spanScenes / Math.max(1, scenes.length - 1));
-      // 곡선 위를 일정 월드 간격으로 걸어가며 양쪽 벼랑 끝에 돌을 놓는다
-      let walkT = Math.max(0, centerT - spanT);
-      const endT = Math.min(1, centerT + spanT);
+    // BUILD 087: 연속한 담 장면(돌담길·능소화 담장)은 하나의 구간으로 병합 —
+    // 두 패턴이 겹치면 결국 만리장성이 된다.
+    const spanT0 = (EW.spanScenes / Math.max(1, scenes.length - 1));
+    const rawSpans = scenes
+      .map((sc, i) => (sc.objectKit === 'stone-wall-kit' ? [sceneT[i] - spanT0, sceneT[i] + spanT0] : null))
+      .filter((x): x is number[] => !!x)
+      .sort((a, b) => a[0] - b[0]);
+    const spans: number[][] = [];
+    rawSpans.forEach((sp) => {
+      const last = spans[spans.length - 1];
+      if (last && sp[0] <= last[1]) last[1] = Math.max(last[1], sp[1]);
+      else spans.push([...sp]);
+    });
+    spans.forEach(([spanStart, spanEnd]) => {
+      // 곡선을 따라 걸으며 구간 리듬으로 담을 세운다.
+      // BUILD 087: 만리장성이 아니다 — 한쪽 조금, 다른 쪽 조금, 가끔 양쪽, 그리고 빈틈.
+      let walkT = Math.max(0, spanStart);
+      const endT = Math.min(1, spanEnd);
       let prev = curve.getPoint(walkT);
+      let segRemain = 0;   // 남은 담 구간 길이 (월드 유닛)
+      let gapRemain = 0.3; // 남은 빈틈 길이 — 살짝 비운 채 시작
+      let sides: number[] = [1];
+      let segCourses = EW.courses;
       while (walkT < endT) {
         walkT += 0.0006;
         const pcur = curve.getPoint(walkT);
-        if (pcur.distanceTo(prev) < EW.step) continue;
+        const stepDist = pcur.distanceTo(prev);
+        if (stepDist < EW.step) continue;
         prev = pcur;
+        if (gapRemain > 0) { gapRemain -= stepDist; continue; }
+        if (segRemain <= 0) {
+          // 새 구간 개시: 어느 쪽에 설지, 몇 단으로 쌓을지 정한다
+          segRemain = EW.segMin + ewRnd() * (EW.segMax - EW.segMin);
+          const r = ewRnd();
+          sides = r < EW.bothChance ? [-1, 1] : r < EW.bothChance + (1 - EW.bothChance) / 2 ? [-1] : [1];
+          segCourses = Math.max(2, EW.courses - (ewRnd() < 0.4 ? 1 : 0));
+        }
+        segRemain -= stepDist;
+        if (segRemain <= 0) gapRemain = EW.gapMin + ewRnd() * (EW.gapMax - EW.gapMin);
         const tanH = curve.getTangent(walkT).setY(0).normalize();
         const norH = new THREE.Vector3(-tanH.z, 0, tanH.x);
         const w = widthAt(walkT);
-        for (const side of [-1, 1]) {
-          for (let c = 0; c < EW.courses; c += 1) {
-            // 위 단으로 갈수록 살짝 좁아지고 성긴다 — 손으로 쌓은 담
+        for (const side of sides) {
+          for (let c = 0; c < segCourses; c += 1) {
+            // 위 단으로 갈수록 성긴다 — 손으로 쌓은 담. 구간 끝머리는 자연히 낮아진다
             if (c > 0 && ewRnd() < 0.22) continue;
+            if (c === segCourses - 1 && segRemain < 0.5 && ewRnd() < 0.6) continue;
             const out = w - EW.inset - c * 0.03 + (ewRnd() - 0.5) * 0.05;
             const pos = pcur.clone()
               .add(norH.clone().multiplyScalar(side * out))

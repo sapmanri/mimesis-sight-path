@@ -44,6 +44,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
   });
   const charProgress = useRef(activeIndex); // 캐릭터의 현재 위치 (장면 단위 진행도)
   const charSpeed = useRef(0);              // 현재 속도 (월드 유닛/초)
+  const charYaw = useRef(0);                // BUILD 087: 몸의 방향 — 스냅하지 않고 돌아선다
+  const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
   const prevWalkerPos = useRef<THREE.Vector3 | null>(null);
   const wasMoving = useRef(false);
 
@@ -80,9 +82,15 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       const targetPos = curvePosAt(activeIndex).add(new THREE.Vector3(0, 1.1, 0));
       const dist = Math.abs(activeIndex - charProgress.current);
       tinker.flyTo(targetPos, Math.min(1.9, 0.8 + dist * 0.3));
-      if (J.phase === 'walk') {
-        // 이미 걷는 중이면 멈추지 않는다 — 방향만 바꾼다
-      } else {
+      // BUILD 087: 마우스를 휙휙 넘기면 — 뛴다. 조급함은 몸이 먼저 안다.
+      const now = clock.elapsedTime;
+      const rapid = now - lastTargetChange.current < 1.6;
+      lastTargetChange.current = now;
+      if (rapid) {
+        J.gait = 'run';
+        J.gaitSwitchAt = -999;
+        J.phase = 'walk'; // 정찰을 기다리지 않고 바로 출발
+      } else if (J.phase !== 'walk') {
         J.phase = 'scout';
       }
     }
@@ -120,8 +128,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
         const t1 = world.progressToT(charProgress.current + Math.sign(remaining) * 0.01);
         const dWdP = Math.max(0.05, world.curve.getPoint(t1).distanceTo(p0) / 0.01); // 월드거리/진행도
         const remainingWorld = Math.abs(remaining) * dWdP;
-        let targetSpeed = J.gait === 'run' ? 1.7 : 0.85;
-        if (remainingWorld < 1.1) targetSpeed = Math.min(targetSpeed, 0.85); // 도착 전 감속
+        let targetSpeed = J.gait === 'run' ? spec.walker.runSpeed : spec.walker.walkSpeed;
+        if (remainingWorld < 1.1) targetSpeed = Math.min(targetSpeed, spec.walker.walkSpeed); // 도착 전 감속
         charSpeed.current += (targetSpeed - charSpeed.current) * Math.min(1, delta * 2.6);
         const stepProg = (charSpeed.current * delta) / dWdP;
         charProgress.current += Math.sign(remaining) * Math.min(Math.abs(remaining), stepProg);
@@ -134,7 +142,17 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
     const pos = world.curve.getPoint(t);
     const aheadT = Math.min(1, t + 0.06);
     const ahead = world.curve.getPoint(aheadT);
-    const dir = ahead.clone().sub(pos).setY(0).normalize();
+    const tangent = ahead.clone().sub(pos).setY(0).normalize();
+    // BUILD 087: 몸은 '가는 방향'을 본다. 돌아올 때는 돌아서서 걷는다 — 뒷걸음질 금지.
+    const facing = moving ? Math.sign(remaining) || 1 : (Math.abs(charYaw.current) > Math.PI / 2 ? -1 : 1);
+    const dir = tangent.clone().multiplyScalar(moving ? facing : 1);
+    if (moving) {
+      const targetYaw = Math.atan2(tangent.x * facing, tangent.z * facing);
+      let dYaw = targetYaw - charYaw.current;
+      while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+      while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+      charYaw.current += dYaw * Math.min(1, delta * 5.5); // ~0.35초에 돌아선다
+    }
 
     // 이번 프레임 실제 이동 거리 → 보폭 동기 (발이 미끄러지지 않는다)
     const distDelta = prevWalkerPos.current ? pos.distanceTo(prevWalkerPos.current) : 0;
@@ -148,7 +166,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       // 도착: 기억 앞에 웅크려 들여다본다 (머무름이 깊은 장면에서만)
       if (wasMoving.current && !moving) {
         const scene = scenes[Math.round(charProgress.current)];
-        if ((scene?.stillness ?? 0) >= 1.0) rig.playInspect();
+        if ((scene?.stillness ?? 0) >= 0.65) rig.playInspect(); // BUILD 087: 캐리어 앞에서도 웅크린다
       }
       if (!wasMoving.current && moving) rig.stopInspect();
       const bob = moving && !rig.inspecting() ? Math.abs(Math.sin(rig.phase())) * (0.012 + speed01 * 0.014) : 0;
@@ -163,17 +181,18 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       walker.position.copy(pos).add(new THREE.Vector3(0, bob + breathe, 0));
       walker.rotation.z = sway;
     }
-    walker.rotation.y = Math.atan2(dir.x, dir.z);
+    walker.rotation.y = charYaw.current;
     wasMoving.current = moving;
 
-    // ---- 카메라 (BUILD 085): 휙휙 가지 않는다. 걷는 사람을 조용히 따라갈 뿐. ----
+    // ---- 카메라: 휙휙 가지 않는다. 몸이 향한 곳의 등 뒤에서 조용히 따라갈 뿐. ----
+    const faceDir = new THREE.Vector3(Math.sin(charYaw.current), 0, Math.cos(charYaw.current));
     const desired = pos
       .clone()
-      .add(dir.clone().multiplyScalar(-3.4))
+      .add(faceDir.clone().multiplyScalar(-3.4))
       .add(new THREE.Vector3(0, 2.0, 0));
     const lookTarget = walker.position
       .clone()
-      .add(dir.clone().multiplyScalar(0.9))
+      .add(faceDir.clone().multiplyScalar(0.9))
       .add(new THREE.Vector3(0, 0.8, 0));
 
     camera.position.lerp(desired, 1 - Math.pow(0.12, delta));
