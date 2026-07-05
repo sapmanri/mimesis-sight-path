@@ -105,6 +105,14 @@ function FlyRig({ home }: { home?: [number, number, number] }) {
   return null;
 }
 
+// ---------- BUILD 112: WAREHOUSE PANEL — 창고를 열람하고 깨운다 ----------
+type WarehouseItem = {
+  id: string; sourceFile: string; release: string; sizeBytes: number;
+  category: string; subcategory: string | null; status: string;
+  productionRef: string | null; notes: string | null; catalogIds: string[];
+};
+type WarehouseReg = { registryVersion: string; assetCount: number; taxonomy: Record<string, string>; items: WarehouseItem[] };
+
 const KITS = ['door-kit', 'person-kit', 'cloud-kit', 'suitcase-kit', 'book-kit', 'cup-kit', 'stone-wall-kit', 'cd-shelf-kit', 'fruit-kit', 'airplane-wing-kit', 'sea-edge-kit'] as const;
 const PATHS = ['straight', 'soft-curve', 'deep-curve', 'bridge', 'stair', 'threshold', 'open-field'] as const;
 const SURFACES = ['dry-stone', 'wet-stone', 'mud', 'sand', 'grass-edge', 'snow-thin', 'rain-puddle', 'moss-aged'] as const;
@@ -179,6 +187,13 @@ export function EditorApp() {
   const [pickTarget, setPickTarget] = useState<null | 'scene' | 'prop-new' | 'prop-repos'>(null);
   const [propCat, setPropCat] = useState(PROP_CATEGORIES[0]);
   const [propObj, setPropObj] = useState(PROP_CATALOG[0].id);
+  // BUILD 112: 자산 창고
+  const [warehouse, setWarehouse] = useState<WarehouseReg | null>(null);
+  const [whCat, setWhCat] = useState<string>('ambient-life');
+  const [whOpen, setWhOpen] = useState(false);
+  useEffect(() => {
+    fetch('/assets/warehouse/registry_v2.json').then((r) => r.json()).then(setWarehouse).catch(() => setWarehouse(null));
+  }, []);
   const [selProp, setSelProp] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   // BUILD 101: 키보드 트랜스폼 — 맵 에디터의 문법.
@@ -503,6 +518,54 @@ export function EditorApp() {
                 onClick={() => setPickTarget((v) => (v === 'prop-new' ? null : 'prop-new'))}>
                 {pickTarget === 'prop-new' ? '클릭 대기 중… (취소)' : '⌖ 배치 — 화면을 찍으세요'}
               </button>
+
+              <h4 className="ed-wh-head" onClick={() => setWhOpen((v) => !v)} style={{ cursor: 'pointer' }}>
+                🏬 자산 창고 {warehouse ? `(${warehouse.assetCount})` : ''} {whOpen ? '▾' : '▸'}
+              </h4>
+              {whOpen && warehouse && (
+                <div className="ed-warehouse">
+                  <div className="ed-wh-chips">
+                    {Object.entries(warehouse.taxonomy).map(([k, label]) => {
+                      const n = warehouse.items.filter((it) => it.category === k).length;
+                      if (!n) return null;
+                      return (
+                        <button key={k} type="button" className={whCat === k ? 'ed-chip on' : 'ed-chip'}
+                          onClick={() => setWhCat(k)}>{label} {n}</button>
+                      );
+                    })}
+                  </div>
+                  <ul className="ed-wh-list">
+                    {warehouse.items.filter((it) => it.category === whCat).map((it) => {
+                      const ready = it.catalogIds.length > 0;
+                      const mb = (it.sizeBytes / 1048576).toFixed(1);
+                      return (
+                        <li key={it.id} className={ready ? 'ready' : ''}>
+                          <div className="ed-wh-name">{it.sourceFile}<span className="ed-wh-meta"> {mb}MB · {it.release}</span></div>
+                          {ready ? (
+                            <div className="ed-wh-actions">
+                              {it.catalogIds.map((cid) => {
+                                const def = PROP_CATALOG.find((q) => q.id === cid);
+                                return (
+                                  <button key={cid} type="button" className="ed-chip on"
+                                    onClick={() => { const d = PROP_CATALOG.find((q) => q.id === cid); if (d) { setPropCat(d.cat); setPropObj(cid); } }}>
+                                    ⌖ {def?.label ?? cid}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className={it.status === 'needs_inspection' ? 'ed-wh-badge insp' : 'ed-wh-badge'}>
+                              {it.status === 'needs_inspection' ? '검수 필요' : '변환 대기'}
+                            </span>
+                          )}
+                          {it.notes && <div className="ed-wh-note">{it.notes}</div>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="ed-note">회색 항목은 창고 보관 중 — 세션에서 변환을 요청하면 배치 가능해집니다.</p>
+                </div>
+              )}
 
               <h4>배치된 사물 {(doc.props ?? []).length}</h4>
               {(doc.props ?? []).length === 0 && <p className="ed-note">아직 없습니다. 위에서 골라 배치하세요.</p>}

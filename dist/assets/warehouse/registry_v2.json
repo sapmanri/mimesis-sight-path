@@ -1,6 +1,6 @@
 {
  "project": "MIMESIS Sight Path",
- "registryVersion": "warehouse_v2",
+ "registryVersion": "warehouse_v2.1",
  "generatedAt": "2026-07-06",
  "basedOn": "assets-v1/v2/v3 (2026-07-05 기준 167개)",
  "taxonomy": {
@@ -30,7 +30,8 @@
    "subcategory": null,
    "status": "raw",
    "productionRef": null,
-   "notes": "세션 인계 문서"
+   "notes": "세션 인계 문서",
+   "catalogIds": []
   },
   {
    "id": "mimesis_asset_registry_kit_v1",
@@ -42,7 +43,8 @@
    "subcategory": null,
    "status": "raw",
    "productionRef": null,
-   "notes": "레지스트리 v1 키트"
+   "notes": "레지스트리 v1 키트",
+   "catalogIds": []
   },
   {
    "id": "mimesis_asset_registry_raw_v1",
@@ -54,7 +56,8 @@
    "subcategory": null,
    "status": "raw",
    "productionRef": null,
-   "notes": "레지스트리 v1"
+   "notes": "레지스트리 v1",
+   "catalogIds": []
   },
   {
    "id": "mimesis_asset_registry_raw_v1",
@@ -66,7 +69,8 @@
    "subcategory": null,
    "status": "raw",
    "productionRef": null,
-   "notes": "레지스트리 v1 문서"
+   "notes": "레지스트리 v1 문서",
+   "catalogIds": []
   },
   {
    "id": "150k",
@@ -78,7 +82,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "9MB 정체불명"
+   "notes": "9MB 정체불명",
+   "catalogIds": []
   },
   {
    "id": "assets_fbx",
@@ -90,7 +95,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "assets_fbx_1",
@@ -102,7 +108,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "assets_fbx_2",
@@ -114,7 +121,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "box",
@@ -126,7 +134,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "e9cb403o4yrk_item01",
@@ -138,7 +147,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "export",
@@ -150,7 +160,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "54MB"
+   "notes": "54MB",
+   "catalogIds": []
   },
   {
    "id": "export_1",
@@ -162,7 +173,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "33MB"
+   "notes": "33MB",
+   "catalogIds": []
   },
   {
    "id": "export_2",
@@ -174,7 +186,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "66MB"
+   "notes": "66MB",
+   "catalogIds": []
   },
   {
    "id": "fbx",
@@ -186,7 +199,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx",
@@ -198,7 +212,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_1",
@@ -210,7 +225,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "25MB"
+   "notes": "25MB",
+   "catalogIds": []
   },
   {
    "id": "fbx_1",
@@ -222,7 +238,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_2",
@@ -234,7 +251,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_2",
@@ -246,7 +264,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_3",
@@ -258,7 +277,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_3",
@@ -270,7 +290,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_4",
@@ -282,7 +303,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_5",
@@ -294,7 +316,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_6",
@@ -306,7 +329,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_models",
@@ -318,7 +342,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbx_with_atlas",
@@ -330,7 +355,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "files",
@@ -342,7 +368,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "n19_e41_fbx",
@@ -354,7 +381,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "130MB 정체불명 대형"
+   "notes": "130MB 정체불명 대형",
+   "catalogIds": []
   },
   {
    "id": "projec2_3dview_3d",
@@ -366,7 +394,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "ssets",
@@ -378,7 +407,8 @@
    "subcategory": null,
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "animals_fbx",
@@ -390,7 +420,13 @@
    "subcategory": "wild",
    "status": "in_production",
    "productionRef": "bear/deer/boar/wolf",
-   "notes": "BUILD 110: 정적 4종 등록(곰·사슴·멧돼지·늑대)"
+   "notes": "BUILD 110: 정적 4종 등록(곰·사슴·멧돼지·늑대)",
+   "catalogIds": [
+    "bear",
+    "deer",
+    "boar",
+    "wolf"
+   ]
   },
   {
    "id": "chicky",
@@ -402,7 +438,10 @@
    "subcategory": "farm",
    "status": "in_production",
    "productionRef": "chicky",
-   "notes": "BUILD 110: 정적"
+   "notes": "BUILD 110: 정적",
+   "catalogIds": [
+    "chicky"
+   ]
   },
   {
    "id": "dog",
@@ -414,7 +453,10 @@
    "subcategory": "farm",
    "status": "in_production",
    "productionRef": "dog",
-   "notes": "BUILD 110: 정적"
+   "notes": "BUILD 110: 정적",
+   "catalogIds": [
+    "dog"
+   ]
   },
   {
    "id": "duck",
@@ -426,7 +468,10 @@
    "subcategory": "farm",
    "status": "in_production",
    "productionRef": "duck",
-   "notes": "BUILD 110: 정적"
+   "notes": "BUILD 110: 정적",
+   "catalogIds": [
+    "duck"
+   ]
   },
   {
    "id": "horse",
@@ -438,7 +483,10 @@
    "subcategory": "farm",
    "status": "in_production",
    "productionRef": "horse",
-   "notes": "BUILD 110: 정적"
+   "notes": "BUILD 110: 정적",
+   "catalogIds": [
+    "horse"
+   ]
   },
   {
    "id": "piggy",
@@ -450,7 +498,10 @@
    "subcategory": "farm",
    "status": "in_production",
    "productionRef": "piggy",
-   "notes": "BUILD 110: 정적"
+   "notes": "BUILD 110: 정적",
+   "catalogIds": [
+    "piggy"
+   ]
   },
   {
    "id": "shepherdvalley_cow_fbx",
@@ -462,7 +513,10 @@
    "subcategory": "farm",
    "status": "in_production",
    "productionRef": "cow",
-   "notes": "BUILD 110: 로밍 — 클립 5종 이식"
+   "notes": "BUILD 110: 로밍 — 클립 5종 이식",
+   "catalogIds": [
+    "cow"
+   ]
   },
   {
    "id": "3d_isometric_drawing_rooms",
@@ -474,7 +528,8 @@
    "subcategory": "interior",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "41_home_sunda",
@@ -486,7 +541,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "50_haunted_sundanese_traditional_house",
@@ -498,7 +554,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "53_cottage_fbx",
@@ -510,7 +567,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "97_eolic_fbx",
@@ -522,7 +580,8 @@
    "subcategory": "rural",
    "status": "raw",
    "productionRef": null,
-   "notes": "풍력터빈"
+   "notes": "풍력터빈",
+   "catalogIds": []
   },
   {
    "id": "ancient_housebuildingfbx",
@@ -534,7 +593,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": "151MB 대형"
+   "notes": "151MB 대형",
+   "catalogIds": []
   },
   {
    "id": "bathrooms",
@@ -546,7 +606,8 @@
    "subcategory": "interior",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "bedroom",
@@ -558,7 +619,8 @@
    "subcategory": "interior",
    "status": "raw",
    "productionRef": null,
-   "notes": "161MB 대형"
+   "notes": "161MB 대형",
+   "catalogIds": []
   },
   {
    "id": "big_ben",
@@ -570,7 +632,8 @@
    "subcategory": "landmark",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "cabina",
@@ -582,7 +645,8 @@
    "subcategory": "hut",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "cowshed_fbx",
@@ -594,7 +658,8 @@
    "subcategory": "rural",
    "status": "raw",
    "productionRef": null,
-   "notes": "외양간 — 소와 세트"
+   "notes": "외양간 — 소와 세트",
+   "catalogIds": []
   },
   {
    "id": "english_thatched_house_fbx",
@@ -606,7 +671,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "free_red_towerfbx",
@@ -618,7 +684,8 @@
    "subcategory": "tower",
    "status": "raw",
    "productionRef": null,
-   "notes": "56MB"
+   "notes": "56MB",
+   "catalogIds": []
   },
   {
    "id": "free_stair_platformfbx",
@@ -630,7 +697,8 @@
    "subcategory": "structure",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "gu7u77vio0zk_simple_house",
@@ -642,7 +710,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "homestead",
@@ -654,7 +723,8 @@
    "subcategory": "rural",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "house_1",
@@ -666,7 +736,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": "108MB 대형"
+   "notes": "108MB 대형",
+   "catalogIds": []
   },
   {
    "id": "house_fbx",
@@ -678,7 +749,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "isometric_rooms",
@@ -690,7 +762,8 @@
    "subcategory": "interior",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "lighthouse_island_toy",
@@ -702,7 +775,10 @@
    "subcategory": "landmark",
    "status": "in_production",
    "productionRef": "lighthouse",
-   "notes": "등대"
+   "notes": "등대",
+   "catalogIds": [
+    "lighthouse"
+   ]
   },
   {
    "id": "low_poly_house",
@@ -714,7 +790,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "medival",
@@ -726,7 +803,8 @@
    "subcategory": "medieval",
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "15MB — 건물 추정"
+   "notes": "15MB — 건물 추정",
+   "catalogIds": []
   },
   {
    "id": "shelter",
@@ -738,7 +816,8 @@
    "subcategory": "structure",
    "status": "raw",
    "productionRef": null,
-   "notes": "238MB 최대형"
+   "notes": "238MB 최대형",
+   "catalogIds": []
   },
   {
    "id": "snow_cabin_iso",
@@ -750,7 +829,10 @@
    "subcategory": "house",
    "status": "in_production",
    "productionRef": "cabin",
-   "notes": "오두막"
+   "notes": "오두막",
+   "catalogIds": [
+    "cabin"
+   ]
   },
   {
    "id": "snowy_house_fbx",
@@ -762,7 +844,8 @@
    "subcategory": "house",
    "status": "raw",
    "productionRef": null,
-   "notes": "Winter 테마 후보"
+   "notes": "Winter 테마 후보",
+   "catalogIds": []
   },
   {
    "id": "tower_arlesfbx",
@@ -774,7 +857,8 @@
    "subcategory": "tower",
    "status": "raw",
    "productionRef": null,
-   "notes": "76MB"
+   "notes": "76MB",
+   "catalogIds": []
   },
   {
    "id": "town_clock_fbx",
@@ -786,7 +870,8 @@
    "subcategory": "landmark",
    "status": "raw",
    "productionRef": null,
-   "notes": "시계탑"
+   "notes": "시계탑",
+   "catalogIds": []
   },
   {
    "id": "wooden_windmill",
@@ -798,7 +883,8 @@
    "subcategory": "rural",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "wrzuj36kxa80_pillar_model",
@@ -810,7 +896,8 @@
    "subcategory": "structure",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "terrain",
@@ -822,7 +909,8 @@
    "subcategory": "terrain",
    "status": "raw",
    "productionRef": null,
-   "notes": "48MB 지형"
+   "notes": "48MB 지형",
+   "catalogIds": []
   },
   {
    "id": "army_girl",
@@ -834,7 +922,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "asian_girl",
@@ -846,7 +935,8 @@
    "subcategory": "realistic",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "female",
@@ -858,7 +948,8 @@
    "subcategory": "base",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "female_base",
@@ -870,7 +961,8 @@
    "subcategory": "base",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "girl_anime",
@@ -882,7 +974,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "girl_fbx",
@@ -894,7 +987,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "hiker_gerald_fbx",
@@ -906,7 +1000,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": "하이커 — 워커 로스터 후보"
+   "notes": "하이커 — 워커 로스터 후보",
+   "catalogIds": []
   },
   {
    "id": "low_people",
@@ -918,7 +1013,8 @@
    "subcategory": "lowpoly-pack",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "malecharacter",
@@ -930,7 +1026,8 @@
    "subcategory": "realistic",
    "status": "raw",
    "productionRef": null,
-   "notes": "38MB 고밀도"
+   "notes": "38MB 고밀도",
+   "catalogIds": []
   },
   {
    "id": "mandalorian",
@@ -942,7 +1039,8 @@
    "subcategory": "fantasy",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "mandalorian_mid_poly",
@@ -954,7 +1052,8 @@
    "subcategory": "fantasy",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "marina_1276",
@@ -966,7 +1065,8 @@
    "subcategory": "realistic",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "olbrecht",
@@ -978,7 +1078,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "olbrecht02",
@@ -990,7 +1091,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "realistic_man_fbx",
@@ -1002,7 +1104,8 @@
    "subcategory": "realistic",
    "status": "raw",
    "productionRef": null,
-   "notes": "81MB 고밀도"
+   "notes": "81MB 고밀도",
+   "catalogIds": []
   },
   {
    "id": "rin_fbx",
@@ -1014,7 +1117,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "scavenger",
@@ -1026,7 +1130,10 @@
    "subcategory": "stylized",
    "status": "in_production",
    "productionRef": "scavenger",
-   "notes": "방랑자"
+   "notes": "방랑자",
+   "catalogIds": [
+    "scavenger"
+   ]
   },
   {
    "id": "shun",
@@ -1038,7 +1145,8 @@
    "subcategory": "stylized",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "stylized_npc_peasant_nolant_free_version",
@@ -1050,7 +1158,8 @@
    "subcategory": "stylized",
    "status": "in_production",
    "productionRef": "walker(roster)",
-   "notes": "BUILD 081+: 워커"
+   "notes": "BUILD 081+: 워커",
+   "catalogIds": []
   },
   {
    "id": "cliff_low",
@@ -1062,7 +1171,8 @@
    "subcategory": "cliff",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "g3yul469purk_debris",
@@ -1074,7 +1184,8 @@
    "subcategory": "debris",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "m57gfu447abk_wall",
@@ -1086,7 +1197,8 @@
    "subcategory": "wall",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "pxfpf20su7ls_brick",
@@ -1098,7 +1210,8 @@
    "subcategory": "wall",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "ruin02_fbx",
@@ -1110,7 +1223,8 @@
    "subcategory": "ruin",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "ruins_fbx",
@@ -1122,7 +1236,8 @@
    "subcategory": "ruin",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "xfpzgroiyups_wall",
@@ -1134,7 +1249,8 @@
    "subcategory": "wall",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "asteroid_1e_fbx",
@@ -1146,7 +1262,8 @@
    "subcategory": "space",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "asteroid_2b_fbx",
@@ -1158,7 +1275,8 @@
    "subcategory": "space",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "asteroid_2b_fbx_1",
@@ -1170,7 +1288,8 @@
    "subcategory": "space",
    "status": "raw",
    "productionRef": null,
-   "notes": "중복본 의심"
+   "notes": "중복본 의심",
+   "catalogIds": []
   },
   {
    "id": "earth",
@@ -1182,7 +1301,8 @@
    "subcategory": "space",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "low_poly_ufo_fbx",
@@ -1194,7 +1314,8 @@
    "subcategory": "scifi",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "moon_2k",
@@ -1206,7 +1327,8 @@
    "subcategory": "space",
    "status": "raw",
    "productionRef": null,
-   "notes": "달 — 달밤 프리셋 후보"
+   "notes": "달 — 달밤 프리셋 후보",
+   "catalogIds": []
   },
   {
    "id": "origami_chat_free",
@@ -1218,7 +1340,8 @@
    "subcategory": "origami",
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "종이접기 고양이 추정"
+   "notes": "종이접기 고양이 추정",
+   "catalogIds": []
   },
   {
    "id": "snwmnnn",
@@ -1230,7 +1353,8 @@
    "subcategory": "winter",
    "status": "raw",
    "productionRef": null,
-   "notes": "Winter 테마 후보"
+   "notes": "Winter 테마 후보",
+   "catalogIds": []
   },
   {
    "id": "tardis",
@@ -1242,7 +1366,8 @@
    "subcategory": "scifi",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "witch",
@@ -1254,7 +1379,8 @@
    "subcategory": "character",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "witch_hat_fbx",
@@ -1266,7 +1392,8 @@
    "subcategory": "wearable",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "3ok8cthawqio_clock_constraints_for_animations",
@@ -1278,7 +1405,8 @@
    "subcategory": "clock",
    "status": "raw",
    "productionRef": null,
-   "notes": "시계 — 애니 제약 포함"
+   "notes": "시계 — 애니 제약 포함",
+   "catalogIds": []
   },
   {
    "id": "books_fbx",
@@ -1290,7 +1418,8 @@
    "subcategory": "book",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "coffee_model_corona",
@@ -1302,7 +1431,8 @@
    "subcategory": "cup",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "fbxglasses",
@@ -1314,7 +1444,8 @@
    "subcategory": "personal",
    "status": "raw",
    "productionRef": null,
-   "notes": "안경"
+   "notes": "안경",
+   "catalogIds": []
   },
   {
    "id": "idv52g8s4zr4_aio_bookshelf",
@@ -1326,7 +1457,8 @@
    "subcategory": "book",
    "status": "raw",
    "productionRef": null,
-   "notes": "책장"
+   "notes": "책장",
+   "catalogIds": []
   },
   {
    "id": "old_bag_low",
@@ -1338,7 +1470,8 @@
    "subcategory": "personal",
    "status": "raw",
    "productionRef": null,
-   "notes": "낡은 가방"
+   "notes": "낡은 가방",
+   "catalogIds": []
   },
   {
    "id": "old_suitcase",
@@ -1350,7 +1483,10 @@
    "subcategory": "personal",
    "status": "in_production",
    "productionRef": "suitcase",
-   "notes": "캐리어"
+   "notes": "캐리어",
+   "catalogIds": [
+    "suitcase"
+   ]
   },
   {
    "id": "shoe_001_lp",
@@ -1362,7 +1498,8 @@
    "subcategory": "personal",
    "status": "raw",
    "productionRef": null,
-   "notes": "낡은 신발 한 켤레"
+   "notes": "낡은 신발 한 켤레",
+   "catalogIds": []
   },
   {
    "id": "suitcase2",
@@ -1374,7 +1511,8 @@
    "subcategory": "personal",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "1elmla01hh_rock1_bytyrosmith",
@@ -1386,7 +1524,8 @@
    "subcategory": "rock",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "6s3hqe2d6rr4_wood",
@@ -1398,7 +1537,8 @@
    "subcategory": "wood",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "85_rocks",
@@ -1410,7 +1550,8 @@
    "subcategory": "rock",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "cactus_lowpoly",
@@ -1422,7 +1563,8 @@
    "subcategory": "plant",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "naawkhr5zw1s_rock",
@@ -1434,7 +1576,8 @@
    "subcategory": "rock",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "oz3cxs1hq03k_marblegrass",
@@ -1446,7 +1589,8 @@
    "subcategory": "grass",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "sb43aqq8sjk0_grass_fbx",
@@ -1458,7 +1602,8 @@
    "subcategory": "grass",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "shapespark_interior_plants_kit",
@@ -1470,7 +1615,8 @@
    "subcategory": "plant",
    "status": "raw",
    "productionRef": null,
-   "notes": "실내 식물 키트"
+   "notes": "실내 식물 키트",
+   "catalogIds": []
   },
   {
    "id": "stone11",
@@ -1482,7 +1628,10 @@
    "subcategory": "rock",
    "status": "in_production",
    "productionRef": "stone",
-   "notes": null
+   "notes": null,
+   "catalogIds": [
+    "stone-tall"
+   ]
   },
   {
    "id": "axes",
@@ -1494,7 +1643,8 @@
    "subcategory": "tool",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "bazaar_stand_collection",
@@ -1506,7 +1656,8 @@
    "subcategory": "market",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "beach_chair",
@@ -1518,7 +1669,8 @@
    "subcategory": "furniture",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "beer_barrel",
@@ -1530,7 +1682,8 @@
    "subcategory": "rural",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "beetle_fbx",
@@ -1542,7 +1695,8 @@
    "subcategory": "vehicle",
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": "폭스바겐 비틀 vs 곤충 — 확인 필요"
+   "notes": "폭스바겐 비틀 vs 곤충 — 확인 필요",
+   "catalogIds": []
   },
   {
    "id": "block_low_fbx",
@@ -1554,7 +1708,8 @@
    "subcategory": "misc",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "blocks",
@@ -1566,7 +1721,8 @@
    "subcategory": "misc",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "carmesh",
@@ -1578,7 +1734,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "carriage_fbx",
@@ -1590,7 +1747,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": "마차"
+   "notes": "마차",
+   "catalogIds": []
   },
   {
    "id": "cement_bags_on_pallet_fbx",
@@ -1602,7 +1760,8 @@
    "subcategory": "industrial",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "chair",
@@ -1614,7 +1773,10 @@
    "subcategory": "furniture",
    "status": "in_production",
    "productionRef": "chair",
-   "notes": "BUILD 104: 마법 의자"
+   "notes": "BUILD 104: 마법 의자",
+   "catalogIds": [
+    "chair"
+   ]
   },
   {
    "id": "classic_car_2",
@@ -1626,7 +1788,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": "노스탤지어 감성 — Memory 승격 후보"
+   "notes": "노스탤지어 감성 — Memory 승격 후보",
+   "catalogIds": []
   },
   {
    "id": "collection_wooden_v01",
@@ -1638,7 +1801,8 @@
    "subcategory": "rural",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "free_low_poly_vehicles_pack_by_rgsdev",
@@ -1650,7 +1814,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": "로우폴리 차량 팩"
+   "notes": "로우폴리 차량 팩",
+   "catalogIds": []
   },
   {
    "id": "generic_spare_wheel_fbx",
@@ -1662,7 +1827,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "gunnedcar",
@@ -1674,7 +1840,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "hat",
@@ -1686,7 +1853,8 @@
    "subcategory": "wearable",
    "status": "raw",
    "productionRef": null,
-   "notes": "와이드브림 모자 — 삽 캐릭터 소품 후보"
+   "notes": "와이드브림 모자 — 삽 캐릭터 소품 후보",
+   "catalogIds": []
   },
   {
    "id": "love",
@@ -1698,7 +1866,8 @@
    "subcategory": "decor",
    "status": "needs_inspection",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "lowpolycars",
@@ -1710,7 +1879,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "m3a1_scout_car_fbx",
@@ -1722,7 +1892,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "oil_truck_fbx",
@@ -1734,7 +1905,8 @@
    "subcategory": "vehicle",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "pack_of_items",
@@ -1746,7 +1918,8 @@
    "subcategory": "misc",
    "status": "raw",
    "productionRef": null,
-   "notes": "80MB 잡화 팩"
+   "notes": "80MB 잡화 팩",
+   "catalogIds": []
   },
   {
    "id": "partsforsale",
@@ -1758,7 +1931,8 @@
    "subcategory": "misc",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "pipe_a_01",
@@ -1770,7 +1944,8 @@
    "subcategory": "industrial",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "pipe_a_a_01",
@@ -1782,7 +1957,8 @@
    "subcategory": "industrial",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "wooden_rowboat",
@@ -1794,7 +1970,8 @@
    "subcategory": "boat",
    "status": "raw",
    "productionRef": null,
-   "notes": "나룻배 — Memory 승격 후보"
+   "notes": "나룻배 — Memory 승격 후보",
+   "catalogIds": []
   },
   {
    "id": "fbx_bridge",
@@ -1806,7 +1983,8 @@
    "subcategory": "bridge",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "firehydrant",
@@ -1818,7 +1996,8 @@
    "subcategory": "street",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "lamp_pillarfbx",
@@ -1830,7 +2009,8 @@
    "subcategory": "streetlight",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "payphone_fbx",
@@ -1842,7 +2022,8 @@
    "subcategory": "street",
    "status": "raw",
    "productionRef": null,
-   "notes": "공중전화 — Memory 승격 후보"
+   "notes": "공중전화 — Memory 승격 후보",
+   "catalogIds": []
   },
   {
    "id": "pk01_1_fbx_signtra_collect_lot_01_v1_0_0",
@@ -1854,7 +2035,8 @@
    "subcategory": "sign",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "radiation_warning_sign",
@@ -1866,7 +2048,8 @@
    "subcategory": "sign",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "roadblocker1",
@@ -1878,7 +2061,8 @@
    "subcategory": "street",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "roadblocker2",
@@ -1890,7 +2074,8 @@
    "subcategory": "street",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "roadsign",
@@ -1902,7 +2087,8 @@
    "subcategory": "sign",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "sign",
@@ -1914,7 +2100,8 @@
    "subcategory": "sign",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "signal_stop_fbx",
@@ -1926,7 +2113,8 @@
    "subcategory": "sign",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "traffic_cone_fbx",
@@ -1938,7 +2126,8 @@
    "subcategory": "street",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "traffic_signal_fbx",
@@ -1950,7 +2139,8 @@
    "subcategory": "sign",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "trafficlightfbx",
@@ -1962,7 +2152,8 @@
    "subcategory": "street",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "westsignfbx",
@@ -1974,7 +2165,8 @@
    "subcategory": "sign",
    "status": "raw",
    "productionRef": null,
-   "notes": "서부풍 간판 22MB"
+   "notes": "서부풍 간판 22MB",
+   "catalogIds": []
   },
   {
    "id": "6dlly90x3j_rain",
@@ -1986,7 +2178,8 @@
    "subcategory": "rain",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "cloud",
@@ -1998,7 +2191,8 @@
    "subcategory": "cloud",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "cloud_polygon_blender_1",
@@ -2010,7 +2204,8 @@
    "subcategory": "cloud",
    "status": "raw",
    "productionRef": null,
-   "notes": null
+   "notes": null,
+   "catalogIds": []
   },
   {
    "id": "glb_mega_village_environment_4_houses",
@@ -2022,7 +2217,8 @@
    "subcategory": "village",
    "status": "raw",
    "productionRef": null,
-   "notes": "253MB — 4채 마을 환경, World Kit 1호 후보"
+   "notes": "253MB — 4채 마을 환경, World Kit 1호 후보",
+   "catalogIds": []
   }
  ]
 }

@@ -189,3 +189,19 @@ body {
 /* BUILD 108 */
 .ed-check { display: flex; align-items: center; gap: 8px; flex-direction: row !important; }
 .ed-check input { width: auto; }
+
+
+/* ---------- BUILD 112: WAREHOUSE PANEL ---------- */
+.ed-warehouse { border: 1px solid rgba(216, 196, 143, 0.2); border-radius: 8px; padding: 8px; margin-bottom: 10px; }
+.ed-wh-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.ed-chip { font-size: 11px; padding: 3px 8px; border-radius: 10px; border: 1px solid rgba(216, 196, 143, 0.3); background: transparent; color: inherit; cursor: pointer; }
+.ed-chip.on { background: rgba(216, 196, 143, 0.18); }
+.ed-wh-list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.ed-wh-list li { padding: 6px 8px; border-radius: 6px; margin-bottom: 4px; background: rgba(255, 255, 255, 0.03); opacity: 0.55; }
+.ed-wh-list li.ready { opacity: 1; background: rgba(216, 196, 143, 0.08); }
+.ed-wh-name { font-size: 12px; word-break: break-all; }
+.ed-wh-meta { opacity: 0.6; font-size: 11px; }
+.ed-wh-badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(255, 255, 255, 0.08); }
+.ed-wh-badge.insp { background: rgba(216, 143, 143, 0.15); }
+.ed-wh-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.ed-wh-note { font-size: 10px; opacity: 0.6; margin-top: 3px; }
