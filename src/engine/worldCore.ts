@@ -756,8 +756,12 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
       const chunkL = (noise1(i * 0.09 + r * 3.1) * 0.5 + noise1(i * 0.32 + r * 8.3) * 0.22) * fine;
       const chunkR = (noise1(i * 0.09 + r * 3.1 + 50) * 0.5 + noise1(i * 0.32 + r * 8.3 + 50) * 0.22) * fine;
       const inset = ringInsetBase[r] * w;
-      const hwL = Math.max(0.06, w - inset + (r === 0 ? 0 : chunkL * (0.3 + v * 0.7)));
-      const hwR = Math.max(0.06, w - inset + (r === 0 ? 0 : chunkR * (0.3 + v * 0.7)));
+      // BUILD 102: 윗단 실루엣 지터 — 깊은 링들만 침식되고 윗선은 자로 잰 듯했다.
+      // 완만한 굽이(저주파) + 잔니블(고주파), 살짝 바깥 편향 — 부서져 나간 턱.
+      const lipL = (noise1(i * 0.23) * 0.6 + noise1(i * 1.31) * 0.4) * 0.09 + 0.015;
+      const lipR = (noise1(i * 0.23 + 77) * 0.6 + noise1(i * 1.31 + 77) * 0.4) * 0.09 + 0.015;
+      const hwL = Math.max(0.06, w - inset + (r === 0 ? lipL : chunkL * (0.3 + v * 0.7)));
+      const hwR = Math.max(0.06, w - inset + (r === 0 ? lipR : chunkR * (0.3 + v * 0.7)));
       const y = f.p.y - drop + (r === 0 ? noise1(i * 0.2) * 0.03 : noise1(i * 0.18 + r * 7) * 0.3 * v);
       rings.push({
         L: f.p.clone().add(f.nor.clone().multiplyScalar(hwL)).setY(y),
@@ -784,7 +788,9 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
         pos.push(p.x, p.y, p.z);
         uv.push(a * 0.9, dist * 0.55);
         const edge = Math.pow(Math.abs(a - 0.5) * 2, 2.2);
-        const c = cSandTop.clone().lerp(cSandEdge, edge * 0.85);
+        // BUILD 102: 침식 밴드 — 가장자리로 갈수록 어둡고, 얼룩덜룩 파인 자국
+        const nib = Math.max(0, noise1(i * 0.7 + j * 5.1)) * Math.pow(Math.abs(a - 0.5) * 2, 4) * 0.5;
+        const c = cSandTop.clone().lerp(cSandEdge, Math.min(1, edge * 0.95 + nib));
         const tint = 1 + noise1(i * 0.9 + j * 3.1) * 0.035;
         col.push(c.r * tint, c.g * tint, c.b * tint);
       }
@@ -850,6 +856,83 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
       idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
     }
     g.add(colorMesh(pos, col, idx, {}));
+  }
+
+  // ---------- BUILD 102: 길 끝단 자연화 — 부스러기·파편·자갈 ----------
+  // 칼로 자른 단면을 깨는 세 겹: 턱에 걸친 부스러기, 떨어져 나가 떠 있는 파편,
+  // 가장자리로 갈수록 빽빽해지는 잔자갈.
+  {
+    const rockGeo = new THREE.IcosahedronGeometry(1, 0);
+    const mkInst = (count: number, color: string, rough = 0.95) => {
+      const mesh = new THREE.InstancedMesh(rockGeo, new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 }), count);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    };
+    const M = new THREE.Matrix4();
+    const Q = new THREE.Quaternion();
+    const E = new THREE.Euler();
+    const V = new THREE.Vector3();
+    const S = new THREE.Vector3();
+    const place = (mesh: THREE.InstancedMesh, k: number, p: THREE.Vector3, sc: THREE.Vector3, rot: number) => {
+      E.set(noise1(rot) * 1.2, rot * 2.6, noise1(rot + 9) * 1.2);
+      Q.setFromEuler(E);
+      V.copy(p);
+      S.copy(sc);
+      M.compose(V, Q, S);
+      mesh.setMatrixAt(k, M);
+    };
+
+    // 턱 부스러기: 가장자리에 걸치거나 반쯤 흘러내린 조각
+    const lipCount = Math.min(70, Math.floor(frames.length / 6));
+    const lip = mkInst(lipCount, PALETTE.sandEdge);
+    for (let k = 0; k < lipCount; k += 1) {
+      const i = Math.floor((k / lipCount) * (frames.length - 1) + noise1(k * 3.7) * 5);
+      const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
+      const w = widthAt(f.t);
+      const side = k % 2 === 0 ? 1 : -1;
+      const out = w * (0.92 + Math.abs(noise1(k * 1.9)) * 0.2);
+      const r = 0.035 + Math.abs(noise1(k * 2.3)) * 0.075;
+      const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * out));
+      p.y += 0.01 - Math.abs(noise1(k * 4.1)) * r * 1.6; // 일부는 턱 아래로 반쯤 흘러내림
+      place(lip, k, p, S.set(r * (1 + Math.abs(noise1(k)) * 0.6), r * 0.7, r * (1 + Math.abs(noise1(k + 5)) * 0.4)), k * 1.13);
+    }
+    lip.instanceMatrix.needsUpdate = true;
+    g.add(lip);
+
+    // 부유 파편: 떨어져 나가 아직 허공에 머무는 돌 (공중섬의 문법)
+    const fragCount = Math.min(26, Math.floor(frames.length / 16));
+    const frag = mkInst(fragCount, PALETTE.cliffHigh);
+    for (let k = 0; k < fragCount; k += 1) {
+      const i = Math.floor((k / fragCount) * (frames.length - 1) + noise1(k * 7.7) * 9);
+      const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
+      const w = widthAt(f.t);
+      const side = noise1(k * 3.3) > 0 ? 1 : -1;
+      const r = 0.05 + Math.abs(noise1(k * 5.1)) * 0.1;
+      const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * w * (1.18 + Math.abs(noise1(k * 2.2)) * 0.45)));
+      p.y -= 0.25 + Math.abs(noise1(k * 6.4)) * 0.75;
+      place(frag, k, p, S.set(r, r * 0.8, r), k * 2.31);
+    }
+    frag.instanceMatrix.needsUpdate = true;
+    g.add(frag);
+
+    // 잔자갈: 가장자리로 갈수록 빽빽하게 (밀도 곡선 = 1 - rnd*rnd)
+    const pebCount = Math.min(150, frames.length);
+    const peb = mkInst(pebCount, PALETTE.sandEdge, 1.0);
+    for (let k = 0; k < pebCount; k += 1) {
+      const i = Math.floor(Math.abs(noise1(k * 1.7)) * (frames.length - 1));
+      const f = frames[i];
+      const w = widthAt(f.t);
+      const side = k % 2 === 0 ? 1 : -1;
+      const towardEdge = 1 - Math.abs(noise1(k * 2.9)) * Math.abs(noise1(k * 4.3)); // 가장자리 편중
+      const out = w * (0.5 + towardEdge * 0.44);
+      const r = 0.012 + Math.abs(noise1(k * 3.1)) * 0.028;
+      const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * out));
+      p.y += r * 0.4;
+      place(peb, k, p, S.set(r * 1.3, r * 0.55, r), k * 0.77);
+    }
+    peb.instanceMatrix.needsUpdate = true;
+    g.add(peb);
   }
 
   return g;
