@@ -716,6 +716,11 @@ export function EditorApp() {
               <label>뛰기 속도 <em>{doc.spec.walker.runSpeed.toFixed(2)} u/s</em>
                 <input type="range" min="1.0" max="2.6" step="0.02" value={doc.spec.walker.runSpeed} onChange={(e) => edit((d) => { d.spec.walker.runSpeed = Number(e.target.value); })} />
               </label>
+              <label className="ed-check">
+                <input type="checkbox" checked={doc.spec.walker.lantern ?? false}
+                  onChange={(e) => edit((d) => { d.spec.walker.lantern = e.target.checked; })} />
+                🏮 등불을 든다 — 밤길의 동반자
+              </label>
             </div>
           )}
 

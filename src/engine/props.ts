@@ -237,6 +237,32 @@ function makeGrass(rnd: () => number) {
   return tuft;
 }
 
+/** BUILD 116: 손에 쥐는 등불 — 워커의 손 뼈에 매달린다. 밤길의 동반자 */
+export function makeHandLantern(): THREE.Group {
+  const g = new THREE.Group();
+  const iron = std('#3c3f3a');
+  // 고리 (손잡이)
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.006, 6, 12), iron);
+  ring.position.y = 0.0;
+  g.add(ring);
+  // 몸통 유리 (발광)
+  const glassMat = new THREE.MeshStandardMaterial({ color: '#ffdf9e', emissive: '#ffca6e', emissiveIntensity: 1.6, roughness: 0.6 });
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.036, 0.07, 8), glassMat);
+  glass.position.y = -0.07;
+  g.add(glass);
+  // 지붕·바닥 캡
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.03, 8), iron);
+  cap.position.y = -0.025;
+  g.add(cap);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.012, 8), iron);
+  base.position.y = -0.11;
+  g.add(base);
+  const glow = new THREE.PointLight('#ffca6e', 2.4, 6.5, 1.8);
+  glow.position.y = -0.07;
+  g.add(glow);
+  return g;
+}
+
 /** 로밍용: 클립 동반 로드 */
 export async function createPropAnimated(
   objId: string,

@@ -6,7 +6,7 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultL
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
-import { createPropObject, createPropAnimated, ANIMATED_PROPS, type PlacedProp } from '../engine/props';
+import { createPropObject, createPropAnimated, ANIMATED_PROPS, makeHandLantern, type PlacedProp } from '../engine/props';
 import { footsteps } from './footsteps';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
@@ -253,6 +253,26 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, spec.walker.timeScale);
+      // BUILD 116: 등불 — 손 뼈에 매달린다. 걸음을 따라 흔들리는 밤길의 동반자.
+      if ((spec.walker as { lantern?: boolean }).lantern) {
+        let hand: THREE.Object3D | null = null;
+        group.traverse((n) => {
+          if (!(n as THREE.Bone).isBone) return;
+          if (/RightHand$/i.test(n.name)) hand = hand ?? n;
+        });
+        if (!hand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name)) hand = hand ?? n; });
+        if (!hand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /hand/i.test(n.name)) hand = hand ?? n; });
+        if (hand) {
+          const h = hand as THREE.Object3D;
+          group.updateMatrixWorld(true);
+          const ws = new THREE.Vector3();
+          h.getWorldScale(ws);
+          const lantern = makeHandLantern();
+          lantern.scale.setScalar(1 / Math.max(ws.x, 1e-6)); // 뼈 누적 스케일 상쇄 — 월드 기준 실측 크기
+          lantern.position.set(0, 0.02, 0.01);
+          h.add(lantern);
+        }
+      }
       // BUILD 104: 마법 의자 — 앉을 때 샤라락. 좌면은 정규화 높이의 47% 지점.
       loadKitModel('chair', defaultLoader).then((chairObj) => {
         if (!alive) return;

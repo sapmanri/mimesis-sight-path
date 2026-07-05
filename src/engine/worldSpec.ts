@@ -203,6 +203,8 @@ export type WorldSpec = {
     runSpeed: number;
     /** BUILD 093: 로스터 선택 — 'random'이면 로드마다 다른 아이가 걷는다 */
     character?: number | 'random';
+    /** BUILD 116: 등불 — 손 뼈에 랜턴을 쥐고 걷는다. 밤길의 동반자 */
+    lantern?: boolean;
   };
 };
 
