@@ -238,6 +238,92 @@ function makeGrass(rnd: () => number) {
   return tuft;
 }
 
+// ---------- BUILD 118: PROP SETS — 홈즈 원칙을 에디터로. "Object 단위 제작 금지, 반드시 Set 단위." ----------
+export type PropSetPiece = {
+  obj: string;                    // PROP_CATALOG id
+  dx: number; dz: number;         // 중심 기준 오프셋 (배치 규칙의 뼈대)
+  jitter?: number;                // 위치 흔들림 반경
+  scale?: [number, number];       // [최소, 최대]
+  rotY?: number;                  // 기준 회전 (지터 ±0.4rad)
+  roam?: boolean;
+};
+export type PropSet = {
+  id: string;
+  label: string;
+  pieces: PropSetPiece[];
+  /** 세트가 환경까지 바꾼다 (달밤 → 밤) */
+  envTime?: 'day' | 'night';
+};
+
+export const PROP_SETS: PropSet[] = [
+  {
+    id: 'ranch', label: '🐄 목장',
+    pieces: [
+      { obj: 'cowshed', dx: 0, dz: -0.9, scale: [3.2, 3.8], rotY: 0.2 },
+      { obj: 'cow', dx: 0.9, dz: 0.5, jitter: 0.3, scale: [0.95, 1.05], roam: true },
+      { obj: 'cow', dx: -0.8, dz: 0.8, jitter: 0.3, scale: [0.9, 1.0], roam: true },
+      { obj: 'dog', dx: 0.4, dz: 1.1, jitter: 0.25, scale: [0.9, 1.1] },
+      { obj: 'piggy', dx: -0.4, dz: 0.2, jitter: 0.3, scale: [0.9, 1.1] },
+      { obj: 'grass', dx: 0.6, dz: -0.2, jitter: 0.5 },
+      { obj: 'grass', dx: -0.9, dz: -0.4, jitter: 0.5 },
+    ],
+  },
+  {
+    id: 'moonnight', label: '🌙 달밤',
+    envTime: 'night',
+    pieces: [
+      { obj: 'moon', dx: 1.5, dz: -3.5, scale: [1.6, 1.9] },   // y는 배치 후 하늘로 올린다
+      { obj: 'lamp', dx: -0.5, dz: 0.3, jitter: 0.2 },
+      { obj: 'lamp', dx: 0.8, dz: 1.4, jitter: 0.2 },
+    ],
+  },
+  {
+    id: 'grove', label: '🌲 숲 어귀',
+    pieces: [
+      { obj: 'tree', dx: -0.7, dz: -0.3, jitter: 0.3, scale: [1.0, 1.4] },
+      { obj: 'tree', dx: 0.5, dz: -0.8, jitter: 0.3, scale: [0.9, 1.3] },
+      { obj: 'tree', dx: 1.1, dz: 0.4, jitter: 0.3, scale: [1.1, 1.5] },
+      { obj: 'bush', dx: -0.3, dz: 0.5, jitter: 0.4 },
+      { obj: 'bush', dx: 0.2, dz: 0.9, jitter: 0.4 },
+      { obj: 'bush', dx: -1.1, dz: 0.1, jitter: 0.4 },
+      { obj: 'rock-small', dx: 0.7, dz: 0.1, jitter: 0.3, scale: [0.8, 1.3] },
+      { obj: 'rock-small', dx: -0.5, dz: -0.9, jitter: 0.3, scale: [0.8, 1.3] },
+    ],
+  },
+  {
+    id: 'rest', label: '🪑 길가의 쉼터',
+    pieces: [
+      { obj: 'chair', dx: 0, dz: 0, rotY: 0.4 },
+      { obj: 'book', dx: 0.35, dz: 0.15, jitter: 0.08, scale: [0.9, 1.0] },
+      { obj: 'cup', dx: 0.28, dz: -0.18, jitter: 0.05 },
+      { obj: 'lantern', dx: -0.35, dz: 0.1, jitter: 0.08 },
+    ],
+  },
+];
+
+/** 세트 → PlacedProp[] 확장. 각 조각은 배치 후 개별 사물 — 언제든 따로 만질 수 있다. */
+export function expandPropSet(set: PropSet, cx: number, cy: number, cz: number, seed: number): PlacedProp[] {
+  const rnd = rng(seed);
+  return set.pieces.map((pc, i) => {
+    const j = pc.jitter ?? 0;
+    const sc = pc.scale ? pc.scale[0] + rnd() * (pc.scale[1] - pc.scale[0]) : 1;
+    const isMoon = pc.obj === 'moon';
+    return {
+      id: 'p' + Date.now().toString(36) + i.toString(36),
+      obj: pc.obj,
+      position: [
+        +(cx + pc.dx + (rnd() - 0.5) * 2 * j).toFixed(2),
+        isMoon ? +(cy + 7.5).toFixed(2) : +cy.toFixed(2), // 달은 하늘에 건다
+        +(cz + pc.dz + (rnd() - 0.5) * 2 * j).toFixed(2),
+      ] as [number, number, number],
+      rotY: +(((pc.rotY ?? 0) + (rnd() - 0.5) * 0.8)).toFixed(2),
+      rotX: 0,
+      scale: +sc.toFixed(2),
+      roam: pc.roam || undefined,
+    };
+  });
+}
+
 /** BUILD 117: 진짜 등불 (Vase 업로드 촛불 랜턴) — 실패 시 절차 등불 폴백 */
 export async function loadHandLanternAsset(loadModel: ModelLoader = defaultLoader): Promise<THREE.Group> {
   try {

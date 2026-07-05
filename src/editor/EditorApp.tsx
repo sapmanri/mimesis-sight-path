@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { World } from '../scene/World';
-import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, ANIMATED_PROPS, type PlacedProp } from '../engine/props';
+import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, ANIMATED_PROPS, PROP_SETS, expandPropSet, type PlacedProp } from '../engine/props';
 import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { WALKER_ROSTER } from '../engine/worldCore';
@@ -190,7 +190,8 @@ export function EditorApp() {
   const [preview, setPreview] = useState<WorldDoc>(() => clone(doc));
   const [savedAt, setSavedAt] = useState<number | null>(null);
   // BUILD 100: 픽 대상 일반화 — 기억 자리 / 새 배치물 / 배치물 자리 다시 찍기
-  const [pickTarget, setPickTarget] = useState<null | 'scene' | 'prop-new' | 'prop-repos'>(null);
+  const [pickTarget, setPickTarget] = useState<null | 'scene' | 'prop-new' | 'prop-repos' | 'set-place'>(null);
+  const [selSet, setSelSet] = useState(PROP_SETS[0].id); // BUILD 118
   const [propCat, setPropCat] = useState(PROP_CATEGORIES[0]);
   const [propObj, setPropObj] = useState(PROP_CATALOG[0].id);
   // BUILD 112: 자산 창고
@@ -417,6 +418,15 @@ export function EditorApp() {
                     const pp = (d.props ?? []).find((q) => q.id === selProp);
                     if (pp) pp.position = [+pt.x.toFixed(2), +pt.y.toFixed(2), +pt.z.toFixed(2)];
                   });
+                } else if (pickTarget === 'set-place') {
+                  // BUILD 118: 세트 착지 — 규칙에 따라 어우러진 사물들이 한꺼번에 내려앉는다
+                  const setDef = PROP_SETS.find((q) => q.id === selSet);
+                  if (setDef) {
+                    edit((d) => {
+                      d.props = [...(d.props ?? []), ...expandPropSet(setDef, pt.x, pt.y, pt.z, Date.now() % 100000)];
+                      if (setDef.envTime) d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), time: setDef.envTime };
+                    });
+                  }
                 }
                 setPickTarget(null);
               } : undefined}
@@ -526,6 +536,18 @@ export function EditorApp() {
               <button type="button" className={pickTarget === 'prop-new' ? 'ed-pickbtn on' : 'ed-pickbtn'}
                 onClick={() => setPickTarget((v) => (v === 'prop-new' ? null : 'prop-new'))}>
                 {pickTarget === 'prop-new' ? '클릭 대기 중… (취소)' : '⌖ 배치 — 화면을 찍으세요'}
+              </button>
+
+              <h4>세트 — 한 번에 내려앉는 풍경</h4>
+              <div className="ed-wh-chips">
+                {PROP_SETS.map((st) => (
+                  <button key={st.id} type="button" className={selSet === st.id ? 'ed-chip on' : 'ed-chip'}
+                    onClick={() => setSelSet(st.id)}>{st.label}</button>
+                ))}
+              </div>
+              <button type="button" className={pickTarget === 'set-place' ? 'ed-pickbtn on' : 'ed-pickbtn'}
+                onClick={() => setPickTarget((v) => (v === 'set-place' ? null : 'set-place'))}>
+                {pickTarget === 'set-place' ? '클릭 대기 중… (취소)' : '⌖ 세트 배치 — 화면을 찍으세요'}
               </button>
 
               <h4 className="ed-wh-head" onClick={() => setWhOpen((v) => !v)} style={{ cursor: 'pointer' }}>
