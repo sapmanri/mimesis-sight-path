@@ -15,6 +15,39 @@
 //   2. 새 시각 상수를 코드에 하드코딩하지 말 것 — 여기 스키마에 추가할 것.
 //   3. seed = 0 은 "레거시 제주" — 기존 빌드와 픽셀 단위 동일함을 보장한다.
 
+// ---------- BUILD 083: GENERATOR REGISTRY ----------
+// "Everything is a Generator" — 길도, 지형도, 가장자리도, 원경도, 빛도.
+// 이 목록은 순수 데이터다. 에디터는 이 목록을 열거해 토글 UI를 만든다.
+// worldCore.buildWorld는 이 순서대로 생성기를 실행한다.
+
+export type WorldGeneratorId =
+  | 'path'         // 커브 + 프레임 + 길폭 + 앵커 (모든 것의 뼈대, 끌 수 없음)
+  | 'terrain'      // 절벽 둑길 지오메트리 + 프로시저럴 표면
+  | 'edge'         // 길 가장자리 풀잎 (홈즈 문서: Edge Generator — "매우 중요")
+  | 'decoration'   // 바위 산란 (Phase 3에서 Set 구조로 확장)
+  | 'memoryPoints' // 장면별 기억 오브젝트 (kit 슬롯)
+  | 'landscape'    // 원경: 등대, 구름 — 닿을 수 없는 기억
+  | 'light'        // 반구광 + 태양 + 보조광
+  | 'assets';      // 실물 GLB 비동기 투입 (끄면 프록시 프리뷰 모드)
+
+export const WORLD_PIPELINE: { id: WorldGeneratorId; label: string; required?: boolean }[] = [
+  { id: 'path', label: 'Path Generator', required: true },
+  { id: 'terrain', label: 'Terrain Generator' },
+  { id: 'edge', label: 'Edge Generator' },
+  { id: 'decoration', label: 'Decoration Generator' },
+  { id: 'memoryPoints', label: 'Memory Point Generator' },
+  { id: 'landscape', label: 'Landscape Generator' },
+  { id: 'light', label: 'Light Generator' },
+  { id: 'assets', label: 'Asset Generator' },
+];
+
+/** 생성기 활성 여부. required는 항상 켜짐, 나머지는 명시적 false만 꺼짐. */
+export function isGeneratorEnabled(spec: WorldSpec, id: WorldGeneratorId): boolean {
+  const entry = WORLD_PIPELINE.find((g) => g.id === id);
+  if (entry?.required) return true;
+  return spec.generators?.[id] !== false;
+}
+
 export type WorldPalette = {
   fog: string;
   sandTop: string;
@@ -41,6 +74,14 @@ export type WorldSpec = {
     /** 모든 프로시저럴 난수의 기준 시드. 0 = 레거시 제주 (기존 빌드와 동일 출력) */
     seed: number;
   };
+
+  /**
+   * BUILD 083: 생성기 토글. "Everything is a Generator."
+   * 명시적으로 false인 생성기만 꺼진다 (생략 = 전부 켜짐).
+   * required 생성기(path)는 끌 수 없다.
+   * 예: { assets: false } → GLB 없이 프로시저럴 프록시만 (에디터 고속 프리뷰 모드)
+   */
+  generators?: Partial<Record<WorldGeneratorId, boolean>>;
 
   /** 세계의 색. 모든 오브젝트는 이 팔레트를 통과해야만 세계에 들어온다. */
   palette: WorldPalette;

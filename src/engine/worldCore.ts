@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { ObservationScene } from '../data/jeju';
-import { JEJU_SPEC, type WorldPalette, type WorldSpec } from './worldSpec';
+import { isGeneratorEnabled, JEJU_SPEC, type WorldGeneratorId, type WorldPalette, type WorldSpec } from './worldSpec';
 
 // BUILD 082: 팔레트의 원본은 이제 worldSpec에 있다.
 // PALETTE는 "현재 빌드 중인 세계의 활성 팔레트" — buildWorld(spec)가 갈아끼운다.
@@ -352,8 +352,13 @@ export function buildWorld(
     return w * (1 + noise1(t * 40) * P.widthNoise);
   };
 
-  group.add(buildTerrain(frames, widthAt));
-  group.add(buildEdgePlants(frames, widthAt));
+  // ---- 이하 BUILD 083: 생성기 파이프라인. 순서는 WORLD_PIPELINE 참조. ----
+  const on = (id: WorldGeneratorId) => isGeneratorEnabled(spec, id);
+
+  // [terrain] 절벽 둑길 지오메트리
+  if (on('terrain')) group.add(buildTerrain(frames, widthAt));
+  // [edge] 길 가장자리 풀잎
+  if (on('edge')) group.add(buildEdgePlants(frames, widthAt));
 
   const anchors: WorldAnchor[] = sceneT.map((t) => {
     const p = curve.getPoint(t);
@@ -361,21 +366,23 @@ export function buildWorld(
     const nor = new THREE.Vector3(-tan.z, 0, tan.x);
     return { p, tan, nor, w: widthAt(t) };
   });
+
+  // [memoryPoints] 장면별 기억 오브젝트 (kit 슬롯 + 비행기 앵커)
   const kitSlots: { kit: string; slot: THREE.Group; seed: number }[] = [];
-  group.add(buildMemoryObjects(scenes, anchors, kitSlots));
-
-  // 비행기 장면 앵커 (월드 좌표 배치용)
   const wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number }[] = [];
-  scenes.forEach((s, i) => {
-    if (s.objectKit === 'airplane-wing-kit') {
-      const a = anchors[i];
-      wingSpots.push({ p: a.p.clone(), tan: a.tan.clone(), nor: a.nor.clone(), side: i % 2 === 0 ? 1 : -1 });
-    }
-  });
+  if (on('memoryPoints')) {
+    group.add(buildMemoryObjects(scenes, anchors, kitSlots));
+    scenes.forEach((s, i) => {
+      if (s.objectKit === 'airplane-wing-kit') {
+        const a = anchors[i];
+        wingSpots.push({ p: a.p.clone(), tan: a.tan.clone(), nor: a.nor.clone(), side: i % 2 === 0 ? 1 : -1 });
+      }
+    });
+  }
 
-  // 바위 산란 지점: 절벽 모서리(rim)와 벽면(face)
+  // [decoration] 바위 산란 지점: 절벽 모서리(rim)와 벽면(face)
   const rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[] = [];
-  {
+  if (on('decoration')) {
     const rrnd = worldRng(6612);
     for (let k = 0; k < SPEC.decoration.rockCount; k += 1) {
       const i = Math.floor(rrnd() * frames.length);
@@ -389,13 +396,19 @@ export function buildWorld(
       rockSpots.push({ pos, rotY: rrnd() * Math.PI * 2, scale: 0.35 + rrnd() * 0.85, face: onFace });
     }
   }
-  const distant = buildDistantWorld();
-  group.add(distant.group);
 
-  // ---- 실물 모델 비동기 투입 (BUILD 075) ----
-  const ready = attachModels(kitSlots, distant.lighthouseSlot, rockSpots, wingSpots, group, loadModel).catch(() => {});
+  // [landscape] 원경 — 닿을 수 없는 기억
+  const distant = on('landscape')
+    ? buildDistantWorld()
+    : { group: new THREE.Group(), lighthouseSlot: new THREE.Group() };
+  if (on('landscape')) group.add(distant.group);
 
-  // ---- lights ----
+  // [assets] 실물 GLB 비동기 투입 (BUILD 075). 끄면 프록시만 남는 고속 프리뷰.
+  const ready = on('assets')
+    ? attachModels(kitSlots, distant.lighthouseSlot, rockSpots, wingSpots, group, loadModel).catch(() => {})
+    : Promise.resolve();
+
+  // [light] 빛 생성기. sun은 BuiltWorld 계약상 항상 생성 (그림자 타겟 추적용).
   const L = spec.light;
   const lights = new THREE.Group();
   lights.add(new THREE.HemisphereLight(new THREE.Color(L.hemiSky), new THREE.Color(L.hemiGround), L.hemiIntensity));
@@ -416,7 +429,7 @@ export function buildWorld(
   const fill = new THREE.DirectionalLight(new THREE.Color(L.fillColor), L.fillIntensity);
   fill.position.set(...L.fillPosition);
   lights.add(fill);
-  group.add(lights);
+  if (on('light')) group.add(lights);
 
   return { group, curve, anchors, sun, fogColor: new THREE.Color(PALETTE.fog), progressToT, ready: ready as Promise<void> };
 }
