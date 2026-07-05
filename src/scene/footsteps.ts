@@ -6,11 +6,18 @@
 export type Footsteps = {
   /** intensity 0(살금)~1(질주). 발이 땅에 닿는 순간 호출 */
   step: (intensity: number) => void;
+  /** 사용자 제스처 핸들러 안에서 호출 — 모바일 오디오 잠금 해제 */
+  unlock: () => void;
+  setMuted: (m: boolean) => void;
+  muted: () => boolean;
+  setVolume: (v: number) => void;
 };
 
 export function createFootsteps(): Footsteps {
   let ctx: AudioContext | null = null;
   let noiseBuf: AudioBuffer | null = null;
+  let muted = false;
+  let volume = 1;
 
   const ensure = () => {
     if (!ctx) {
@@ -27,12 +34,17 @@ export function createFootsteps(): Footsteps {
   };
 
   return {
+    unlock() { ensure(); },
+    setMuted(m) { muted = m; },
+    muted: () => muted,
+    setVolume(v) { volume = Math.min(1, Math.max(0, v)); },
     step(intensity: number) {
+      if (muted) return;
       if (!ensure() || !ctx || !noiseBuf) return;
       const t = ctx.currentTime;
       const k = Math.min(1, Math.max(0, intensity));
       const master = ctx.createGain();
-      master.gain.value = 0.05 + k * 0.09; // 조용한 세계 — 소리도 조심스럽게
+      master.gain.value = (0.05 + k * 0.09) * volume; // 조용한 세계 — 소리도 조심스럽게
       master.connect(ctx.destination);
 
       // 1) 무게: 사인 thud (주파수 살짝 랜덤 — 걸음마다 같은 소리는 없다)
@@ -62,3 +74,6 @@ export function createFootsteps(): Footsteps {
     },
   };
 }
+
+// BUILD 095: 싱글턴 — World가 밟고, App이 잠금해제/음소거를 관리한다
+export const footsteps = createFootsteps();

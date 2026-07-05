@@ -4,16 +4,36 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
+import { TouchTrail } from './components/TouchTrail';
+import { EditorPanel } from './components/EditorPanel';
+import { footsteps } from './scene/footsteps';
+import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.21.1 · SOLES & SAND · BUILD 094';
+const BUILD_LABEL = 'v0.22.0 · TOUCH & TUNE · BUILD 095';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
+  const [muted, setMuted] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [spec, setSpec] = useState<WorldSpec>(JEJU_SPEC);
   const lastMoveAt = useRef(0);
   const lastManualAt = useRef(0);
+
+  // BUILD 095: 모바일 오디오 잠금 해제 — 어떤 제스처든 첫 접촉에서 (제스처 콜스택 안에서만 유효)
+  useEffect(() => {
+    const unlock = () => footsteps.unlock();
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    window.addEventListener('touchstart', unlock, { passive: true });
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
 
   useEffect(() => {
     const move = (direction: 1 | -1, input: 'auto' | 'manual' = 'manual') => {
@@ -42,12 +62,29 @@ export default function App() {
       if (event.key === 'ArrowUp' || event.key === 'PageUp') move(-1, 'manual');
     };
 
+    // BUILD 095: 모바일 스와이프 — 위로 쓸면 앞으로, 아래로 쓸면 되돌아간다
+    let touchStartY = 0;
+    let touchStartT = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0]?.clientY ?? 0;
+      touchStartT = Date.now();
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      const dy = touchStartY - (e.changedTouches[0]?.clientY ?? touchStartY);
+      const dt = Date.now() - touchStartT;
+      if (Math.abs(dy) > 42 && dt < 700) move(dy > 0 ? 1 : -1, 'manual');
+    };
+
     window.addEventListener('wheel', onWheel, { passive: true });
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
 
     return () => {
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
     };
   }, []);
 
@@ -99,14 +136,36 @@ export default function App() {
           dpr={[1, 2]}
           shadows
         >
-          <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} />
+          <World activeIndex={activeIndex} scenes={jejuScenes} mode={mode} spec={spec} />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />
         <div className="atmosphere-vignette" aria-hidden="true" />
         <ProgressNav scenes={jejuScenes} activeIndex={activeIndex} onChange={handleNavChange} />
         <StoryCard scene={jejuScenes[activeIndex]} mode={mode} />
+        <div className="float-controls">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={muted ? '소리 켜기' : '소리 끄기'}
+            onClick={() => { footsteps.unlock(); footsteps.setMuted(!muted); setMuted(!muted); }}
+          >{muted ? '🔇' : '🔊'}</button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="월드 에디터"
+            onClick={() => setEditorOpen((v) => !v)}
+          >⚙</button>
+        </div>
         <div className="build-badge">{BUILD_LABEL}</div>
+        {editorOpen && (
+          <EditorPanel
+            spec={spec}
+            onApply={(next) => { setSpec(next); setEditorOpen(false); }}
+            onClose={() => setEditorOpen(false)}
+          />
+        )}
       </section>
+      <TouchTrail />
     </main>
   );
 }
