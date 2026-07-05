@@ -10,8 +10,8 @@ import { compileScenes } from './engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
-const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.27.0 · GRAMMAR OF HANDS · BUILD 100';
+const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
+const BUILD_LABEL = 'v0.28.0 · ANCHORED FEET · BUILD 101';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

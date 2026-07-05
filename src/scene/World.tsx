@@ -91,6 +91,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const userCam = useRef({ blend: 0, az: 0, el: 0.45, dist: 5.5, lastInput: -99, dragging: false });
   const walkerPos = useRef<THREE.Vector3 | null>(null); // BUILD 098: 실제 위치 — 커브는 안내선일 뿐
   const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
+  // BUILD 101: 길 탭은 '정확히 그 지점'으로 — 분수 진행도 타깃. activeIndex 동기화가 덮지 않게 잠근다.
+  const tapLock = useRef<number | null>(null);
   const prevWalkerPos = useRef<THREE.Vector3 | null>(null);
   const faceVelocity = useRef(new THREE.Vector3()); // BUILD 090: 가드 리드용 속도 벡터
   const wasMoving = useRef(false);
@@ -167,15 +169,19 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       const hits = ray.intersectObject(world.group, true);
       if (!hits.length) return;
       const pt = hits[0].point;
-      // 가장 가까운 기억 지점
-      let best = 0;
+      // BUILD 101: 찍은 점을 안내선에 투영 — 정확히 그 지점으로 걷는다
+      let bestP = 0;
       let bestD = Infinity;
-      for (let i = 0; i < scenes.length; i += 1) {
-        const a = world.curve.getPoint(world.progressToT(i));
+      const N = scenes.length - 1;
+      for (let p = 0; p <= N; p += 0.02) {
+        const a = world.curve.getPoint(world.progressToT(p));
         const d = Math.hypot(a.x - pt.x, a.z - pt.z);
-        if (d < bestD) { bestD = d; best = i; }
+        if (d < bestD) { bestD = d; bestP = p; }
       }
-      if (bestD < 6) onPathTapRef.current(best);
+      if (bestD < 3.5) {
+        tapLock.current = bestP;
+        onPathTapRef.current(Math.round(bestP));
+      }
     };
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
@@ -246,10 +252,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
 
     // ---- 여정 상태기 ----
     // 목적지가 바뀌면: 팅커가 먼저 날아간다. 사람은 팅커가 자리잡은 뒤에 출발한다.
-    if (J.target !== activeIndex) {
-      J.target = activeIndex;
-      const targetPos = curvePosAt(activeIndex).add(new THREE.Vector3(0, 1.1, 0));
-      const dist = Math.abs(activeIndex - charProgress.current);
+    // BUILD 101: 탭 잠금이 이 activeIndex를 가리키면 분수 지점이 진짜 목적지다.
+    if (tapLock.current !== null && Math.round(tapLock.current) !== activeIndex) tapLock.current = null;
+    const wantTarget = tapLock.current ?? activeIndex;
+    if (J.target !== wantTarget) {
+      J.target = wantTarget;
+      const targetPos = curvePosAt(wantTarget).add(new THREE.Vector3(0, 1.1, 0));
+      const dist = Math.abs(wantTarget - charProgress.current);
       tinker.flyTo(targetPos, Math.min(1.9, 0.8 + dist * 0.3));
       // BUILD 087: 마우스를 휙휙 넘기면 — 뛴다. 조급함은 몸이 먼저 안다.
       const now = clock.elapsedTime;
@@ -266,13 +275,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       // 인물 이탈은 프레임 가드가 매 프레임 막아주므로, 구도는 마음껏 대담해도 된다.
       if (spec.camera.mode === 'held') {
         const a = curvePosAt(charProgress.current);
-        const bPos = curvePosAt(activeIndex);
+        const bPos = curvePosAt(wantTarget);
         const mid = a.clone().lerp(bPos, 0.55);
         const segLen = a.distanceTo(bPos);
-        const midT = world.progressToT((charProgress.current + activeIndex) / 2);
+        const midT = world.progressToT((charProgress.current + wantTarget) / 2);
         const mtan = world.curve.getTangent(midT).setY(0).normalize();
         const mnor = new THREE.Vector3(-mtan.z, 0, mtan.x);
-        const travel = Math.sign(activeIndex - charProgress.current) || 1;
+        const travel = Math.sign(wantTarget - charProgress.current) || 1;
         const dist = Math.min(11, Math.max(4.5, spec.camera.baseDist + segLen * spec.camera.fitGain));
         const recipe = SHOT_RECIPES[Math.floor(Math.random() * SHOT_RECIPES.length)];
         const sideSign = Math.random() > 0.5 ? 1 : -1; // 왼쪽 옆면, 오른쪽 옆면도 번갈아
@@ -401,12 +410,16 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       rig.update(delta, speed01, moving, clock.elapsedTime, distDelta);
       // 도착: 기억 앞에 웅크려 들여다본다 (머무름이 깊은 장면에서만)
       if (wasMoving.current && !moving) {
-        onArrive?.(Math.round(charProgress.current));
-        const scene = scenes[Math.round(charProgress.current)];
-        const st = scene?.stillness ?? 0;
-        // BUILD 091: 깊은 머무름에선 바닥에 앉아 바라본다. 그 밖에선 들여다본다.
-        if (st >= 1.3) rig.playInspect('sit');
-        else if (st >= 0.65) rig.playInspect('pickup');
+        // BUILD 101: 기억 '지점'에 닿았을 때만 카드가 펼쳐지고 몸이 앉는다.
+        // 길 중간에 머무는 건 그냥 서서 바라보는 것.
+        const nearIdx = Math.round(charProgress.current);
+        if (Math.abs(charProgress.current - nearIdx) < 0.22) {
+          onArrive?.(nearIdx);
+          const scene = scenes[nearIdx];
+          const st = scene?.stillness ?? 0;
+          if (st >= 1.3) rig.playInspect('sit');
+          else if (st >= 0.65) rig.playInspect('pickup');
+        }
       }
       if (!wasMoving.current && moving) { rig.stopInspect(); onDepart?.(); }
       const bob = moving && !rig.inspecting() ? Math.abs(Math.sin(rig.phase())) * (0.012 + speed01 * 0.014) : 0;

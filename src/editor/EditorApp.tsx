@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { World } from '../scene/World';
-import { PROP_CATALOG, PROP_CATEGORIES, type PlacedProp } from '../engine/props';
+import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, type PlacedProp } from '../engine/props';
 import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { WALKER_ROSTER } from '../engine/worldCore';
@@ -81,10 +81,10 @@ function FlyRig() {
     const speed = (k['shift'] ? 12 : 4) * dt;
     const fwd = new THREE.Vector3(-Math.sin(L.yaw), 0, -Math.cos(L.yaw));
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-    if (k['w'] || k['arrowup']) camera.position.addScaledVector(fwd, speed);
-    if (k['s'] || k['arrowdown']) camera.position.addScaledVector(fwd, -speed);
-    if (k['a'] || k['arrowleft']) camera.position.addScaledVector(right, -speed);
-    if (k['d'] || k['arrowright']) camera.position.addScaledVector(right, speed);
+    if (k['w']) camera.position.addScaledVector(fwd, speed);
+    if (k['s']) camera.position.addScaledVector(fwd, -speed);
+    if (k['a']) camera.position.addScaledVector(right, -speed);
+    if (k['d']) camera.position.addScaledVector(right, speed);
     if (k['e'] || k[' ']) camera.position.y += speed;
     if (k['q']) camera.position.y -= speed;
   });
@@ -98,6 +98,50 @@ const WEATHERS = ['clear-day', 'soft-cloud', 'rain-cloud', 'drizzle', 'moon-nigh
 const SHOTS = ['wide', 'macro', 'walk', 'overhead', 'side'] as const;
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+
+// ---------- BUILD 101: PROPS LAYER — 살아있는 배치 ----------
+// 배치물은 세계 재생성 없이 그 자리에서 움직인다. 오브젝트는 한 번만 로드하고,
+// 위치/회전/크기는 React 프롭으로만 흐른다. 클릭하면 선택된다.
+function AsyncProp({ obj, seed }: { obj: string; seed: number }) {
+  const [node, setNode] = useState<THREE.Group | null>(null);
+  useEffect(() => {
+    let alive = true;
+    createPropObject(obj, seed).then((g) => { if (alive) setNode(g); });
+    return () => { alive = false; };
+  }, [obj, seed]);
+  return node ? <primitive object={node} /> : null;
+}
+
+function PropsLayer({ list, selected, onSelect }: {
+  list: PlacedProp[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <>
+      {list.map((pp) => {
+        const seed = pp.id.split('').reduce((a, c) => a + c.charCodeAt(0), 7);
+        return (
+          <group
+            key={pp.id}
+            position={pp.position}
+            rotation={[pp.rotX, pp.rotY, 0]}
+            scale={pp.scale}
+            onPointerDown={(e) => { e.stopPropagation(); onSelect(pp.id); }}
+          >
+            <AsyncProp obj={pp.obj} seed={seed} />
+            {selected === pp.id && (
+              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+                <ringGeometry args={[0.34, 0.42, 32]} />
+                <meshBasicMaterial color="#d8c48f" transparent opacity={0.85} depthTest={false} />
+              </mesh>
+            )}
+          </group>
+        );
+      })}
+    </>
+  );
+}
 
 function freshDoc(): WorldDoc {
   return { version: 1, name: 'JEJU, 시선을 따라 걷다', blueprints: clone(jejuBlueprints), spec: clone(JEJU_SPEC) };
@@ -123,22 +167,74 @@ export function EditorApp() {
   const [propObj, setPropObj] = useState(PROP_CATALOG[0].id);
   const [selProp, setSelProp] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // BUILD 101: 키보드 트랜스폼 — 맵 에디터의 문법.
+  // 화살표 = 평면 이동 · PgUp/PgDn = 높이 · R/F = 좌우 회전 · T/G = 기울임 ·
+  // -/= = 크기 · Shift = 큰 걸음 · Delete = 삭제 · ESC = 선택 해제
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickTarget(null); };
-    window.addEventListener('keydown', esc);
-    return () => window.removeEventListener('keydown', esc);
-  }, []);
+    const kd = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setPickTarget(null); setSelProp(null); return; }
+      const tEl = e.target as HTMLElement;
+      if (tEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(tEl.tagName)) return;
+      const prop = selProp ? (doc.props ?? []).find((q) => q.id === selProp) : null;
+      const onScene = !prop && tab === 'scene';
+      if (!prop && !onScene) return;
+      const mv = e.shiftKey ? 0.5 : 0.1;
+      const rot = (e.shiftKey ? 15 : 5) * (Math.PI / 180);
+      const sc = e.shiftKey ? 1.15 : 1.05;
+      const key = e.key;
+      const editProp = (fn: (q: PlacedProp) => void) => edit((d) => { const q = (d.props ?? []).find((x) => x.id === selProp); if (q) fn(q); });
+      const handled = () => e.preventDefault();
+      switch (key) {
+        case 'ArrowLeft': handled(); prop ? editProp((q) => { q.position[0] -= mv; }) : editScene((sc2) => { sc2.position[0] -= mv; }); break;
+        case 'ArrowRight': handled(); prop ? editProp((q) => { q.position[0] += mv; }) : editScene((sc2) => { sc2.position[0] += mv; }); break;
+        case 'ArrowUp': handled(); prop ? editProp((q) => { q.position[2] -= mv; }) : editScene((sc2) => { sc2.position[2] -= mv; }); break;
+        case 'ArrowDown': handled(); prop ? editProp((q) => { q.position[2] += mv; }) : editScene((sc2) => { sc2.position[2] += mv; }); break;
+        case 'PageUp': handled(); prop ? editProp((q) => { q.position[1] += mv; }) : editScene((sc2) => { sc2.position[1] += mv; }); break;
+        case 'PageDown': handled(); prop ? editProp((q) => { q.position[1] -= mv; }) : editScene((sc2) => { sc2.position[1] -= mv; }); break;
+        case 'r': case 'R': prop ? editProp((q) => { q.rotY += rot; }) : editScene((sc2) => { sc2.objectRotY = (sc2.objectRotY ?? 0) + rot; }); break;
+        case 'f': case 'F': prop ? editProp((q) => { q.rotY -= rot; }) : editScene((sc2) => { sc2.objectRotY = (sc2.objectRotY ?? 0) - rot; }); break;
+        case 't': case 'T': prop ? editProp((q) => { q.rotX = Math.min(0.8, q.rotX + rot); }) : editScene((sc2) => { sc2.objectRotX = Math.min(0.8, (sc2.objectRotX ?? 0) + rot); }); break;
+        case 'g': case 'G': prop ? editProp((q) => { q.rotX = Math.max(-0.8, q.rotX - rot); }) : editScene((sc2) => { sc2.objectRotX = Math.max(-0.8, (sc2.objectRotX ?? 0) - rot); }); break;
+        case '=': case '+': prop ? editProp((q) => { q.scale = Math.min(4, q.scale * sc); }) : editScene((sc2) => { sc2.scale = Math.min(3, (sc2.scale || 1) * sc); }); break;
+        case '-': case '_': prop ? editProp((q) => { q.scale = Math.max(0.15, q.scale / sc); }) : editScene((sc2) => { sc2.scale = Math.max(0.2, (sc2.scale || 1) / sc); }); break;
+        case 'Delete': case 'Backspace':
+          if (prop) { handled(); edit((d) => { d.props = (d.props ?? []).filter((q) => q.id !== selProp); }); setSelProp(null); }
+          break;
+        default: break;
+      }
+    };
+    window.addEventListener('keydown', kd);
+    return () => window.removeEventListener('keydown', kd);
+  }, [selProp, tab, doc, sel]);
   const photoRef = useRef<HTMLInputElement | null>(null);
 
-  // 자동저장 + 프리뷰 커밋 (0.5s 디바운스 — 슬라이더 드래그 중 세계 재생성 폭주 방지)
+  // BUILD 101: 자동저장은 그대로, 프리뷰 커밋은 '바뀐 부분만' —
+  // 기억(blueprints)이나 환경(spec)이 실제로 달라졌을 때만 세계를 다시 짓는다.
+  // 배치물(props)은 프리뷰를 거치지 않는다: PropsLayer가 라이브로 그린다.
+  const lastBp = useRef('');
+  const lastSpec = useRef('');
   useEffect(() => {
     const t = setTimeout(() => {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(doc));
       setSavedAt(Date.now());
-      setPreview(clone(doc));
+      const bp = JSON.stringify(doc.blueprints);
+      const sp = JSON.stringify(doc.spec);
+      if (bp !== lastBp.current || sp !== lastSpec.current) {
+        lastBp.current = bp;
+        lastSpec.current = sp;
+        setPreview({ ...clone(doc), props: [] });
+      }
     }, 500);
     return () => clearTimeout(t);
   }, [doc]);
+
+  // 에디터 프리뷰의 워커는 고정 — 재생성 때마다 아이가 바뀌면 정신없다
+  const pinnedWalker = useMemo(() => Math.floor(Math.random() * WALKER_ROSTER.length), []);
+  const previewSpec = useMemo(() => {
+    const sp = clone(preview.spec);
+    if ((sp.walker.character ?? 'random') === 'random') sp.walker.character = pinnedWalker;
+    return sp;
+  }, [preview, pinnedWalker]);
 
   const scenes = useMemo(() => compileScenes(preview.blueprints), [preview]);
   const cur = doc.blueprints[sel];
@@ -256,12 +352,16 @@ export function EditorApp() {
         <main className="ed-preview">
           <Canvas className={pickTarget ? 'ed-canvas ed-picking' : 'ed-canvas'} camera={{ position: [0, 3.1, 8.4], fov: 42 }} dpr={[1, 1.5]} shadows>
             <FlyRig />
+            <PropsLayer
+              list={doc.props ?? []}
+              selected={selProp}
+              onSelect={(id) => { if (!pickTarget) { setSelProp(id); setTab('place'); } }}
+            />
             <World
               activeIndex={Math.min(sel, scenes.length - 1)}
               scenes={scenes}
               mode="manual"
-              spec={preview.spec}
-              props={preview.props}
+              spec={previewSpec}
               freeCamera
               onGroundPick={pickTarget ? (pt) => {
                 if (pickTarget === 'scene') {
@@ -288,7 +388,7 @@ export function EditorApp() {
               {pickTarget === 'scene' ? '지면을 클릭하면 이 기억의 자리가 됩니다' : pickTarget === 'prop-new' ? '지면을 클릭하면 그 자리에 배치됩니다' : '지면을 클릭하면 그리로 옮깁니다'} · ESC 취소
             </div>
           )}
-          <div className="ed-flyhint">WASD/화살표 이동 · Q/E 상하 · 우클릭 드래그 시선 · Shift 가속</div>
+          <div className="ed-flyhint">카메라: WASD + Q/E · 우클릭 드래그 시선 · Shift 가속{selProp ? ' — 선택물: 화살표 · R/F · T/G · −/=' : ''}</div>
           <div className="ed-preview-bar">
             <button type="button" onClick={() => setSel((v) => Math.max(0, v - 1))}>←</button>
             <span>{String(sel + 1).padStart(2, '0')} / {doc.blueprints.length} · {cur?.title}</span>
@@ -352,18 +452,13 @@ export function EditorApp() {
               <button type="button" className={pickTarget === 'scene' ? 'ed-pickbtn on' : 'ed-pickbtn'} onClick={() => setPickTarget((v) => (v === 'scene' ? null : 'scene'))}>
                 {pickTarget === 'scene' ? '클릭 대기 중… (취소)' : '⌖ 프리뷰에서 자리 찍기'}
               </button>
-              <label>사물 크기 <em>{(cur.scale || 1).toFixed(2)}×</em>
-                <input type="range" min="0.4" max="2" step="0.05" value={cur.scale || 1}
-                  onChange={(e) => editScene((sc) => { sc.scale = Number(e.target.value); })} />
-              </label>
-              <label>사물 회전 · 좌우 <em>{Math.round((cur.objectRotY ?? 0) * 180 / Math.PI)}°</em>
-                <input type="range" min={-Math.PI} max={Math.PI} step="0.02" value={cur.objectRotY ?? 0}
-                  onChange={(e) => editScene((s) => { s.objectRotY = Number(e.target.value); })} />
-              </label>
-              <label>사물 기울임 · 위아래 <em>{Math.round((cur.objectRotX ?? 0) * 180 / Math.PI)}°</em>
-                <input type="range" min={-0.8} max={0.8} step="0.02" value={cur.objectRotX ?? 0}
-                  onChange={(e) => editScene((s) => { s.objectRotX = Number(e.target.value); })} />
-              </label>
+              <div className="ed-readout">
+                <span>회전 {Math.round((cur.objectRotY ?? 0) * 180 / Math.PI)}° · 기울임 {Math.round((cur.objectRotX ?? 0) * 180 / Math.PI)}° · 크기 {(cur.scale || 1).toFixed(2)}×</span>
+              </div>
+              <div className="ed-keyguide">
+                <b>키보드로 조정</b>
+                화살표 이동 · PgUp/Dn 높이 · R/F 회전 · T/G 기울임 · −/= 크기 · Shift 크게
+              </div>
               <div className="ed-photo">
                 <span>사진 <small>(폴라로이드 액자 예정)</small></span>
                 {cur.photo
@@ -410,21 +505,15 @@ export function EditorApp() {
               {selProp && (() => {
                 const pp = (doc.props ?? []).find((q) => q.id === selProp);
                 if (!pp) return null;
-                const editProp = (fn: (q: PlacedProp) => void) => edit((d) => { const q = (d.props ?? []).find((x) => x.id === selProp); if (q) fn(q); });
                 return (
                   <div className="ed-propedit">
-                    <label>회전 · 좌우 <em>{Math.round(pp.rotY * 180 / Math.PI)}°</em>
-                      <input type="range" min={-Math.PI} max={Math.PI} step="0.02" value={pp.rotY} onChange={(e) => editProp((q) => { q.rotY = Number(e.target.value); })} />
-                    </label>
-                    <label>기울임 · 위아래 <em>{Math.round(pp.rotX * 180 / Math.PI)}°</em>
-                      <input type="range" min={-0.8} max={0.8} step="0.02" value={pp.rotX} onChange={(e) => editProp((q) => { q.rotX = Number(e.target.value); })} />
-                    </label>
-                    <label>크기 <em>{pp.scale.toFixed(2)}×</em>
-                      <input type="range" min="0.3" max="3" step="0.05" value={pp.scale} onChange={(e) => editProp((q) => { q.scale = Number(e.target.value); })} />
-                    </label>
-                    <label>높이 <em>{pp.position[1].toFixed(2)}u</em>
-                      <input type="range" min="-0.5" max="9" step="0.1" value={pp.position[1]} onChange={(e) => editProp((q) => { q.position[1] = Number(e.target.value); })} />
-                    </label>
+                    <div className="ed-readout">
+                      <span>({pp.position[0].toFixed(1)}, {pp.position[1].toFixed(1)}, {pp.position[2].toFixed(1)}) · 회전 {Math.round(pp.rotY * 180 / Math.PI)}° · 기울임 {Math.round(pp.rotX * 180 / Math.PI)}° · {pp.scale.toFixed(2)}×</span>
+                    </div>
+                    <div className="ed-keyguide">
+                      <b>키보드로 조정</b>
+                      화살표 이동 · PgUp/Dn 높이 · R/F 회전 · T/G 기울임 · −/= 크기 · Shift 크게 · Del 삭제
+                    </div>
                     <button type="button" className={pickTarget === 'prop-repos' ? 'ed-pickbtn on' : 'ed-pickbtn'}
                       onClick={() => setPickTarget((v) => (v === 'prop-repos' ? null : 'prop-repos'))}>
                       {pickTarget === 'prop-repos' ? '클릭 대기 중… (취소)' : '⌖ 자리 다시 찍기'}

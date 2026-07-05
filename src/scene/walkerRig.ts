@@ -196,6 +196,13 @@ export function createClipRig(
   // BUILD 100: Mixamo 'Sitting'은 의자 높이다 — 앉는 동안 몸을 천천히 가라앉혀 땅에 앉힌다.
   // 일어날 땐 같은 속도로 떠오른다 — 툭 튀는 대신 스르륵.
   let sitSink = 0;
+  // BUILD 101: 발 앵커 (Vase 진단 — 무게중심과 발의 어긋남).
+  // 앉는 애니는 발이 앞으로 나가지만 좌표는 몸 중심이라, 일어날 때 그 차이만큼 툭 튄다.
+  // 해법: 제스처 동안 '발 중점'을 붙박고, 발이 움직인 만큼 몸을 역보정한다 —
+  // 사람은 발이 있던 자리에 앉고, 발이 있던 자리에서 일어난다.
+  let feetAnchor: { x: number; z: number } | null = null;
+  let feetOffX = 0;
+  let feetOffZ = 0;
   // 발자국 감지: 발이 접지 문턱을 뚫고 내려오는 순간
   let contactL = false;
   let contactR = false;
@@ -232,6 +239,15 @@ export function createClipRig(
     phase: () => 0, // 상하 흔들림은 클립 안에 있다 — 홀더 bob은 끈다
     playInspect(kind = 'pickup') {
       if (gesture !== 'none') return;
+      // 발 앵커: 지금 발이 있는 자리 (홀더 로컬)
+      if (footL && footR && root.parent) {
+        root.updateMatrixWorld(true);
+        footL.getWorldPosition(fw);
+        const lx = fw.x; const lz = fw.z;
+        footR.getWorldPosition(fw);
+        root.parent.getWorldPosition(pw);
+        feetAnchor = { x: (lx + fw.x) / 2 - pw.x, z: (lz + fw.z) / 2 - pw.z };
+      }
       if (kind === 'sit' && sitIdle) {
         if (sitDown) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
         else { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 전환 클립이 없으면 느린 페이드로
@@ -302,6 +318,30 @@ export function createClipRig(
           contactR = false;
         }
       }
+      // 발 앵커 역보정: 제스처 동안 발 중점이 앵커에서 벗어난 만큼 몸을 되민다
+      if (footL && footR && root.parent && feetAnchor && (gesture !== 'none' || gestureGrace > 0)) {
+        root.updateMatrixWorld(true);
+        footL.getWorldPosition(fw);
+        const lx = fw.x; const lz = fw.z;
+        footR.getWorldPosition(fw);
+        root.parent.getWorldPosition(pw);
+        const curX = (lx + fw.x) / 2 - pw.x - feetOffX; // 보정분 제외한 원시 발 위치
+        const curZ = (lz + fw.z) / 2 - pw.z - feetOffZ;
+        // 발을 못박되, 보정 속도는 0.8u/s로 제한 — 발 떨림이 몸의 점프로 역류하지 않게
+        const tx = feetAnchor.x - curX;
+        const tz = feetAnchor.z - curZ;
+        const step = 0.8 * dt;
+        feetOffX += THREE.MathUtils.clamp(tx - feetOffX, -step, step);
+        feetOffZ += THREE.MathUtils.clamp(tz - feetOffZ, -step, step);
+      } else if (feetAnchor) {
+        // 제스처가 완전히 끝났다 — 보정을 조용히 거둔다 (걷기 시작하면 더 빨리)
+        const k = Math.min(1, dt * (moving ? 4 : 1.2));
+        feetOffX *= 1 - k;
+        feetOffZ *= 1 - k;
+        if (Math.abs(feetOffX) + Math.abs(feetOffZ) < 0.002) { feetAnchor = null; feetOffX = 0; feetOffZ = 0; }
+      }
+      root.position.x = feetOffX;
+      root.position.z = feetOffZ;
       root.position.y = baseY + groundCorr - sitSink;
     },
   };
