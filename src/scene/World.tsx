@@ -48,6 +48,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
   const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
   const prevWalkerPos = useRef<THREE.Vector3 | null>(null);
   const wasMoving = useRef(false);
+  // BUILD 088: 관조 카메라의 현재 구도 (여정마다 새로 잡고, 잡은 뒤엔 잠근다)
+  const shot = useRef<{ pos: THREE.Vector3; look: THREE.Vector3 } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -75,6 +77,21 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
     const J = journey.current;
     const curvePosAt = (prog: number) => world.curve.getPoint(world.progressToT(prog));
 
+    // BUILD 088: 첫 구도 — 여정이 시작되기 전에도 시선은 이미 자리를 잡고 있다
+    if (spec.camera.mode === 'held' && !shot.current) {
+      const a0 = curvePosAt(charProgress.current);
+      const b0 = curvePosAt(Math.min(scenes.length - 1, charProgress.current + 1));
+      const mid0 = a0.clone().lerp(b0, 0.55);
+      const t0 = world.progressToT(charProgress.current + 0.5);
+      const tan0 = world.curve.getTangent(t0).setY(0).normalize();
+      const nor0 = new THREE.Vector3(-tan0.z, 0, tan0.x);
+      const d0 = spec.camera.baseDist + a0.distanceTo(b0) * spec.camera.fitGain;
+      shot.current = {
+        pos: mid0.clone().add(nor0.multiplyScalar(d0 * 0.82)).add(tan0.multiplyScalar(-d0 * 0.4)).add(new THREE.Vector3(0, spec.camera.height + 0.7, 0)),
+        look: mid0.clone().add(new THREE.Vector3(0, 0.45, 0)),
+      };
+    }
+
     // ---- 여정 상태기 ----
     // 목적지가 바뀌면: 팅커가 먼저 날아간다. 사람은 팅커가 자리잡은 뒤에 출발한다.
     if (J.target !== activeIndex) {
@@ -92,6 +109,25 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
         J.phase = 'walk'; // 정찰을 기다리지 않고 바로 출발
       } else if (J.phase !== 'walk') {
         J.phase = 'scout';
+      }
+      // BUILD 088: 새 여정 = 새 구도. 출발점과 목적지가 함께 담기는 3/4 부감을 잡고, 잠근다.
+      if (spec.camera.mode === 'held') {
+        const a = curvePosAt(charProgress.current);
+        const bPos = curvePosAt(activeIndex);
+        const mid = a.clone().lerp(bPos, 0.55);
+        const segLen = a.distanceTo(bPos);
+        const midT = world.progressToT((charProgress.current + activeIndex) / 2);
+        const mtan = world.curve.getTangent(midT).setY(0).normalize();
+        const mnor = new THREE.Vector3(-mtan.z, 0, mtan.x);
+        const travel = Math.sign(activeIndex - charProgress.current) || 1;
+        const dist = Math.min(11, Math.max(4.5, spec.camera.baseDist + segLen * spec.camera.fitGain));
+        shot.current = {
+          pos: mid.clone()
+            .add(mnor.clone().multiplyScalar(dist * 0.82))
+            .add(mtan.clone().multiplyScalar(-travel * dist * 0.4))
+            .add(new THREE.Vector3(0, spec.camera.height + segLen * 0.1, 0)),
+          look: mid.clone().add(new THREE.Vector3(0, 0.45, 0)),
+        };
       }
     }
     if (J.phase === 'scout' && tinker.state() === 'hover') {
@@ -184,20 +220,34 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
     walker.rotation.y = charYaw.current;
     wasMoving.current = moving;
 
-    // ---- 카메라: 휙휙 가지 않는다. 몸이 향한 곳의 등 뒤에서 조용히 따라갈 뿐. ----
-    const faceDir = new THREE.Vector3(Math.sin(charYaw.current), 0, Math.cos(charYaw.current));
-    const desired = pos
-      .clone()
-      .add(faceDir.clone().multiplyScalar(-3.4))
-      .add(new THREE.Vector3(0, 2.0, 0));
-    const lookTarget = walker.position
-      .clone()
-      .add(faceDir.clone().multiplyScalar(0.9))
-      .add(new THREE.Vector3(0, 0.8, 0));
-
-    camera.position.lerp(desired, 1 - Math.pow(0.12, delta));
-    smoothLook.current.lerp(lookTarget, 1 - Math.pow(0.06, delta));
-    camera.lookAt(smoothLook.current);
+    // ---- 카메라 ----
+    if (spec.camera.mode === 'held' && shot.current) {
+      // BUILD 088: 관조 카메라 — 레퍼런스의 문법. 구도는 잠기고, 사람이 그 속을 걸어간다.
+      // 구도 전환은 reframeSec의 호흡으로 느리게 흘러가고, 잡힌 뒤엔 미세하게만 숨쉰다.
+      const e = clock.elapsedTime;
+      const D = spec.camera.drift;
+      const desired = shot.current.pos.clone().add(new THREE.Vector3(
+        Math.sin(e * 0.23) * D, Math.sin(e * 0.31 + 1.2) * D * 0.6, Math.cos(e * 0.19) * D,
+      ));
+      const k = 1 - Math.pow(0.002, delta / spec.camera.reframeSec);
+      camera.position.lerp(desired, k);
+      smoothLook.current.lerp(shot.current.look, k);
+      camera.lookAt(smoothLook.current);
+    } else {
+      // follow 모드 (BUILD 087): 몸이 향한 곳의 등 뒤에서 조용히 따라간다
+      const faceDir = new THREE.Vector3(Math.sin(charYaw.current), 0, Math.cos(charYaw.current));
+      const desired = pos
+        .clone()
+        .add(faceDir.clone().multiplyScalar(-3.4))
+        .add(new THREE.Vector3(0, 2.0, 0));
+      const lookTarget = walker.position
+        .clone()
+        .add(faceDir.clone().multiplyScalar(0.9))
+        .add(new THREE.Vector3(0, 0.8, 0));
+      camera.position.lerp(desired, 1 - Math.pow(0.12, delta));
+      smoothLook.current.lerp(lookTarget, 1 - Math.pow(0.06, delta));
+      camera.lookAt(smoothLook.current);
+    }
 
     // 태양은 걷는 사람을 따라간다 (그림자 카메라가 항상 근처를 비추도록)
     world.sun.position.copy(pos).add(new THREE.Vector3(6, 11, 5));

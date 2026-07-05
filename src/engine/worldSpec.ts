@@ -166,6 +166,17 @@ export type WorldSpec = {
   };
 
   /** 걷는 사람 — 이 세계의 주인공은 걷는 시간이다. */
+  /** BUILD 088: 카메라 문법. 레퍼런스 릴 실측 — 카메라는 잠겨 있고(2초에 0px),
+   *  캐릭터가 고정된 구도 속을 걸어 지나간다. 디오라마를 바라보는 시선. */
+  camera: {
+    mode: 'held' | 'follow';
+    height: number;      // 관조 시점 높이
+    baseDist: number;    // 기본 이격
+    fitGain: number;     // 여정 길이가 길수록 물러나는 배율
+    reframeSec: number;  // 다음 구도로 넘어가는 호흡
+    drift: number;       // 구도 안에서 숨쉬는 미세 드리프트 진폭
+  };
+
   walker: {
     /** 걸음 애니메이션 배속 (0.72 = 천천히 걷는다) */
     timeScale: number;
@@ -246,6 +257,14 @@ export const JEJU_SPEC: WorldSpec = {
     fillColor: '#9fc4c9',
     fillIntensity: 0.22,
     fillPosition: [-5, 3, -4],
+  },
+  camera: {
+    mode: 'held',
+    height: 2.7,
+    baseDist: 4.2,
+    fitGain: 0.55,
+    reframeSec: 2.4,
+    drift: 0.05,
   },
   walker: {
     timeScale: 0.72,
