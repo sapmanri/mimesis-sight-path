@@ -176,7 +176,7 @@ function makeCliffTexture() {
 // 원칙: 모델은 팔레트를 통과해야만 세계에 들어온다 (원색 반입 금지).
 // 로드 실패 시 프로시저럴 프록시가 그대로 남는다 (폴백 안전).
 
-export type ModelLoader = (file: string) => Promise<THREE.Group>;
+export type ModelLoader = (file: string) => Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>;
 
 type ModelSpec = {
   file: string;
@@ -192,6 +192,14 @@ const MODELS: Record<string, ModelSpec> = {
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 9, tint: PALETTE.white },
   stone: { file: 'stone11.glb', height: 0.24, tint: '#6e7268', fitMaxDim: true },
   rock0: { file: 'Rock0.glb', height: 0.3, tint: '#79766a', fitMaxDim: true },
+  rockA: { file: 'RockA.glb', height: 0.22, tint: '#6b6e63', fitMaxDim: true },
+  rockB: { file: 'RockB.glb', height: 0.22, tint: '#75725f', fitMaxDim: true },
+  rockC: { file: 'RockC.glb', height: 0.22, tint: '#666a61', fitMaxDim: true },
+  rockD: { file: 'RockD.glb', height: 0.22, tint: '#7c7666', fitMaxDim: true },
+  caveA: { file: 'CaveA.glb', height: 1.15, tint: '#8a7d68', fitMaxDim: true },
+  caveB: { file: 'CaveB.glb', height: 0.95, tint: '#7e7361', fitMaxDim: true },
+  walker: { file: 'Peasant.glb', height: 0.9, tint: '#57534a' },
+  airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
   rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },
 };
@@ -262,17 +270,26 @@ const defaultLoader: ModelLoader = (file) =>
   new Promise((resolve, reject) => {
     new GLTFLoader().load(
       `/assets/models/${file}`,
-      (gltf) => resolve(gltf.scene as unknown as THREE.Group),
+      (gltf) => resolve({ scene: gltf.scene as unknown as THREE.Group, animations: gltf.animations }),
       undefined,
       reject,
     );
   });
 
-async function loadKitModel(key: string, loadModel: ModelLoader) {
+export async function loadKitModel(key: string, loadModel: ModelLoader) {
   const spec = MODELS[key];
-  const raw = await loadModel(spec.file);
+  const raw = (await loadModel(spec.file)).scene;
   applyPalette(raw, spec.tint);
   return normalizeModel(raw, spec);
+}
+
+/** 워커 실물 (Peasant Nolant): 정규화된 그룹 + Walk/Idle 애니메이션 클립 */
+export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader) {
+  const spec = MODELS.walker;
+  const gltf = await loadModel(spec.file);
+  applyPalette(gltf.scene, spec.tint);
+  const group = normalizeModel(gltf.scene, spec);
+  return { group, animations: gltf.animations };
 }
 
 function seededRandom(seed: number) {
@@ -341,8 +358,17 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
   const kitSlots: { kit: string; slot: THREE.Group; seed: number }[] = [];
   group.add(buildMemoryObjects(scenes, anchors, kitSlots));
 
+  // 비행기 장면 앵커 (월드 좌표 배치용)
+  const wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number }[] = [];
+  scenes.forEach((s, i) => {
+    if (s.objectKit === 'airplane-wing-kit') {
+      const a = anchors[i];
+      wingSpots.push({ p: a.p.clone(), tan: a.tan.clone(), nor: a.nor.clone(), side: i % 2 === 0 ? 1 : -1 });
+    }
+  });
+
   // 바위 산란 지점: 절벽 모서리(rim)와 벽면(face)
-  const rockSpots: { pos: THREE.Vector3; rotY: number; scale: number }[] = [];
+  const rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[] = [];
   {
     const rrnd = seededRandom(6612);
     for (let k = 0; k < 46; k += 1) {
@@ -354,14 +380,14 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
       const out = onFace ? w * (0.92 + rrnd() * 0.2) : w * (0.82 + rrnd() * 0.14);
       const y = onFace ? f.p.y - 0.12 - rrnd() * 0.28 : f.p.y - 0.03;
       const pos = f.p.clone().add(f.nor.clone().multiplyScalar(side * out)).setY(y);
-      rockSpots.push({ pos, rotY: rrnd() * Math.PI * 2, scale: 0.35 + rrnd() * 0.85 });
+      rockSpots.push({ pos, rotY: rrnd() * Math.PI * 2, scale: 0.35 + rrnd() * 0.85, face: onFace });
     }
   }
   const distant = buildDistantWorld();
   group.add(distant.group);
 
   // ---- 실물 모델 비동기 투입 (BUILD 075) ----
-  const ready = attachModels(kitSlots, distant.lighthouseSlot, rockSpots, group, loadModel).catch(() => {});
+  const ready = attachModels(kitSlots, distant.lighthouseSlot, rockSpots, wingSpots, group, loadModel).catch(() => {});
 
   // ---- lights ----
   const lights = new THREE.Group();
@@ -391,7 +417,8 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
 async function attachModels(
   kitSlots: { kit: string; slot: THREE.Group; seed: number }[],
   lighthouseSlot: THREE.Group,
-  rockSpots: { pos: THREE.Vector3; rotY: number; scale: number }[],
+  rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[],
+  wingSpots: { p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3; side: number }[],
   worldGroup: THREE.Group,
   loadModel: ModelLoader,
 ) {
@@ -402,13 +429,17 @@ async function attachModels(
     loadKitModel('rock0', loadModel),
     loadKitModel('rock3', loadModel),
     loadKitModel('rock7', loadModel),
+    loadKitModel('caveA', loadModel),
+    loadKitModel('caveB', loadModel),
   ]).then((variants) => {
     const rockGroup = new THREE.Group();
     rockSpots.forEach((spot, i) => {
-      const r = variants[i % variants.length].clone(true);
+      // 대형 슬랩(CaveWalls)은 절벽면 전용 — 길 위에는 작은 바위만
+      const isSlab = spot.face && i % 2 === 0;
+      const r = variants[isSlab ? 3 + (i % 2) : i % 3].clone(true);
       r.position.copy(spot.pos);
       r.rotation.y = spot.rotY;
-      r.scale.setScalar(spot.scale);
+      r.scale.setScalar(isSlab ? spot.scale * 0.55 : spot.scale * (spot.face ? 1 : 0.6));
       rockGroup.add(r);
     });
     worldGroup.add(rockGroup);
@@ -473,6 +504,21 @@ async function attachModels(
   tasks.push(loadKitModel('lighthouse', loadModel).then((lh) => {
     lighthouseSlot.add(lh);
   }));
+
+  // 비행기: 길 옆 허공을 스쳐 지나가는 중 — 진행 방향과 나란히, 반쯤 안개 위
+  if (wingSpots.length) {
+    tasks.push(loadKitModel('airplane', loadModel).then((plane) => {
+      wingSpots.forEach((w) => {
+        const p = plane.clone(true);
+        p.position.copy(w.p)
+          .add(w.nor.clone().multiplyScalar(w.side * 9))
+          .add(new THREE.Vector3(0, -0.15, 0)); // 허공 멀리, 안개에 반쯤 잠긴 채
+        p.rotation.y = Math.atan2(w.tan.x, w.tan.z) + 0.25;
+        p.rotation.z = 0.06;
+        worldGroup.add(p);
+      });
+    }));
+  }
 
   await Promise.allSettled(tasks);
 }
@@ -743,18 +789,7 @@ const KITS: Record<string, KitFn> = {
     g.add(coat, head, brim, crown, pack);
     return g;
   },
-  'airplane-wing-kit': () => {
-    const g = new THREE.Group();
-    const wing = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.05, 0.7), std('#dfe3e0'));
-    wing.position.set(0, 0.5, 0);
-    wing.rotation.z = 0.06;
-    wing.rotation.y = 0.5;
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.052, 0.06), std('#c9b06a'));
-    stripe.position.set(0, 0.5, 0.2);
-    stripe.rotation.copy(wing.rotation);
-    g.add(wing, stripe);
-    return g;
-  },
+  'airplane-wing-kit': () => new THREE.Group(), // 판자 제거 — 실물 비행기는 attachModels에서
   'stone-wall-kit': (rnd) => {
     const g = new THREE.Group();
     const mat = std(PALETTE.basalt);

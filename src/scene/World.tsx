@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
-import { buildWorld, createWalkerFigure, PALETTE } from '../engine/worldCore';
+import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../engine/worldCore';
 
 type WorldProps = {
   scenes: ObservationScene[];
@@ -14,9 +14,40 @@ type WorldProps = {
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
 export function World({ scenes, activeIndex, mode }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes), [scenes]);
-  const walker = useMemo(() => createWalkerFigure(), []);
+  // 워커: 프로시저럴 실루엣으로 시작, Peasant 로드 완료 시 교체
+  const walker = useMemo(() => {
+    const holder = new THREE.Group();
+    holder.add(createWalkerFigure());
+    return holder;
+  }, []);
+  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const actionsRef = useRef<{ walk?: THREE.AnimationAction; idle?: THREE.AnimationAction }>({});
   const walkProgress = useRef(activeIndex);
   const { gl } = useThree();
+
+  useEffect(() => {
+    let alive = true;
+    loadWalkerAsset().then(({ group, animations }) => {
+      if (!alive) return;
+      walker.clear();
+      walker.add(group);
+      const mixer = new THREE.AnimationMixer(group);
+      mixerRef.current = mixer;
+      const walkClip = animations.find((a) => /walk/i.test(a.name));
+      const idleClip = animations.find((a) => /idle/i.test(a.name));
+      if (walkClip) {
+        const walk = mixer.clipAction(walkClip);
+        walk.timeScale = 0.72; // 천천히 걷는다
+        actionsRef.current.walk = walk;
+      }
+      if (idleClip) {
+        const idle = mixer.clipAction(idleClip);
+        idle.play();
+        actionsRef.current.idle = idle;
+      }
+    }).catch(() => { /* 실패 시 프로시저럴 실루엣 유지 */ });
+    return () => { alive = false; };
+  }, [walker]);
 
   useEffect(() => {
     gl.shadowMap.enabled = true;
@@ -44,13 +75,32 @@ export function World({ scenes, activeIndex, mode }: WorldProps) {
     const nor = new THREE.Vector3(-dir.z, 0, dir.x);
 
     // ---- 걷는 사람 ----
-    if (moving) walkPhase.current += delta * 4.6;
-    const bob = moving ? Math.abs(Math.sin(walkPhase.current)) * 0.016 : 0;
-    const sway = moving ? Math.sin(walkPhase.current) * 0.035 : 0;
-    const breathe = Math.sin(clock.elapsedTime * 1.4) * 0.004;
-    walker.position.copy(pos).add(new THREE.Vector3(0, bob + breathe, 0));
+    const mixer = mixerRef.current;
+    const acts = actionsRef.current;
+    if (mixer) {
+      // 실물 워커: 애니메이션 클립으로 걷는다
+      if (acts.walk && acts.idle) {
+        if (moving && !acts.walk.isRunning()) {
+          acts.walk.reset().fadeIn(0.35).play();
+          acts.idle.fadeOut(0.35);
+        } else if (!moving && acts.walk.isRunning()) {
+          acts.walk.fadeOut(0.5);
+          acts.idle.reset().fadeIn(0.5).play();
+        }
+      }
+      mixer.update(delta);
+      walker.position.copy(pos);
+      walker.rotation.z = 0;
+    } else {
+      // 폴백 실루엣: 절차적 걸음
+      if (moving) walkPhase.current += delta * 4.6;
+      const bob = moving ? Math.abs(Math.sin(walkPhase.current)) * 0.016 : 0;
+      const sway = moving ? Math.sin(walkPhase.current) * 0.035 : 0;
+      const breathe = Math.sin(clock.elapsedTime * 1.4) * 0.004;
+      walker.position.copy(pos).add(new THREE.Vector3(0, bob + breathe, 0));
+      walker.rotation.z = sway;
+    }
     walker.rotation.y = Math.atan2(dir.x, dir.z);
-    walker.rotation.z = sway;
 
     // ---- 카메라: 걷는 사람의 등을 조용히 따라간다 ----
     const sideDrift = Math.sin(walkProgress.current * 0.72) * 0.15;
