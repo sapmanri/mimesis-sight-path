@@ -6,6 +6,13 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../eng
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
+import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
+
+// BUILD 090: 액자 수호 규칙 값 — 에디터 Camera 패널 노출 예정
+const ZERO_VEL = new THREE.Vector3();
+const GUARD_PARAMS: GuardParams = {
+  safeX: 0.55, safeY: 0.68, maxDist: 13, minDist: 1.9, panRate: 2.4, moveRate: 1.1, leadTime: 0.55,
+};
 
 type WorldProps = {
   scenes: ObservationScene[];
@@ -47,6 +54,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
   const charYaw = useRef(0);                // BUILD 087: 몸의 방향 — 스냅하지 않고 돌아선다
   const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
   const prevWalkerPos = useRef<THREE.Vector3 | null>(null);
+  const faceVelocity = useRef(new THREE.Vector3()); // BUILD 090: 가드 리드용 속도 벡터
   const wasMoving = useRef(false);
   // BUILD 088: 관조 카메라의 현재 구도 (여정마다 새로 잡고, 잡은 뒤엔 잠근다)
   const shot = useRef<{ pos: THREE.Vector3; look: THREE.Vector3 } | null>(null);
@@ -110,7 +118,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       } else if (J.phase !== 'walk') {
         J.phase = 'scout';
       }
-      // BUILD 088: 새 여정 = 새 구도. 출발점과 목적지가 함께 담기는 3/4 부감을 잡고, 잠근다.
+      // BUILD 090: 새 여정 = 새 구도. 구도 사전에서 뽑는다 — 옆면, 마중, 부감... 다양함이 핵심.
+      // 인물 이탈은 프레임 가드가 매 프레임 막아주므로, 구도는 마음껏 대담해도 된다.
       if (spec.camera.mode === 'held') {
         const a = curvePosAt(charProgress.current);
         const bPos = curvePosAt(activeIndex);
@@ -121,13 +130,25 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
         const mnor = new THREE.Vector3(-mtan.z, 0, mtan.x);
         const travel = Math.sign(activeIndex - charProgress.current) || 1;
         const dist = Math.min(11, Math.max(4.5, spec.camera.baseDist + segLen * spec.camera.fitGain));
+        const recipe = SHOT_RECIPES[Math.floor(Math.random() * SHOT_RECIPES.length)];
+        const sideSign = Math.random() > 0.5 ? 1 : -1; // 왼쪽 옆면, 오른쪽 옆면도 번갈아
+        // 시선은 인물과 여정 중점 사이 — 인물을 품은 채 태어나는 구도
         shot.current = {
           pos: mid.clone()
-            .add(mnor.clone().multiplyScalar(dist * 0.82))
-            .add(mtan.clone().multiplyScalar(-travel * dist * 0.4))
-            .add(new THREE.Vector3(0, spec.camera.height + segLen * 0.1, 0)),
-          look: mid.clone().add(new THREE.Vector3(0, 0.45, 0)),
+            .add(mnor.clone().multiplyScalar(sideSign * dist * recipe.nor))
+            .add(mtan.clone().multiplyScalar(travel * dist * recipe.tan))
+            .add(new THREE.Vector3(0, spec.camera.height * (0.4 + recipe.lift) + segLen * recipe.hBoost, 0)),
+          look: a.clone().lerp(mid, 0.4).add(new THREE.Vector3(0, 0.45, 0)),
         };
+        // BUILD 090: 사전 정착 — 구도가 화면에 나가기 전에 가드를 미리 돌려
+        // 인물이 처음부터 액자 안에 있도록 다듬는다 (첫 프레임 이탈 방지)
+        {
+          const cam3 = camera as THREE.PerspectiveCamera;
+          const chestNow = walker.position.clone().add(new THREE.Vector3(0, 0.5, 0));
+          for (let i = 0; i < 40; i += 1) {
+            guardShot(shot.current, chestNow, ZERO_VEL, cam3.fov, cam3.aspect, 0.05, GUARD_PARAMS);
+          }
+        }
       }
     }
     if (J.phase === 'scout' && tinker.state() === 'hover') {
@@ -192,6 +213,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
 
     // 이번 프레임 실제 이동 거리 → 보폭 동기 (발이 미끄러지지 않는다)
     const distDelta = prevWalkerPos.current ? pos.distanceTo(prevWalkerPos.current) : 0;
+    if (prevWalkerPos.current && delta > 0) {
+      faceVelocity.current.copy(pos).sub(prevWalkerPos.current).divideScalar(delta);
+    }
     prevWalkerPos.current = pos.clone();
 
     // ---- 걷는 사람 ----
@@ -222,8 +246,12 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
 
     // ---- 카메라 ----
     if (spec.camera.mode === 'held' && shot.current) {
-      // BUILD 088: 관조 카메라 — 레퍼런스의 문법. 구도는 잠기고, 사람이 그 속을 걸어간다.
-      // 구도 전환은 reframeSec의 호흡으로 느리게 흘러가고, 잡힌 뒤엔 미세하게만 숨쉰다.
+      // BUILD 088: 관조 카메라 — 구도는 잠기고, 사람이 그 속을 걸어간다.
+      // BUILD 090: 프레임 가드 — 단, 사람이 액자를 벗어나려 하면 구도가 따라 고쳐진다.
+      const chest = walker.position.clone().add(new THREE.Vector3(0, 0.5, 0));
+      const vel = faceVelocity.current; // 이번 프레임 계산된 이동 속도 벡터
+      const cam3 = camera as THREE.PerspectiveCamera;
+      guardShot(shot.current, chest, vel, cam3.fov, cam3.aspect, delta, GUARD_PARAMS);
       const e = clock.elapsedTime;
       const D = spec.camera.drift;
       const desired = shot.current.pos.clone().add(new THREE.Vector3(
