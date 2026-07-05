@@ -213,9 +213,6 @@ export function createClipRig(
   let chair: THREE.Group | null = null;
   let chairPhase: 'in' | 'hold' | 'out' | 'none' = 'none';
   let chairT = 0;
-  let chairPending = false; // 앉기 초반 힙을 실측해 '의자 높이 클립'에게만 의자를 준다
-  let sitClock = 0;
-  let chairProbe = 0;
   // 발자국 감지: 발이 접지 문턱을 뚫고 내려오는 순간
   let contactL = false;
   let contactR = false;
@@ -256,11 +253,19 @@ export function createClipRig(
     },
     playInspect(kind = 'pickup') {
       if (gesture !== 'none') return;
-      // 마법 의자: 클립이 '의자 높이'인지 0.5초 뒤 실측해 결정 (바닥 앉기 클립은 바닥이 어울린다)
+      // BUILD 105: 전원 의자 — 의자 높이 클립은 앉고, 바닥 클립은 의자 위에 양반다리로.
+      // (의자파가 3/11뿐이라 열 번을 새로고침해도 의자를 못 보는 문제의 해답)
       if (kind === 'sit' && chairAsset && root.parent && sitIdle) {
-        chairPending = true;
-        sitClock = 0;
-        chairProbe = 0;
+        if (!chair) {
+          chair = chairAsset;
+          root.parent.add(chair);
+        }
+        chair.position.set(0, 0, -0.06);
+        chair.rotation.set(0, 0, 0);
+        chair.scale.setScalar(0.001);
+        chair.visible = true;
+        chairPhase = 'in';
+        chairT = 0;
       }
       // 발 앵커: 지금 발이 있는 자리 (홀더 로컬)
       // BUILD 102.1: 반드시 '부모 로컬' 좌표로 — 월드 축으로 재고 로컬 축(root.position)에
@@ -311,33 +316,6 @@ export function createClipRig(
       mixer.update(dt);
 
       // 앉기 침하: 앉는 동안 0.26u 가라앉고, 일어나면 같은 호흡으로 떠오른다
-      // 마법 의자 판정: 앉기 0.5초 — 힙이 좌면보다 높이 머물면 의자 높이 클립이다
-      if (chairPending && (gesture === 'sit' || gesture === 'sitDown') && hipsBone && root.parent) {
-        sitClock += dt;
-        // 0.35~0.7s 구간의 최대 raw로 판정 (침하 진행분은 sitSink로 되돌려 계산)
-        if (sitClock > 0.35) {
-          hipsBone.getWorldPosition(fw);
-          root.parent.worldToLocal(fw);
-          chairProbe = Math.max(chairProbe, fw.y + sitSink);
-        }
-        if (sitClock > 0.7) {
-          chairPending = false;
-          if (chairProbe > chairSeatY + 0.02 && chairAsset) {
-            if (!chair) {
-              chair = chairAsset;
-              root.parent.add(chair);
-            }
-            chair.position.set(0, 0, -0.06);
-            chair.rotation.set(0, 0, 0);
-            chair.scale.setScalar(0.001);
-            chair.visible = true;
-            chairPhase = 'in';
-            chairT = 0;
-          }
-        }
-      }
-      if (gesture !== 'sit' && gesture !== 'sitDown') chairPending = false;
-
       // 마법 의자 등장/퇴장: 살짝 튀어올랐다 자리잡는 팝 (0.45s), 사라질 땐 빨려들 듯 (0.28s)
       if (chair && chairPhase === 'in') {
         chairT += dt;
@@ -366,9 +344,12 @@ export function createClipRig(
           footMin += sitSink;
         }
         const onChair = chairPhase === 'in' || chairPhase === 'hold';
-        const seatTop = onChair ? chairSeatY + 0.03 : 0.14;
-        const footCap = onChair ? footMin + 0.3 : footMin + 0.1;
-        sinkTarget = THREE.MathUtils.clamp(Math.min(hipsRaw - seatTop, footCap), 0, 0.34);
+        if (onChair) {
+          // 좌면에 정렬 — 바닥 클립(raw가 낮음)은 음수 침하 = 들어올려 양반다리로 앉힌다
+          sinkTarget = THREE.MathUtils.clamp(hipsRaw - (chairSeatY + 0.04), -0.28, 0.34);
+        } else {
+          sinkTarget = THREE.MathUtils.clamp(Math.min(hipsRaw - 0.14, footMin + 0.1), 0, 0.34);
+        }
       }
       sitSink += (sinkTarget - sitSink) * Math.min(1, dt * 1.8);
 

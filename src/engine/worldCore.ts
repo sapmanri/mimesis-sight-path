@@ -813,6 +813,60 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     g.add(colorMesh(pos, col, idx, { receiveShadow: true, uv, map: groundTex }));
   }
 
+  // BUILD 105: 크러스트 — 길과 '같은 재질'의 연장 판. 립 정점(ring 0)에 정확히 붙어
+  // 바깥으로 뻗다 살짝 처진다. 별개 오브젝트가 아니라 부서진 길 표면 그 자체.
+  {
+    const pos: number[] = [];
+    const col: number[] = [];
+    const idx: number[] = [];
+    const uv: number[] = [];
+    let dist3 = 0;
+    const distAt: number[] = [];
+    cross.forEach((_, i) => {
+      if (i > 0) dist3 += frames[i].p.distanceTo(frames[i - 1].p);
+      distAt.push(dist3);
+    });
+    (['L', 'R'] as const).forEach((side, si) => {
+      let i = 2;
+      while (i < cross.length - 3) {
+        const gate = noise1(i * 0.171 + si * 53);
+        if (gate < 0.08) { i += 1; continue; } // 갈라진 틈 — 판이 없는 구간
+        const len = 2 + Math.floor(Math.abs(noise1(i * 0.77 + si * 9)) * 3); // 2~4 프레임 길이 판
+        const reach = 0.1 + Math.abs(noise1(i * 1.37 + si * 17)) * 0.2;      // 바깥으로 0.1~0.3
+        const droop = 0.015 + Math.abs(noise1(i * 2.9 + si * 5)) * 0.05;     // 처짐
+        const start = pos.length / 3;
+        let added = 0;
+        for (let k2 = 0; k2 <= len && i + k2 < cross.length; k2 += 1) {
+          const fi = i + k2;
+          const f = frames[fi];
+          const inner = cross[fi][0][side];
+          const norS = f.nor.clone().multiplyScalar(side === 'L' ? 1 : -1);
+          const taper = k2 === 0 || k2 === len ? 0.35 : 1; // 판 양끝은 좁아진다 (갈라진 조각 모양)
+          const outP = inner.clone().add(norS.multiplyScalar(reach * taper * (0.85 + noise1(fi * 3.3) * 0.3)));
+          outP.y -= droop * taper + Math.abs(noise1(fi * 5.1)) * 0.012;
+          // 안쪽 정점: 립과 동일 (용접) / 바깥 정점: 뻗음
+          pos.push(inner.x, inner.y, inner.z, outP.x, outP.y, outP.z);
+          const ua = side === 'L' ? 0 : 0.9;
+          const ub = side === 'L' ? -0.14 : 1.04;
+          uv.push(ua, distAt[fi] * 0.55, ub, distAt[fi] * 0.55);
+          const cIn = cSandEdge.clone();
+          const cOut = cSandEdge.clone().multiplyScalar(0.86 + noise1(fi * 1.9) * 0.06);
+          col.push(cIn.r, cIn.g, cIn.b, cOut.r, cOut.g, cOut.b);
+          added += 1;
+        }
+        for (let q = 0; q < added - 1; q += 1) {
+          const a = start + q * 2;
+          if (side === 'L') idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3);
+          else idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+        }
+        i += len + 1 + Math.floor(Math.abs(noise1(i * 4.4)) * 3); // 틈 (crack)
+      }
+    });
+    const crust = colorMesh(pos, col, idx, { receiveShadow: true, castShadow: true, uv, map: groundTex });
+    if (crust.material instanceof THREE.Material) (crust.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    g.add(crust);
+  }
+
   // cliff sides
   (['L', 'R'] as const).forEach((side) => {
     const pos: number[] = [];
@@ -898,14 +952,14 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     };
 
     // 턱 부스러기: 가장자리에 걸치거나 반쯤 흘러내린 조각
-    const lipCount = Math.min(120, Math.floor(frames.length / 3.5));
+    const lipCount = Math.min(80, Math.floor(frames.length / 5));
     const lip = mkInst(lipCount, PALETTE.sandEdge);
     for (let k = 0; k < lipCount; k += 1) {
       const i = Math.floor((k / lipCount) * (frames.length - 1) + noise1(k * 3.7) * 5);
       const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
       const w = widthAt(f.t);
       const side = k % 2 === 0 ? 1 : -1;
-      const out = w * (0.92 + Math.abs(noise1(k * 1.9)) * 0.2);
+      const out = w * (1.02 + Math.abs(noise1(k * 1.9)) * 0.16); // BUILD 105: 길 위가 아니라 가장자리 바깥에
       const r = 0.035 + Math.abs(noise1(k * 2.3)) * 0.1;
       const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * out));
       p.y += 0.01 - Math.abs(noise1(k * 4.1)) * r * 1.6; // 일부는 턱 아래로 반쯤 흘러내림
@@ -947,40 +1001,6 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     }
     peb.instanceMatrix.needsUpdate = true;
     g.add(peb);
-
-    // BUILD 104: 크러스트 — 갈라진 흙판이 가장자리를 '덮는다' (Vase: 저게 큰 차이야).
-    // 납작한 오각 슬래브가 턱 위에 겹겹이 얹히고 일부는 밖으로 삐져나가 매달린다.
-    {
-      const slabGeo = new THREE.CylinderGeometry(1, 1.13, 0.28, 5);
-      const crustCols = [PALETTE.sandTop, PALETTE.sandEdge, '#a5977a'];
-      const crustMeshes = crustCols.map((c) => mkInstG(slabGeo, c, 130));
-      const cc = [0, 0, 0];
-      const slabCount = Math.min(190, Math.floor(frames.length / 2.2));
-      for (let k = 0; k < slabCount; k += 1) {
-        const i = Math.floor(Math.abs(noise1(k * 2.83)) * (frames.length - 1));
-        const f = frames[i];
-        const w = widthAt(f.t);
-        const side = k % 2 === 0 ? 1 : -1;
-        const out = w * (0.82 + Math.abs(noise1(k * 1.51)) * 0.34); // 일부는 턱 밖으로 삐져나간다
-        const r = 0.09 + Math.abs(noise1(k * 3.7)) * 0.15;
-        const p2 = f.p.clone().add(f.nor.clone().multiplyScalar(side * out));
-        p2.y += 0.008 + Math.abs(noise1(k * 5.9)) * 0.02;
-        V.copy(p2);
-        // 바깥으로 살짝 처진 기울기 — 부서져 내리기 직전의 판
-        const outYaw = Math.atan2(f.nor.x * side, f.nor.z * side);
-        E.set(0, noise1(k * 1.1) * Math.PI, 0);
-        Q.setFromEuler(E);
-        const tiltAxis = new THREE.Vector3(Math.cos(outYaw), 0, -Math.sin(outYaw));
-        const qt = new THREE.Quaternion().setFromAxisAngle(tiltAxis, (0.04 + Math.abs(noise1(k * 4.6)) * 0.16) * side * 0 + (0.05 + Math.abs(noise1(k * 4.6)) * 0.14));
-        Q.multiply(qt);
-        S.set(r * (1 + Math.abs(noise1(k * 6.3)) * 0.7), 0.16 + Math.abs(noise1(k * 7.7)) * 0.14, r);
-        M.compose(V, Q, S);
-        const mi = k % 3;
-        crustMeshes[mi].setMatrixAt(cc[mi], M);
-        cc[mi] += 1;
-      }
-      crustMeshes.forEach((m, i2) => { m.count = cc[i2]; m.instanceMatrix.needsUpdate = true; g.add(m); });
-    }
 
     // BUILD 103: 가장자리 초목 스필 — 레퍼런스의 진짜 주인공.
     // 턱에 걸터앉은 수풀 덩이 + 절벽면에 매달려 바깥으로 뻗은 풀.
