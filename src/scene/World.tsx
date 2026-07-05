@@ -61,7 +61,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
 
   useEffect(() => {
     let alive = true;
-    loadWalkerAsset().then(({ group, animations, clipSpeeds }) => {
+    loadWalkerAsset(undefined, (spec.walker as { character?: number | 'random' }).character ?? 'random').then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
       walker.clear();
       walker.add(group);

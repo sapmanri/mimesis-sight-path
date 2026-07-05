@@ -189,6 +189,8 @@ export type WorldSpec = {
     /** BUILD 087: 호흡의 값들 — 에디터 Walker 패널에서 노출 예정 */
     walkSpeed: number; // 월드 유닛/초
     runSpeed: number;
+    /** BUILD 093: 로스터 선택 — 'random'이면 로드마다 다른 아이가 걷는다 */
+    character?: number | 'random';
   };
 };
 

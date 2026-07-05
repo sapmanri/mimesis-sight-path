@@ -226,13 +226,28 @@ const MODELS: Record<string, ModelSpec> = {
   rockD: { file: 'RockD.glb', height: 0.22, tint: '#7c7666', fitMaxDim: true },
   caveA: { file: 'CaveA.glb', height: 1.15, tint: '#8a7d68', fitMaxDim: true },
   caveB: { file: 'CaveB.glb', height: 0.95, tint: '#7e7361', fitMaxDim: true },
-  // BUILD 092: Vase 구매 리틀보이 (Mixamo 리깅). 애니메이션 FBX들을 GLB 수술로 합본,
-  // 루트모션 제자리화. clipSpeeds = 루트 이동거리 ÷ 시간 (정확값, 원척).
+  // BUILD 092/093: 걷는 사람들. clipSpeeds = 루트 이동거리 ÷ 시간 (원척 정확값).
   walker: { file: 'LittleBoy.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'LittleBoy_texture.png', clipSpeeds: { walk: 1.48, run: 5.207 } },
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
   rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },
 };
+
+// ---------- BUILD 093: WALKER ROSTER ----------
+// 여덟 아이가 번갈아 이 길을 걷는다. 로드마다 한 명이 뽑힌다 — 오늘의 걷는 사람.
+// (Kid2는 텍스처 미동봉+클립 규약 혼재로 로스터 제외, 파일은 보류)
+export const WALKER_ROSTER: ModelSpec[] = [
+  MODELS.walker, // LittleBoy (BUILD 092)
+  { file: 'Kid1.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid1_texture.png', clipSpeeds: { walk: 0.007, run: 0.023 } },
+  { file: 'Kid3.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid3_texture.png', clipSpeeds: { walk: 0.007, run: 0.013 } },
+  { file: 'Kid4.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid4_texture.png', clipSpeeds: { walk: 0.006, run: 0.017 } },
+  { file: 'Kid5.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid5_texture.png', clipSpeeds: { walk: 0.044, run: 0.098 } },
+  { file: 'Kid6.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid6_texture.png', clipSpeeds: { walk: 0.007, run: 0.013 } },
+  { file: 'Kid7.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid7_texture.png', clipSpeeds: { walk: 0.028, run: 0.073 } },
+  { file: 'Kid8.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid8_texture.png', clipSpeeds: { walk: 0.007, run: 0.024 } },
+];
+
+
 
 const PALETTE_HUES = [0.07, 0.11, 0.29, 0.53]; // wood, sand, sage, teal
 
@@ -333,8 +348,12 @@ export async function loadKitModel(key: string, loadModel: ModelLoader) {
 }
 
 /** 워커 실물 (Peasant Nolant): 정규화된 그룹 + Walk/Idle 애니메이션 클립 */
-export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader) {
-  const spec = MODELS.walker;
+export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, character: number | 'random' = 'random') {
+  // BUILD 093: 오늘의 걷는 사람 — 로스터에서 뽑는다
+  const idx = character === 'random'
+    ? Math.floor(Math.random() * WALKER_ROSTER.length)
+    : Math.max(0, Math.min(WALKER_ROSTER.length - 1, character));
+  const spec = WALKER_ROSTER[idx] ?? MODELS.walker;
   const gltf = await loadModel(spec.file);
   if (spec.keepLook) {
     // BUILD 085: 주인공은 팔레트를 통과하지 않는다 — 자기 옷을 입고 걷는다.

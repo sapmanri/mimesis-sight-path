@@ -168,8 +168,26 @@ export function createClipRig(
   };
   const pickup = mk('PickUp') ?? mk('Interact') ?? mk('Pickup');
   const sitDown = mk('Sit_Floor_Down');
-  const sitIdle = mk('Sit_Floor_Idle', false);
+  const sitIdle = mk('Sit_Floor_Idle', false) ?? mk('Sitting', false) ?? mk('Sitting Idle', false);
   const standUp = mk('Sit_Floor_StandUp');
+
+  // BUILD 093: 접지 보정 — "허공 보행" 수정.
+  // 정지 포즈 기준의 정렬은 클립이 재생되면 어긋난다 (Mixamo 힙 기준선 차이).
+  // 발 뼈의 월드 최저점을 실측해 땅에 맞춘다. 밑창 두께는 바인드 포즈에서 한 번 잰다.
+  const findBone = (...res: RegExp[]): THREE.Object3D | null => {
+    let f: THREE.Object3D | null = null;
+    root.traverse((o) => { if (f) return; if (res.some((re) => re.test(o.name))) f = o; });
+    return f;
+  };
+  const footL = findBone(/LeftFoot$/i, /^footl$/i, /foot\.l/i);
+  const footR = findBone(/RightFoot$/i, /^footr$/i, /foot\.r/i);
+  // 밑창 두께: 발목 뼈에서 발바닥까지 ≈ 신장의 3.5% (0.9 캐릭터 → 0.032).
+  // 스킨드 메시의 bbox는 포즈를 반영하지 않아 실측 기준으로 못 쓴다.
+  const sole = 0.032;
+  const baseY = root.position.y;
+  let groundCorr = 0;
+  const fw = new THREE.Vector3();
+  const pw = new THREE.Vector3();
 
   let current: THREE.AnimationAction = idle;
   idle.play();
@@ -198,13 +216,16 @@ export function createClipRig(
     phase: () => 0, // 상하 흔들림은 클립 안에 있다 — 홀더 bob은 끈다
     playInspect(kind = 'pickup') {
       if (gesture !== 'none') return;
-      if (kind === 'sit' && sitDown && sitIdle) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
-      else if (pickup) { gesture = 'pickup'; switchTo(pickup, 0.3); }
+      if (kind === 'sit' && sitIdle) {
+        if (sitDown) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
+        else { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 전환 클립이 없으면 느린 페이드로
+      } else if (pickup) { gesture = 'pickup'; switchTo(pickup, 0.3); }
+      else if (sitIdle) { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 들여다보기가 없으면 앉는다
     },
     stopInspect() {
       if (gesture === 'sit' || gesture === 'sitDown') {
         if (standUp) { gesture = 'standUp'; switchTo(standUp, 0.2); }
-        else { gesture = 'none'; switchTo(idle, 0.25); }
+        else { gesture = 'none'; switchTo(idle, 0.4); }
       } else if (gesture === 'pickup') {
         gesture = 'none';
         switchTo(idle, 0.25);
@@ -227,6 +248,19 @@ export function createClipRig(
         this.stopInspect();
       }
       mixer.update(dt);
+
+      // 접지 보정: 최저 발이 홀더(길 표면) 높이에 닿도록 (게스처 중엔 동결 — 앉은 발은 기준이 아니다)
+      if (footL && footR && gesture === 'none' && root.parent) {
+        root.updateMatrixWorld(true);
+        footL.getWorldPosition(fw);
+        const ly = fw.y;
+        footR.getWorldPosition(fw);
+        const minFoot = Math.min(ly, fw.y);
+        root.parent.getWorldPosition(pw);
+        const err = (minFoot - sole) - pw.y;
+        groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.25), Math.min(1, dt * 10)); // 하향 보정은 넉넉히 (Mixamo 힙 기준선은 1u 이상 뜨기도 한다)
+        root.position.y = baseY + groundCorr;
+      }
     },
   };
 }
