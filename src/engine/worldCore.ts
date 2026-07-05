@@ -245,6 +245,9 @@ export const WALKER_ROSTER: ModelSpec[] = [
   { file: 'Kid6.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid6_texture.png', clipSpeeds: { walk: 0.007, run: 0.013 } },
   { file: 'Kid7.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid7_texture.png', clipSpeeds: { walk: 0.028, run: 0.073 } },
   { file: 'Kid8.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid8_texture.png', clipSpeeds: { walk: 0.007, run: 0.024 } },
+  // BUILD 097: Kid9(신규, 로우폴리 본체), Kid10(애니 미동봉 → c9 클립 이식, fbx 본체로 축 정합)
+  { file: 'Kid9.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid9_texture.png', clipSpeeds: { walk: 0.0071, run: 0.0192 } },
+  { file: 'Kid10.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid10_texture.png', clipSpeeds: { walk: 3.125, run: 8.43 } }, // 슬라이드 스윕 확정 (걷기 2%·뛰기 11%)
 ];
 
 

@@ -11,7 +11,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.23.0 · THE STUDIO · BUILD 096';
+const BUILD_LABEL = 'v0.24.0 · TEN WALKERS · BUILD 097';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
