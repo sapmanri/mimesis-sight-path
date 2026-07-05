@@ -232,7 +232,7 @@ export function EditorApp() {
         case 'f': case 'F': prop ? editProp((q) => { q.rotY -= rot; }) : editScene((sc2) => { sc2.objectRotY = (sc2.objectRotY ?? 0) - rot; }); break;
         case 't': case 'T': prop ? editProp((q) => { q.rotX = Math.min(0.8, q.rotX + rot); }) : editScene((sc2) => { sc2.objectRotX = Math.min(0.8, (sc2.objectRotX ?? 0) + rot); }); break;
         case 'g': case 'G': prop ? editProp((q) => { q.rotX = Math.max(-0.8, q.rotX - rot); }) : editScene((sc2) => { sc2.objectRotX = Math.max(-0.8, (sc2.objectRotX ?? 0) - rot); }); break;
-        case '=': case '+': prop ? editProp((q) => { q.scale = Math.min(4, q.scale * sc); }) : editScene((sc2) => { sc2.scale = Math.min(3, (sc2.scale || 1) * sc); }); break;
+        case '=': case '+': prop ? editProp((q) => { q.scale = Math.min(25, q.scale * sc); }) : editScene((sc2) => { sc2.scale = Math.min(3, (sc2.scale || 1) * sc); }); break; // BUILD 114: 상상의 공간에 4배 상한은 좁았다
         case '-': case '_': prop ? editProp((q) => { q.scale = Math.max(0.15, q.scale / sc); }) : editScene((sc2) => { sc2.scale = Math.max(0.2, (sc2.scale || 1) / sc); }); break;
         case 'Delete': case 'Backspace':
           if (prop) { handled(); edit((d) => { d.props = (d.props ?? []).filter((q) => q.id !== selProp); }); setSelProp(null); }

@@ -315,8 +315,11 @@ export async function createPropObject(
           if (!mesh.isMesh) return;
           const m = mesh.material as THREE.MeshStandardMaterial;
           m.emissive = new THREE.Color('#f2ecda');
-          m.emissiveIntensity = 0.55;
+          m.emissiveIntensity = 0.9;
         });
+        // BUILD 114: 달은 보이기만 하는 게 아니라 비춘다 — 가로등의 문법을 하늘로
+        const moonlight = new THREE.PointLight('#dfe6f0', 2.2, 30, 1.6);
+        g.add(moonlight);
         return g;
       }
       default: return null;
