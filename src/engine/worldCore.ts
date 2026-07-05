@@ -159,7 +159,7 @@ type ModelSpec = {
 };
 
 const MODELS: Record<string, ModelSpec> = {
-  suitcase: { file: 'Old_Suitcase.glb', height: 0.5, tint: PALETTE.mint, preRotateX: -Math.PI / 2 },
+  suitcase: { file: 'Old_Suitcase.glb', height: 0.42, tint: PALETTE.mint, preRotateX: -Math.PI / 2 },
   cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2' },
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 3.4, tint: PALETTE.white },
   stone: { file: 'stone11.glb', height: 0.24, tint: '#6e7268', fitMaxDim: true },
@@ -324,7 +324,7 @@ export function buildWorld(scenes: ObservationScene[], loadModel: ModelLoader = 
       const side = rrnd() > 0.5 ? 1 : -1;
       const onFace = rrnd() > 0.55;
       const out = onFace ? w * (0.92 + rrnd() * 0.2) : w * (0.82 + rrnd() * 0.14);
-      const y = onFace ? f.p.y - 0.25 - rrnd() * 0.55 : f.p.y - 0.03;
+      const y = onFace ? f.p.y - 0.12 - rrnd() * 0.28 : f.p.y - 0.03;
       const pos = f.p.clone().add(f.nor.clone().multiplyScalar(side * out)).setY(y);
       rockSpots.push({ pos, rotY: rrnd() * Math.PI * 2, scale: 0.35 + rrnd() * 0.85 });
     }
@@ -464,13 +464,13 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     new THREE.Color(PALETTE.cliffLow),
     new THREE.Color(PALETTE.cliffDeep),
   ];
-  const ringInsetBase = [0, 0.06, 0.18, 0.38];
-  const RINGS = 4;
+  const ringInsetBase = [0, 0.09, 0.26];
+  const RINGS = 3;
 
   type Ring = { L: THREE.Vector3; R: THREE.Vector3 };
   const cross: Ring[][] = frames.map((f, i) => {
     const w = widthAt(f.t);
-    const depth = 1.5 + noise1(i * 0.05) * 0.55;
+    const depth = 0.85 + noise1(i * 0.05) * 0.3;
     const rings: Ring[] = [];
     for (let r = 0; r < RINGS; r += 1) {
       const v = r / (RINGS - 1);
@@ -542,8 +542,8 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
         const base = r === 0 ? cSandEdge : s0.clone().lerp(s1, si - Math.floor(si));
         const tint = 1 + noise1(i * 0.6 + r * 9.2 + (side === 'L' ? 0 : 40)) * 0.1 * (1 - v);
         // 아래로 갈수록 안개에 잠긴다 — 레퍼런스처럼 길 끄트머리 바로 밑까지
-        const sink = Math.pow(v, 1.4);
-        const c = base.clone().lerp(new THREE.Color(PALETTE.fog), sink * 0.92);
+        const sink = Math.pow(v, 1.05);
+        const c = base.clone().lerp(new THREE.Color(PALETTE.fog), sink * 0.97);
         col.push(c.r * tint, c.g * tint, c.b * tint);
       });
     });
