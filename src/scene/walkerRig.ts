@@ -240,13 +240,16 @@ export function createClipRig(
     playInspect(kind = 'pickup') {
       if (gesture !== 'none') return;
       // 발 앵커: 지금 발이 있는 자리 (홀더 로컬)
+      // BUILD 102.1: 반드시 '부모 로컬' 좌표로 — 월드 축으로 재고 로컬 축(root.position)에
+      // 보정하면, 몸이 회전해 있을 때 좌표계가 어긋나 양의 피드백 → 앉는 순간 떠밀려간다.
       if (footL && footR && root.parent) {
         root.updateMatrixWorld(true);
         footL.getWorldPosition(fw);
+        root.parent.worldToLocal(fw);
         const lx = fw.x; const lz = fw.z;
         footR.getWorldPosition(fw);
-        root.parent.getWorldPosition(pw);
-        feetAnchor = { x: (lx + fw.x) / 2 - pw.x, z: (lz + fw.z) / 2 - pw.z };
+        root.parent.worldToLocal(fw);
+        feetAnchor = { x: (lx + fw.x) / 2, z: (lz + fw.z) / 2 };
       }
       if (kind === 'sit' && sitIdle) {
         if (sitDown) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
@@ -322,17 +325,21 @@ export function createClipRig(
       if (footL && footR && root.parent && feetAnchor && (gesture !== 'none' || gestureGrace > 0)) {
         root.updateMatrixWorld(true);
         footL.getWorldPosition(fw);
+        root.parent.worldToLocal(fw);
         const lx = fw.x; const lz = fw.z;
         footR.getWorldPosition(fw);
-        root.parent.getWorldPosition(pw);
-        const curX = (lx + fw.x) / 2 - pw.x - feetOffX; // 보정분 제외한 원시 발 위치
-        const curZ = (lz + fw.z) / 2 - pw.z - feetOffZ;
+        root.parent.worldToLocal(fw);
+        const curX = (lx + fw.x) / 2 - feetOffX; // 보정분 제외한 원시 발 위치 (부모 로컬)
+        const curZ = (lz + fw.z) / 2 - feetOffZ;
         // 발을 못박되, 보정 속도는 0.8u/s로 제한 — 발 떨림이 몸의 점프로 역류하지 않게
         const tx = feetAnchor.x - curX;
         const tz = feetAnchor.z - curZ;
         const step = 0.8 * dt;
         feetOffX += THREE.MathUtils.clamp(tx - feetOffX, -step, step);
         feetOffZ += THREE.MathUtils.clamp(tz - feetOffZ, -step, step);
+        // 안전망: 어떤 경우에도 보정이 0.6u를 넘지 않는다
+        feetOffX = THREE.MathUtils.clamp(feetOffX, -0.6, 0.6);
+        feetOffZ = THREE.MathUtils.clamp(feetOffZ, -0.6, 0.6);
       } else if (feetAnchor) {
         // 제스처가 완전히 끝났다 — 보정을 조용히 거둔다 (걷기 시작하면 더 빨리)
         const k = Math.min(1, dt * (moving ? 4 : 1.2));
