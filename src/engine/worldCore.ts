@@ -13,6 +13,36 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { ObservationScene } from '../data/jeju';
 import { isGeneratorEnabled, JEJU_SPEC, type WorldGeneratorId, type WorldPalette, type WorldSpec } from './worldSpec';
+import { ASSET_SETS, type AssetSet } from './worldSets';
+
+/**
+ * BUILD 084: AssetSet 조립기 — Set의 배치 규칙을 해석해 THREE 그룹을 만든다.
+ * 조각(piece)은 시드 난수로 순환 선택된다. 원본 그룹은 절대 변형하지 않는다 (clone만).
+ */
+function buildAssetSet(set: AssetSet, pieceOf: (key: string) => THREE.Group, rnd: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const pick = () => pieceOf(set.pieces[Math.floor(rnd() * set.pieces.length)]);
+  if (set.rule.kind === 'wall') {
+    for (const row of set.rule.rows) {
+      for (let i = 0; i < row.count; i += 1) {
+        const s = pick().clone(true);
+        s.position.set(row.startX + i * row.stepX + (rnd() - 0.5) * row.jitter, row.y, (rnd() - 0.5) * 0.03);
+        s.rotation.y = rnd() * Math.PI * 2;
+        s.scale.multiplyScalar(row.scale[0] + rnd() * (row.scale[1] - row.scale[0]));
+        g.add(s);
+      }
+    }
+  } else {
+    for (let i = 0; i < set.rule.count; i += 1) {
+      const s = pick().clone(true);
+      s.position.set((rnd() - 0.5) * set.rule.spreadX, 0, (rnd() - 0.5) * set.rule.spreadZ);
+      s.rotation.y = rnd() * Math.PI * 2;
+      s.scale.multiplyScalar(set.rule.scale[0] + rnd() * (set.rule.scale[1] - set.rule.scale[0]));
+      g.add(s);
+    }
+  }
+  return g;
+}
 
 // BUILD 082: 팔레트의 원본은 이제 worldSpec에 있다.
 // PALETTE는 "현재 빌드 중인 세계의 활성 팔레트" — buildWorld(spec)가 갈아끼운다.
@@ -178,11 +208,12 @@ type ModelSpec = {
   tint: string;          // 텍스처/무채색 재질의 대체 틴트
   preRotateX?: number;   // 눕혀진 모델 세우기 등
   fitMaxDim?: boolean;   // 높이 대신 최대 치수 기준 (납작한 돌 등)
+  strip?: string;        // BUILD 084: 이 부분문자열을 이름에 포함한 메시 제거 (원본 에셋의 조명판 등)
 };
 
 const MODELS: Record<string, ModelSpec> = {
-  suitcase: { file: 'Old_Suitcase.glb', height: 0.42, tint: PALETTE.mint, preRotateX: -Math.PI / 2 },
-  cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2' },
+  suitcase: { file: 'Old_Suitcase.glb', height: 0.42, tint: '#7e937f', preRotateX: -Math.PI / 2 }, // BUILD 084: mint→낡은 세이지 (안개 속 발광 완화)
+  cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2', strip: 'areaLight' }, // BUILD 084: 원본의 조명판 지오메트리 제거 (절벽가 발광 원인)
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 9, tint: PALETTE.white },
   stone: { file: 'stone11.glb', height: 0.24, tint: '#6e7268', fitMaxDim: true },
   rock0: { file: 'Rock0.glb', height: 0.3, tint: '#79766a', fitMaxDim: true },
@@ -231,7 +262,9 @@ function applyPalette(group: THREE.Group, fallbackTint: string) {
         src.getHSL(hsl);
         const h = hsl.s < 0.08 ? 0.11 : remapHue(hsl.h);
         const s = Math.min(hsl.s * 0.55, 0.34);
-        const l = Math.min(0.82, Math.max(0.16, hsl.l));
+        // BUILD 084: 밝기 상한 0.82→0.52. 리니어 l>0.52는 태양광(1.35)+ACES에서
+        // 백색으로 날아간다 — RockSet 담 "백색 괴물"과 Snow_Cabin 발광의 근본 원인이었다.
+        const l = Math.min(0.52, Math.max(0.16, hsl.l));
         c.setHSL(h, s, l);
       }
       return applyHeightFog(new THREE.MeshStandardMaterial({ color: c, roughness: 1, metalness: 0, side: THREE.DoubleSide }));
@@ -273,6 +306,11 @@ const defaultLoader: ModelLoader = (file) =>
 export async function loadKitModel(key: string, loadModel: ModelLoader) {
   const spec = MODELS[key];
   const raw = (await loadModel(spec.file)).scene;
+  if (spec.strip) {
+    const doomed: THREE.Object3D[] = [];
+    raw.traverse((n) => { if (n.name.includes(spec.strip!)) doomed.push(n); });
+    doomed.forEach((n) => n.parent?.remove(n));
+  }
   applyPalette(raw, spec.tint);
   return normalizeModel(raw, spec);
 }
@@ -473,38 +511,19 @@ async function attachModels(
     }));
   }
 
-  // 돌담: dodecahedron 대신 진짜 돌 메시로 담 쌓기
+  // 돌담/돌무더기: AssetSet 규칙으로 조립 (BUILD 084 — Set 단위 제작 원칙)
   const wallSlots = kitSlots.filter((k) => k.kit === 'stone-wall-kit' || k.kit === 'sea-edge-kit');
   if (wallSlots.length) {
-    tasks.push(loadKitModel('stone', loadModel).then((stone) => {
+    const wallSet = ASSET_SETS[SPEC.decoration.stoneWallSet] ?? ASSET_SETS['stone-wall-01'];
+    const edgeSet = ASSET_SETS[SPEC.decoration.seaEdgeSet] ?? ASSET_SETS['sea-edge-01'];
+    const pieceKeys = [...new Set([...wallSet.pieces, ...edgeSet.pieces])];
+    tasks.push(Promise.all(pieceKeys.map((p) => loadKitModel(p, loadModel))).then((loaded) => {
+      const pieceOf = (key: string) => loaded[pieceKeys.indexOf(key)];
       wallSlots.forEach((k) => {
         const rnd = worldRng(k.seed);
         k.slot.clear();
-        // 담으로 읽히게: 아랫단 8개 촘촘히 + 윗단 6개 어긋나게
-        if (k.kit === 'stone-wall-kit') {
-          for (let i = 0; i < 8; i += 1) {
-            const s = stone.clone(true);
-            s.position.set(-0.49 + i * 0.14 + (rnd() - 0.5) * 0.02, 0, (rnd() - 0.5) * 0.03);
-            s.rotation.y = rnd() * Math.PI * 2;
-            s.scale.setScalar(0.85 + rnd() * 0.3);
-            k.slot.add(s);
-          }
-          for (let i = 0; i < 6; i += 1) {
-            const s = stone.clone(true);
-            s.position.set(-0.35 + i * 0.14 + (rnd() - 0.5) * 0.02, 0.11, (rnd() - 0.5) * 0.03);
-            s.rotation.y = rnd() * Math.PI * 2;
-            s.scale.setScalar(0.7 + rnd() * 0.28);
-            k.slot.add(s);
-          }
-        } else {
-          for (let i = 0; i < 3; i += 1) {
-            const s = stone.clone(true);
-            s.position.set((rnd() - 0.5) * 0.5, 0, (rnd() - 0.5) * 0.2);
-            s.rotation.y = rnd() * Math.PI * 2;
-            s.scale.setScalar(0.7 + rnd() * 0.5);
-            k.slot.add(s);
-          }
-        }
+        const set = k.kit === 'stone-wall-kit' ? wallSet : edgeSet;
+        k.slot.add(buildAssetSet(set, pieceOf, rnd));
       });
     }));
   }
@@ -755,7 +774,7 @@ type KitFn = (rnd: () => number) => THREE.Group;
 const KITS: Record<string, KitFn> = {
   'door-kit': () => {
     const g = new THREE.Group();
-    const postMat = std(PALETTE.white);
+    const postMat = std('#9a8f78'); // BUILD 084: 백색(발광) → 낡은 목재. 레퍼런스의 낡은 문.
     const postGeo = new THREE.BoxGeometry(0.22, 1.15, 0.22);
     const p1 = new THREE.Mesh(postGeo, postMat);
     p1.position.set(-0.5, 0.57, 0);

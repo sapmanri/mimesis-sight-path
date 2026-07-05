@@ -125,12 +125,16 @@ export type WorldSpec = {
     cliffDepthNoise: number;
   };
 
-  /** 장식 생성기 — Set 단위 제작 원칙의 전신. Phase 3에서 Set 구조로 확장 예정. */
+  /** 장식 생성기 — Set 단위 제작 원칙 (worldSets.ts의 ASSET_SETS 참조) */
   decoration: {
     /** 바위 산란 수 (절벽 rim/face) */
     rockCount: number;
     /** 풀잎 다발 수 (길 가장자리) */
     grassCount: number;
+    /** 돌담 Set id (BUILD 084) */
+    stoneWallSet: string;
+    /** 바다 끝 Set id (BUILD 084) */
+    seaEdgeSet: string;
   };
 
   /** 빛 생성기 */
@@ -205,6 +209,8 @@ export const JEJU_SPEC: WorldSpec = {
   decoration: {
     rockCount: 46,
     grassCount: 140,
+    stoneWallSet: 'stone-wall-02', // BUILD 084: RockSet06 재투입 (백색 괴물 원인 해결됨)
+    seaEdgeSet: 'sea-edge-01',
   },
   light: {
     hemiSky: '#b9d2d8',
