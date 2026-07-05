@@ -137,6 +137,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     pauseT: number;
     yaw: number;
     lateral: number;
+    pinned: boolean; // BUILD 111: roam 꺼짐 — 제자리에서 숨만 쉰다
   };
   const roamers = useRef<Roamer[]>([]);
   useEffect(() => {
@@ -145,14 +146,20 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     roamers.current = [];
     (props ?? []).forEach((pp, i) => {
       const seed = pp.id.split('').reduce((a, c) => a + c.charCodeAt(0), 7) + i * 131;
-      const wantRoam = pp.roam && ANIMATED_PROPS.has(pp.obj);
-      if (wantRoam) {
+      const wantAnimated = ANIMATED_PROPS.has(pp.obj);
+      if (wantAnimated) {
+        // BUILD 111: 살아있는 것은 멈춰도 살아있다 — roam이 꺼져도 제자리 Idle로 숨 쉰다.
+        const pinned = !pp.roam;
         createPropAnimated(pp.obj).then((res) => {
           if (!alive || !res) return;
           const holder = new THREE.Group();
           holder.add(res.group);
           holder.scale.setScalar(pp.scale);
           holder.userData.propId = pp.id;
+          if (pinned) {
+            holder.position.set(pp.position[0], pp.position[1], pp.position[2]);
+            holder.rotation.y = pp.rotY;
+          }
           // 시작 진행도: 배치 지점을 커브에 투영
           let bestP = 0;
           let bestD = Infinity;
@@ -177,6 +184,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             pauseT: 1 + Math.random() * 2,
             yaw: 0,
             lateral: (seed % 2 === 0 ? 1 : -1) * (0.1 + (seed % 7) * 0.02),
+            pinned,
           };
           roamer.idleAction?.play();
           propsGroup.add(holder);
@@ -641,6 +649,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
 
     // 로밍: 걷다가, 멈춰 서서 두리번, 다시 걷는다 — 제멋대로, 그러나 길을 따라
     for (const R of roamers.current) {
+      if (R.pinned) { R.mixer.update(delta); continue; } // BUILD 111: 제자리 숨쉬기
       const N = scenes.length - 1;
       if (R.pauseT > 0) {
         R.pauseT -= delta;

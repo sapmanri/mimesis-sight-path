@@ -385,7 +385,7 @@ export function EditorApp() {
                   const id = 'p' + Date.now().toString(36);
                   edit((d) => {
                     d.props = d.props ?? [];
-                    d.props.push({ id, obj: propObj, position: [+pt.x.toFixed(2), +pt.y.toFixed(2), +pt.z.toFixed(2)], rotY: 0, rotX: 0, scale: 1 });
+                    d.props.push({ id, obj: propObj, position: [+pt.x.toFixed(2), +pt.y.toFixed(2), +pt.z.toFixed(2)], rotY: 0, rotX: 0, scale: 1, roam: ANIMATED_PROPS.has(propObj) || undefined }); // BUILD 111: 동물은 두면 걷는다
                   });
                   setSelProp(id);
                 } else if (pickTarget === 'prop-repos' && selProp) {

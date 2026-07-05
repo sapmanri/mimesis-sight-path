@@ -368,28 +368,29 @@ export async function loadKitModelWithClips(key: string, loadModel: ModelLoader)
     raw.traverse((n) => { if (needles.some((x) => n.name.includes(x))) doomed.push(n); });
     doomed.forEach((n) => n.parent?.remove(n));
   }
-  if (spec.keepLook) {
-    // BUILD 110: 소는 자기 무늬를 입고 걷는다 — 워커와 같은 문법 (조명 밀수 차단·높이안개는 예외 없음)
-    stripLights(raw);
-    raw.traverse((node) => {
-      const mesh = node as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false; // 스킨드 메시: 뼈 이동 시 오컬링 방지
-      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      mats.forEach((m) => {
-        const std = m as THREE.MeshStandardMaterial;
-        std.roughness = 1;
-        std.metalness = 0;
-        applyHeightFog(std);
-        std.needsUpdate = true;
-      });
-    });
-  } else {
-    applyPalette(raw, spec.tint);
-  }
+  if (spec.keepLook) applyKeepLook(raw);
+  else applyPalette(raw, spec.tint);
   return { group: normalizeModel(raw, spec), animations: loaded.animations };
+}
+
+/** BUILD 111: 자기 무늬 문법 — 팔레트 미적용, 단 조명 밀수 차단·높이안개는 예외 없음 */
+function applyKeepLook(raw: THREE.Group) {
+  stripLights(raw);
+  raw.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false; // 스킨드 메시: 뼈 이동 시 오컬링 방지
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach((m) => {
+      const std = m as THREE.MeshStandardMaterial;
+      std.roughness = 1;
+      std.metalness = 0;
+      applyHeightFog(std);
+      std.needsUpdate = true;
+    });
+  });
 }
 
 export async function loadKitModel(key: string, loadModel: ModelLoader) {
@@ -401,7 +402,8 @@ export async function loadKitModel(key: string, loadModel: ModelLoader) {
     raw.traverse((n) => { if (needles.some((x) => n.name.includes(x))) doomed.push(n); });
     doomed.forEach((n) => n.parent?.remove(n));
   }
-  applyPalette(raw, spec.tint);
+  if (spec.keepLook) applyKeepLook(raw); // BUILD 111: 서 있는 소도 자기 무늬를 입는다
+  else applyPalette(raw, spec.tint);
   return normalizeModel(raw, spec);
 }
 
