@@ -11,7 +11,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.26.0 · HANDS & CARDS · BUILD 099';
+const BUILD_LABEL = 'v0.27.0 · GRAMMAR OF HANDS · BUILD 100';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -25,7 +25,7 @@ export default function App() {
     try {
       const d = JSON.parse(localStorage.getItem('mimesis:world-draft:v1') ?? '');
       if (d?.blueprints?.length && d?.spec) {
-        return { scenes: compileScenes(d.blueprints), spec: d.spec as WorldSpec };
+        return { scenes: compileScenes(d.blueprints), spec: d.spec as WorldSpec, props: d.props ?? [] };
       }
     } catch { /* 기본 세계로 */ }
     return null;
@@ -48,6 +48,14 @@ export default function App() {
     };
   }, []);
 
+  // BUILD 100: 길 탭 = 그 기억으로 걷기 (절대 인덱스, 쿨다운 없음 — 의도가 명확한 입력)
+  const goTo = (index: number) => {
+    lastManualAt.current = Date.now();
+    lastMoveAt.current = Date.now();
+    setMode('manual');
+    setActiveIndex(Math.max(0, Math.min(scenes.length - 1, index)));
+  };
+
   useEffect(() => {
     const move = (direction: 1 | -1, input: 'auto' | 'manual' = 'manual') => {
       const now = Date.now();
@@ -65,39 +73,15 @@ export default function App() {
       });
     };
 
-    const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) < 18) return;
-      move(event.deltaY > 0 ? 1 : -1, 'manual');
-    };
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'ArrowDown' || event.key === 'PageDown') move(1, 'manual');
       if (event.key === 'ArrowUp' || event.key === 'PageUp') move(-1, 'manual');
     };
 
-    // BUILD 095: 모바일 스와이프 — 위로 쓸면 앞으로, 아래로 쓸면 되돌아간다
-    let touchStartY = 0;
-    let touchStartT = 0;
-    const onTouchStart = (e: TouchEvent) => {
-      touchStartY = e.touches[0]?.clientY ?? 0;
-      touchStartT = Date.now();
-    };
-    const onTouchEnd = (e: TouchEvent) => {
-      const dy = touchStartY - (e.changedTouches[0]?.clientY ?? touchStartY);
-      const dt = Date.now() - touchStartT;
-      if (Math.abs(dy) > 42 && dt < 700) move(dy > 0 ? 1 : -1, 'manual');
-    };
-
-    window.addEventListener('wheel', onWheel, { passive: true });
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchend', onTouchEnd, { passive: true });
 
     return () => {
-      window.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchend', onTouchEnd);
     };
   }, []);
 
@@ -156,6 +140,8 @@ export default function App() {
             spec={spec}
             onArrive={(i) => setCardAt(i)}
             onDepart={() => setCardAt(null)}
+            onPathTap={goTo}
+            props={draft?.props}
           />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />

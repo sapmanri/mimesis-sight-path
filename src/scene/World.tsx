@@ -6,6 +6,7 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../eng
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
+import { createPropObject, type PlacedProp } from '../engine/props';
 import { footsteps } from './footsteps';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
@@ -26,11 +27,17 @@ type WorldProps = {
   /** BUILD 099: 카드 페이즈 — 도착/출발 신호 */
   onArrive?: (index: number) => void;
   onDepart?: () => void;
+  /** BUILD 100: 자유 배치물 (에디터가 놓은 사물들) */
+  props?: PlacedProp[];
+  /** BUILD 100: 에디터 자유 카메라 — true면 World는 카메라에 손대지 않는다 */
+  freeCamera?: boolean;
+  /** BUILD 100: 길 탭 — 가장 가까운 기억 지점으로 걷기 */
+  onPathTap?: (index: number) => void;
 };
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, onPathTap }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
   // 워커: 프로시저럴 실루엣으로 시작, Peasant 로드 완료 시 교체
   const walker = useMemo(() => {
@@ -40,6 +47,28 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   }, []);
   const rigRef = useRef<WalkerRig | null>(null);
   const { gl } = useThree();
+
+  // BUILD 100: 배치물 — 문서의 props를 3D로. id+obj+seed가 같으면 재사용 없이 단순 재생성(에디터 디바운스가 폭주를 막는다).
+  const propsGroup = useMemo(() => new THREE.Group(), []);
+  useEffect(() => {
+    let alive = true;
+    propsGroup.clear();
+    (props ?? []).forEach((pp, i) => {
+      const seed = pp.id.split('').reduce((a, c) => a + c.charCodeAt(0), 7) + i * 131;
+      createPropObject(pp.obj, seed).then((obj) => {
+        if (!alive || !obj) return;
+        const holder = new THREE.Group();
+        holder.add(obj);
+        holder.position.set(pp.position[0], pp.position[1], pp.position[2]);
+        holder.rotation.y = pp.rotY;
+        holder.rotation.x = pp.rotX;
+        holder.scale.setScalar(pp.scale);
+        holder.userData.propId = pp.id;
+        propsGroup.add(holder);
+      });
+    });
+    return () => { alive = false; };
+  }, [props, propsGroup]);
 
   // ---- BUILD 086: 캐릭터 주권 ----
   // 캐릭터는 카메라에 떠밀려 다니지 않는다. 자기 속도로 걷고, 자기 보폭으로 딛는다.
@@ -98,11 +127,17 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     const U = userCam.current;
     let px = 0;
     let py = 0;
+    let downX = 0;
+    let downY = 0;
+    let downT = 0;
     const down = (e: PointerEvent) => {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
       U.dragging = true;
       px = e.clientX;
       py = e.clientY;
+      downX = e.clientX;
+      downY = e.clientY;
+      downT = performance.now();
     };
     const move = (e: PointerEvent) => {
       if (!U.dragging) return;
@@ -115,18 +150,55 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       U.el = Math.min(1.25, Math.max(0.08, U.el + dy * 0.004));
       U.lastInput = performance.now() / 1000;
     };
-    const up = () => { U.dragging = false; };
+    const up = (e: PointerEvent) => {
+      const was = U.dragging;
+      U.dragging = false;
+      // BUILD 100: 탭 = 길 위 그 지점으로 걷기 (짧고, 거의 안 움직인 접촉)
+      if (!was || !onPathTapRef.current) return;
+      const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+      if (moved > 7 || performance.now() - downT > 350) return;
+      const rect = el.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(ndc, cameraRef.current!);
+      const hits = ray.intersectObject(world.group, true);
+      if (!hits.length) return;
+      const pt = hits[0].point;
+      // 가장 가까운 기억 지점
+      let best = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < scenes.length; i += 1) {
+        const a = world.curve.getPoint(world.progressToT(i));
+        const d = Math.hypot(a.x - pt.x, a.z - pt.z);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (bestD < 6) onPathTapRef.current(best);
+    };
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+    // BUILD 100: 휠 = 확대·축소 (장면 이동은 길 탭/키보드로)
+    const wheel = (e: WheelEvent) => {
+      U.dist = Math.min(12, Math.max(2.2, U.dist * (1 + Math.sign(e.deltaY) * 0.09)));
+      U.lastInput = performance.now() / 1000;
+    };
+    el.addEventListener('wheel', wheel, { passive: true });
     return () => {
+      el.removeEventListener('wheel', wheel);
       el.removeEventListener('pointerdown', down);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
   }, [gl]);
+
+  const cameraRef = useRef<THREE.Camera | null>(null);
+  const onPathTapRef = useRef(onPathTap);
+  onPathTapRef.current = onPathTap;
 
   // 사용자 카메라 블렌드 적용: 잡으면 빠르게 1로, 놓으면 1.6초에 걸쳐 0으로
   const applyUserCam = (camera: THREE.Camera, delta: number) => {
@@ -153,11 +225,12 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   };
 
   useFrame(({ camera, clock }, delta) => {
+    cameraRef.current = camera;
     const J = journey.current;
     const curvePosAt = (prog: number) => world.curve.getPoint(world.progressToT(prog));
 
     // BUILD 088: 첫 구도 — 여정이 시작되기 전에도 시선은 이미 자리를 잡고 있다
-    if (spec.camera.mode === 'held' && !shot.current) {
+    if (!freeCamera && spec.camera.mode === 'held' && !shot.current) {
       const a0 = curvePosAt(charProgress.current);
       const b0 = curvePosAt(Math.min(scenes.length - 1, charProgress.current + 1));
       const mid0 = a0.clone().lerp(b0, 0.55);
@@ -351,8 +424,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     walker.rotation.y = charYaw.current;
     wasMoving.current = moving;
 
-    // ---- 카메라 ----
-    if (spec.camera.mode === 'held' && shot.current) {
+    // ---- 카메라 ---- (BUILD 100: freeCamera면 에디터가 조종한다 — 손대지 않는다)
+    if (!freeCamera && spec.camera.mode === 'held' && shot.current) {
       // BUILD 088: 관조 카메라 — 구도는 잠기고, 사람이 그 속을 걸어간다.
       // BUILD 090: 프레임 가드 — 단, 사람이 액자를 벗어나려 하면 구도가 따라 고쳐진다.
       const chest = walker.position.clone().add(new THREE.Vector3(0, 0.5, 0));
@@ -380,10 +453,12 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         .clone()
         .add(faceDir.clone().multiplyScalar(0.9))
         .add(new THREE.Vector3(0, 0.8, 0));
-      camera.position.lerp(desired, 1 - Math.pow(0.12, delta));
-      smoothLook.current.lerp(lookTarget, 1 - Math.pow(0.06, delta));
-      applyUserCam(camera, delta);
-      camera.lookAt(smoothLook.current);
+      if (!freeCamera) {
+        camera.position.lerp(desired, 1 - Math.pow(0.12, delta));
+        smoothLook.current.lerp(lookTarget, 1 - Math.pow(0.06, delta));
+        applyUserCam(camera, delta);
+        camera.lookAt(smoothLook.current);
+      }
     }
 
     // 태양은 걷는 사람을 따라간다 (그림자 카메라가 항상 근처를 비추도록)
@@ -399,6 +474,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         object={world.group}
         onPointerDown={onGroundPick ? (e: { point: THREE.Vector3; stopPropagation: () => void }) => { e.stopPropagation(); onGroundPick(e.point.clone()); } : undefined}
       />
+      <primitive object={propsGroup} />
       <primitive object={walker} />
       <primitive object={tinker.group} />
       <primitive object={tinker.trail} />

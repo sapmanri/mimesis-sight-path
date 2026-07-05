@@ -193,6 +193,9 @@ export function createClipRig(
   // rollingMin: 즉시 내려가고, 천천히(0.12u/s) 올라오는 최저점 추적기.
   let rollingMin = Infinity;
   let gestureGrace = 0; // BUILD 098: 제스처 직후 접지 보정을 서두르지 않는다 (일어날 때 튕김 방지)
+  // BUILD 100: Mixamo 'Sitting'은 의자 높이다 — 앉는 동안 몸을 천천히 가라앉혀 땅에 앉힌다.
+  // 일어날 땐 같은 속도로 떠오른다 — 툭 튀는 대신 스르륵.
+  let sitSink = 0;
   // 발자국 감지: 발이 접지 문턱을 뚫고 내려오는 순간
   let contactL = false;
   let contactR = false;
@@ -238,7 +241,7 @@ export function createClipRig(
     stopInspect() {
       if (gesture === 'sit' || gesture === 'sitDown') {
         if (standUp) { gesture = 'standUp'; switchTo(standUp, 0.2); }
-        else { gesture = 'none'; switchTo(idle, 0.55); gestureGrace = 0.9; rollingMin = Infinity; } // 전환 클립이 없으면 더 느리게 일어난다
+        else { gesture = 'none'; switchTo(idle, 0.85); gestureGrace = 1.1; rollingMin = Infinity; } // 전환 클립이 없으면 더 느리게 일어난다
       } else if (gesture === 'pickup') {
         gesture = 'none';
         switchTo(idle, 0.25);
@@ -264,8 +267,13 @@ export function createClipRig(
       }
       mixer.update(dt);
 
-      // 접지 보정 + 발자국 (게스처 중엔 동결 — 앉은 발은 기준이 아니다)
-      if (footL && footR && gesture === 'none' && root.parent) {
+      // 앉기 침하: 앉는 동안 0.26u 가라앉고, 일어나면 같은 호흡으로 떠오른다
+      const sinkTarget = (gesture === 'sit' || gesture === 'sitDown') ? 0.26 : 0;
+      sitSink += (sinkTarget - sitSink) * Math.min(1, dt * 1.8);
+
+      // 접지 보정 + 발자국 (게스처와 유예 중엔 동결 — 앉은 발도, 일어나는 발도 기준이 아니다)
+      gestureGrace = Math.max(0, gestureGrace - dt);
+      if (footL && footR && gesture === 'none' && gestureGrace <= 0 && root.parent) {
         root.updateMatrixWorld(true);
         footL.getWorldPosition(fw);
         const ly = fw.y;
@@ -277,10 +285,7 @@ export function createClipRig(
         const minNow = Math.min(ly, ry);
         rollingMin = Math.min(minNow, (rollingMin === Infinity ? minNow : rollingMin) + 0.12 * dt);
         const err = (rollingMin - sole) - ground;
-        gestureGrace = Math.max(0, gestureGrace - dt);
-        const rate = gestureGrace > 0 ? 2.2 : 8; // 일어난 직후엔 천천히 자리를 찾는다
-        groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.4), Math.min(1, dt * rate));
-        root.position.y = baseY + groundCorr;
+        groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.4), Math.min(1, dt * 8));
 
         // 발자국: 발이 접지 대역(표면+2.5cm)으로 '진입'하는 순간, 이동 중일 때만
         stepClock += dt;
@@ -297,6 +302,7 @@ export function createClipRig(
           contactR = false;
         }
       }
+      root.position.y = baseY + groundCorr - sitSink;
     },
   };
 }

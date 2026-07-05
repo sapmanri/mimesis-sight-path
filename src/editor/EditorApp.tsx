@@ -8,8 +8,10 @@
 //       '뷰어에서 열기' = 본편이 ?draft=1로 이 문서를 읽는다.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import { World } from '../scene/World';
+import { PROP_CATALOG, PROP_CATEGORIES, type PlacedProp } from '../engine/props';
 import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { WALKER_ROSTER } from '../engine/worldCore';
@@ -17,7 +19,77 @@ import { jejuBlueprints } from '../data/jeju';
 
 const DRAFT_KEY = 'mimesis:world-draft:v1';
 
-type WorldDoc = { version: 1; name: string; blueprints: SceneBlueprint[]; spec: WorldSpec };
+type WorldDoc = { version: 1; name: string; blueprints: SceneBlueprint[]; spec: WorldSpec; props?: PlacedProp[] };
+
+// ---------- BUILD 100: 자유 카메라 (WASD/화살표 + 우클릭 드래그 룩) ----------
+// 다른 에디터들과 같은 문법 — 멀리 날아가 오브젝트를 찍는다.
+function FlyRig() {
+  const { camera, gl } = useThree();
+  const keys = useRef<Record<string, boolean>>({});
+  const look = useRef({ dragging: false, px: 0, py: 0, yaw: 0, pitch: 0, init: false });
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+      keys.current[e.key.toLowerCase()] = true;
+      if (e.key.startsWith('Arrow')) e.preventDefault();
+    };
+    const ku = (e: KeyboardEvent) => { keys.current[e.key.toLowerCase()] = false; };
+    const el = gl.domElement;
+    const ctx = (e: MouseEvent) => e.preventDefault();
+    const down = (e: PointerEvent) => {
+      if (e.button !== 2) return;
+      look.current.dragging = true;
+      look.current.px = e.clientX;
+      look.current.py = e.clientY;
+    };
+    const move = (e: PointerEvent) => {
+      const L = look.current;
+      if (!L.dragging) return;
+      L.yaw -= (e.clientX - L.px) * 0.0042;
+      L.pitch = Math.max(-1.35, Math.min(1.35, L.pitch - (e.clientY - L.py) * 0.0038));
+      L.px = e.clientX;
+      L.py = e.clientY;
+    };
+    const up = () => { look.current.dragging = false; };
+    window.addEventListener('keydown', kd);
+    window.addEventListener('keyup', ku);
+    el.addEventListener('contextmenu', ctx);
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('keydown', kd);
+      window.removeEventListener('keyup', ku);
+      el.removeEventListener('contextmenu', ctx);
+      el.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  }, [gl]);
+  useFrame((_, dt) => {
+    const L = look.current;
+    if (!L.init) {
+      // 현재 카메라 방향에서 시작
+      const d = camera.getWorldDirection(new THREE.Vector3());
+      L.yaw = Math.atan2(-d.x, -d.z) + Math.PI;
+      L.pitch = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+      L.init = true;
+    }
+    camera.rotation.set(L.pitch, L.yaw, 0, 'YXZ');
+    const k = keys.current;
+    const speed = (k['shift'] ? 12 : 4) * dt;
+    const fwd = new THREE.Vector3(-Math.sin(L.yaw), 0, -Math.cos(L.yaw));
+    const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    if (k['w'] || k['arrowup']) camera.position.addScaledVector(fwd, speed);
+    if (k['s'] || k['arrowdown']) camera.position.addScaledVector(fwd, -speed);
+    if (k['a'] || k['arrowleft']) camera.position.addScaledVector(right, -speed);
+    if (k['d'] || k['arrowright']) camera.position.addScaledVector(right, speed);
+    if (k['e'] || k[' ']) camera.position.y += speed;
+    if (k['q']) camera.position.y -= speed;
+  });
+  return null;
+}
 
 const KITS = ['door-kit', 'person-kit', 'cloud-kit', 'suitcase-kit', 'book-kit', 'cup-kit', 'stone-wall-kit', 'cd-shelf-kit', 'fruit-kit', 'airplane-wing-kit', 'sea-edge-kit'] as const;
 const PATHS = ['straight', 'soft-curve', 'deep-curve', 'bridge', 'stair', 'threshold', 'open-field'] as const;
@@ -42,13 +114,17 @@ function loadDoc(): WorldDoc {
 export function EditorApp() {
   const [doc, setDoc] = useState<WorldDoc>(loadDoc);
   const [sel, setSel] = useState(0);
-  const [tab, setTab] = useState<'scene' | 'env' | 'walker' | 'camera'>('scene');
+  const [tab, setTab] = useState<'scene' | 'place' | 'env' | 'walker' | 'camera'>('scene');
   const [preview, setPreview] = useState<WorldDoc>(() => clone(doc));
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [pickMode, setPickMode] = useState(false); // BUILD 099: 자리 찍기 — 다음 클릭이 좌표가 된다
+  // BUILD 100: 픽 대상 일반화 — 기억 자리 / 새 배치물 / 배치물 자리 다시 찍기
+  const [pickTarget, setPickTarget] = useState<null | 'scene' | 'prop-new' | 'prop-repos'>(null);
+  const [propCat, setPropCat] = useState(PROP_CATEGORIES[0]);
+  const [propObj, setPropObj] = useState(PROP_CATALOG[0].id);
+  const [selProp, setSelProp] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickMode(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickTarget(null); };
     window.addEventListener('keydown', esc);
     return () => window.removeEventListener('keydown', esc);
   }, []);
@@ -178,19 +254,41 @@ export function EditorApp() {
 
         {/* ---- 중: 살아있는 프리뷰 ---- */}
         <main className="ed-preview">
-          <Canvas className={pickMode ? 'ed-canvas ed-picking' : 'ed-canvas'} camera={{ position: [0, 3.1, 8.4], fov: 42 }} dpr={[1, 1.5]} shadows>
+          <Canvas className={pickTarget ? 'ed-canvas ed-picking' : 'ed-canvas'} camera={{ position: [0, 3.1, 8.4], fov: 42 }} dpr={[1, 1.5]} shadows>
+            <FlyRig />
             <World
               activeIndex={Math.min(sel, scenes.length - 1)}
               scenes={scenes}
               mode="manual"
               spec={preview.spec}
-              onGroundPick={pickMode ? (pt) => {
-                editScene((sc) => { sc.position[0] = +pt.x.toFixed(2); sc.position[2] = +pt.z.toFixed(2); });
-                setPickMode(false);
+              props={preview.props}
+              freeCamera
+              onGroundPick={pickTarget ? (pt) => {
+                if (pickTarget === 'scene') {
+                  editScene((sc) => { sc.position[0] = +pt.x.toFixed(2); sc.position[2] = +pt.z.toFixed(2); });
+                } else if (pickTarget === 'prop-new') {
+                  const id = 'p' + Date.now().toString(36);
+                  edit((d) => {
+                    d.props = d.props ?? [];
+                    d.props.push({ id, obj: propObj, position: [+pt.x.toFixed(2), +pt.y.toFixed(2), +pt.z.toFixed(2)], rotY: 0, rotX: 0, scale: 1 });
+                  });
+                  setSelProp(id);
+                } else if (pickTarget === 'prop-repos' && selProp) {
+                  edit((d) => {
+                    const pp = (d.props ?? []).find((q) => q.id === selProp);
+                    if (pp) pp.position = [+pt.x.toFixed(2), +pt.y.toFixed(2), +pt.z.toFixed(2)];
+                  });
+                }
+                setPickTarget(null);
               } : undefined}
             />
           </Canvas>
-          {pickMode && <div className="ed-pick-hint">지면을 클릭하면 이 기억의 자리가 됩니다 · ESC 취소</div>}
+          {pickTarget && (
+            <div className="ed-pick-hint">
+              {pickTarget === 'scene' ? '지면을 클릭하면 이 기억의 자리가 됩니다' : pickTarget === 'prop-new' ? '지면을 클릭하면 그 자리에 배치됩니다' : '지면을 클릭하면 그리로 옮깁니다'} · ESC 취소
+            </div>
+          )}
+          <div className="ed-flyhint">WASD/화살표 이동 · Q/E 상하 · 우클릭 드래그 시선 · Shift 가속</div>
           <div className="ed-preview-bar">
             <button type="button" onClick={() => setSel((v) => Math.max(0, v - 1))}>←</button>
             <span>{String(sel + 1).padStart(2, '0')} / {doc.blueprints.length} · {cur?.title}</span>
@@ -201,7 +299,7 @@ export function EditorApp() {
         {/* ---- 우: 인스펙터 ---- */}
         <aside className="ed-inspector">
           <nav className="ed-tabs">
-            {([['scene', '기억'], ['env', '환경'], ['walker', '걷는 사람'], ['camera', '시선']] as const).map(([k, label]) => (
+            {([['scene', '기억'], ['place', '배치'], ['env', '환경'], ['walker', '걷는 사람'], ['camera', '시선']] as const).map(([k, label]) => (
               <button key={k} type="button" className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
             ))}
           </nav>
@@ -251,9 +349,13 @@ export function EditorApp() {
                 <label>자리 X<input type="number" step="0.2" value={cur.position[0]} onChange={(e) => editScene((s) => { s.position[0] = Number(e.target.value); })} /></label>
                 <label>자리 Z<input type="number" step="0.2" value={cur.position[2]} onChange={(e) => editScene((s) => { s.position[2] = Number(e.target.value); })} /></label>
               </div>
-              <button type="button" className={pickMode ? 'ed-pickbtn on' : 'ed-pickbtn'} onClick={() => setPickMode((v) => !v)}>
-                {pickMode ? '클릭 대기 중… (취소)' : '⌖ 프리뷰에서 자리 찍기'}
+              <button type="button" className={pickTarget === 'scene' ? 'ed-pickbtn on' : 'ed-pickbtn'} onClick={() => setPickTarget((v) => (v === 'scene' ? null : 'scene'))}>
+                {pickTarget === 'scene' ? '클릭 대기 중… (취소)' : '⌖ 프리뷰에서 자리 찍기'}
               </button>
+              <label>사물 크기 <em>{(cur.scale || 1).toFixed(2)}×</em>
+                <input type="range" min="0.4" max="2" step="0.05" value={cur.scale || 1}
+                  onChange={(e) => editScene((sc) => { sc.scale = Number(e.target.value); })} />
+              </label>
               <label>사물 회전 · 좌우 <em>{Math.round((cur.objectRotY ?? 0) * 180 / Math.PI)}°</em>
                 <input type="range" min={-Math.PI} max={Math.PI} step="0.02" value={cur.objectRotY ?? 0}
                   onChange={(e) => editScene((s) => { s.objectRotY = Number(e.target.value); })} />
@@ -269,6 +371,67 @@ export function EditorApp() {
                   : <button type="button" onClick={() => photoRef.current?.click()}>사진 첨부…</button>}
                 <input ref={photoRef} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) attachPhoto(f); e.currentTarget.value = ''; }} />
               </div>
+            </div>
+          )}
+
+          {tab === 'place' && (
+            <div className="ed-fields">
+              <h4>오브젝트 카탈로그</h4>
+              <div className="ed-grid2">
+                <label>카테고리
+                  <select value={propCat} onChange={(e) => { setPropCat(e.target.value); const first = PROP_CATALOG.find((q) => q.cat === e.target.value); if (first) setPropObj(first.id); }}>
+                    {PROP_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label>오브젝트
+                  <select value={propObj} onChange={(e) => setPropObj(e.target.value)}>
+                    {PROP_CATALOG.filter((q) => q.cat === propCat).map((q) => <option key={q.id} value={q.id}>{q.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <button type="button" className={pickTarget === 'prop-new' ? 'ed-pickbtn on' : 'ed-pickbtn'}
+                onClick={() => setPickTarget((v) => (v === 'prop-new' ? null : 'prop-new'))}>
+                {pickTarget === 'prop-new' ? '클릭 대기 중… (취소)' : '⌖ 배치 — 화면을 찍으세요'}
+              </button>
+
+              <h4>배치된 사물 {(doc.props ?? []).length}</h4>
+              {(doc.props ?? []).length === 0 && <p className="ed-note">아직 없습니다. 위에서 골라 배치하세요.</p>}
+              <ul className="ed-proplist">
+                {(doc.props ?? []).map((pp) => {
+                  const def = PROP_CATALOG.find((q) => q.id === pp.obj);
+                  return (
+                    <li key={pp.id} className={selProp === pp.id ? 'on' : ''}>
+                      <button type="button" onClick={() => setSelProp(pp.id)}>{def?.label ?? pp.obj}</button>
+                      <button type="button" className="ed-del" onClick={() => { edit((d) => { d.props = (d.props ?? []).filter((q) => q.id !== pp.id); }); if (selProp === pp.id) setSelProp(null); }}>✕</button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {selProp && (() => {
+                const pp = (doc.props ?? []).find((q) => q.id === selProp);
+                if (!pp) return null;
+                const editProp = (fn: (q: PlacedProp) => void) => edit((d) => { const q = (d.props ?? []).find((x) => x.id === selProp); if (q) fn(q); });
+                return (
+                  <div className="ed-propedit">
+                    <label>회전 · 좌우 <em>{Math.round(pp.rotY * 180 / Math.PI)}°</em>
+                      <input type="range" min={-Math.PI} max={Math.PI} step="0.02" value={pp.rotY} onChange={(e) => editProp((q) => { q.rotY = Number(e.target.value); })} />
+                    </label>
+                    <label>기울임 · 위아래 <em>{Math.round(pp.rotX * 180 / Math.PI)}°</em>
+                      <input type="range" min={-0.8} max={0.8} step="0.02" value={pp.rotX} onChange={(e) => editProp((q) => { q.rotX = Number(e.target.value); })} />
+                    </label>
+                    <label>크기 <em>{pp.scale.toFixed(2)}×</em>
+                      <input type="range" min="0.3" max="3" step="0.05" value={pp.scale} onChange={(e) => editProp((q) => { q.scale = Number(e.target.value); })} />
+                    </label>
+                    <label>높이 <em>{pp.position[1].toFixed(2)}u</em>
+                      <input type="range" min="-0.5" max="9" step="0.1" value={pp.position[1]} onChange={(e) => editProp((q) => { q.position[1] = Number(e.target.value); })} />
+                    </label>
+                    <button type="button" className={pickTarget === 'prop-repos' ? 'ed-pickbtn on' : 'ed-pickbtn'}
+                      onClick={() => setPickTarget((v) => (v === 'prop-repos' ? null : 'prop-repos'))}>
+                      {pickTarget === 'prop-repos' ? '클릭 대기 중… (취소)' : '⌖ 자리 다시 찍기'}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

@@ -214,7 +214,7 @@ type ModelSpec = {
   clipSpeeds?: { walk: number; run: number }; // BUILD 091: 클립 고유속도 (원척, u/s)
 };
 
-const MODELS: Record<string, ModelSpec> = {
+export const MODELS: Record<string, ModelSpec> = {
   suitcase: { file: 'Old_Suitcase.glb', height: 0.3, tint: '#7e937f', preRotateX: -Math.PI / 2 }, // BUILD 087: 여행용 캐리어 크기 (0.42는 길을 침범했다)
   cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2', strip: 'areaLight,aiSkyDomeLight,camera,pCube10,Oak_Tree,nRigid' }, // BUILD 085: 디오라마 받침판(7.5유닛 pCube10)/나무/조명/카메라 제거 — 건물만
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 9, tint: PALETTE.white },
@@ -330,7 +330,7 @@ function normalizeModel(group: THREE.Group, spec: ModelSpec) {
   return wrapper;
 }
 
-const defaultLoader: ModelLoader = (file) =>
+export const defaultLoader: ModelLoader = (file) =>
   new Promise((resolve, reject) => {
     new GLTFLoader().load(
       `/assets/models/${file}`,
@@ -968,6 +968,23 @@ function buildVegetation(frames: Frame[], widthAt: (t: number) => number, anchor
   return g;
 }
 
+// BUILD 100: 뭉게구름 — 알파 막이 아니라 덩어리. props 카탈로그에서도 쓴다.
+export function makeCloudPuff(rnd: () => number, scale: number) {
+  const cloud = new THREE.Group();
+  const mat = std('#e9eef0');
+  const geo = new THREE.IcosahedronGeometry(1, 0);
+  const n = 4 + Math.floor(rnd() * 4);
+  for (let i = 0; i < n; i += 1) {
+    const m = new THREE.Mesh(geo, mat);
+    const r = (0.45 + rnd() * 0.6) * scale;
+    m.scale.set(r * (1 + rnd() * 0.5), r * 0.55, r * (1 + rnd() * 0.4));
+    m.position.set((rnd() - 0.5) * scale * 1.9, (rnd() - 0.4) * scale * 0.35, (rnd() - 0.5) * scale * 1.1);
+    m.rotation.y = rnd() * Math.PI;
+    cloud.add(m);
+  }
+  return cloud;
+}
+
 // ---------- memory object kits ----------
 function buildMemoryObjects(
   scenes: ObservationScene[],
@@ -984,6 +1001,7 @@ function buildMemoryObjects(
     // BUILD 099: 에디터 회전 — 기본 각 위에 사용자가 정한 각을 얹는다
     obj.rotation.y = Math.atan2(a.tan.x, a.tan.z) + (side > 0 ? 0.4 : -0.4) + (scene.objectRotY ?? 0);
     obj.rotation.x = scene.objectRotX ?? 0;
+    obj.scale.setScalar(scene.scale || 1); // BUILD 100: 사물 크기 — 에디터 슬라이더
     obj.traverse((m) => {
       if ((m as THREE.Mesh).isMesh) {
         m.castShadow = true;
@@ -1002,7 +1020,7 @@ function std(color: string) {
 
 type KitFn = (rnd: () => number) => THREE.Group;
 
-const KITS: Record<string, KitFn> = {
+export const KITS: Record<string, KitFn> = {
   'door-kit': () => {
     const g = new THREE.Group();
     const postMat = std('#b9aa8a'); // BUILD 085: 더 밝고 따뜻한 낡은 목재 (Vase: 084 톤은 탁했다)
@@ -1140,11 +1158,10 @@ function buildDistantWorld(): { group: THREE.Group; lighthouseSlot: THREE.Group 
   lighthouseSlot.position.set(-13, -0.4, -42);
   g.add(lighthouseSlot);
 
-  const cloudMat = new THREE.MeshBasicMaterial({ color: '#e3eae8', transparent: true, opacity: 0.2, depthWrite: false });
-  for (let i = 0; i < 9; i += 1) {
-    const c = new THREE.Mesh(new THREE.CircleGeometry(1, 24), cloudMat);
-    c.scale.set(9 + rnd() * 12, 1.1 + rnd() * 1.1, 1);
-    c.position.set((rnd() - 0.5) * 40, 3 + rnd() * 8, -30 - rnd() * 40);
+  // BUILD 100: 구름 재탄생 — 알파 막이 아니라 덩어리. 눌린 다면체 뭉치의 뭉게구름.
+  for (let i = 0; i < 7; i += 1) {
+    const c = makeCloudPuff(rnd, 1.6 + rnd() * 2.6);
+    c.position.set((rnd() - 0.5) * 44, 4 + rnd() * 8, -26 - rnd() * 42);
     g.add(c);
   }
 

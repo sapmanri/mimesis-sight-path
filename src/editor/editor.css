@@ -160,3 +160,19 @@ body {
   background: none; color: #d8c48f; cursor: pointer; font-size: 12px;
 }
 .ed-pickbtn.on { background: rgba(216, 196, 143, 0.18); border-style: solid; }
+
+/* BUILD 100: 배치 탭 + 자유 카메라 */
+.ed-flyhint {
+  position: absolute; left: 12px; bottom: 12px;
+  padding: 6px 10px; border-radius: 8px;
+  background: rgba(22, 36, 42, 0.72); color: rgba(238,243,238,0.75);
+  font-size: 10.5px; letter-spacing: 0.03em; pointer-events: none;
+}
+.ed-note { font-size: 11px; opacity: 0.5; margin: 2px 0; }
+.ed-proplist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.ed-proplist li { display: flex; align-items: center; border-radius: 8px; background: rgba(255,255,255,0.03); }
+.ed-proplist li.on { background: rgba(216,196,143,0.14); outline: 1px solid rgba(216,196,143,0.4); }
+.ed-proplist li > button:first-child { flex: 1; text-align: left; padding: 7px 10px; border: none; background: none; color: inherit; cursor: pointer; font-size: 12px; }
+.ed-proplist .ed-del { border: none; background: none; color: inherit; opacity: 0.5; cursor: pointer; padding: 6px 8px; }
+.ed-proplist .ed-del:hover { opacity: 1; color: #d8c48f; }
+.ed-propedit { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.1); }
