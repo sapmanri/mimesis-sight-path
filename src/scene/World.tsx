@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
 import { buildWorld, createWalkerFigure, loadWalkerAsset, PALETTE } from '../engine/worldCore';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
+import { createWalkerRig, type WalkerRig } from './walkerRig';
 
 type WorldProps = {
   scenes: ObservationScene[];
@@ -23,9 +24,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
     holder.add(createWalkerFigure());
     return holder;
   }, []);
-  const mixerRef = useRef<THREE.AnimationMixer | null>(null);
-  const actionsRef = useRef<{ walk?: THREE.AnimationAction; idle?: THREE.AnimationAction }>({});
+  const rigRef = useRef<WalkerRig | null>(null);
   const walkProgress = useRef(activeIndex);
+  const wasMoving = useRef(false);
   const { gl } = useThree();
 
   useEffect(() => {
@@ -34,20 +35,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       if (!alive) return;
       walker.clear();
       walker.add(group);
-      const mixer = new THREE.AnimationMixer(group);
-      mixerRef.current = mixer;
-      const walkClip = animations.find((a) => /walk/i.test(a.name));
-      const idleClip = animations.find((a) => /idle/i.test(a.name));
-      if (walkClip) {
-        const walk = mixer.clipAction(walkClip);
-        walk.timeScale = spec.walker.timeScale; // 천천히 걷는다
-        actionsRef.current.walk = walk;
-      }
-      if (idleClip) {
-        const idle = mixer.clipAction(idleClip);
-        idle.play();
-        actionsRef.current.idle = idle;
-      }
+      // BUILD 085: 스캐빈저 절차 보행 리그. 클립엔 보행이 없어 뼈를 직접 구동한다.
+      rigRef.current = createWalkerRig(group, animations, spec.walker.timeScale);
     }).catch(() => { /* 실패 시 프로시저럴 실루엣 유지 */ });
     return () => { alive = false; };
   }, [walker, spec]);
@@ -60,6 +49,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
   }, [gl]);
 
   const walkPhase = useRef(0);
+  const smoothLook = useRef(new THREE.Vector3(0, 0.8, 0));
 
   useFrame(({ camera, clock }, delta) => {
     // 천천히 걷는다. 서두르지 않는다.
@@ -75,24 +65,20 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
     const aheadT = Math.min(1, t + 0.06);
     const ahead = world.curve.getPoint(aheadT);
     const dir = ahead.clone().sub(pos).setY(0).normalize();
-    const nor = new THREE.Vector3(-dir.z, 0, dir.x);
 
-    // ---- 걷는 사람 ----
-    const mixer = mixerRef.current;
-    const acts = actionsRef.current;
-    if (mixer) {
-      // 실물 워커: 애니메이션 클립으로 걷는다
-      if (acts.walk && acts.idle) {
-        if (moving && !acts.walk.isRunning()) {
-          acts.walk.reset().fadeIn(0.35).play();
-          acts.idle.fadeOut(0.35);
-        } else if (!moving && acts.walk.isRunning()) {
-          acts.walk.fadeOut(0.5);
-          acts.idle.reset().fadeIn(0.5).play();
-        }
+    // ---- 걷는 사람 (BUILD 085: 절차 보행 — 느리면 걷고, 멀면 뛴다) ----
+    const speed01 = Math.min(1, Math.max(0, (Math.abs(distance) - 0.6) / 2.4));
+    const rig = rigRef.current;
+    if (rig) {
+      rig.update(delta, speed01, moving, clock.elapsedTime);
+      // 도착: 기억 앞에 웅크려 들여다본다 (머무름이 깊은 장면에서만)
+      if (wasMoving.current && !moving) {
+        const scene = scenes[Math.round(walkProgress.current)];
+        if ((scene?.stillness ?? 0) >= 1.0) rig.playInspect();
       }
-      mixer.update(delta);
-      walker.position.copy(pos);
+      if (!wasMoving.current && moving) rig.stopInspect();
+      const bob = moving && !rig.inspecting() ? Math.abs(Math.sin(rig.phase())) * (0.014 + speed01 * 0.012) : 0;
+      walker.position.copy(pos).add(new THREE.Vector3(0, bob, 0));
       walker.rotation.z = 0;
     } else {
       // 폴백 실루엣: 절차적 걸음
@@ -104,21 +90,21 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       walker.rotation.z = sway;
     }
     walker.rotation.y = Math.atan2(dir.x, dir.z);
+    wasMoving.current = moving;
 
-    // ---- 카메라: 걷는 사람의 등을 조용히 따라간다 ----
-    const sideDrift = Math.sin(walkProgress.current * 0.72) * 0.15;
+    // ---- 카메라 (BUILD 085): 휙휙 가지 않는다. 걷는 사람을 조용히 따라갈 뿐. ----
     const desired = pos
       .clone()
       .add(dir.clone().multiplyScalar(-3.4))
-      .add(nor.clone().multiplyScalar(sideDrift))
       .add(new THREE.Vector3(0, 2.0, 0));
-    const lookAt = walker.position
+    const lookTarget = walker.position
       .clone()
-      .add(dir.clone().multiplyScalar(2.6))
-      .add(new THREE.Vector3(0, 0.15, 0));
+      .add(dir.clone().multiplyScalar(0.9))
+      .add(new THREE.Vector3(0, 0.8, 0));
 
-    camera.position.lerp(desired, 1 - Math.pow(0.045, delta));
-    camera.lookAt(lookAt.x, lookAt.y, lookAt.z);
+    camera.position.lerp(desired, 1 - Math.pow(0.12, delta));
+    smoothLook.current.lerp(lookTarget, 1 - Math.pow(0.06, delta));
+    camera.lookAt(smoothLook.current);
 
     // 태양은 걷는 사람을 따라간다 (그림자 카메라가 항상 근처를 비추도록)
     world.sun.position.copy(pos).add(new THREE.Vector3(6, 11, 5));

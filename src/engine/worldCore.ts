@@ -209,11 +209,13 @@ type ModelSpec = {
   preRotateX?: number;   // 눕혀진 모델 세우기 등
   fitMaxDim?: boolean;   // 높이 대신 최대 치수 기준 (납작한 돌 등)
   strip?: string;        // BUILD 084: 이 부분문자열을 이름에 포함한 메시 제거 (원본 에셋의 조명판 등)
+  keepLook?: boolean;    // BUILD 085: 팔레트 미적용 — 원래 텍스처/색 보존 (워커 등 주인공급)
+  texture?: string;      // BUILD 085: 수동 바인딩할 텍스처 파일명 (FBX 변환에서 누락된 경우)
 };
 
 const MODELS: Record<string, ModelSpec> = {
   suitcase: { file: 'Old_Suitcase.glb', height: 0.42, tint: '#7e937f', preRotateX: -Math.PI / 2 }, // BUILD 084: mint→낡은 세이지 (안개 속 발광 완화)
-  cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2', strip: 'areaLight' }, // BUILD 084: 원본의 조명판 지오메트리 제거 (절벽가 발광 원인)
+  cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2', strip: 'areaLight,aiSkyDomeLight,camera,pCube10,Oak_Tree,nRigid' }, // BUILD 085: 디오라마 받침판(7.5유닛 pCube10)/나무/조명/카메라 제거 — 건물만
   lighthouse: { file: 'Lighthouse_island_toy.glb', height: 9, tint: PALETTE.white },
   stone: { file: 'stone11.glb', height: 0.24, tint: '#6e7268', fitMaxDim: true },
   rock0: { file: 'Rock0.glb', height: 0.3, tint: '#79766a', fitMaxDim: true },
@@ -223,7 +225,7 @@ const MODELS: Record<string, ModelSpec> = {
   rockD: { file: 'RockD.glb', height: 0.22, tint: '#7c7666', fitMaxDim: true },
   caveA: { file: 'CaveA.glb', height: 1.15, tint: '#8a7d68', fitMaxDim: true },
   caveB: { file: 'CaveB.glb', height: 0.95, tint: '#7e7361', fitMaxDim: true },
-  walker: { file: 'Peasant.glb', height: 0.9, tint: '#57534a' },
+  walker: { file: 'Scavenger.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Scavenger_texture.png' }, // BUILD 085: Vase 제공 캐릭터, 원래 룩 보존
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
   rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },
@@ -242,8 +244,18 @@ function remapHue(h: number) {
 }
 
 /** 모든 재질을 팔레트 안으로 리맵. 명도는 살리고 색조를 우리 세계로 끌어온다. */
+// BUILD 085: GLB에 밀수된 조명 제거 (KHR_lights_punctual).
+// RockA-D/CaveA-B에 백색 포인트라이트가 내장돼 있었다 — "백색 괴물"과
+// 빛 웅덩이(담/절벽/슬랩 아래 발광)의 진범. 빛은 이 세계의 Light Generator만 만든다.
+function stripLights(group: THREE.Object3D) {
+  const smuggled: THREE.Object3D[] = [];
+  group.traverse((node) => { if ((node as THREE.Light).isLight) smuggled.push(node); });
+  smuggled.forEach((n) => n.parent?.remove(n));
+}
+
 function applyPalette(group: THREE.Group, fallbackTint: string) {
   const fallback = new THREE.Color(fallbackTint);
+  stripLights(group);
   group.traverse((node) => {
     const mesh = node as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -307,8 +319,9 @@ export async function loadKitModel(key: string, loadModel: ModelLoader) {
   const spec = MODELS[key];
   const raw = (await loadModel(spec.file)).scene;
   if (spec.strip) {
+    const needles = spec.strip.split(',');
     const doomed: THREE.Object3D[] = [];
-    raw.traverse((n) => { if (n.name.includes(spec.strip!)) doomed.push(n); });
+    raw.traverse((n) => { if (needles.some((x) => n.name.includes(x))) doomed.push(n); });
     doomed.forEach((n) => n.parent?.remove(n));
   }
   applyPalette(raw, spec.tint);
@@ -319,7 +332,35 @@ export async function loadKitModel(key: string, loadModel: ModelLoader) {
 export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader) {
   const spec = MODELS.walker;
   const gltf = await loadModel(spec.file);
-  applyPalette(gltf.scene, spec.tint);
+  if (spec.keepLook) {
+    // BUILD 085: 주인공은 팔레트를 통과하지 않는다 — 자기 옷을 입고 걷는다.
+    // 단 조명 밀수 차단과 높이안개는 세계의 문법이므로 예외 없이 적용.
+    stripLights(gltf.scene);
+    let map: THREE.Texture | null = null;
+    if (spec.texture) {
+      map = new THREE.TextureLoader().load(`/assets/models/${spec.texture}`);
+      map.flipY = false;
+      map.colorSpace = THREE.SRGBColorSpace;
+    }
+    gltf.scene.traverse((node) => {
+      const mesh = node as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false; // 스킨드 메시: 뼈 이동 시 오컬링 방지
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      mats.forEach((m) => {
+        const std = m as THREE.MeshStandardMaterial;
+        if (map && std.color) { std.map = map; std.color.set('#ffffff'); }
+        std.roughness = 1;
+        std.metalness = 0;
+        applyHeightFog(std);
+        std.needsUpdate = true;
+      });
+    });
+  } else {
+    applyPalette(gltf.scene, spec.tint);
+  }
   const group = normalizeModel(gltf.scene, spec);
   return { group, animations: gltf.animations };
 }
@@ -774,7 +815,7 @@ type KitFn = (rnd: () => number) => THREE.Group;
 const KITS: Record<string, KitFn> = {
   'door-kit': () => {
     const g = new THREE.Group();
-    const postMat = std('#9a8f78'); // BUILD 084: 백색(발광) → 낡은 목재. 레퍼런스의 낡은 문.
+    const postMat = std('#b9aa8a'); // BUILD 085: 더 밝고 따뜻한 낡은 목재 (Vase: 084 톤은 탁했다)
     const postGeo = new THREE.BoxGeometry(0.22, 1.15, 0.22);
     const p1 = new THREE.Mesh(postGeo, postMat);
     p1.position.set(-0.5, 0.57, 0);
