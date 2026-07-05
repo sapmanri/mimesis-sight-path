@@ -162,6 +162,9 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'deer', label: '사슴', cat: '동물' },
   { id: 'boar', label: '멧돼지', cat: '동물' },
   { id: 'wolf', label: '늑대', cat: '동물' },
+  // BUILD 113
+  { id: 'cowshed', label: '외양간', cat: '구조물' },
+  { id: 'moon', label: '달', cat: '하늘' },
   // 하늘
   { id: 'cloud', label: '뭉게구름', cat: '하늘' },
   { id: 'cloud-dark', label: '먹구름', cat: '하늘' },
@@ -303,6 +306,19 @@ export async function createPropObject(
       case 'cow': case 'dog': case 'duck': case 'chicky': case 'horse':
       case 'piggy': case 'bear': case 'deer': case 'boar': case 'wolf':
         return await loadKitModel(objId, loadModel);
+      case 'cowshed': return await loadKitModel('cowshed', loadModel);
+      case 'moon': {
+        // BUILD 113: 달은 스스로 빛난다 — 은은한 자체발광, 밤 프리셋의 씨앗
+        const g = await loadKitModel('moon', loadModel);
+        g.traverse((n) => {
+          const mesh = n as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const m = mesh.material as THREE.MeshStandardMaterial;
+          m.emissive = new THREE.Color('#f2ecda');
+          m.emissiveIntensity = 0.55;
+        });
+        return g;
+      }
       default: return null;
     }
   } catch {

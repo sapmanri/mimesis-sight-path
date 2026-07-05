@@ -32,6 +32,12 @@ function FlyRig({ home }: { home?: [number, number, number] }) {
     cam.position.set(h[0] + 2.6, h[1] + 2.1, h[2] + 3.6);
     cam.lookAt(h[0], h[1] + 0.5, h[2]);
   };
+  // BUILD 113: 홈이 바뀌면 그리로 난다 — 첫 프레임 허공 금지, 기억 선택 = 비행
+  const homeKey = home ? home.join(',') : '';
+  useEffect(() => {
+    if (home) { goHome(camera); look.current.init = false; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [homeKey]);
   const keys = useRef<Record<string, boolean>>({});
   const look = useRef({ dragging: false, px: 0, py: 0, yaw: 0, pitch: 0, init: false });
   useEffect(() => {
@@ -191,6 +197,8 @@ export function EditorApp() {
   const [warehouse, setWarehouse] = useState<WarehouseReg | null>(null);
   const [whCat, setWhCat] = useState<string>('ambient-life');
   const [whOpen, setWhOpen] = useState(false);
+  // BUILD 113: 실제 커브 앵커 — FlyRig 홈의 진짜 좌표
+  const [anchors, setAnchors] = useState<[number, number, number][] | null>(null);
   useEffect(() => {
     fetch('/assets/warehouse/registry_v2.json').then((r) => r.json()).then(setWarehouse).catch(() => setWarehouse(null));
   }, []);
@@ -380,7 +388,7 @@ export function EditorApp() {
         {/* ---- 중: 살아있는 프리뷰 ---- */}
         <main className="ed-preview">
           <Canvas className={pickTarget ? 'ed-canvas ed-picking' : 'ed-canvas'} camera={{ position: [0, 3.1, 8.4], fov: 42 }} dpr={[1, 1.5]} shadows>
-            <FlyRig home={(doc.blueprints[sel]?.position ?? [0, 0, 0]) as [number, number, number]} />
+            <FlyRig home={(anchors?.[Math.min(sel, (anchors.length - 1))] ?? doc.blueprints[sel]?.position ?? [0, 0, 0]) as [number, number, number]} />
             <PropsLayer
               list={doc.props ?? []}
               selected={selProp}
@@ -393,6 +401,7 @@ export function EditorApp() {
               spec={previewSpec}
               freeCamera
               onScenePick={!pickTarget ? (i) => { setSel(i); setSelProp(null); setTab('scene'); } : undefined}
+              onAnchors={setAnchors}
               onGroundPick={pickTarget ? (pt) => {
                 if (pickTarget === 'scene') {
                   editScene((sc) => { sc.position[0] = +pt.x.toFixed(2); sc.position[2] = +pt.z.toFixed(2); });

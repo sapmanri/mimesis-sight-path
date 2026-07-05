@@ -31,6 +31,8 @@ type WorldProps = {
   props?: PlacedProp[];
   /** BUILD 100: 에디터 자유 카메라 — true면 World는 카메라에 손대지 않는다 */
   freeCamera?: boolean;
+  /** BUILD 113: 실제 월드 커브 앵커 노출 — 에디터 카메라가 기억 곁으로 날아가기 위해 */
+  onAnchors?: (pts: [number, number, number][]) => void;
   /** BUILD 100: 길 탭 — 가장 가까운 기억 지점으로 걷기 */
   onPathTap?: (index: number) => void;
   /** BUILD 106: 에디터 — 기억 사물 클릭 선택 */
@@ -39,8 +41,12 @@ type WorldProps = {
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, onPathTap, onScenePick }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, onPathTap, onScenePick, onAnchors }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
+  useEffect(() => {
+    onAnchors?.(world.anchors.map((a) => [a.p.x, a.p.y, a.p.z]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world]);
   // 워커: 프로시저럴 실루엣으로 시작, Peasant 로드 완료 시 교체
   const walker = useMemo(() => {
     const holder = new THREE.Group();

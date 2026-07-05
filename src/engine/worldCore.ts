@@ -241,6 +241,9 @@ export const MODELS: Record<string, ModelSpec> = {
   deer: { file: 'deer.glb', height: 0.8, tint: '#9a8365' },
   boar: { file: 'boar.glb', height: 0.5, tint: '#6e6154' },
   wolf: { file: 'wolf.glb', height: 0.55, tint: '#75787a' },
+  // BUILD 113: 창고에서 깨어난 것들
+  cowshed: { file: 'Cowshed.glb', height: 1.7, tint: '#8a7a63', fitMaxDim: true }, // 방향 미검증 — 스크린샷 보고 preRotateX 보정 예정
+  moon: { file: 'Moon.glb', height: 1.2, tint: '#e9e4d4', fitMaxDim: true },
   // BUILD 107: 카탈로그 확장 등록
   stone11: { file: 'stone11.glb', height: 0.5, tint: '#6b6e63', fitMaxDim: true },
   rogue: { file: 'RogueHooded.glb', height: 0.95, tint: '#8f8a7a', keepLook: true },

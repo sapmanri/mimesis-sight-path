@@ -656,10 +656,12 @@
    "downloadUrl": "https://github.com/sapmanri/mimesis-sight-path/releases/download/assets-v1/cowshed_FBX.rar",
    "category": "architecture",
    "subcategory": "rural",
-   "status": "raw",
-   "productionRef": null,
-   "notes": "외양간 — 소와 세트",
-   "catalogIds": []
+   "status": "in_production",
+   "productionRef": "cowshed",
+   "notes": "외양간 — 소와 세트 (BUILD 113, 방향 검증 대기)",
+   "catalogIds": [
+    "cowshed"
+   ]
   },
   {
    "id": "english_thatched_house_fbx",
@@ -1325,10 +1327,12 @@
    "downloadUrl": "https://github.com/sapmanri/mimesis-sight-path/releases/download/assets-v1/Moon_2K.fbx",
    "category": "fantasy",
    "subcategory": "space",
-   "status": "raw",
-   "productionRef": null,
-   "notes": "달 — 달밤 프리셋 후보",
-   "catalogIds": []
+   "status": "in_production",
+   "productionRef": "moon",
+   "notes": "달 — 자체발광, 달밤 프리셋의 씨앗 (BUILD 113)",
+   "catalogIds": [
+    "moon"
+   ]
   },
   {
    "id": "origami_chat_free",
