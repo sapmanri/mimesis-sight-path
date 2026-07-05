@@ -185,6 +185,7 @@ export function createClipRig(
   const toeR = findBone(/RightToeBase$/i, /RightToe/i);
   const footL = toeL ?? findBone(/LeftFoot$/i, /^footl$/i, /foot\.l/i);
   const footR = toeR ?? findBone(/RightFoot$/i, /^footr$/i, /foot\.r/i);
+  const hipsBone = findBone(/Hips$/i, /pelvis/i, /^hips$/i);
   // 밑창: 발끝 뼈 기준 얇게, 발목 기준이면 두껍게
   const sole = toeL ? 0.012 : 0.035;
   const baseY = root.position.y;
@@ -287,7 +288,22 @@ export function createClipRig(
       mixer.update(dt);
 
       // 앉기 침하: 앉는 동안 0.26u 가라앉고, 일어나면 같은 호흡으로 떠오른다
-      const sinkTarget = (gesture === 'sit' || gesture === 'sitDown') ? 0.26 : 0;
+      // BUILD 103: 적응형 침하 — 고정 0.26u는 어떤 아이에겐 반신욕이었다 (클립마다 힙 높이가 다르다).
+      // 지금 힙의 '침하 전' 높이를 실측해, 엉덩이가 땅에 살짝 닿는 만큼(0.14u)만 가라앉는다.
+      let sinkTarget = 0;
+      if ((gesture === 'sit' || gesture === 'sitDown') && hipsBone && root.parent) {
+        hipsBone.getWorldPosition(fw);
+        root.parent.worldToLocal(fw);
+        const hipsRaw = fw.y + sitSink; // 침하를 걷어낸 원시 힙 높이 (부모 로컬, 지면=0)
+        // 발 깊이 상한: 다리가 앞으로 뻗는 자세에서 발이 모래에 10cm 이상 잠기지 않게
+        let footMin = 9;
+        if (footL && footR) {
+          footL.getWorldPosition(fw); root.parent.worldToLocal(fw); footMin = fw.y;
+          footR.getWorldPosition(fw); root.parent.worldToLocal(fw); footMin = Math.min(footMin, fw.y);
+          footMin += sitSink;
+        }
+        sinkTarget = THREE.MathUtils.clamp(Math.min(hipsRaw - 0.14, footMin + 0.1), 0, 0.34);
+      }
       sitSink += (sinkTarget - sitSink) * Math.min(1, dt * 1.8);
 
       // 접지 보정 + 발자국 (게스처와 유예 중엔 동결 — 앉은 발도, 일어나는 발도 기준이 아니다)

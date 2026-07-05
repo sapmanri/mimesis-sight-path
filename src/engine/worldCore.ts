@@ -756,13 +756,20 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
       const chunkL = (noise1(i * 0.09 + r * 3.1) * 0.5 + noise1(i * 0.32 + r * 8.3) * 0.22) * fine;
       const chunkR = (noise1(i * 0.09 + r * 3.1 + 50) * 0.5 + noise1(i * 0.32 + r * 8.3 + 50) * 0.22) * fine;
       const inset = ringInsetBase[r] * w;
-      // BUILD 102: 윗단 실루엣 지터 — 깊은 링들만 침식되고 윗선은 자로 잰 듯했다.
-      // 완만한 굽이(저주파) + 잔니블(고주파), 살짝 바깥 편향 — 부서져 나간 턱.
-      const lipL = (noise1(i * 0.23) * 0.6 + noise1(i * 1.31) * 0.4) * 0.09 + 0.015;
-      const lipR = (noise1(i * 0.23 + 77) * 0.6 + noise1(i * 1.31 + 77) * 0.4) * 0.09 + 0.015;
+      // BUILD 102→103: 윗단 실루엣 — 굽이 + 잔니블 + '물어뜯김'(bite).
+      // 레퍼런스의 핵심은 군데군데 깊게 떨어져 나간 요철이었다.
+      const waveL = (noise1(i * 0.23) * 0.6 + noise1(i * 1.31) * 0.4) * 0.13 + 0.02;
+      const waveR = (noise1(i * 0.23 + 77) * 0.6 + noise1(i * 1.31 + 77) * 0.4) * 0.13 + 0.02;
+      const bnL = noise1(i * 0.115);
+      const bnR = noise1(i * 0.115 + 31);
+      const biteL = Math.max(0, bnL - 0.38) * 0.8 * w; // 문턱을 넘는 구간만 깊게 파인다
+      const biteR = Math.max(0, bnR - 0.38) * 0.8 * w;
+      const lipL = waveL - biteL;
+      const lipR = waveR - biteR;
       const hwL = Math.max(0.06, w - inset + (r === 0 ? lipL : chunkL * (0.3 + v * 0.7)));
       const hwR = Math.max(0.06, w - inset + (r === 0 ? lipR : chunkR * (0.3 + v * 0.7)));
-      const y = f.p.y - drop + (r === 0 ? noise1(i * 0.2) * 0.03 : noise1(i * 0.18 + r * 7) * 0.3 * v);
+      const lipCrumb = (biteL + biteR) * 0.22; // 물린 자리는 턱도 살짝 주저앉는다
+      const y = f.p.y - drop + (r === 0 ? noise1(i * 0.2) * 0.03 - lipCrumb : noise1(i * 0.18 + r * 7) * 0.3 * v);
       rings.push({
         L: f.p.clone().add(f.nor.clone().multiplyScalar(hwL)).setY(y),
         R: f.p.clone().add(f.nor.clone().multiplyScalar(-hwR)).setY(y),
@@ -863,6 +870,12 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
   // 가장자리로 갈수록 빽빽해지는 잔자갈.
   {
     const rockGeo = new THREE.IcosahedronGeometry(1, 0);
+    const mkInstG = (geo: THREE.BufferGeometry, color: string, count: number) => {
+      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 }), count);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    };
     const mkInst = (count: number, color: string, rough = 0.95) => {
       const mesh = new THREE.InstancedMesh(rockGeo, new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 }), count);
       mesh.castShadow = true;
@@ -884,7 +897,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     };
 
     // 턱 부스러기: 가장자리에 걸치거나 반쯤 흘러내린 조각
-    const lipCount = Math.min(70, Math.floor(frames.length / 6));
+    const lipCount = Math.min(120, Math.floor(frames.length / 3.5));
     const lip = mkInst(lipCount, PALETTE.sandEdge);
     for (let k = 0; k < lipCount; k += 1) {
       const i = Math.floor((k / lipCount) * (frames.length - 1) + noise1(k * 3.7) * 5);
@@ -892,7 +905,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
       const w = widthAt(f.t);
       const side = k % 2 === 0 ? 1 : -1;
       const out = w * (0.92 + Math.abs(noise1(k * 1.9)) * 0.2);
-      const r = 0.035 + Math.abs(noise1(k * 2.3)) * 0.075;
+      const r = 0.035 + Math.abs(noise1(k * 2.3)) * 0.1;
       const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * out));
       p.y += 0.01 - Math.abs(noise1(k * 4.1)) * r * 1.6; // 일부는 턱 아래로 반쯤 흘러내림
       place(lip, k, p, S.set(r * (1 + Math.abs(noise1(k)) * 0.6), r * 0.7, r * (1 + Math.abs(noise1(k + 5)) * 0.4)), k * 1.13);
@@ -901,7 +914,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     g.add(lip);
 
     // 부유 파편: 떨어져 나가 아직 허공에 머무는 돌 (공중섬의 문법)
-    const fragCount = Math.min(26, Math.floor(frames.length / 16));
+    const fragCount = Math.min(40, Math.floor(frames.length / 10));
     const frag = mkInst(fragCount, PALETTE.cliffHigh);
     for (let k = 0; k < fragCount; k += 1) {
       const i = Math.floor((k / fragCount) * (frames.length - 1) + noise1(k * 7.7) * 9);
@@ -917,7 +930,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     g.add(frag);
 
     // 잔자갈: 가장자리로 갈수록 빽빽하게 (밀도 곡선 = 1 - rnd*rnd)
-    const pebCount = Math.min(150, frames.length);
+    const pebCount = Math.min(280, frames.length * 2);
     const peb = mkInst(pebCount, PALETTE.sandEdge, 1.0);
     for (let k = 0; k < pebCount; k += 1) {
       const i = Math.floor(Math.abs(noise1(k * 1.7)) * (frames.length - 1));
@@ -933,6 +946,61 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     }
     peb.instanceMatrix.needsUpdate = true;
     g.add(peb);
+
+    // BUILD 103: 가장자리 초목 스필 — 레퍼런스의 진짜 주인공.
+    // 턱에 걸터앉은 수풀 덩이 + 절벽면에 매달려 바깥으로 뻗은 풀.
+    const greens = SPEC.decoration.vegetation.greens;
+    const blobGeo = new THREE.IcosahedronGeometry(1, 0);
+    const coneGeo = new THREE.ConeGeometry(0.011, 0.12, 3);
+    const spillMeshes = greens.slice(0, 2).map((c) => mkInstG(blobGeo, c, 160));
+    const hangMeshes = greens.slice(1, 3).map((c) => mkInstG(coneGeo, c, 130));
+    const counters = [0, 0, 0, 0];
+    // 턱 수풀: 2~4덩이 뭉치가 가장자리에 반쯤 걸쳐 있다
+    const bushSpots = Math.min(52, Math.floor(frames.length / 8));
+    for (let k = 0; k < bushSpots; k += 1) {
+      const i = Math.floor(Math.abs(noise1(k * 5.3)) * (frames.length - 1));
+      const f = frames[i];
+      const w = widthAt(f.t);
+      const side = k % 2 === 0 ? 1 : -1;
+      const base = f.p.clone().add(f.nor.clone().multiplyScalar(side * w * (0.86 + Math.abs(noise1(k * 1.7)) * 0.17)));
+      const n = 2 + Math.floor(Math.abs(noise1(k * 3.9)) * 3);
+      for (let b2 = 0; b2 < n; b2 += 1) {
+        const mi = (k + b2) % 2;
+        const mesh = spillMeshes[mi];
+        const r = 0.055 + Math.abs(noise1(k * 2.1 + b2 * 7)) * 0.075;
+        V.set(base.x + noise1(k * 9 + b2 * 3) * 0.09, base.y + r * 0.42 - Math.abs(noise1(k + b2 * 11)) * 0.05, base.z + noise1(k * 4 + b2 * 5) * 0.09);
+        E.set(0, noise1(k * 1.3 + b2) * 3, noise1(k * 2.7 + b2) * 0.25);
+        Q.setFromEuler(E);
+        S.set(r * (1 + Math.abs(noise1(b2 + k)) * 0.4), r * 0.62, r * (1 + Math.abs(noise1(b2 + k + 3)) * 0.4));
+        M.compose(V, Q, S);
+        mesh.setMatrixAt(counters[mi], M);
+        counters[mi] += 1;
+      }
+    }
+    // 매달린 풀: 절벽면에서 바깥·아래로 뻗는다
+    const hangCount = Math.min(120, Math.floor(frames.length / 3.5));
+    for (let k = 0; k < hangCount; k += 1) {
+      const i = Math.floor(Math.abs(noise1(k * 6.1)) * (frames.length - 1));
+      const f = frames[i];
+      const w = widthAt(f.t);
+      const side = k % 2 === 0 ? 1 : -1;
+      const mi = k % 2;
+      const mesh = hangMeshes[mi];
+      const p2 = f.p.clone().add(f.nor.clone().multiplyScalar(side * w * (1.0 + Math.abs(noise1(k * 2.4)) * 0.05)));
+      p2.y -= 0.03 + Math.abs(noise1(k * 3.8)) * 0.3;
+      V.copy(p2);
+      // 바깥으로 기울어 매달림: 법선 방향으로 눕는다
+      const outYaw = Math.atan2(f.nor.x * side, f.nor.z * side);
+      E.set(0, outYaw, -(0.7 + Math.abs(noise1(k * 1.9)) * 0.7));
+      Q.setFromEuler(E);
+      const sc = 0.8 + Math.abs(noise1(k * 4.4)) * 1.1;
+      S.set(sc, sc, sc);
+      M.compose(V, Q, S);
+      mesh.setMatrixAt(counters[2 + mi], M);
+      counters[2 + mi] += 1;
+    }
+    spillMeshes.forEach((m, i2) => { m.count = counters[i2]; m.instanceMatrix.needsUpdate = true; g.add(m); });
+    hangMeshes.forEach((m, i2) => { m.count = counters[2 + i2]; m.instanceMatrix.needsUpdate = true; g.add(m); });
   }
 
   return g;
