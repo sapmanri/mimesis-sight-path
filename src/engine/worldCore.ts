@@ -226,9 +226,9 @@ const MODELS: Record<string, ModelSpec> = {
   rockD: { file: 'RockD.glb', height: 0.22, tint: '#7c7666', fitMaxDim: true },
   caveA: { file: 'CaveA.glb', height: 1.15, tint: '#8a7d68', fitMaxDim: true },
   caveB: { file: 'CaveB.glb', height: 0.95, tint: '#7e7361', fitMaxDim: true },
-  // BUILD 091: KayKit Rogue Hooded (CC0) — 전문 제작 클립 76개. 걸음을 빌려 입는다.
-  // clipSpeeds: 원척 기준 클립 고유속도 실측값 (스탠스 발 후방속). 정규화 스케일 곱해 사용.
-  walker: { file: 'RogueHooded.glb', height: 0.9, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.674, run: 3.484 } }, // 접지 기준 정밀 실측
+  // BUILD 092: Vase 구매 리틀보이 (Mixamo 리깅). 애니메이션 FBX들을 GLB 수술로 합본,
+  // 루트모션 제자리화. clipSpeeds = 루트 이동거리 ÷ 시간 (정확값, 원척).
+  walker: { file: 'LittleBoy.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'LittleBoy_texture.png', clipSpeeds: { walk: 1.48, run: 5.207 } },
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
   rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },

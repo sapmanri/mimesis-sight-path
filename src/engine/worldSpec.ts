@@ -281,8 +281,9 @@ export const JEJU_SPEC: WorldSpec = {
     timeScale: 0.72,
     // BUILD 091: 클립 고유속도(걷기 0.31 · 뛰기 0.86, 정규화 후)의 자연 배속권.
     // 릴의 느린 호흡(0.96Hz)과도 맞는다 — 서두르지 않는 세계.
-    walkSpeed: 0.34,
-    runSpeed: 1.25,
+    // BUILD 092: 리틀보이의 자연 배속권 (걷기 고유 0.70 · 뛰기 2.45, 정규화 후)
+    walkSpeed: 0.58,
+    runSpeed: 2.1,
   },
 };
 

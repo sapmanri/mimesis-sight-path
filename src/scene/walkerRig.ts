@@ -145,10 +145,14 @@ export function createClipRig(
   animations: THREE.AnimationClip[],
   natural: { walk: number; run: number },
 ): WalkerRig | null {
-  const clip = (n: string) => animations.find((a) => a.name === n) ?? null;
-  const cWalk = clip('Walking_A');
-  const cRun = clip('Running_A');
-  const cIdle = clip('Idle');
+  // 클립 명명은 팩마다 다르다 — 후보군으로 찾는다 (KayKit / Mixamo 계열)
+  const clip = (...names: string[]) => {
+    for (const n of names) { const c = animations.find((a) => a.name === n); if (c) return c; }
+    return null;
+  };
+  const cWalk = clip('Walking_A', 'Walking', 'Walk');
+  const cRun = clip('Running_A', 'Running', 'Run');
+  const cIdle = clip('Idle', 'Idle_A', 'idle');
   if (!cWalk || !cRun || !cIdle) return null;
 
   const mixer = new THREE.AnimationMixer(root);
@@ -162,7 +166,7 @@ export function createClipRig(
     if (once) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
     return a;
   };
-  const pickup = mk('PickUp') ?? mk('Interact');
+  const pickup = mk('PickUp') ?? mk('Interact') ?? mk('Pickup');
   const sitDown = mk('Sit_Floor_Down');
   const sitIdle = mk('Sit_Floor_Idle', false);
   const standUp = mk('Sit_Floor_StandUp');

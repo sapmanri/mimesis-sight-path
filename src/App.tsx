@@ -7,7 +7,7 @@ import { ProgressNav } from './components/ProgressNav';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.19.0 · BORROWED LEGS · BUILD 091';
+const BUILD_LABEL = 'v0.20.0 · LITTLE BOY · BUILD 092';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
