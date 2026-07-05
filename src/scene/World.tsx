@@ -33,11 +33,13 @@ type WorldProps = {
   freeCamera?: boolean;
   /** BUILD 100: 길 탭 — 가장 가까운 기억 지점으로 걷기 */
   onPathTap?: (index: number) => void;
+  /** BUILD 106: 에디터 — 기억 사물 클릭 선택 */
+  onScenePick?: (index: number) => void;
 };
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, onPathTap }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, onPathTap, onScenePick }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
   // 워커: 프로시저럴 실루엣으로 시작, Peasant 로드 완료 시 교체
   const walker = useMemo(() => {
@@ -490,7 +492,19 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       <fog attach="fog" args={[PALETTE.fog, 12, 58]} />
       <primitive
         object={world.group}
-        onPointerDown={onGroundPick ? (e: { point: THREE.Vector3; stopPropagation: () => void }) => { e.stopPropagation(); onGroundPick(e.point.clone()); } : undefined}
+        onPointerDown={(onGroundPick || onScenePick) ? (e: { point: THREE.Vector3; object: THREE.Object3D; stopPropagation: () => void }) => {
+          e.stopPropagation();
+          // 기억 사물을 찍었으면 그 기억을 선택 (자리 찍기 모드가 아닐 때)
+          if (onScenePick && !onGroundPick) {
+            let n: THREE.Object3D | null = e.object;
+            while (n) {
+              if (n.userData?.sceneIndex !== undefined) { onScenePick(n.userData.sceneIndex as number); return; }
+              n = n.parent;
+            }
+            return;
+          }
+          onGroundPick?.(e.point.clone());
+        } : undefined}
       />
       <primitive object={propsGroup} />
       <primitive object={walker} />

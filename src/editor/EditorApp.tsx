@@ -363,6 +363,7 @@ export function EditorApp() {
               mode="manual"
               spec={previewSpec}
               freeCamera
+              onScenePick={!pickTarget ? (i) => { setSel(i); setSelProp(null); setTab('scene'); } : undefined}
               onGroundPick={pickTarget ? (pt) => {
                 if (pickTarget === 'scene') {
                   editScene((sc) => { sc.position[0] = +pt.x.toFixed(2); sc.position[2] = +pt.z.toFixed(2); });

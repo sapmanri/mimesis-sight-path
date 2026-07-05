@@ -248,7 +248,8 @@ export const WALKER_ROSTER: ModelSpec[] = [
   { file: 'Kid8.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid8_texture.png', clipSpeeds: { walk: 0.007, run: 0.024 } },
   // BUILD 097: Kid9(신규, 로우폴리 본체), Kid10(애니 미동봉 → c9 클립 이식, fbx 본체로 축 정합)
   { file: 'Kid9.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid9_texture.png', clipSpeeds: { walk: 0.0071, run: 0.0192 } },
-  { file: 'Kid10.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid10_texture.png', clipSpeeds: { walk: 3.125, run: 8.43 } }, // 슬라이드 스윕 확정 (걷기 2%·뛰기 11%)
+  // BUILD 106: Kid10 벤치 — 이식 클립과 의상 지오메트리 불화로 다리 사이 천막 (GPU 실측 채움 69% vs 정상 23%).
+  // 파일은 보존, 클로스 뼈 처리 익히면 복귀. { file: 'Kid10.glb', ... }
   // BUILD 098: Kid2 구제 — 자기 FBX 애니로 재빌드 (지난번 glb 경로가 문제였다).
   // 텍스처는 원래 없는 단색 디자인 (#e7e7e7 석고 아이). 고유속도는 월드 실측.
   { file: 'Kid2.glb', height: 0.9, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 1.3328, run: 3.5529 } },
@@ -859,6 +860,28 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
           if (side === 'L') idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3);
           else idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
         }
+        // BUILD 106: 두께 — 바깥 모서리 아래로 림을 내린다 (판마다 랜덤 0.03~0.09)
+        {
+          const thick = 0.045 + Math.abs(noise1(i * 6.7 + si * 13)) * 0.075;
+          const rimStart = pos.length / 3;
+          for (let q = 0; q < added; q += 1) {
+            const topIdx = (start + q * 2 + 1) * 3; // 바깥 정점
+            const x = pos[topIdx];
+            const y = pos[topIdx + 1];
+            const z = pos[topIdx + 2];
+            pos.push(x, y, z, x, y - thick, z);
+            const u2 = side === 'L' ? -0.14 : 1.04;
+            uv.push(u2, q * 0.2, u2, q * 0.2 + thick * 0.5);
+            const cT = cSandEdge.clone().multiplyScalar(0.86);
+            const cB = cSandEdge.clone().multiplyScalar(0.62); // 아랫면은 그늘
+            col.push(cT.r, cT.g, cT.b, cB.r, cB.g, cB.b);
+          }
+          for (let q = 0; q < added - 1; q += 1) {
+            const a = rimStart + q * 2;
+            if (side === 'L') idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+            else idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3);
+          }
+        }
         i += len + 1 + Math.floor(Math.abs(noise1(i * 4.4)) * 3); // 틈 (crack)
       }
     });
@@ -1207,7 +1230,8 @@ function buildMemoryObjects(
     // BUILD 099: 에디터 회전 — 기본 각 위에 사용자가 정한 각을 얹는다
     obj.rotation.y = Math.atan2(a.tan.x, a.tan.z) + (side > 0 ? 0.4 : -0.4) + (scene.objectRotY ?? 0);
     obj.rotation.x = scene.objectRotX ?? 0;
-    obj.scale.setScalar(scene.scale || 1); // BUILD 100: 사물 크기 — 에디터 슬라이더
+    obj.scale.setScalar(scene.scale || 1); // BUILD 100: 사물 크기 — 에디터 키보드
+    obj.traverse((n) => { n.userData.sceneIndex = i; }); // BUILD 106: 에디터 클릭 선택용
     obj.traverse((m) => {
       if ((m as THREE.Mesh).isMesh) {
         m.castShadow = true;
