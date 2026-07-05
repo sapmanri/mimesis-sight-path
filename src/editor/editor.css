@@ -145,3 +145,18 @@ body {
   .ed-inspector { border-left: none; border-top: 1px solid rgba(255,255,255,0.07); }
   .ed-top { flex-wrap: wrap; }
 }
+
+/* BUILD 099: 자리 찍기 */
+.ed-canvas.ed-picking { cursor: crosshair; }
+.ed-pick-hint {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  padding: 7px 14px; border-radius: 999px;
+  background: rgba(216, 196, 143, 0.95); color: #2b3a34;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.ed-pickbtn {
+  width: 100%; padding: 8px;
+  border: 1px dashed rgba(216, 196, 143, 0.5); border-radius: 9px;
+  background: none; color: #d8c48f; cursor: pointer; font-size: 12px;
+}
+.ed-pickbtn.on { background: rgba(216, 196, 143, 0.18); border-style: solid; }

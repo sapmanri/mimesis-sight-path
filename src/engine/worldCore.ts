@@ -981,7 +981,9 @@ function buildMemoryObjects(
     const obj = kit(worldRng(100 + i * 37));
     const side = i % 2 === 0 ? 1 : -1;
     obj.position.copy(a.p).add(a.nor.clone().multiplyScalar(side * a.w * 0.45));
-    obj.rotation.y = Math.atan2(a.tan.x, a.tan.z) + (side > 0 ? 0.4 : -0.4);
+    // BUILD 099: 에디터 회전 — 기본 각 위에 사용자가 정한 각을 얹는다
+    obj.rotation.y = Math.atan2(a.tan.x, a.tan.z) + (side > 0 ? 0.4 : -0.4) + (scene.objectRotY ?? 0);
+    obj.rotation.x = scene.objectRotX ?? 0;
     obj.traverse((m) => {
       if ((m as THREE.Mesh).isMesh) {
         m.castShadow = true;

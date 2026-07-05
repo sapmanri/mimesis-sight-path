@@ -45,7 +45,13 @@ export function EditorApp() {
   const [tab, setTab] = useState<'scene' | 'env' | 'walker' | 'camera'>('scene');
   const [preview, setPreview] = useState<WorldDoc>(() => clone(doc));
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [pickMode, setPickMode] = useState(false); // BUILD 099: 자리 찍기 — 다음 클릭이 좌표가 된다
   const fileRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickMode(false); };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, []);
   const photoRef = useRef<HTMLInputElement | null>(null);
 
   // 자동저장 + 프리뷰 커밋 (0.5s 디바운스 — 슬라이더 드래그 중 세계 재생성 폭주 방지)
@@ -172,9 +178,19 @@ export function EditorApp() {
 
         {/* ---- 중: 살아있는 프리뷰 ---- */}
         <main className="ed-preview">
-          <Canvas className="ed-canvas" camera={{ position: [0, 3.1, 8.4], fov: 42 }} dpr={[1, 1.5]} shadows>
-            <World activeIndex={Math.min(sel, scenes.length - 1)} scenes={scenes} mode="manual" spec={preview.spec} />
+          <Canvas className={pickMode ? 'ed-canvas ed-picking' : 'ed-canvas'} camera={{ position: [0, 3.1, 8.4], fov: 42 }} dpr={[1, 1.5]} shadows>
+            <World
+              activeIndex={Math.min(sel, scenes.length - 1)}
+              scenes={scenes}
+              mode="manual"
+              spec={preview.spec}
+              onGroundPick={pickMode ? (pt) => {
+                editScene((sc) => { sc.position[0] = +pt.x.toFixed(2); sc.position[2] = +pt.z.toFixed(2); });
+                setPickMode(false);
+              } : undefined}
+            />
           </Canvas>
+          {pickMode && <div className="ed-pick-hint">지면을 클릭하면 이 기억의 자리가 됩니다 · ESC 취소</div>}
           <div className="ed-preview-bar">
             <button type="button" onClick={() => setSel((v) => Math.max(0, v - 1))}>←</button>
             <span>{String(sel + 1).padStart(2, '0')} / {doc.blueprints.length} · {cur?.title}</span>
@@ -235,6 +251,17 @@ export function EditorApp() {
                 <label>자리 X<input type="number" step="0.2" value={cur.position[0]} onChange={(e) => editScene((s) => { s.position[0] = Number(e.target.value); })} /></label>
                 <label>자리 Z<input type="number" step="0.2" value={cur.position[2]} onChange={(e) => editScene((s) => { s.position[2] = Number(e.target.value); })} /></label>
               </div>
+              <button type="button" className={pickMode ? 'ed-pickbtn on' : 'ed-pickbtn'} onClick={() => setPickMode((v) => !v)}>
+                {pickMode ? '클릭 대기 중… (취소)' : '⌖ 프리뷰에서 자리 찍기'}
+              </button>
+              <label>사물 회전 · 좌우 <em>{Math.round((cur.objectRotY ?? 0) * 180 / Math.PI)}°</em>
+                <input type="range" min={-Math.PI} max={Math.PI} step="0.02" value={cur.objectRotY ?? 0}
+                  onChange={(e) => editScene((s) => { s.objectRotY = Number(e.target.value); })} />
+              </label>
+              <label>사물 기울임 · 위아래 <em>{Math.round((cur.objectRotX ?? 0) * 180 / Math.PI)}°</em>
+                <input type="range" min={-0.8} max={0.8} step="0.02" value={cur.objectRotX ?? 0}
+                  onChange={(e) => editScene((s) => { s.objectRotX = Number(e.target.value); })} />
+              </label>
               <div className="ed-photo">
                 <span>사진 <small>(폴라로이드 액자 예정)</small></span>
                 {cur.photo

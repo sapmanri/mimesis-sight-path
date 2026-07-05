@@ -21,11 +21,16 @@ type WorldProps = {
   mode: 'auto' | 'manual';
   /** BUILD 082: 세계 명세. 생략 시 제주 프리셋. */
   spec?: WorldSpec;
+  /** BUILD 099: 에디터 자리 찍기 — 지면 클릭 좌표 콜백 */
+  onGroundPick?: (p: THREE.Vector3) => void;
+  /** BUILD 099: 카드 페이즈 — 도착/출발 신호 */
+  onArrive?: (index: number) => void;
+  onDepart?: () => void;
 };
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
   // 워커: 프로시저럴 실루엣으로 시작, Peasant 로드 완료 시 교체
   const walker = useMemo(() => {
@@ -53,6 +58,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
   const charProgress = useRef(activeIndex); // 캐릭터의 현재 위치 (장면 단위 진행도)
   const charSpeed = useRef(0);              // 현재 속도 (월드 유닛/초)
   const charYaw = useRef(0);                // BUILD 087: 몸의 방향 — 스냅하지 않고 돌아선다
+  // BUILD 099: 사용자 카메라 — 마우스가 잡으면 따르고, 4초 놓아두면 자동으로 되돌아간다
+  const userCam = useRef({ blend: 0, az: 0, el: 0.45, dist: 5.5, lastInput: -99, dragging: false });
   const walkerPos = useRef<THREE.Vector3 | null>(null); // BUILD 098: 실제 위치 — 커브는 안내선일 뿐
   const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
   const prevWalkerPos = useRef<THREE.Vector3 | null>(null);
@@ -84,6 +91,66 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
 
   const walkPhase = useRef(0);
   const smoothLook = useRef(new THREE.Vector3(0, 0.8, 0));
+
+  // BUILD 099: 드래그 = 궤도 잡기 (워커 중심). 손을 떼고 4초가 지나면 시선은 제자리로.
+  useEffect(() => {
+    const el = gl.domElement;
+    const U = userCam.current;
+    let px = 0;
+    let py = 0;
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      U.dragging = true;
+      px = e.clientX;
+      py = e.clientY;
+    };
+    const move = (e: PointerEvent) => {
+      if (!U.dragging) return;
+      const dx = e.clientX - px;
+      const dy = e.clientY - py;
+      px = e.clientX;
+      py = e.clientY;
+      if (Math.abs(dx) + Math.abs(dy) < 1) return;
+      U.az -= dx * 0.0055;
+      U.el = Math.min(1.25, Math.max(0.08, U.el + dy * 0.004));
+      U.lastInput = performance.now() / 1000;
+    };
+    const up = () => { U.dragging = false; };
+    el.addEventListener('pointerdown', down);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      el.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, [gl]);
+
+  // 사용자 카메라 블렌드 적용: 잡으면 빠르게 1로, 놓으면 1.6초에 걸쳐 0으로
+  const applyUserCam = (camera: THREE.Camera, delta: number) => {
+    const U = userCam.current;
+    const now = performance.now() / 1000;
+    const engaged = U.dragging || now - U.lastInput < 4.0;
+    U.blend += ((engaged ? 1 : 0) - U.blend) * Math.min(1, delta * (engaged ? 5 : 1.4));
+    if (U.blend < 0.01) {
+      // 자동 상태 동안엔 현재 구도를 궤도각으로 기억 — 잡는 순간 튀지 않게
+      const rel = camera.position.clone().sub(smoothLook.current);
+      U.dist = Math.min(11, Math.max(2.2, rel.length()));
+      U.az = Math.atan2(rel.x, rel.z);
+      U.el = Math.asin(THREE.MathUtils.clamp(rel.y / Math.max(0.001, rel.length()), -1, 1));
+      return;
+    }
+    const focus = walker.position.clone().add(new THREE.Vector3(0, 0.55, 0));
+    const manual = focus.clone().add(new THREE.Vector3(
+      Math.sin(U.az) * Math.cos(U.el) * U.dist,
+      Math.sin(U.el) * U.dist,
+      Math.cos(U.az) * Math.cos(U.el) * U.dist,
+    ));
+    camera.position.lerp(manual, U.blend);
+    smoothLook.current.lerp(focus, U.blend);
+  };
 
   useFrame(({ camera, clock }, delta) => {
     const J = journey.current;
@@ -261,13 +328,14 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       rig.update(delta, speed01, moving, clock.elapsedTime, distDelta);
       // 도착: 기억 앞에 웅크려 들여다본다 (머무름이 깊은 장면에서만)
       if (wasMoving.current && !moving) {
+        onArrive?.(Math.round(charProgress.current));
         const scene = scenes[Math.round(charProgress.current)];
         const st = scene?.stillness ?? 0;
         // BUILD 091: 깊은 머무름에선 바닥에 앉아 바라본다. 그 밖에선 들여다본다.
         if (st >= 1.3) rig.playInspect('sit');
         else if (st >= 0.65) rig.playInspect('pickup');
       }
-      if (!wasMoving.current && moving) rig.stopInspect();
+      if (!wasMoving.current && moving) { rig.stopInspect(); onDepart?.(); }
       const bob = moving && !rig.inspecting() ? Math.abs(Math.sin(rig.phase())) * (0.012 + speed01 * 0.014) : 0;
       walker.position.copy(pos).add(new THREE.Vector3(0, bob, 0));
       walker.rotation.z = 0;
@@ -299,6 +367,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
       const k = 1 - Math.pow(0.002, delta / spec.camera.reframeSec);
       camera.position.lerp(desired, k);
       smoothLook.current.lerp(shot.current.look, k);
+      applyUserCam(camera, delta);
       camera.lookAt(smoothLook.current);
     } else {
       // follow 모드 (BUILD 087): 몸이 향한 곳의 등 뒤에서 조용히 따라간다
@@ -313,6 +382,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
         .add(new THREE.Vector3(0, 0.8, 0));
       camera.position.lerp(desired, 1 - Math.pow(0.12, delta));
       smoothLook.current.lerp(lookTarget, 1 - Math.pow(0.06, delta));
+      applyUserCam(camera, delta);
       camera.lookAt(smoothLook.current);
     }
 
@@ -325,7 +395,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC }: WorldProp
     <>
       <color attach="background" args={[PALETTE.fog]} />
       <fog attach="fog" args={[PALETTE.fog, 12, 58]} />
-      <primitive object={world.group} />
+      <primitive
+        object={world.group}
+        onPointerDown={onGroundPick ? (e: { point: THREE.Vector3; stopPropagation: () => void }) => { e.stopPropagation(); onGroundPick(e.point.clone()); } : undefined}
+      />
       <primitive object={walker} />
       <primitive object={tinker.group} />
       <primitive object={tinker.trail} />

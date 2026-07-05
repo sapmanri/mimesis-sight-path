@@ -11,12 +11,14 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 18000;
-const BUILD_LABEL = 'v0.25.0 · TRUE PATH · BUILD 098';
+const BUILD_LABEL = 'v0.26.0 · HANDS & CARDS · BUILD 099';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const [muted, setMuted] = useState(false);
+  // BUILD 099: 카드는 도착의 것 — 걷는 동안엔 접히고, 머무를 때 펼쳐진다
+  const [cardAt, setCardAt] = useState<number | null>(0);
   // BUILD 096: 에디터 문서로 열기 (?draft=1) — 에디터가 지은 세계를 그대로 걷는다
   const [draft] = useState(() => {
     if (!new URLSearchParams(window.location.search).has('draft')) return null;
@@ -147,12 +149,19 @@ export default function App() {
           dpr={[1, 2]}
           shadows
         >
-          <World activeIndex={activeIndex} scenes={scenes} mode={mode} spec={spec} />
+          <World
+            activeIndex={activeIndex}
+            scenes={scenes}
+            mode={mode}
+            spec={spec}
+            onArrive={(i) => setCardAt(i)}
+            onDepart={() => setCardAt(null)}
+          />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />
         <div className="atmosphere-vignette" aria-hidden="true" />
         <ProgressNav scenes={scenes} activeIndex={activeIndex} onChange={handleNavChange} />
-        <StoryCard scene={scenes[activeIndex]} mode={mode} />
+        <StoryCard scene={cardAt !== null ? scenes[cardAt] : null} mode={mode} />
         <div className="float-controls">
           <button
             type="button"

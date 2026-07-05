@@ -22,6 +22,9 @@ export type SceneBlueprint = {
   soundTone: number;
   /** BUILD 096: 에디터에서 첨부한 사진 (dataURL 또는 URL) — 폴라로이드 액자(예정)용 */
   photo?: string;
+  /** BUILD 099: 기억 사물의 회전 (라디안). rotY = 좌우, rotX = 위아래 기울임 */
+  objectRotY?: number;
+  objectRotX?: number;
 };
 
 export type RuntimeScene = SceneBlueprint & {
