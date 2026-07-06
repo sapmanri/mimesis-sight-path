@@ -31,6 +31,8 @@ type WorldProps = {
   onArrive?: (index: number) => void;
   /** BUILD 150: 무한 산책 — 목적지 없이 계속 걷는다. 순환 길에선 감아 돌고, 열린 길에선 왕복한다 */
   stroll?: boolean;
+  /** BUILD 169: 우편 카드 — 우체통 앞에 멈추면 글·사진이 배달된다 (null = 카드 닫기) */
+  onMail?: (item: { text?: string; photo?: string } | null) => void;
   onDepart?: () => void;
   /** BUILD 100: 자유 배치물 (에디터가 놓은 사물들) */
   props?: PlacedProp[];
@@ -48,7 +50,7 @@ type WorldProps = {
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll, onMail }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
   useEffect(() => {
     onAnchors?.(world.anchors.map((a) => [a.p.x, a.p.y, a.p.z]));
@@ -424,6 +426,61 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gullsActive, spec.ambience?.sea, world, gullRoot]);
 
+  // BUILD 169: 우체통 속의 시 — 《잠깐 멈춰.》가 이 길 위에 산다.
+  // 우체통은 이정표다: 스트리밍되지 않고 제자리를 지킨다. 지나는 사람에게 다음 글을 배달한다.
+  const mailRoot = useMemo(() => new THREE.Group(), []);
+  const mailSpots = useRef<{ grp: THREE.Group; cool: number }[]>([]);
+  const mailDeck = useRef<{ text?: string; photo?: string }[]>([]);
+  const mailIdx = useRef(0);
+  const mailRest = useRef<null | { until: number; at: THREE.Vector3 }>(null);
+  useEffect(() => {
+    const M = spec.mail;
+    mailRoot.clear();
+    mailSpots.current = [];
+    mailDeck.current = [];
+    mailIdx.current = 0;
+    const n = M?.count ?? 0;
+    if (!n) return;
+    let dead = false;
+    // 덱: 직접 입력 또는 URL 피드 — 문자열 배열/{text,photo}/{items} 모두 수용
+    const normalize = (raw: unknown): { text?: string; photo?: string }[] => {
+      const arr = Array.isArray(raw) ? raw : (raw as { items?: unknown[] })?.items;
+      if (!Array.isArray(arr)) return [];
+      return arr.map((it) => typeof it === 'string' ? { text: it } : {
+        text: (it as { text?: string }).text,
+        photo: (it as { photo?: string; image?: string; photoUrl?: string }).photo
+          ?? (it as { image?: string }).image ?? (it as { photoUrl?: string }).photoUrl,
+      }).filter((it) => it.text || it.photo);
+    };
+    if (M?.source === 'url' && M.url) {
+      void fetch(M.url).then((r) => r.json()).then((j) => {
+        if (!dead) { mailDeck.current = normalize(j); }
+      }).catch(() => { /* 배달 사고 — 우체통은 서 있되 편지는 없다 */ });
+    } else {
+      mailDeck.current = normalize(M?.items ?? []);
+    }
+    // 우체통 배치: 순환로엔 고르게, 열린 길엔 안쪽으로
+    for (let i = 0; i < n; i += 1) {
+      const prog = spec.path?.loop
+        ? ((i + 0.5) / n) * scenes.length + (Math.random() - 0.5) * 0.6
+        : 0.8 + ((i + 0.5) / n) * (scenes.length - 2);
+      const t = world.progressToT(prog);
+      const p = world.curve.getPoint(t);
+      const tan = world.curve.getTangent(t).setY(0).normalize();
+      const nor = new THREE.Vector3(-tan.z, 0, tan.x);
+      const side = i % 2 === 0 ? 1 : -1;
+      const grp = new THREE.Group();
+      grp.position.copy(p).addScaledVector(nor, side * 0.62);
+      grp.rotation.y = Math.atan2(-nor.x * side, -nor.z * side); // 길 쪽을 바라본다
+      mailRoot.add(grp);
+      mailSpots.current.push({ grp, cool: 0 });
+      void loadKitModel(i % 2 === 0 ? 'mailbox' : 'postboxred', defaultLoader)
+        .then((obj) => { if (!dead) grp.add(obj); }).catch(() => {});
+    }
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world, spec.mail?.count, spec.mail?.source, spec.mail?.url, spec.mail?.items]);
+
   // BUILD 168: 길가의 우연 — 안개는 무대 전환막이다.
   // 뒤 안개로 사라진 것은 철거되고, 앞 안개 너머에서 새 것이 태어난다 (Vase의 유비식 스트리밍).
   // 그리고 끝없는 하이킹의 심장 — 캠프파이어. 닿으면 앉아 쉬었다 간다.
@@ -439,7 +496,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const campRest = useRef<null | { until: number; fire: THREE.Vector3 }>(null);
   const fireSync = useRef(0);
   const campfireProto = useRef<Promise<THREE.Group> | null>(null);
-  const WAY_POOL = ['stone11', 'rock3', 'suitcase', 'lamp', 'snowman'] as const;
+  const WAY_POOL = ['stone11', 'rock3', 'suitcase', 'lamp', 'snowman', 'phonebooth'] as const; // BUILD 169: 들길의 빨간 전화부스
   const loadCampfire = () => {
     if (!campfireProto.current) {
       campfireProto.current = defaultLoader('CampfireSet.glb').then((gltf) => {
@@ -1251,6 +1308,41 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         }
       }
     }
+    // BUILD 169: 우체통 — 어느 모드에서든, 지나면 편지가 온다
+    if (mailSpots.current.length && !ridingRef.current) {
+      const tt3 = clock.elapsedTime;
+      const MR = mailRest.current;
+      if (MR) {
+        if (tt3 < MR.until) {
+          J.target = charProgress.current; // 배달의 시간 — 발이 멈춘다
+          const dxM = MR.at.x - (walkerPos.current?.x ?? 0);
+          const dzM = MR.at.z - (walkerPos.current?.z ?? 0);
+          let dyawM = Math.atan2(dxM, dzM) - charYaw.current;
+          while (dyawM > Math.PI) dyawM -= Math.PI * 2;
+          while (dyawM < -Math.PI) dyawM += Math.PI * 2;
+          charYaw.current += dyawM * Math.min(1, delta * 1.8);
+        } else {
+          mailRest.current = null;
+          onMail?.(null);
+          rigRef.current?.stopInspect();
+        }
+      } else if (!campRest.current && walkerPos.current) {
+        for (const ms of mailSpots.current) {
+          if (tt3 < ms.cool) continue;
+          if (ms.grp.position.distanceTo(walkerPos.current) < 1.05) {
+            ms.cool = tt3 + 90; // 같은 우체통은 한참 뒤에나 다시
+            const deck = mailDeck.current;
+            const item = deck.length ? deck[mailIdx.current % deck.length] : null;
+            mailIdx.current += 1;
+            const readLen = item?.text ? Math.min(11, 5 + item.text.length * 0.05) : 5;
+            mailRest.current = { until: tt3 + readLen, at: ms.grp.position.clone() };
+            if (item) onMail?.(item);
+            rigRef.current?.playInspect('pickup'); // 들여다본다 — 편지의 동작
+            break;
+          }
+        }
+      }
+    }
     // BUILD 168: 길가의 우연 — 스트리밍 (산책 중에만)
     if (stroll) {
       const walkerDir2 = (loopPath ? 1 : strollDir.current) as 1 | -1;
@@ -1603,6 +1695,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       <primitive object={gullRoot} />
       <primitive object={passerRoot} />
       <primitive object={waysideRoot} />
+      <primitive object={mailRoot} />
       <primitive object={starsObj.pts} />
       <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}

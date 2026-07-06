@@ -324,6 +324,10 @@ export const MODELS: Record<string, ModelSpec> = {
   windturbine: { file: 'Eolic.glb', height: 4.2, tint: '#c8cdd1' }, // BUILD 136: 부유섬 받침 포함 (Vase 업로드 eolic_OBJ)
   broom: { file: 'Broom.glb', height: 1.15, tint: '#7a5a3a', fitMaxDim: true }, // BUILD 145: 0.85→1.15 — 엉덩이에 가려질 크기였다. GLB 노드의 Rx(-90) 제거로 눕은 게 원본
   seagull: { file: 'Seagull.glb', height: 0.75, tint: '#e2e6e4', fitMaxDim: true }, // BUILD 149: 활공 자세 728정점 — 날개폭 0.75u. 갈매기는 날갯짓하지 않는다, 바람을 탄다
+  // BUILD 169: 우체통 속의 시 — 런던 우체통(무텍스처 로우폴리, 팔레트 적합) + 빨간 포스트박스(자기 옷)
+  mailbox: { file: 'Mailbox.glb', height: 0.85, tint: '#9e4f45' },
+  postboxred: { file: 'PostboxRed.glb', height: 0.8, tint: '#a5433c', keepLook: true },
+  phonebooth: { file: 'PhoneBooth.glb', height: 1.5, tint: '#a5433c', keepLook: true }, // 길가의 우연 보너스 — 들길의 빨간 전화부스
 };
 
 // ---------- BUILD 093: WALKER ROSTER ----------

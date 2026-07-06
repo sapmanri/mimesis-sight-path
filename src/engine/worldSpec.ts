@@ -91,6 +91,16 @@ export type WorldSpec = {
       dayMinutes?: number;
     };
   };
+  /** BUILD 169: 우체통 속의 시 — 길가의 우체통에서 글과 사진이 배달된다.
+   *  count: 길에 세울 우체통 수(0=없음) · source: inline(에디터 직접)/url(JSON 피드 자동화)
+   *  items: [{text, photo?}] · url 피드는 문자열 배열/{text,photo}배열/{items:[...]} 모두 수용 */
+  mail?: {
+    count?: number;
+    source?: 'inline' | 'url';
+    url?: string;
+    items?: { text?: string; photo?: string }[];
+  };
+
   /** BUILD 148: 공기의 소리 — 전부 실시간 합성이라 파일이 없다.
    *  sea: 파도 0~1 (제주 0.55, 겨울 0) · life: 생명의 소리(낮 새, 밤 풀벌레) 밀도 0~1 */
   ambience?: {

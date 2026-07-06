@@ -12,7 +12,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.61.0 · THE CAMPFIRE · BUILD 168';
+const BUILD_LABEL = 'v0.62.0 · LETTERS ON THE ROAD · BUILD 169';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -20,6 +20,7 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [riding, setRiding] = useState(false); // BUILD 136: 구름 탑승
   const [stroll, setStroll] = useState(false); // BUILD 150: 무한 산책 — 카드도 도착도 없이, 그냥 걷는다
+  const [mailItem, setMailItem] = useState<{ text?: string; photo?: string } | null>(null); // BUILD 169: 배달된 편지
   const [uiIdle, setUiIdle] = useState(false); // BUILD 156: UI 유휴 — 틀어놓는 화면에서 단추는 유령이 된다
   useEffect(() => {
     let t = window.setTimeout(() => setUiIdle(true), 3500);
@@ -161,6 +162,7 @@ export default function App() {
             props={draft?.props}
             riding={riding}
             stroll={stroll}
+            onMail={setMailItem}
           />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />
@@ -190,6 +192,13 @@ export default function App() {
             >{riding ? '🚶' : '☁️'}</button>
           )}
         </div>
+        {mailItem && (
+          <div className="mail-card" role="status">
+            {mailItem.photo && <img className="mail-photo" src={mailItem.photo} alt="" />}
+            {mailItem.text && <p className="mail-text">{mailItem.text}</p>}
+            <div className="mail-stamp">— 길 위의 우체통에서</div>
+          </div>
+        )}
         <div className="build-badge">{BUILD_LABEL}</div>
       </section>
       <TouchTrail />

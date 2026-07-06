@@ -380,3 +380,46 @@
 /* BUILD 108: 타자기 커서 */
 .memory-caret { opacity: 0.55; animation: caretBlink 0.9s steps(1) infinite; margin-left: 1px; }
 @keyframes caretBlink { 50% { opacity: 0; } }
+
+
+/* BUILD 169: 우체통 속의 시 — 편지지. 크림 종이, 명조의 호흡 */
+.mail-card {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  max-width: 340px;
+  width: calc(100% - 48px);
+  background: rgba(248, 244, 232, 0.94);
+  border: 1px solid rgba(120, 105, 80, 0.25);
+  border-radius: 6px;
+  padding: 18px 20px 12px;
+  box-shadow: 0 10px 34px rgba(20, 28, 34, 0.35);
+  animation: mailIn 0.7s ease both;
+  pointer-events: none;
+}
+@keyframes mailIn { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.mail-photo {
+  width: 100%;
+  max-height: 170px;
+  object-fit: cover;
+  border-radius: 3px;
+  margin-bottom: 12px;
+  filter: sepia(0.12) saturate(0.92);
+}
+.mail-text {
+  margin: 0;
+  font-family: 'Gowun Batang', 'Nanum Myeongjo', serif;
+  font-size: 15px;
+  line-height: 1.85;
+  color: #3d3830;
+  white-space: pre-line;
+}
+.mail-stamp {
+  margin-top: 12px;
+  text-align: right;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(90, 80, 62, 0.55);
+}
+.ui-idle .mail-card { opacity: 1; } /* 편지는 유휴 페이드의 예외 — 읽으라고 온 것이니 */

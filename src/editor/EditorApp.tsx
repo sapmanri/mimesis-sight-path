@@ -214,6 +214,19 @@ function blankDoc(count: number, loop = false): WorldDoc {
 }
 
 /** BUILD 130: 문서 위생 — 중복 배치물 id를 치유한다 (유령의 근원이었던 쌍둥이 id) */
+// BUILD 169: 우편 글감 직렬화 — 블록은 빈 줄로, http 줄은 사진으로
+function parseMail(raw: string): { text?: string; photo?: string }[] {
+  return raw.split(/\n\s*\n/).map((block) => {
+    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const photo = lines.find((l) => /^https?:\/\//.test(l));
+    const text = lines.filter((l) => !/^https?:\/\//.test(l)).join('\n');
+    return { text: text || undefined, photo };
+  }).filter((it) => it.text || it.photo);
+}
+function serializeMail(items?: { text?: string; photo?: string }[]): string {
+  return (items ?? []).map((it) => [it.text, it.photo].filter(Boolean).join('\n')).join('\n\n');
+}
+
 function sanitizeDoc(d: WorldDoc): WorldDoc {
   // BUILD 159: 소재 치유 — 알 수 없는 길 소재로 저장된 문서(오타 프리셋의 저주)를 로드 시 되살린다
   if (d.spec?.path) {
@@ -927,6 +940,32 @@ export function EditorApp() {
                   onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), flow: { ...(d.spec.weather?.flow ?? {}), weather: e.target.checked || undefined } }; })} />
                 🌦️ 날씨가 흐른다 — 구름이 걷고, 바람이 일고, 비가 왔다 갠다
               </label>
+              <h4>우편 — 길 위의 글 📮</h4>
+              <label>우체통 <em>{doc.spec.mail?.count ?? 0}개{(doc.spec.mail?.count ?? 0) === 0 ? ' (배달 없음)' : ''}</em>
+                <input type="range" min="0" max="8" step="1" value={doc.spec.mail?.count ?? 0}
+                  onChange={(e) => edit((d) => { d.spec.mail = { ...(d.spec.mail ?? {}), count: Number(e.target.value) }; })} />
+              </label>
+              {(doc.spec.mail?.count ?? 0) > 0 && (
+                <>
+                  <div className="ed-wh-chips">
+                    <button type="button" className={(doc.spec.mail?.source ?? 'inline') === 'inline' ? 'ed-chip on' : 'ed-chip'}
+                      onClick={() => edit((d) => { d.spec.mail = { ...(d.spec.mail ?? {}), source: 'inline' }; })}>✍️ 직접 입력</button>
+                    <button type="button" className={doc.spec.mail?.source === 'url' ? 'ed-chip on' : 'ed-chip'}
+                      onClick={() => edit((d) => { d.spec.mail = { ...(d.spec.mail ?? {}), source: 'url' }; })}>🔗 URL 연동</button>
+                  </div>
+                  {doc.spec.mail?.source === 'url' ? (
+                    <label>글감 피드 URL <em>JSON</em>
+                      <input type="text" placeholder="https://…/pause_catalog.json" value={doc.spec.mail?.url ?? ''}
+                        onChange={(e) => edit((d) => { d.spec.mail = { ...(d.spec.mail ?? {}), url: e.target.value }; })} />
+                    </label>
+                  ) : (
+                    <label>글감 (빈 줄로 구분 · http로 시작하는 줄 = 사진)
+                      <textarea rows={7} value={serializeMail(doc.spec.mail?.items)} placeholder={'모르는 길을 걷는 동안은\n어디에도 늦지 않는다.\n\nhttps://…/photo.jpg\n안개가 지도를 지워주었다.'}
+                        onChange={(e) => edit((d) => { d.spec.mail = { ...(d.spec.mail ?? {}), items: parseMail(e.target.value) }; })} />
+                    </label>
+                  )}
+                </>
+              )}
               <h4>{doc.spec.weather?.time === 'night' ? '달 (태양의 자리)' : '태양'}</h4>
               <label>빛의 세기 <em>{doc.spec.light.sunIntensity.toFixed(2)}</em>
                 <input type="range" min="0.2" max="2.4" step="0.05" value={doc.spec.light.sunIntensity}
