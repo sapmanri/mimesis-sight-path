@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
-import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE } from '../engine/worldCore';
+import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE, enforceFog } from '../engine/worldCore';
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
@@ -298,6 +298,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const userCam = useRef({ blend: 0, az: 0, el: 0.45, dist: 5.5, lastInput: -99, dragging: false });
   const walkerPos = useRef<THREE.Vector3 | null>(null); // BUILD 098: 실제 위치 — 커브는 안내선일 뿐
   const lanternRef = useRef<THREE.Group | null>(null); // BUILD 117: 진자 등불 래퍼
+  const prevNight = useRef(false); // BUILD 170: 밤의 문턱 감지
   // ---- BUILD 136: 구름 탈것 ----
   const ridingRef = useRef(false);
   // BUILD 146: 걷는 기계 탈출 — 문득 멈춰 두리번, 여분 클립 한 번, 그러고선 뛰어서 따라잡는다
@@ -475,7 +476,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       mailRoot.add(grp);
       mailSpots.current.push({ grp, cool: 0 });
       void loadKitModel(i % 2 === 0 ? 'mailbox' : 'postboxred', defaultLoader)
-        .then((obj) => { if (!dead) grp.add(obj); }).catch(() => {});
+        .then((obj) => { if (!dead) { enforceFog(obj); grp.add(obj); } }).catch(() => {});
     }
     return () => { dead = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -557,13 +558,14 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         const light = new THREE.PointLight('#ff9a4e', 1.1, 5.2, 1.6);
         light.position.set(0, 0.35, 0);
         set.add(light);
+        enforceFog(set); // 불꽃은 fog:false·발광이라 알아서 예외
         spot.flames = flames;
         spot.light = light;
         grp.add(set);
       });
     } else {
       const key = WAY_POOL[Math.floor(Math.random() * WAY_POOL.length)];
-      void loadKitModel(key, defaultLoader).then((obj) => { grp.add(obj); }).catch(() => {});
+      void loadKitModel(key, defaultLoader).then((obj) => { enforceFog(obj); grp.add(obj); }).catch(() => {});
     }
   };
 
@@ -606,7 +608,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     group: THREE.Group; mixer: THREE.AnimationMixer; prog: number; dir: 1 | -1;
     head: THREE.Object3D | null; headYaw: number; speed: number;
   }>(null);
-  const passerIn = useRef(55 + Math.random() * 80); // 첫 만남은 1~2분 남짓 뒤
+  const passerIn = useRef(30 + Math.random() * 45); // BUILD 170: 첫 만남은 반 분~1분쯤 뒤
   const passerLoading = useRef(false);
   const spawnPasser = (walkDir: 1 | -1, spawnProg: number) => {
     if (passerLoading.current || passer.current) return;
@@ -623,6 +625,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       }
       let head: THREE.Object3D | null = null;
       group.traverse((o) => { if (!head && /head$/i.test(o.name)) head = o; });
+      enforceFog(group);
       passerRoot.add(group);
       passer.current = { group, mixer, prog: spawnProg, dir: (walkDir * -1) as 1 | -1, head, headYaw: 0, speed: 0.78 + Math.random() * 0.14 };
     }).catch(() => { passerLoading.current = false; });
@@ -684,7 +687,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         if (!footRef.current && /(left)?foot$/i.test(n.name)) footRef.current = n;
       });
       // BUILD 116→117: 등불 — 손 뼈에 진자로 매달린다. 뼈가 어떻게 돌아도 등불은 중력을 안다.
-      if ((spec.walker as { lantern?: boolean }).lantern) {
+      if ((spec.walker as { lantern?: boolean }).lantern || spec.weather?.flow?.time) { // BUILD 170: 흐르는 밤을 위해 미리 준비해 둔다
         let hand: THREE.Object3D | null = null;
         group.traverse((n) => {
           if (!(n as THREE.Bone).isBone) return;
@@ -699,6 +702,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           h.getWorldScale(ws);
           const wrapper = new THREE.Group();
           wrapper.scale.setScalar(1 / Math.max(ws.x, 1e-6)); // 뼈 누적 스케일 상쇄 — 월드 기준 실측 크기
+          wrapper.visible = !!(spec.walker as { lantern?: boolean }).lantern; // 명시적 등불 세계만 상시 점등
           h.add(wrapper);
           lanternRef.current = wrapper;
           loadHandLanternAsset().then((lantern) => {
@@ -857,6 +861,14 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       }
       // 갈매기는 하늘을 읽는다 — 밤이 오면, 비가 오면 내려앉는다
       gullRoot.visible = SKY.state.time === 'day' && SKY.state.kind !== 'rain' && SKY.state.kind !== 'snow';
+      // BUILD 170: 밤의 등불 — 어떤 밤엔 들고, 어떤 밤엔 달빛만 믿는다 (60%의 마음)
+      if (SKY.flowTime() && !(spec.walker as { lantern?: boolean }).lantern && lanternRef.current) {
+        const isNight = SKY.state.time === 'night';
+        if (isNight !== prevNight.current) {
+          prevNight.current = isNight;
+          lanternRef.current.visible = isNight && Math.random() < 0.6;
+        }
+      }
       // BUILD 152: 하루의 빛 — 해의 높이가 그림자를 끌고 다닌다
       if (SKY.flowTime()) {
         const DL = dayLightAt(SKY.state.dayT);
@@ -915,7 +927,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       }
       J.gaitSwitchAt = -999; // 진행점 토글러는 산책에선 쉰다
       if (loopPath) {
-        if (charProgress.current > scenes.length * 3) { charProgress.current -= scenes.length; } // 숫자 위생 — 무한히 걸어도 넘치지 않게
+        if (charProgress.current > scenes.length * 3) { // 숫자 위생 — 무한히 걸어도 넘치지 않게
+          charProgress.current -= scenes.length;
+          J.target -= scenes.length;
+          // BUILD 170: 함께 걷는 것들의 진행도도 같이 감는다 — 안 그러면 한 바퀴 앞에 좌초된다
+          if (passer.current) passer.current.prog -= scenes.length;
+          for (const spt of waySpots.current) spt.prog -= scenes.length;
+        }
         J.target = charProgress.current + 2.5;
       } else {
         if (strollDir.current > 0 && charProgress.current >= scenes.length - 1 - 0.03) strollDir.current = -1;
@@ -1415,8 +1433,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       }
       if (campRest.current) { campRest.current = null; rigRef.current?.stopInspect(); }
     }
-    // BUILD 166: 스치는 사람 — 산책 중에만, 한 번에 한 명만
-    if (stroll) {
+    // BUILD 170: 스치는 사람 승격 — 순환로에선 모드 불문 등장 (무한류 세계의 시민)
+    if (stroll || loopPath) {
       const PS = passer.current;
       const walkerDir = (loopPath ? 1 : strollDir.current) as 1 | -1;
       if (!PS) {
@@ -1460,7 +1478,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           passerIn.current = 90 + Math.random() * 130; // 다음 인연은 1.5~3.5분 뒤
         }
       }
-    } else if (passer.current) { // 산책이 끝나면 인연도 접는다
+    } else if (passer.current) { // 순환도 산책도 아니면 인연을 접는다
       passerRoot.remove(passer.current.group);
       passer.current = null;
     }

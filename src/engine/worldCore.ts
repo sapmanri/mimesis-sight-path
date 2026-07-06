@@ -89,6 +89,8 @@ const HEIGHT_FOG = {
 };
 
 export function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUILD 129: strength<1 = 안개에 덜 잠긴다 (열차 차체용)
+  if (mat.userData.hfog) return mat; // BUILD 170: 멱등 — 두 번 입히지 않는다
+  mat.userData.hfog = true;
   // 주의: mix는 sRGB 인코딩된 최종 색 위에서 돌므로, 안개색도 sRGB 값 그대로 써야 배경과 정확히 섞인다
   const hex = parseInt(PALETTE.fog.slice(1), 16);
   const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
@@ -429,6 +431,23 @@ function normalizeModel(group: THREE.Group, spec: ModelSpec) {
   const wrapper = new THREE.Group();
   wrapper.add(group);
   return wrapper;
+}
+
+/** BUILD 170: 안개 강제 집행 — 동적으로 태어난 것들(길가의 우연·우체통·스치는 사람)을 일괄 소탕.
+ *  발광(emissive>0)과 fog:false는 의도된 예외로 존중한다. 멱등이라 몇 번을 쓸어도 안전. */
+export function enforceFog(root: THREE.Object3D) {
+  root.traverse((n) => {
+    const mesh = n as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach((m) => {
+      const std = m as THREE.MeshStandardMaterial;
+      if (!std || std.fog === false) return;
+      if (std.emissive && (std.emissive.r + std.emissive.g + std.emissive.b) > 0.05) return;
+      applyHeightFog(std);
+      std.needsUpdate = true;
+    });
+  });
 }
 
 export const defaultLoader: ModelLoader = (file) =>
