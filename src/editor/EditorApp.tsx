@@ -14,6 +14,7 @@ import { World } from '../scene/World';
 import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, ANIMATED_PROPS, PROP_SETS, expandPropSet, type PlacedProp } from '../engine/props';
 import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
+import { THEME_KITS, applyThemeEnv, expandThemeSets } from '../engine/themeKits';
 import { WALKER_ROSTER } from '../engine/worldCore';
 import { jejuBlueprints } from '../data/jeju';
 
@@ -192,6 +193,7 @@ export function EditorApp() {
   // BUILD 100: 픽 대상 일반화 — 기억 자리 / 새 배치물 / 배치물 자리 다시 찍기
   const [pickTarget, setPickTarget] = useState<null | 'scene' | 'prop-new' | 'prop-repos' | 'set-place'>(null);
   const [selSet, setSelSet] = useState(PROP_SETS[0].id); // BUILD 118
+  const [themeKeepProps, setThemeKeepProps] = useState(true); // BUILD 121: 테마 적용 시 기존 배치 유지 여부
   const [propCat, setPropCat] = useState(PROP_CATEGORIES[0]);
   const [propObj, setPropObj] = useState(PROP_CATALOG[0].id);
   // BUILD 112: 자산 창고
@@ -642,6 +644,25 @@ export function EditorApp() {
 
           {tab === 'env' && (
             <div className="ed-fields">
+              <h4>🎬 테마 키트 — 세계의 계절</h4>
+              <div className="ed-wh-chips">
+                {THEME_KITS.map((th) => (
+                  <button key={th.id} type="button" className="ed-chip" title={th.description}
+                    onClick={() => {
+                      edit((d) => {
+                        applyThemeEnv(d.spec, th);
+                        if (!themeKeepProps) d.props = [];
+                        if (anchors && th.sets) {
+                          d.props = [...(d.props ?? []), ...expandThemeSets(th, anchors, Date.now() % 100000)];
+                        }
+                      });
+                    }}>{th.label}</button>
+                ))}
+              </div>
+              <label className="ed-check">
+                <input type="checkbox" checked={themeKeepProps} onChange={(e) => setThemeKeepProps(e.target.checked)} />
+                기존 배치 유지 (끄면 테마가 배치를 새로 깐다)
+              </label>
               <h4>날씨</h4>
               <label>하늘
                 <select
