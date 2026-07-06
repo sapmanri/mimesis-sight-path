@@ -90,6 +90,12 @@ function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUIL
   // 주의: mix는 sRGB 인코딩된 최종 색 위에서 돌므로, 안개색도 sRGB 값 그대로 써야 배경과 정확히 섞인다
   const hex = parseInt(PALETTE.fog.slice(1), 16);
   const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
+  // BUILD 132: 값을 재질 생성 시점에 스냅샷 — 그리고 프로그램 캐시 키에 박는다.
+  // THREE는 onBeforeCompile의 '함수 소스 문자열'로 셰이더 프로그램을 캐시한다. 값이 클로저 참조면
+  // 소스가 항상 같아서 첫 컴파일 프로그램을 영원히 재사용 → 슬라이더가 헛돈다 (안개가 변하지 않던 사건의 진범).
+  const top = HEIGHT_FOG.top;
+  const bottom = HEIGHT_FOG.bottom;
+  const str = strength * HEIGHT_FOG.strength;
   const glsl = (n: number) => n.toFixed(4);
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
@@ -99,9 +105,10 @@ function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUIL
       .replace('#include <common>', '#include <common>\nvarying float vHFy;')
       .replace(
         '#include <fog_fragment>',
-        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(HEIGHT_FOG.bottom)}, ${glsl(HEIGHT_FOG.top)}, vHFy)) * ${glsl(strength * HEIGHT_FOG.strength)});`,
+        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(bottom)}, ${glsl(top)}, vHFy)) * ${glsl(str)});`,
       );
   };
+  mat.customProgramCacheKey = () => `hfog|${top.toFixed(4)}|${bottom.toFixed(4)}|${str.toFixed(4)}|${PALETTE.fog}`;
   return mat;
 }
 
