@@ -297,7 +297,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     let alive = true;
     loadKitModel('broom', defaultLoader).then((obj) => {
       if (!alive) return;
-      obj.rotation.x = Math.PI / 2; // BUILD 143: 모델이 세로로 서 있었다(똥꼬 관통 사건) — 눕힌다. 자루 앞, 솔 뒤
+      // BUILD 145: 회전 핵 철거 — GLB 노드의 구워진 Rx(-90)를 원본에서 제거했다. 지오메트리 원좌표: 장축 +Z(자루 앞), 솔 -Z(뒤)
+      obj.rotation.x = -0.09; // 코를 살짝 든다 — 나는 자세
       obj.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(obj);
       const c = box.getCenter(new THREE.Vector3());
@@ -808,7 +809,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           const kindR = spec.walker.mount?.kind ?? 'cloud';
           if (kindR === 'broom') {
             const fx = Math.sin(charYaw.current); const fz = Math.cos(charYaw.current);
-            P.group.position.set(walker.position.x - fx * 0.34, broomMount.position.y + 0.05, walker.position.z - fz * 0.34); // BUILD 143: 솔방석은 뒤에 있다
+            P.group.position.set(walker.position.x - fx * 0.36, broomMount.position.y + 0.08, walker.position.z - fz * 0.36); // BUILD 145: 커진 솔방석 위로
           } else {
             P.group.position.set(babyCloud.position.x, babyCloud.position.y + 0.045, babyCloud.position.z);
           }

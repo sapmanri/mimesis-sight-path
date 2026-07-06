@@ -322,7 +322,7 @@ export const MODELS: Record<string, ModelSpec> = {
   signallight: { file: 'SignalLight.glb', height: 0.9, tint: '#5a5f5c' },
   railsection: { file: 'RailSection.glb', height: 2.4, tint: '#6b665e', fitMaxDim: true }, // 12u 길이가 지배 축
   windturbine: { file: 'Eolic.glb', height: 4.2, tint: '#c8cdd1' }, // BUILD 136: 부유섬 받침 포함 (Vase 업로드 eolic_OBJ)
-  broom: { file: 'Broom.glb', height: 0.85, tint: '#7a5a3a', fitMaxDim: true }, // BUILD 141: 마법 빗자루 — +Z 장축 0.9
+  broom: { file: 'Broom.glb', height: 1.15, tint: '#7a5a3a', fitMaxDim: true }, // BUILD 145: 0.85→1.15 — 엉덩이에 가려질 크기였다. GLB 노드의 Rx(-90) 제거로 눕은 게 원본
 };
 
 // ---------- BUILD 093: WALKER ROSTER ----------
