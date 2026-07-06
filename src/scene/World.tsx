@@ -482,6 +482,55 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world, spec.mail?.count, spec.mail?.source, spec.mail?.url, spec.mail?.items]);
 
+  // BUILD 173: 새벽의 수탉 — 흐르는 시간의 새벽 창이 열리면, 가장 가까운 안개 속에서 태어난다.
+  // 주변을 쪼며 돌아다니다가, 사람이 다가오면 홰를 치고 운다. 아침이 깊어지면 안개가 도로 데려간다.
+  const rooster = useRef<null | {
+    grp: THREE.Group; mixer: THREE.AnimationMixer;
+    shout: THREE.AnimationAction | null; claw: THREE.AnimationAction | null;
+    home: THREE.Vector3; goal: THREE.Vector3; goalIn: number; crowCool: number;
+  }>(null);
+  const roosterLoading = useRef(false);
+  const spawnRooster = (prog: number) => {
+    if (roosterLoading.current || rooster.current) return;
+    roosterLoading.current = true;
+    void Promise.all([
+      defaultLoader('Rooster.glb'), defaultLoader('RoosterShout.glb'), defaultLoader('RoosterClaw.glb'),
+    ]).then(([body, shoutD, clawD]) => {
+      roosterLoading.current = false;
+      const g = body.scene;
+      // 정규화: 닭 크기 0.32, 발을 땅에 — 실측
+      const box = new THREE.Box3().setFromObject(g);
+      const size = box.getSize(new THREE.Vector3());
+      g.scale.setScalar(0.32 / Math.max(1e-6, size.y));
+      box.setFromObject(g);
+      g.position.y -= box.min.y;
+      const c = box.getCenter(new THREE.Vector3());
+      g.position.x -= c.x; g.position.z -= c.z;
+      const holder = new THREE.Group();
+      holder.add(g);
+      enforceFog(holder); // 자기 깃털은 입되(텍스처 보존), 안개는 예외 없이
+      const mixer = new THREE.AnimationMixer(g);
+      const mk = (clip?: THREE.AnimationClip) => {
+        if (!clip) return null;
+        const a = mixer.clipAction(clip);
+        a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true;
+        return a;
+      };
+      const shout = mk(shoutD.animations[0]);
+      const claw = mk(clawD.animations[0]);
+      const t = world.progressToT(prog);
+      const p = world.curve.getPoint(t);
+      const tan = world.curve.getTangent(t).setY(0).normalize();
+      const nor = new THREE.Vector3(-tan.z, 0, tan.x);
+      holder.position.copy(p).addScaledVector(nor, (Math.random() < 0.5 ? 1 : -1) * (0.45 + Math.random() * 0.4));
+      waysideRoot.add(holder);
+      rooster.current = {
+        grp: holder, mixer, shout, claw,
+        home: holder.position.clone(), goal: holder.position.clone(), goalIn: 1, crowCool: 0,
+      };
+    }).catch(() => { roosterLoading.current = false; });
+  };
+
   // BUILD 168: 길가의 우연 — 안개는 무대 전환막이다.
   // 뒤 안개로 사라진 것은 철거되고, 앞 안개 너머에서 새 것이 태어난다 (Vase의 유비식 스트리밍).
   // 그리고 끝없는 하이킹의 심장 — 캠프파이어. 닿으면 앉아 쉬었다 간다.
@@ -501,8 +550,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const campRest = useRef<null | { until: number; fire: THREE.Vector3 }>(null);
   const fireSync = useRef(0);
   const campfireProto = useRef<Promise<THREE.Group> | null>(null);
-  const WAY_POOL = ['stone11', 'rock3', 'suitcase', 'lamp', 'snowman', 'phonebooth', 'deer', 'boar', 'deer'] as const; // BUILD 171: 동물 합류 — 사슴은 두 번 (자주 보고 싶으니)
-  const WAY_ANIMALS = new Set(['deer', 'boar', 'wolf']);
+  const WAY_POOL = ['stone11', 'rock3', 'suitcase', 'lamp', 'snowman', 'phonebooth'] as const; // BUILD 173: 정적 동물 퇴출 — 박제처럼 서 있는 야생은 야생이 아니다 (Vase)
   const loadCampfire = () => {
     if (!campfireProto.current) {
       campfireProto.current = defaultLoader('CampfireSet.glb').then((gltf) => {
@@ -592,12 +640,6 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       });
     } else {
       const key = WAY_POOL[Math.floor(Math.random() * WAY_POOL.length)];
-      if (WAY_ANIMALS.has(key)) {
-        const t2 = world.progressToT(prog);
-        const nor2 = new THREE.Vector3(-world.curve.getTangent(t2).z, 0, world.curve.getTangent(t2).x).setY(0);
-        grp.position.addScaledVector(nor2.normalize(), (Math.random() < 0.5 ? 1 : -1) * (0.35 + Math.random() * 0.5)); // 야생의 거리
-        grp.rotation.y = Math.random() * Math.PI * 2;
-      }
       void loadKitModel(key, defaultLoader).then((obj) => { enforceFog(obj); grp.add(obj); }).catch(() => {});
     }
   };
@@ -1415,6 +1457,46 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         if (behind < -(16 / dWdPn)) {
           waysideRoot.remove(spt.grp);
           waySpots.current.splice(i, 1);
+        }
+      }
+      // BUILD 173: 새벽의 수탉
+      {
+        const R = rooster.current;
+        const dawn = skyOn && SKY.flowTime() && SKY.state.dayT > 0.205 && SKY.state.dayT < 0.36;
+        if (!R && dawn && !roosterLoading.current) {
+          spawnRooster(charProgress.current + walkerDir2 * (13 / dWdPn)); // 가장 가까운 안개 속
+        } else if (R) {
+          R.mixer.update(delta);
+          const dW2 = walkerPos.current ? R.grp.position.distanceTo(walkerPos.current) : 99;
+          // 로밍 — 집 주변 1.1u를 쪼며 다닌다
+          R.goalIn -= delta;
+          const gx = R.goal.x - R.grp.position.x; const gz = R.goal.z - R.grp.position.z;
+          const gd = Math.hypot(gx, gz);
+          if (gd > 0.06) {
+            R.grp.position.x += (gx / gd) * 0.22 * delta;
+            R.grp.position.z += (gz / gd) * 0.22 * delta;
+            R.grp.rotation.y = Math.atan2(gx, gz);
+            R.grp.position.y += (Math.abs(Math.sin(clock.elapsedTime * 9)) * 0.012 - (R.grp.position.y - R.home.y)) * 0.5; // 종종걸음
+          } else if (R.goalIn <= 0) {
+            R.goalIn = 2.5 + Math.random() * 3;
+            const a = Math.random() * Math.PI * 2;
+            R.goal.set(R.home.x + Math.cos(a) * (0.3 + Math.random() * 0.8), R.home.y, R.home.z + Math.sin(a) * (0.3 + Math.random() * 0.8));
+            if (R.claw && Math.random() < 0.6) { R.claw.reset().fadeIn(0.2).play(); } // 땅을 쫀다
+          }
+          // 사람이 오면 — 홰를 치고 운다 ㅋㅋ
+          if (dW2 < 2.7 && clock.elapsedTime > R.crowCool) {
+            R.crowCool = clock.elapsedTime + 22 + Math.random() * 15;
+            if (walkerPos.current) R.grp.rotation.y = Math.atan2(walkerPos.current.x - R.grp.position.x, walkerPos.current.z - R.grp.position.z);
+            R.claw?.fadeOut(0.15);
+            R.shout?.reset().fadeIn(0.15).play();
+            ambience.roosterCrow(Math.max(0.25, 1 - dW2 / 6));
+          }
+          // 아침이 깊어지면 — 안개가 데려간다 (사람이 안 볼 때)
+          const over = !skyOn || !SKY.flowTime() || SKY.state.dayT > 0.38 || SKY.state.dayT < 0.19;
+          if (over && dW2 > 11) {
+            waysideRoot.remove(R.grp);
+            rooster.current = null;
+          }
         }
       }
       // BUILD 172: 선객 — 불을 쬐다가, 어떤 이는 먼저 일어난다

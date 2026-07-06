@@ -333,6 +333,43 @@ function createAmbience() {
     crackleTimer = window.setTimeout(tick, 300);
   };
 
+  // ---------- BUILD 173: 꼬끼오 ----------
+  /** 수탉 — 4음절: 꼬, 끼, 오오오(비브라토), 오(내려앉음). 만화적이지만 이 세계의 만화다 */
+  const roosterCrow = (vol = 1) => {
+    if (!ensure() || !ctx || !master || muted) return;
+    let t = ctx.currentTime + 0.05;
+    const out = ctx.createGain();
+    out.gain.value = 0.05 * Math.min(1, Math.max(0.15, vol));
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1150; bp.Q.value = 1.4;
+    out.connect(master);
+    const syll = (f0: number, f1: number, dur: number, vib = 0) => {
+      if (!ctx) return;
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(60, f1), t + dur);
+      if (vib > 0) {
+        const v = ctx.createOscillator(); v.type = 'sine'; v.frequency.value = 9;
+        const vg = ctx.createGain(); vg.gain.value = vib;
+        v.connect(vg).connect(o.frequency);
+        v.start(t); v.stop(t + dur + 0.02);
+      }
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(1, t + 0.03);
+      g.gain.setValueAtTime(1, t + dur - 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(bp).connect(g).connect(out);
+      o.start(t); o.stop(t + dur + 0.02);
+      t += dur + 0.045;
+    };
+    syll(540, 620, 0.13);          // 꼬
+    syll(720, 820, 0.11);          // 끼
+    syll(980, 1240, 0.4, 55);      // 오오오~
+    syll(820, 480, 0.3);           // 오...
+  };
+
   // ---------- BUILD 149: 갈매기 ----------
   /** 끼룩 — 내려앉는 미음(mew). 1~3번, 멀리서. World의 갈매기들이 부른다 */
   const gullCry = () => {
@@ -421,6 +458,7 @@ function createAmbience() {
     },
     thunder,
     gullCry,
+    roosterCrow,
     /** 모닥불 근접도 0~1 — 잉걸 게인과 타닥임 밀도가 함께 따른다 */
     setFire(level: number) {
       fireLevel = Math.min(1, Math.max(0, level));
