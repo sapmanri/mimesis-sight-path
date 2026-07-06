@@ -304,7 +304,7 @@ export function createClipRig(
           chair = chairAsset;
           root.parent.add(chair);
         }
-        chair.position.set(0, 0, -0.06);
+        chair.position.set(0, 0, 0.05); // BUILD 177: 의자가 작아졌으니 좌면을 엉덩이 밑으로 당긴다 (-0.06은 큰 의자 시절의 값)
         chair.rotation.set(0, 0, 0);
         chair.scale.setScalar(0.001);
         chair.visible = true;

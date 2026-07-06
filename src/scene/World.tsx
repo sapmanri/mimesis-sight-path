@@ -948,7 +948,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     smoothLook.current.lerp(focus, U.blend);
   };
 
-  useFrame(({ camera, clock }, delta) => {
+  useFrame(({ camera, clock, scene }, delta) => {
+    // BUILD 177: 진단 후크 — 콘솔에서 세계를 부검할 수 있게 (window.__W)
+    (window as unknown as { __W?: unknown }).__W = { world, walker, scene, charProgress };
     // BUILD 157: 델타 클램핑 — 탭을 떠났다 오면 delta가 '몇 분'이 되어 모든 적분이 폭발한다.
     // 긴 공백을 짧은 한 걸음으로 자른다. 세계는 잠들었다 깬 것이지, 5분치 물리를 몰아서 살지 않는다.
     delta = Math.min(delta, 0.05);

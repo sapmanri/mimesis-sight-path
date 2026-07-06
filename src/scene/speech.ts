@@ -35,20 +35,32 @@ function drawBubble(icon?: string): HTMLCanvasElement {
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d')!;
-  // 종이 — 크림, 아주 둥근 모서리, 얇은 따뜻한 테두리 (편지지의 혈통)
-  const bx = 14; const by = 12; const bw = W - 28; const bh = H - 58; const r = 26;
-  g.beginPath();
-  g.moveTo(bx + r, by);
-  g.arcTo(bx + bw, by, bx + bw, by + bh, r);
-  g.arcTo(bx + bw, by + bh, bx, by + bh, r);
-  g.arcTo(bx, by + bh, bx, by, r);
-  g.arcTo(bx, by, bx + bw, by, r);
-  g.closePath();
-  g.fillStyle = 'rgba(249, 245, 233, 0.95)';
-  g.fill();
-  g.lineWidth = 2.5;
-  g.strokeStyle = 'rgba(120, 105, 80, 0.32)';
-  g.stroke();
+  // BUILD 177: 몽글몽글 — 네모가 아니라 구름이다 (심즈 생각구름의 문법).
+  // 원들의 합집합을 채우고, 테두리를 두르고, 살짝 작은 원들로 안쪽 선을 지운다 — 삼중 붓질
+  const bx = 14; const by = 12; const bw = W - 28; const bh = H - 58;
+  const cx = bx + bw / 2; const cy = by + bh / 2;
+  const rx = bw / 2 - 12; const ry = bh / 2 - 4;
+  const lobes: { x: number; y: number; r: number }[] = [];
+  const N = 11;
+  for (let i = 0; i < N; i += 1) {
+    const a = (i / N) * Math.PI * 2;
+    const wob = 0.88 + Math.random() * 0.22; // 구름은 같은 혹이 없다
+    lobes.push({
+      x: cx + Math.cos(a) * rx * wob * 0.86,
+      y: cy + Math.sin(a) * ry * wob * 0.82,
+      r: (18 + Math.random() * 8) * (1 + Math.abs(Math.cos(a)) * 0.35), // 좌우가 살짝 통통
+    });
+  }
+  lobes.push({ x: cx, y: cy, r: Math.min(rx, ry) }); // 몸통
+  const paint = (rad: (l: { r: number }) => number, style: string, stroke = false) => {
+    g.beginPath();
+    lobes.forEach((l) => { g.moveTo(l.x + rad(l), l.y); g.arc(l.x, l.y, rad(l), 0, Math.PI * 2); });
+    if (stroke) { g.strokeStyle = style; g.lineWidth = 2.5; g.stroke(); }
+    else { g.fillStyle = style; g.fill(); }
+  };
+  paint((l) => l.r, 'rgba(249, 245, 233, 0.95)');            // ① 합집합 채움
+  paint((l) => l.r, 'rgba(120, 105, 80, 0.32)', true);       // ② 테두리
+  paint((l) => l.r - 1.6, 'rgba(249, 245, 233, 0.95)');      // ③ 안쪽 선 지우기
   // 꼬리 — 점 세 개가 아래로 잦아든다 (만화의 속삭임 문법)
   for (let i = 0; i < 2; i += 1) {
     const rr = 7 - i * 3;
