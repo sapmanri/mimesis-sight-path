@@ -1043,7 +1043,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     const SM = new THREE.Matrix4(); const SQ = new THREE.Quaternion(); const SE = new THREE.Euler(); const SV = new THREE.Vector3();
     for (let k = 0; k < sleeperCount; k += 1) {
       const { p, tan } = atDist(k * 0.55 + 0.2);
-      SE.set(0, Math.atan2(tan.x, tan.z) + Math.PI / 2, 0);
+      SE.set(0, Math.atan2(tan.x, tan.z), 0); // BUILD 135: +90도 제거 — 긴 축(X)은 이미 가로였다. 침목은 레일을 가로지른다
       SQ.setFromEuler(SE);
       SV.set(p.x, railY(p.y) - 0.018, p.z);
       SM.compose(SV, SQ, new THREE.Vector3(1, 1, 1));

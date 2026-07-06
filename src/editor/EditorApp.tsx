@@ -121,7 +121,7 @@ type WarehouseItem = {
 };
 type WarehouseReg = { registryVersion: string; assetCount: number; taxonomy: Record<string, string>; items: WarehouseItem[] };
 
-const KITS = ['none', 'door-kit', 'person-kit', 'cloud-kit', 'suitcase-kit', 'book-kit', 'cup-kit', 'stone-wall-kit', 'cd-shelf-kit', 'fruit-kit', 'airplane-wing-kit', 'sea-edge-kit'] as const; // BUILD 128: 기본은 '없음' — 기억만 있는 자리
+// BUILD 135: 킷 목록 퇴역 — 기억의 사물은 배치 카탈로그의 소관이다
 const PATHS = ['straight', 'soft-curve', 'deep-curve', 'bridge', 'stair', 'threshold', 'open-field'] as const;
 const SURFACES = ['dry-stone', 'wet-stone', 'mud', 'sand', 'grass-edge', 'snow-thin', 'rain-puddle', 'moss-aged'] as const;
 const WEATHERS = ['clear-day', 'soft-cloud', 'rain-cloud', 'drizzle', 'moon-night', 'sunset-fade', 'fog-morning'] as const;
@@ -569,11 +569,8 @@ export function EditorApp() {
                 <label>색조<input type="color" value={cur.hue} onChange={(e) => editScene((s) => { s.hue = e.target.value; })} /></label>
               </div>
               <label>문장<textarea rows={4} value={cur.text} onChange={(e) => editScene((s) => { s.text = e.target.value; })} /></label>
-              <label>사물 (오브젝트 킷)
-                <select value={cur.objectKit} onChange={(e) => editScene((s) => { s.objectKit = e.target.value as SceneBlueprint['objectKit']; })}>
-                  {KITS.map((k) => <option key={k} value={k}>{k === 'none' ? '없음 (기억만)' : k}</option>)}
-                </select>
-              </label>
+              {/* BUILD 135: 오브젝트 킷 UI 퇴역 — 배치 카탈로그+자리찍기가 완전한 상위호환.
+                  엔진은 제주 같은 레거시 문서의 킷을 계속 렌더한다 (제주는 킷 위에 지어진 세계다). */}
               <div className="ed-grid2">
                 <label>길의 결
                   <select value={cur.pathKind} onChange={(e) => editScene((s) => { s.pathKind = e.target.value as SceneBlueprint['pathKind']; })}>
