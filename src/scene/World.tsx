@@ -490,7 +490,11 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     grp: THREE.Group; prog: number; kind: 'campfire' | 'prop';
     flames?: { m: THREE.Mesh; ph: number; s0: number }[];
     light?: THREE.PointLight; rested?: boolean;
+    // BUILD 172: 선객 — 먼저 와서 불을 쬐던 사람
+    guest?: { group: THREE.Group; mixer: THREE.AnimationMixer; anims: THREE.AnimationClip[]; natWalk: number; leaveIn: number | null };
   };
+  // 먼저 떠난 이들 — 스폿과 무관하게 제 갈 길을 간다
+  const departures = useRef<{ group: THREE.Group; mixer: THREE.AnimationMixer; prog: number; dir: 1 | -1; speed: number; walked: number }[]>([]);
   const waySpots = useRef<WaySpot[]>([]);
   const wayIn = useRef(6);
   const wayCount = useRef(0);
@@ -564,6 +568,27 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         spot.flames = flames;
         spot.light = light;
         grp.add(set);
+        // BUILD 172: 65%의 확률로, 누군가 먼저 와 있다
+        if (Math.random() < 0.65) {
+          void loadWalkerAsset(defaultLoader, 'random').then(({ group: g2, animations, clipSpeeds }) => {
+            const mixer = new THREE.AnimationMixer(g2);
+            const findC = (...names: string[]) => animations.find((a) => names.includes(a.name)) ?? null;
+            const sit = findC('Sit_Floor_Idle', 'Sitting', 'Sitting Idle');
+            const idle = findC('Idle', 'Idle_A', 'idle');
+            const pose = sit ?? idle ?? animations[0];
+            if (pose) mixer.clipAction(pose).play(); // 앉을 줄 아는 아이는 앉고, 아니면 서서 불을 본다
+            const a = Math.random() * Math.PI * 2;
+            g2.position.set(Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55);
+            g2.rotation.y = Math.atan2(-g2.position.x, -g2.position.z); // 불을 바라본다
+            enforceFog(g2);
+            grp.add(g2);
+            spot.guest = {
+              group: g2, mixer, anims: animations,
+              natWalk: clipSpeeds?.walk || 0.85,
+              leaveIn: Math.random() < 0.45 ? 10 + Math.random() * 25 : null, // 45%는 먼저 간다 (카운트다운 — 프레임의 시계를 빌리지 않는다)
+            };
+          }).catch(() => {});
+        }
       });
     } else {
       const key = WAY_POOL[Math.floor(Math.random() * WAY_POOL.length)];
@@ -1392,6 +1417,45 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           waySpots.current.splice(i, 1);
         }
       }
+      // BUILD 172: 선객 — 불을 쬐다가, 어떤 이는 먼저 일어난다
+      for (const spt of waySpots.current) {
+        const G = spt.guest;
+        if (!G) continue;
+        G.mixer.update(delta);
+        if (G.leaveIn !== null) G.leaveIn -= delta;
+        if (G.leaveIn !== null && G.leaveIn <= 0) {
+          // 일어나 제 갈 길로 — 스폿의 손을 놓고 길의 사람이 된다
+          spt.guest = undefined;
+          const dirL = (Math.random() < 0.5 ? 1 : -1) as 1 | -1;
+          const mixer2 = new THREE.AnimationMixer(G.group);
+          const walkC = G.anims.find((a) => ['Walking_A', 'Walking', 'Walk'].includes(a.name)) ?? G.anims[0];
+          if (walkC) {
+            const act = mixer2.clipAction(walkC);
+            act.timeScale = THREE.MathUtils.clamp(0.8 / G.natWalk, 0.55, 1.9);
+            act.play();
+          }
+          const wp2 = G.group.getWorldPosition(new THREE.Vector3());
+          waysideRoot.add(G.group); // 세계 좌표 유지한 채 재입양
+          G.group.position.copy(wp2);
+          departures.current.push({ group: G.group, mixer: mixer2, prog: spt.prog, dir: dirL, speed: 0.75 + Math.random() * 0.15, walked: 0 });
+        }
+      }
+      for (let i = departures.current.length - 1; i >= 0; i -= 1) {
+        const D = departures.current[i];
+        const tD = world.progressToT(D.prog);
+        const pD = world.curve.getPoint(tD);
+        const t1D = world.progressToT(D.prog + D.dir * 0.01);
+        const dWdPD = Math.max(0.05, world.curve.getPoint(t1D).distanceTo(pD) / 0.01);
+        D.prog += (D.dir * D.speed * delta) / dWdPD;
+        D.walked += D.speed * delta;
+        const ptD = world.curve.getPoint(world.progressToT(D.prog));
+        const tanD = world.curve.getTangent(world.progressToT(D.prog)).setY(0).normalize();
+        D.group.position.lerp(ptD, Math.min(1, delta * 3)); // 불가에서 길로 스며 합류
+        D.group.position.y = ptD.y;
+        D.group.rotation.y = Math.atan2(tanD.x * D.dir, tanD.z * D.dir);
+        D.mixer.update(delta);
+        if (D.walked > 17) { waysideRoot.remove(D.group); departures.current.splice(i, 1); } // 안개가 데려간다
+      }
       // 불꽃 일렁임 + 모닥불 쉼 + 타닥 소리
       const tt2 = clock.elapsedTime;
       let nearestFire = Infinity;
@@ -1440,6 +1504,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         waySpots.current.forEach((spt) => waysideRoot.remove(spt.grp));
         waySpots.current = [];
         ambience.setFire(0);
+      }
+      if (departures.current.length) {
+        departures.current.forEach((D) => waysideRoot.remove(D.group));
+        departures.current = [];
       }
       if (campRest.current) { campRest.current = null; rigRef.current?.stopInspect(); }
     }
