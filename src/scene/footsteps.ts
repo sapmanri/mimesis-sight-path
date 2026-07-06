@@ -29,12 +29,22 @@ export function createFootsteps(): Footsteps {
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i += 1) d[i] = Math.random() * 2 - 1;
     }
-    if (ctx.state === 'suspended') void ctx.resume();
+    if (ctx.state !== 'running') void ctx.resume(); // iOS 'interrupted' 포함
     return ctx.state === 'running';
   };
 
   return {
-    unlock() { ensure(); },
+    unlock() {
+      ensure();
+      // BUILD 155: 빈 버퍼 의식 — 제스처 안에서 한 번 울려야 iOS가 진짜로 깬다
+      if (ctx) {
+        try {
+          const b = ctx.createBuffer(1, 1, 22050);
+          const s = ctx.createBufferSource();
+          s.buffer = b; s.connect(ctx.destination); s.start(0);
+        } catch { /* 조용히 */ }
+      }
+    },
     setMuted(m) { muted = m; },
     muted: () => muted,
     setVolume(v) { volume = Math.min(1, Math.max(0, v)); },
