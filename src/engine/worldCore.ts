@@ -267,7 +267,7 @@ type ModelSpec = {
 // BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
 // BUILD 179: 돌 격리 실험 (Vase 제안 — 바이섹션) — 전부 끄고 0을 확인한 뒤, 한 그룹씩 복귀시켜 범인을 특정한다.
 // glb: rockSpots(rock0/3/7·caveA/B) / pebbles: 잔자갈 인스턴서(lip·frag·peb) / (스트리밍 풀은 World.tsx WAY_POOL)
-export const ROCK_GROUPS = { glb: false, pebbles: false, bushes: false }; // BUILD 180: 수풀도 격리 (스샷의 초록 다면체 덩이 = 수풀 계열)
+export const ROCK_GROUPS = { glb: false, pebbles: false, bushes: false, grass: false }; // BUILD 182: 강철 풀(잔풀·가장자리풀)도 격리 — 원인 불명, 증거는 인계 문서에
 
 // BUILD 180: 셰이더 프로그램 논스 — 부검 결과, needsUpdate로도 재컴파일이 안 일어났다.
 // 같은 캐시 키의 프로그램이 살아 있으면 THREE는 onBeforeCompile을 다시 부르지 않는다 —
@@ -1579,8 +1579,8 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     const greens = SPEC.decoration.vegetation.greens;
     const blobGeo = new THREE.IcosahedronGeometry(1, 0);
     const coneGeo = new THREE.ConeGeometry(0.011, 0.12, 3);
-    const spillMeshes = greens.slice(0, 2).map((c) => mkInstG(blobGeo, c, 160));
-    const hangMeshes = greens.slice(1, 3).map((c) => mkInstG(coneGeo, c, 130));
+    const spillMeshes = greens.slice(0, 2).map((c) => mkInstG(blobGeo, c, ROCK_GROUPS.grass ? 160 : 0)); // BUILD 182: 격리
+    const hangMeshes = greens.slice(1, 3).map((c) => mkInstG(coneGeo, c, ROCK_GROUPS.grass ? 130 : 0)); // BUILD 182: 격리
     const counters = [0, 0, 0, 0];
     // 턱 수풀: 2~4덩이 뭉치가 가장자리에 반쯤 걸쳐 있다 (BUILD 180: 격리 대상)
     const bushSpots = ROCK_GROUPS.bushes ? Math.min(52, Math.floor(frames.length / 8)) : 0; // BUILD 180: 격리
@@ -1657,6 +1657,7 @@ function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
   const rnd = worldRng(4177);
   const matA = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 })); // BUILD 165: 가장자리 풀도
   const matB = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 }));
+  if (!ROCK_GROUPS.grass) return new THREE.Group(); // BUILD 182: 격리
   const geo = new THREE.ConeGeometry(0.016, 0.16, 3); // 풀잎 한 가닥
   for (let k = 0; k < SPEC.decoration.grassCount; k += 1) {
     const i = Math.floor(rnd() * frames.length);
