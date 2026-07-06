@@ -678,6 +678,17 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     color: '#fdf6e3', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
   }), []);
 
+  // BUILD 174: 허공답보 수술 — BUILD 093의 유령이 NPC들에게 부활했었다.
+  // 정지 포즈 정렬은 클립이 재생되면 어긋난다(믹사모 힙 기준선 차이).
+  // 클립을 한 순간 돌린 뒤 몸의 월드 최저점을 실측해 발바닥을 기준면에 붙인다 — 주인공이 받던 수술을 모두에게.
+  const groundNpc = (root: THREE.Group, mixer: THREE.AnimationMixer) => {
+    mixer.update(0.08);
+    root.updateMatrixWorld(true);
+    const base = root.getWorldPosition(new THREE.Vector3()).y;
+    const box = new THREE.Box3().setFromObject(root);
+    if (Number.isFinite(box.min.y)) root.position.y += base - box.min.y;
+  };
+
   // BUILD 166: 스치는 사람 — 무한길은 외로운 길이다. 가끔 반대편에서 누군가 걸어온다.
   // 스칠 때 서로 고개만 살짝 — 각자의 하루가 있으므로 멈추지 않는다 (인간극장의 문법).
   const passerRoot = useMemo(() => new THREE.Group(), []);
