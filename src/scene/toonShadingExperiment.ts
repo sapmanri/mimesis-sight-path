@@ -29,7 +29,7 @@ import * as THREE from 'three';
  * steps: 계조 단수 (3 = 애니 느낌 강함, 4~5 = 부드러운 그림책 느낌)
  * softness: 0 = 완전 플랫(하드 컷), 1 = 거의 선형(스탠다드에 가까움). 권장 0.3~0.4
  */
-export function createToonGradientMap(steps = 4, softness = 0.35): THREE.DataTexture {
+export function createToonGradientMap(steps = 3, softness = 0.15): THREE.DataTexture {
   const width = 64;
   const data = new Uint8Array(width * 4);
 
@@ -50,8 +50,8 @@ export function createToonGradientMap(steps = 4, softness = 0.35): THREE.DataTex
   }
 
   const tex = new THREE.DataTexture(data, width, 1, THREE.RGBAFormat);
-  tex.minFilter = THREE.LinearFilter; // Nearest로 바꾸면 컷이 더 딱딱해짐
-  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.NearestFilter; // 계조 컷을 명확하게 (Linear는 hemisphere 조명과 만나면 거의 뭉개진다 — BUILD 183 교훈)
+  tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
   return tex;
 }
@@ -71,7 +71,7 @@ const ORIGINAL_MATERIALS = new WeakMap<THREE.Mesh, THREE.Material | THREE.Materi
 const OUTLINE_SHELLS = new WeakMap<THREE.Object3D, THREE.Object3D[]>();
 
 export function applyToonShading(root: THREE.Object3D, options: ToonOptions = {}): void {
-  const { steps = 4, softness = 0.35, saturationBoost = 1.12 } = options;
+  const { steps = 3, softness = 0.15, saturationBoost = 1.12 } = options;
   const gradientMap = createToonGradientMap(steps, softness);
 
   root.traverse((child) => {
@@ -157,7 +157,7 @@ export function addInkOutline(root: THREE.Object3D, options: OutlineOptions = {}
           `#include <begin_vertex>
            float n = inkNoise(floor(position * 40.0)) - 0.5;
            float t = uThickness * (1.0 + n * uIrregularity);
-           transformed += normalize(objectNormal) * t;`
+           transformed += normalize(normal) * t; // objectNormal 금지: BasicMaterial엔 normal 청크가 없다 (BUILD 183 교훈)`
         );
     };
 
