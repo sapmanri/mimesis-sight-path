@@ -335,13 +335,18 @@
    "mount": {
     "enabled": true,
     "kind": "cloud"
+   },
+   "pet": {
+    "enabled": true,
+    "kind": "cat4"
    }
   },
   "weather": {
    "kind": "snow",
    "rainAmount": 0.55,
    "cloudAmount": 0.7,
-   "time": "day"
+   "time": "day",
+   "wind": 0.45
   },
   "generators": {
    "landscape": false,

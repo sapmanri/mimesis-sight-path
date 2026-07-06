@@ -73,6 +73,8 @@ export type WorldSpec = {
   /** BUILD 107→108: 날씨 다이얼 — 종류에 더해 세기·번개·구름 양·태양까지 손댈 수 있다. */
   weather?: {
     kind: 'clear' | 'cloudy' | 'rain' | 'snow';
+    /** BUILD 141: 바람 0~1 — 하늘 구름이 흐른다. 센 날은 빠르게 */
+    wind?: number;
     /** 강수 세기 0~1 (기본 0.6) — 비의 빗줄기, 눈의 눈발이 공유한다 (BUILD 120) */
     rainAmount?: number;
     /** 번개 (비일 때만) */
@@ -220,6 +222,8 @@ export type WorldSpec = {
     lantern?: boolean;
     /** BUILD 136: 탈것 — 뷰어에 ☁️ 버튼이 뜨고, 누르면 연기 펑 하며 구름에 올라탄다 */
     mount?: { enabled?: boolean; kind?: 'cloud' | 'broom' };
+    /** BUILD 141: 펫 — 캐릭터 곁을 알아서 놀며 따라다닌다. 탈것 소환 시 함께 탄다 */
+    pet?: { enabled?: boolean; kind?: string };
   };
 };
 

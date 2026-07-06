@@ -17,7 +17,7 @@
   "fantasy": "🌌 Fantasy",
   "theme-kits": "🎬 Theme Kits"
  },
- "assetCount": 178,
+ "assetCount": 180,
  "totalBytes": 2667920289,
  "items": [
   {
@@ -2381,6 +2381,30 @@
    "status": "raw",
    "productionRef": null,
    "notes": "클러스터 3개가 원점에서 흩어진 구조 — 탑승 구름은 makeCloudPuff 프로시저럴로 대체. 대형 구름 프롭 후보로 보류",
+   "catalogIds": []
+  },
+  {
+   "id": "pets_mini_pack",
+   "sourceFile": "uploads_files_7265868_Pets_Mini_glb.zip",
+   "release": "assets-v4-pending",
+   "sizeBytes": null,
+   "category": "ambient_life",
+   "subcategory": "pets",
+   "status": "in_production",
+   "productionRef": "pets",
+   "notes": "BUILD 141 기상. 고양이4+포메2+닥스+래브라도 8종 채용(각 Idle/Walk/Run/Sit+재롱). 도베르만·바리에이션·사료/장난감/집 소품은 보류. 원본 3종(zip) assets-v4 업로드 대기",
+   "catalogIds": []
+  },
+  {
+   "id": "broom_01",
+   "sourceFile": "broomv2_DEMO_fbx.zip",
+   "release": "assets-v4-pending",
+   "sizeBytes": null,
+   "category": "props",
+   "subcategory": "mount",
+   "status": "in_production",
+   "productionRef": "broom",
+   "notes": "BUILD 141 기상 — 탈것 전용(카탈로그 미등재). Fbx_Broom은 bbox 붕괴, 1068298 GLB는 74MB 과체중으로 보류",
    "catalogIds": []
   }
  ]

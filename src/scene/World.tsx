@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
 import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE } from '../engine/worldCore';
+import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
@@ -288,6 +289,48 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     g.visible = false;
     return g;
   }, []);
+  // BUILD 141: 빗자루 탈것 — 구름과 같은 문법, 다른 몸
+  const broomMount = useMemo(() => { const g = new THREE.Group(); g.visible = false; return g; }, []);
+  useEffect(() => {
+    if ((spec.walker.mount?.kind ?? 'cloud') !== 'broom' || broomMount.children.length) return;
+    let alive = true;
+    loadKitModel('broom', defaultLoader).then((obj) => {
+      if (!alive) return;
+      const box = new THREE.Box3().setFromObject(obj);
+      const c = box.getCenter(new THREE.Vector3());
+      obj.position.x -= c.x; obj.position.z -= c.z; obj.position.y -= c.y; // 자루 중심으로
+      broomMount.add(obj);
+    }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.walker.mount?.kind]);
+  // BUILD 141: 펫 — 곁을 알아서 노는 동반자
+  const petRoot = useMemo(() => new THREE.Group(), []);
+  const pet = useRef<(LoadedPet & { cur: THREE.AnimationAction | null; mode: string; goal: THREE.Vector3; timer: number }) | null>(null);
+  useEffect(() => {
+    const kind = spec.walker.pet?.enabled ? (spec.walker.pet?.kind ?? 'cat1') : null;
+    petRoot.clear();
+    pet.current = null;
+    if (!kind) return;
+    const def = PET_ROSTER.find((d) => d.id === kind) ?? PET_ROSTER[0];
+    let alive = true;
+    loadPet(def).then((lp) => {
+      if (!alive) return;
+      pet.current = { ...lp, cur: null, mode: 'wander', goal: new THREE.Vector3(), timer: 0.5 };
+      if (walkerPos.current) lp.group.position.copy(walkerPos.current).add(new THREE.Vector3(0.4, 0, 0.3));
+      petRoot.add(lp.group);
+    }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.walker.pet?.enabled, spec.walker.pet?.kind]);
+  /** 펫 클립 전환 — 0.25초 페이드 */
+  const petPlay = (a: THREE.AnimationAction | null) => {
+    const P = pet.current;
+    if (!P || !a || P.cur === a) return;
+    a.reset().fadeIn(0.25).play();
+    P.cur?.fadeOut(0.25);
+    P.cur = a;
+  };
   const poofRoot = useMemo(() => new THREE.Group(), []);
   const poofs = useRef<{ grp: THREE.Group; t: number }[]>([]);
   const spawnPoof = (at: THREE.Vector3) => {
@@ -308,8 +351,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     if (ridingRef.current === on) return;
     ridingRef.current = on;
     rigRef.current?.setRiding?.(on);
-    cloudMount.visible = on;
-    babyCloud.visible = on;
+    const kindNow = spec.walker.mount?.kind ?? 'cloud'; // BUILD 141
+    cloudMount.visible = on && kindNow === 'cloud';
+    broomMount.visible = on && kindNow === 'broom';
+    babyCloud.visible = on && kindNow === 'cloud';
     if (on && walkerPos.current) babyCloud.position.copy(walkerPos.current).add(new THREE.Vector3(0.4, 0.4, 0));
     if (walkerPos.current) spawnPoof(walkerPos.current); // 연기 펑 — 전환의 어색함을 가린다
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -716,6 +761,17 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         walker.position.z + Math.cos(tt * 0.61) * 0.02,
       );
       cloudMount.rotation.y += delta * 0.12;
+    }
+    // BUILD 141: 빗자루 — 골반 아래, 진행 방향으로 자루를 눕힌다
+    if (broomMount.visible) {
+      let by = walker.position.y + (rigRef.current?.rideSeat?.() ?? 0) - 0.05;
+      if (hipsRef.current) { hipsRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.14; }
+      broomMount.position.set(walker.position.x, by, walker.position.z);
+      broomMount.rotation.y = charYaw.current;
+      broomMount.rotation.z = Math.sin(clock.elapsedTime * 1.1) * 0.03;
+    }
+    if (cloudMount.visible || broomMount.visible) {
+      const tt = clock.elapsedTime;
       // 아기: 오른쪽 옆 0.42u를 스프링으로 따라온다 — 늦게 출발하고 부드럽게 도착
       const side = new THREE.Vector3(Math.cos(charYaw.current), 0, -Math.sin(charYaw.current));
       const target = walker.position.clone()
@@ -723,6 +779,77 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         .add(new THREE.Vector3(0, -0.02 + Math.sin(tt * 1.1 + 3) * 0.035, 0));
       babyCloud.position.lerp(target, Math.min(1, delta * 2.5));
       babyCloud.rotation.y += delta * 0.2;
+    }
+    // BUILD 141: 펫 — 지상에선 알아서 놀고, 탈것 위에선 함께 탄다
+    {
+      const P = pet.current;
+      if (P) {
+        P.mixer.update(delta);
+        const wp = walkerPos.current;
+        if (ridingRef.current) {
+          const kindR = spec.walker.mount?.kind ?? 'cloud';
+          if (kindR === 'broom') {
+            const fx = Math.sin(charYaw.current); const fz = Math.cos(charYaw.current);
+            P.group.position.set(walker.position.x + fx * 0.32, broomMount.position.y + 0.03, walker.position.z + fz * 0.32);
+          } else {
+            P.group.position.set(babyCloud.position.x, babyCloud.position.y + 0.045, babyCloud.position.z);
+          }
+          P.group.rotation.y = charYaw.current;
+          petPlay(P.sit ?? P.idle);
+        } else if (wp) {
+          P.timer -= delta;
+          const dx0 = wp.x - P.group.position.x; const dz0 = wp.z - P.group.position.z;
+          const dW = Math.hypot(dx0, dz0);
+          if (dW > 1.8 && P.mode !== 'chase') { P.mode = 'chase'; P.goal.set(wp.x, 0, wp.z); P.timer = 1.2; }
+          if (P.timer <= 0) {
+            P.timer = 2 + Math.random() * 3;
+            const r = Math.random();
+            if (r < 0.5) { // 어슬렁 — 걷는 사람 근처 아무 데나
+              P.mode = 'wander';
+              const a = Math.random() * Math.PI * 2; const rr = 0.35 + Math.random() * 0.85;
+              P.goal.set(wp.x + Math.cos(a) * rr, 0, wp.z + Math.sin(a) * rr);
+            } else if (r < 0.78) { // 곁으로
+              P.mode = 'chase'; P.goal.set(wp.x - Math.sin(charYaw.current) * 0.45, 0, wp.z - Math.cos(charYaw.current) * 0.45);
+            } else if (P.tricks.length) { // 재롱 한 번
+              P.mode = 'trick';
+              const t0 = P.tricks[Math.floor(Math.random() * P.tricks.length)];
+              t0.reset().fadeIn(0.2).play();
+              P.cur?.fadeOut(0.2);
+              P.cur = t0;
+              P.timer = (t0.getClip().duration ?? 1.5) + 0.2;
+            } else { P.mode = 'idle'; }
+          }
+          if (P.mode !== 'trick') {
+            const gx = P.goal.x - P.group.position.x; const gz = P.goal.z - P.group.position.z;
+            const gd = Math.hypot(gx, gz);
+            if (gd > 0.1) {
+              const running = P.mode === 'chase' && dW > 1.1;
+              const spd = running ? 1.35 : 0.5;
+              P.group.position.x += (gx / gd) * spd * delta;
+              P.group.position.z += (gz / gd) * spd * delta;
+              const wantYaw = Math.atan2(gx, gz);
+              let dy = wantYaw - P.group.rotation.y;
+              while (dy > Math.PI) dy -= Math.PI * 2;
+              while (dy < -Math.PI) dy += Math.PI * 2;
+              P.group.rotation.y += dy * Math.min(1, delta * 7);
+              petPlay(running ? (P.run ?? P.walk) : (P.walk ?? P.idle));
+            } else {
+              petPlay(P.idle);
+            }
+          }
+          P.group.position.y = wp.y; // 길의 높이를 따른다
+        }
+      }
+    }
+    // BUILD 141: 바람 — 하늘 구름이 흐른다. 센 날은 빠르게
+    {
+      const wind = spec.weather?.wind ?? 0;
+      if (wind > 0 && world.clouds?.length) {
+        for (const c of world.clouds) {
+          c.position.x += (0.25 + 0.75 * (c.userData.drift ?? 0.5)) * wind * delta * 1.6;
+          if (c.position.x > 70) c.position.x = -70;
+        }
+      }
     }
     // 연기 펑 — 0.6초 살고 사라진다
     for (let i = poofs.current.length - 1; i >= 0; i -= 1) {
@@ -909,6 +1036,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       {snow && <primitive object={snow.points} />}
       <primitive object={cloudMount} />
       <primitive object={babyCloud} />
+      <primitive object={broomMount} />
+      <primitive object={petRoot} />
       <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}
       <primitive

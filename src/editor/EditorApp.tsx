@@ -16,6 +16,7 @@ import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
 import { JEJU_SPEC, WORLD_PIPELINE, isGeneratorEnabled, type WorldSpec } from '../engine/worldSpec';
 import { THEME_KITS, applyThemeEnv, expandThemeSets } from '../engine/themeKits';
 import { ROAD_MATERIALS, WALKER_ROSTER } from '../engine/worldCore';
+import { PET_ROSTER } from '../engine/pets';
 import type { RoadMaterialId } from '../engine/worldSpec';
 import { jejuBlueprints } from '../data/jeju';
 
@@ -837,6 +838,10 @@ export function EditorApp() {
                   <option value="snow">눈</option>
                 </select>
               </label>
+              <label>바람 <em>{Math.round((doc.spec.weather?.wind ?? 0) * 100)}%{(doc.spec.weather?.wind ?? 0) === 0 ? ' (구름이 멈춰 있다)' : ''}</em>
+                <input type="range" min="0" max="1" step="0.05" value={doc.spec.weather?.wind ?? 0}
+                  onChange={(e) => edit((d) => { d.spec.weather = { ...(d.spec.weather ?? { kind: 'clear' }), wind: Number(e.target.value) }; })} />
+              </label>
               <label>구름 양 <em>{Math.round((doc.spec.weather?.cloudAmount ?? 0.5) * 100)}%</em>
                 <input type="range" min="0" max="1" step="0.05" value={doc.spec.weather?.cloudAmount ?? 0.5}
                   onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), cloudAmount: Number(e.target.value) }; })} />
@@ -922,6 +927,18 @@ export function EditorApp() {
               <label>뛰기 속도 <em>{doc.spec.walker.runSpeed.toFixed(2)} u/s</em>
                 <input type="range" min="1.0" max="2.6" step="0.02" value={doc.spec.walker.runSpeed} onChange={(e) => edit((d) => { d.spec.walker.runSpeed = Number(e.target.value); })} />
               </label>
+              <h4>펫 (BUILD 141) — 곁을 알아서 노는 동반자</h4>
+              <label className="ed-check">
+                <input type="checkbox" checked={doc.spec.walker.pet?.enabled ?? false}
+                  onChange={(e) => edit((d) => { d.spec.walker.pet = { ...(d.spec.walker.pet ?? {}), enabled: e.target.checked, kind: d.spec.walker.pet?.kind ?? 'cat1' }; })} />
+                펫 데리고 다니기 — 근처를 어슬렁대다 재롱도 부린다. 탈것 소환 시 함께 탄다
+              </label>
+              <label>누구를
+                <select value={doc.spec.walker.pet?.kind ?? 'cat1'}
+                  onChange={(e) => edit((d) => { d.spec.walker.pet = { ...(d.spec.walker.pet ?? { enabled: false }), kind: e.target.value }; })}>
+                  {PET_ROSTER.map((pd) => <option key={pd.id} value={pd.id}>{pd.label}</option>)}
+                </select>
+              </label>
               <h4>탈것 (BUILD 136)</h4>
               <label className="ed-check">
                 <input type="checkbox" checked={doc.spec.walker.mount?.enabled ?? false}
@@ -932,7 +949,7 @@ export function EditorApp() {
                 <select value={doc.spec.walker.mount?.kind ?? 'cloud'}
                   onChange={(e) => edit((d) => { d.spec.walker.mount = { ...(d.spec.walker.mount ?? { enabled: false }), kind: e.target.value as 'cloud' | 'broom' }; })}>
                   <option value="cloud">☁️ 구름 (뛰기 속도로 흐른다)</option>
-                  <option value="broom" disabled>🧹 마법 빗자루 — 예정</option>
+                  <option value="broom">🧹 마법 빗자루 (자루가 진행 방향을 향한다)</option>
                 </select>
               </label>
               <label className="ed-check">

@@ -71,6 +71,8 @@ export type BuiltWorld = {
   progressToT: (progress: number) => number;
   /** 모든 실물 모델 로드/배치 완료 시점 (실패해도 resolve — 프록시 폴백 유지) */
   ready: Promise<void>;
+  /** BUILD 141: 바람에 흐르는 하늘 구름들 */
+  clouds: THREE.Object3D[];
 };
 
 
@@ -320,6 +322,7 @@ export const MODELS: Record<string, ModelSpec> = {
   signallight: { file: 'SignalLight.glb', height: 0.9, tint: '#5a5f5c' },
   railsection: { file: 'RailSection.glb', height: 2.4, tint: '#6b665e', fitMaxDim: true }, // 12u 길이가 지배 축
   windturbine: { file: 'Eolic.glb', height: 4.2, tint: '#c8cdd1' }, // BUILD 136: 부유섬 받침 포함 (Vase 업로드 eolic_OBJ)
+  broom: { file: 'Broom.glb', height: 0.85, tint: '#7a5a3a', fitMaxDim: true }, // BUILD 141: 마법 빗자루 — +Z 장축 0.9
 };
 
 // ---------- BUILD 093: WALKER ROSTER ----------
@@ -713,7 +716,7 @@ export function buildWorld(
   // [landscape] 원경 — 닿을 수 없는 기억
   const distant = on('landscape')
     ? buildDistantWorld(spec.weather?.kind ?? 'clear', spec.weather?.cloudAmount ?? 0.5)
-    : { group: new THREE.Group(), lighthouseSlot: new THREE.Group() };
+    : { group: new THREE.Group(), lighthouseSlot: new THREE.Group(), clouds: [] as THREE.Object3D[] };
   if (on('landscape')) group.add(distant.group);
 
   // [assets] 실물 GLB 비동기 투입 (BUILD 075). 끄면 프록시만 남는 고속 프리뷰.
@@ -756,7 +759,7 @@ export function buildWorld(
 
   const fogColor = new THREE.Color(PALETTE.fog).lerp(new THREE.Color('#48545c'), wGray);
   if (night) fogColor.lerp(new THREE.Color('#0d1420'), 0.75); // BUILD 115: 밤하늘·밤안개
-  return { group, curve, anchors, sun, fogColor, progressToT, ready: ready as Promise<void> };
+  return { group, curve, anchors, sun, fogColor, progressToT, ready: ready as Promise<void> , clouds: distant.clouds };
 }
 
 async function attachModels(
@@ -1742,7 +1745,7 @@ export function createWalkerFigure() {
 }
 
 // ---------- distant world: 닿을 수 없는 기억 ----------
-function buildDistantWorld(wKindD: string = 'clear', cloudAmt: number = 0.5, ): { group: THREE.Group; lighthouseSlot: THREE.Group } {
+function buildDistantWorld(wKindD: string = 'clear', cloudAmt: number = 0.5, ): { group: THREE.Group; lighthouseSlot: THREE.Group; clouds: THREE.Object3D[] } {
   const g = new THREE.Group();
   const lighthouseSlot = new THREE.Group();
   const rnd = worldRng(9010);
@@ -1758,10 +1761,13 @@ function buildDistantWorld(wKindD: string = 'clear', cloudAmt: number = 0.5, ): 
   // BUILD 100: 구름 재탄생 — 알파 막이 아니라 덩어리. 눌린 다면체 뭉치의 뭉게구름.
   const stormy = wKindD !== 'clear';
   const puffN = Math.round((stormy ? 8 : 4) + cloudAmt * (stormy ? 14 : 10));
+  const clouds: THREE.Object3D[] = []; // BUILD 141: 바람이 밀 구름들
   for (let i = 0; i < puffN; i += 1) {
     const c = makeCloudPuff(rnd, (stormy ? 2.2 : 1.6) + rnd() * 2.6, stormy ? (wKindD === 'rain' ? '#59646b' : '#8b959a') : undefined);
     c.position.set((rnd() - 0.5) * 46, (stormy ? 3 : 4) + rnd() * (stormy ? 6 : 8), -24 - rnd() * 42);
+    c.userData.drift = 0.4 + rnd() * 0.6; // 구름마다 제 속도
     g.add(c);
+    clouds.push(c);
   }
 
   {
@@ -1778,5 +1784,5 @@ function buildDistantWorld(wKindD: string = 'clear', cloudAmt: number = 0.5, ): 
     g.add(new THREE.Points(geo, mat));
   }
 
-  return { group: g, lighthouseSlot };
+  return { group: g, lighthouseSlot, clouds };
 }
