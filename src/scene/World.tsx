@@ -497,7 +497,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const campRest = useRef<null | { until: number; fire: THREE.Vector3 }>(null);
   const fireSync = useRef(0);
   const campfireProto = useRef<Promise<THREE.Group> | null>(null);
-  const WAY_POOL = ['stone11', 'rock3', 'suitcase', 'lamp', 'snowman', 'phonebooth'] as const; // BUILD 169: 들길의 빨간 전화부스
+  const WAY_POOL = ['stone11', 'rock3', 'suitcase', 'lamp', 'snowman', 'phonebooth', 'deer', 'boar', 'deer'] as const; // BUILD 171: 동물 합류 — 사슴은 두 번 (자주 보고 싶으니)
+  const WAY_ANIMALS = new Set(['deer', 'boar', 'wolf']);
   const loadCampfire = () => {
     if (!campfireProto.current) {
       campfireProto.current = defaultLoader('CampfireSet.glb').then((gltf) => {
@@ -524,6 +525,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     const side = Math.random() < 0.5 ? 1 : -1;
     const grp = new THREE.Group();
     grp.position.copy(p).addScaledVector(nor, side * (kind === 'campfire' ? 0.78 : 0.6 + Math.random() * 0.45));
+    // (동물이면 아래 로드 시점에 조금 더 물러선다 — 야생의 거리)
     grp.rotation.y = Math.random() * Math.PI * 2;
     waysideRoot.add(grp);
     const spot: WaySpot = { grp, prog, kind };
@@ -565,6 +567,12 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       });
     } else {
       const key = WAY_POOL[Math.floor(Math.random() * WAY_POOL.length)];
+      if (WAY_ANIMALS.has(key)) {
+        const t2 = world.progressToT(prog);
+        const nor2 = new THREE.Vector3(-world.curve.getTangent(t2).z, 0, world.curve.getTangent(t2).x).setY(0);
+        grp.position.addScaledVector(nor2.normalize(), (Math.random() < 0.5 ? 1 : -1) * (0.35 + Math.random() * 0.5)); // 야생의 거리
+        grp.rotation.y = Math.random() * Math.PI * 2;
+      }
       void loadKitModel(key, defaultLoader).then((obj) => { enforceFog(obj); grp.add(obj); }).catch(() => {});
     }
   };
@@ -1343,6 +1351,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           mailRest.current = null;
           onMail?.(null);
           rigRef.current?.stopInspect();
+          if (!stroll) lastWant.current = null; // BUILD 171: 배달 후에도 여정은 계속된다
         }
       } else if (!campRest.current && walkerPos.current) {
         for (const ms of mailSpots.current) {
@@ -1361,8 +1370,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         }
       }
     }
-    // BUILD 168: 길가의 우연 — 스트리밍 (산책 중에만)
-    if (stroll) {
+    // BUILD 171: 길가의 우연 승격 — 순환로에선 모드 불문 (사람만 승격시키고 세간살이를 두고 왔었다)
+    if (stroll || loopPath) {
       const walkerDir2 = (loopPath ? 1 : strollDir.current) as 1 | -1;
       // 생성: 앞 안개 너머(22u)에, 동시 2~3곳 유지
       wayIn.current -= delta;
@@ -1423,6 +1432,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         } else {
           campRest.current = null;
           rigRef.current?.stopInspect();
+          if (!stroll) lastWant.current = null; // BUILD 171: 자동 모드 — 멈췄던 여정을 다시 편성한다 (안 하면 영영 선다)
         }
       }
     } else {
@@ -1475,7 +1485,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         if (gone || offEnds) {
           passerRoot.remove(PS.group);
           passer.current = null;
-          passerIn.current = 90 + Math.random() * 130; // 다음 인연은 1.5~3.5분 뒤
+          passerIn.current = 45 + Math.random() * 65; // BUILD 171: 다음 인연은 1~2분 안쪽 — 길이 덜 외롭게
         }
       }
     } else if (passer.current) { // 순환도 산책도 아니면 인연을 접는다
