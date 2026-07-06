@@ -265,6 +265,10 @@ type ModelSpec = {
 };
 
 // BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
+// BUILD 179: 돌 격리 실험 (Vase 제안 — 바이섹션) — 전부 끄고 0을 확인한 뒤, 한 그룹씩 복귀시켜 범인을 특정한다.
+// glb: rockSpots(rock0/3/7·caveA/B) / pebbles: 잔자갈 인스턴서(lip·frag·peb) / (스트리밍 풀은 World.tsx WAY_POOL)
+export const ROCK_GROUPS = { glb: false, pebbles: false };
+
 export const ROAD_MATERIALS: Record<RoadMaterialId, { label: string; top?: string; edge?: string }> = {
   sand: { label: '모랫길' },
   asphalt: { label: '아스팔트', top: '#4d5052', edge: '#404346' },
@@ -719,7 +723,7 @@ export function buildWorld(
 
   // [decoration] 바위 산란 지점: 절벽 모서리(rim)와 벽면(face)
   const rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[] = [];
-  if (on('decoration')) {
+  if (on('decoration') && ROCK_GROUPS.glb) { // BUILD 179: 격리 실험
     const rrnd = worldRng(6612);
     for (let k = 0; k < SPEC.decoration.rockCount; k += 1) {
       const i = Math.floor(rrnd() * frames.length);
@@ -1513,7 +1517,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
 
     // 턱 부스러기: 가장자리에 걸치거나 반쯤 흘러내린 조각
     const lipCount = Math.min(80, Math.floor(frames.length / 5));
-    const lip = mkInst(lipCount, '#' + cSandEdge.getHexString()); // BUILD 124: 소재를 따른다
+    const lip = mkInst(ROCK_GROUPS.pebbles ? lipCount : 0, '#' + cSandEdge.getHexString()); // BUILD 179: 격리
     for (let k = 0; k < lipCount; k += 1) {
       const i = Math.floor((k / lipCount) * (frames.length - 1) + noise1(k * 3.7) * 5);
       const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
@@ -1530,7 +1534,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
 
     // 부유 파편: 떨어져 나가 아직 허공에 머무는 돌 (공중섬의 문법)
     const fragCount = Math.min(40, Math.floor(frames.length / 10));
-    const frag = mkInst(fragCount, PALETTE.cliffHigh);
+    const frag = mkInst(ROCK_GROUPS.pebbles ? fragCount : 0, PALETTE.cliffHigh); // BUILD 179: 격리
     for (let k = 0; k < fragCount; k += 1) {
       const i = Math.floor((k / fragCount) * (frames.length - 1) + noise1(k * 7.7) * 9);
       const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
@@ -1546,7 +1550,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
 
     // 잔자갈: 가장자리로 갈수록 빽빽하게 (밀도 곡선 = 1 - rnd*rnd)
     const pebCount = Math.min(280, frames.length * 2);
-    const peb = mkInst(pebCount, '#' + cSandEdge.getHexString(), 1.0); // BUILD 124
+    const peb = mkInst(ROCK_GROUPS.pebbles ? pebCount : 0, '#' + cSandEdge.getHexString(), 1.0); // BUILD 179: 격리
     for (let k = 0; k < pebCount; k += 1) {
       const i = Math.floor(Math.abs(noise1(k * 1.7)) * (frames.length - 1));
       const f = frames[i];

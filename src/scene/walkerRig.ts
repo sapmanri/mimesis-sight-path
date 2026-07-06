@@ -304,7 +304,7 @@ export function createClipRig(
           chair = chairAsset;
           root.parent.add(chair);
         }
-        chair.position.set(0, 0, 0.05); // BUILD 177: 의자가 작아졌으니 좌면을 엉덩이 밑으로 당긴다 (-0.06은 큰 의자 시절의 값)
+        chair.position.set(0, 0, 0.18); // BUILD 179: 실측 재보정 — 스샷 기준 좌면이 엉덩이보다 0.15 뒤였다
         chair.rotation.set(0, 0, 0);
         chair.scale.setScalar(0.001);
         chair.visible = true;
@@ -361,11 +361,7 @@ export function createClipRig(
       }
       mixer.update(dt);
       if (headBone && lookYaw !== 0) headBone.rotation.y += lookYaw; // BUILD 146: 믹서가 쓴 위에 두리번을 얹는다
-      // BUILD 178: 고도 자가치유 — 앉기 침하(0.26u)의 복원이 전환 사고로 끊기면 몸이 떠 버린다.
-      // 제스처도 의자도 탈것도 없을 때, 몸의 기준 고도는 언제나 baseY로 스며 돌아온다
-      if (!riding && gesture === 'none' && chairPhase === 'none' && Math.abs(root.position.y - baseY) > 0.001) {
-        root.position.y += (baseY - root.position.y) * Math.min(1, dt * 2.2);
-      }
+      // BUILD 179: 178의 워치독 철회 — 리그는 이미 매 프레임 y를 합성한다(root.y = baseY + groundCorr - sitSink)
 
       // 앉기 침하: 앉는 동안 0.26u 가라앉고, 일어나면 같은 호흡으로 떠오른다
       // 마법 의자 등장/퇴장: 살짝 튀어올랐다 자리잡는 팝 (0.45s), 사라질 땐 빨려들 듯 (0.28s)
