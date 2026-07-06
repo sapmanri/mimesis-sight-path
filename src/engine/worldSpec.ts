@@ -69,8 +69,8 @@ export type WorldPalette = {
 export type WorldSpec = {
   /** BUILD 107→108: 날씨 다이얼 — 종류에 더해 세기·번개·구름 양·태양까지 손댈 수 있다. */
   weather?: {
-    kind: 'clear' | 'cloudy' | 'rain';
-    /** 빗줄기 세기 0~1 (기본 0.6) */
+    kind: 'clear' | 'cloudy' | 'rain' | 'snow';
+    /** 강수 세기 0~1 (기본 0.6) — 비의 빗줄기, 눈의 눈발이 공유한다 (BUILD 120) */
     rainAmount?: number;
     /** 번개 (비일 때만) */
     lightning?: boolean;

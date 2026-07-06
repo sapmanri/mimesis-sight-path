@@ -130,6 +130,31 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec.weather?.kind, spec.weather?.rainAmount]);
 
+  // BUILD 120: 눈발 — 비의 문법을 물려받되, 서두르지 않는다. 떨어지며 좌우로 흔들린다.
+  const snow = useMemo(() => {
+    if (spec.weather?.kind !== 'snow') return null;
+    const N = Math.round(300 + (spec.weather?.rainAmount ?? 0.6) * 1300);
+    const pos = new Float32Array(N * 3);
+    const flakes = new Float32Array(N * 5); // x,y,z,speed,swayPhase
+    for (let i = 0; i < N; i += 1) {
+      flakes[i * 5] = (Math.random() - 0.5) * 26;
+      flakes[i * 5 + 1] = Math.random() * 14;
+      flakes[i * 5 + 2] = (Math.random() - 0.5) * 26;
+      flakes[i * 5 + 3] = 0.55 + Math.random() * 0.6; // 비(7~11)의 1/10 — 눈은 천천히 온다
+      flakes[i * 5 + 4] = Math.random() * Math.PI * 2;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: '#eef2f5', size: 0.055, sizeAttenuation: true,
+      transparent: true, opacity: 0.85, depthWrite: false,
+    });
+    const points = new THREE.Points(geo, mat);
+    points.frustumCulled = false;
+    return { points, flakes, N };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec.weather?.kind, spec.weather?.rainAmount]);
+
   // BUILD 100: 배치물 — 문서의 props를 3D로. id+obj+seed가 같으면 재사용 없이 단순 재생성(에디터 디바운스가 폭주를 막는다).
   // BUILD 109: 로밍 — 애니메이션 있는 배치물은 길을 따라 제멋대로 왔다갔다 한다.
   const propsGroup = useMemo(() => new THREE.Group(), []);
@@ -679,6 +704,27 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       rain.lines.geometry.attributes.position.needsUpdate = true;
     }
 
+    // 눈발: 천천히 내리고, 바람에 흔들리고, 바닥에 닿으면 다시 하늘로 (사람을 따라다니는 26u 상자)
+    if (snow) {
+      const arr = snow.points.geometry.attributes.position.array as Float32Array;
+      const F = snow.flakes;
+      const t = clock.elapsedTime;
+      for (let i = 0; i < snow.N; i += 1) {
+        F[i * 5 + 1] -= F[i * 5 + 3] * delta;
+        F[i * 5] += Math.sin(t * 0.7 + F[i * 5 + 4]) * 0.32 * delta;
+        F[i * 5 + 2] += Math.cos(t * 0.55 + F[i * 5 + 4] * 1.3) * 0.22 * delta;
+        if (F[i * 5 + 1] < -1.5) {
+          F[i * 5] = (Math.random() - 0.5) * 26;
+          F[i * 5 + 1] = 12 + Math.random() * 3;
+          F[i * 5 + 2] = (Math.random() - 0.5) * 26;
+        }
+        arr[i * 3] = pos.x + F[i * 5];
+        arr[i * 3 + 1] = pos.y + F[i * 5 + 1];
+        arr[i * 3 + 2] = pos.z + F[i * 5 + 2];
+      }
+      snow.points.geometry.attributes.position.needsUpdate = true;
+    }
+
     // BUILD 117: 등불 진자 — 뼈의 회전을 상쇄해 늘 곧게 매달린다
     if (lanternRef.current && lanternRef.current.parent) {
       const q = new THREE.Quaternion();
@@ -744,8 +790,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   return (
     <>
       <color attach="background" args={[world.fogColor]} />
-      <fog attach="fog" args={[world.fogColor, spec.weather?.kind === 'rain' ? 9 : 12, spec.weather?.kind === 'rain' ? 44 : 58]} />
+      <fog attach="fog" args={[world.fogColor, spec.weather?.kind === 'rain' ? 9 : spec.weather?.kind === 'snow' ? 10 : 12, spec.weather?.kind === 'rain' ? 44 : spec.weather?.kind === 'snow' ? 50 : 58]} />
       {rain && <primitive object={rain.lines} />}
+      {snow && <primitive object={snow.points} />}
       {lightning && <primitive object={lightning.flash} />}
       <primitive
         object={world.group}

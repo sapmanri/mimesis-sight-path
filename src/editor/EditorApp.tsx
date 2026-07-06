@@ -646,28 +646,29 @@ export function EditorApp() {
               <label>하늘
                 <select
                   value={doc.spec.weather?.kind ?? 'clear'}
-                  onChange={(e) => edit((d) => { d.spec.weather = { ...(d.spec.weather ?? {}), kind: e.target.value as 'clear' | 'cloudy' | 'rain' }; })}
+                  onChange={(e) => edit((d) => { d.spec.weather = { ...(d.spec.weather ?? {}), kind: e.target.value as 'clear' | 'cloudy' | 'rain' | 'snow' }; })}
                 >
                   <option value="clear">맑음</option>
                   <option value="cloudy">흐림</option>
                   <option value="rain">비</option>
+                  <option value="snow">눈</option>
                 </select>
               </label>
               <label>구름 양 <em>{Math.round((doc.spec.weather?.cloudAmount ?? 0.5) * 100)}%</em>
                 <input type="range" min="0" max="1" step="0.05" value={doc.spec.weather?.cloudAmount ?? 0.5}
                   onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), cloudAmount: Number(e.target.value) }; })} />
               </label>
-              {(doc.spec.weather?.kind ?? 'clear') === 'rain' && (
+              {((doc.spec.weather?.kind ?? 'clear') === 'rain' || doc.spec.weather?.kind === 'snow') && (
                 <>
-                  <label>빗줄기 세기 <em>{Math.round((doc.spec.weather?.rainAmount ?? 0.6) * 100)}%</em>
+                  <label>{doc.spec.weather?.kind === 'snow' ? '눈발 세기' : '빗줄기 세기'} <em>{Math.round((doc.spec.weather?.rainAmount ?? 0.6) * 100)}%</em>
                     <input type="range" min="0.05" max="1" step="0.05" value={doc.spec.weather?.rainAmount ?? 0.6}
                       onChange={(e) => edit((d) => { d.spec.weather = { kind: 'rain', ...(d.spec.weather ?? {}), rainAmount: Number(e.target.value) }; })} />
                   </label>
-                  <label className="ed-check">
+                  {doc.spec.weather?.kind === 'rain' && (<label className="ed-check">
                     <input type="checkbox" checked={doc.spec.weather?.lightning ?? false}
                       onChange={(e) => edit((d) => { d.spec.weather = { kind: 'rain', ...(d.spec.weather ?? {}), lightning: e.target.checked }; })} />
                     번개
-                  </label>
+                  </label>)}
                 </>
               )}
               <h4>시간</h4>
