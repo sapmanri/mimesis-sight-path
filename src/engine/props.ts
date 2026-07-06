@@ -327,7 +327,9 @@ export function expandPropSet(set: PropSet, cx: number, cy: number, cz: number, 
     const sc = pc.scale ? pc.scale[0] + rnd() * (pc.scale[1] - pc.scale[0]) : 1;
     const isMoon = pc.obj === 'moon';
     return {
-      id: 'p' + Date.now().toString(36) + i.toString(36),
+      // BUILD 130: id에 seed+난수 — 같은 밀리초에 세트 여러 개가 확장돼도(테마!) 절대 충돌하지 않는다.
+      // Date.now()+i만 쓰던 시절, 테마의 세트 3개가 한 틱에 태어나 쌍둥이 id를 낳았다 → React 중복 키 → 지워지지 않는 유령.
+      id: 'p' + Date.now().toString(36) + i.toString(36) + (seed % 1296).toString(36) + Math.floor(Math.random() * 1296).toString(36),
       obj: pc.obj,
       position: [
         +(cx + pc.dx + (rnd() - 0.5) * 2 * j).toFixed(2),

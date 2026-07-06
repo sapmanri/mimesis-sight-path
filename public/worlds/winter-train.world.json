@@ -337,6 +337,11 @@
    "rainAmount": 0.55,
    "cloudAmount": 0.7,
    "time": "day"
+  },
+  "generators": {
+   "landscape": false,
+   "assets": false,
+   "decoration": false
   }
  }
 }

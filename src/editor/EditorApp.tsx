@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { World } from '../scene/World';
 import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, ANIMATED_PROPS, PROP_SETS, expandPropSet, type PlacedProp } from '../engine/props';
 import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
-import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
+import { JEJU_SPEC, WORLD_PIPELINE, isGeneratorEnabled, type WorldSpec } from '../engine/worldSpec';
 import { THEME_KITS, applyThemeEnv, expandThemeSets } from '../engine/themeKits';
 import { ROAD_MATERIALS, WALKER_ROSTER } from '../engine/worldCore';
 import type { RoadMaterialId } from '../engine/worldSpec';
@@ -203,13 +203,27 @@ function blankDoc(count: number): WorldDoc {
   const spec = clone(JEJU_SPEC);
   spec.meta.name = '이름 없는 길';
   spec.meta.seed = 1 + Math.floor(Math.random() * 99999); // 지형·질감도 새 주사위
+  // BUILD 130: 기본에는 딱 길만 — 등대섬(landscape), 길가 바위·오두막·비행기(assets), 나무·수풀(decoration)은 고르는 것
+  spec.generators = { ...(spec.generators ?? {}), landscape: false, assets: false, decoration: false };
   return { version: 1, name: '이름 없는 길', blueprints: bs, spec };
+}
+
+/** BUILD 130: 문서 위생 — 중복 배치물 id를 치유한다 (유령의 근원이었던 쌍둥이 id) */
+function sanitizeDoc(d: WorldDoc): WorldDoc {
+  if (d.props?.length) {
+    const seen = new Set<string>();
+    d.props.forEach((pp) => {
+      while (seen.has(pp.id)) pp.id += Math.floor(Math.random() * 1296).toString(36);
+      seen.add(pp.id);
+    });
+  }
+  return d;
 }
 
 function loadDoc(): WorldDoc {
   try {
     const d = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? '');
-    if (d?.blueprints?.length && d?.spec) return d as WorldDoc;
+    if (d?.blueprints?.length && d?.spec) return sanitizeDoc(d as WorldDoc);
   } catch { /* 새 문서로 */ }
   return freshDoc();
 }
@@ -356,7 +370,7 @@ export function EditorApp() {
   };
   /** 문서 통째 교체 (새 문서/가져오기)도 되돌릴 수 있게 */
   const replaceDoc = (next: WorldDoc) => {
-    setDoc((d) => { histPast.current.push(clone(d)); histFuture.current = []; return next; });
+    setDoc((d) => { histPast.current.push(clone(d)); histFuture.current = []; return sanitizeDoc(next); });
     histLastPush.current = 0;
   };
   const editScene = (fn: (s: SceneBlueprint) => void) => edit((d) => { fn(d.blueprints[sel]); });
@@ -755,6 +769,18 @@ export function EditorApp() {
                 <input type="checkbox" checked={themeKeepProps} onChange={(e) => setThemeKeepProps(e.target.checked)} />
                 기존 배치 유지 (끄면 테마가 배치를 새로 깐다)
               </label>
+              <h4>세계 생성기 — 무엇으로 이 세계를 지을까</h4>
+              <div className="ed-wh-chips">
+                {WORLD_PIPELINE.filter((gn) => !gn.required).map((gn) => {
+                  const onNow = isGeneratorEnabled(doc.spec, gn.id);
+                  const KO: Record<string, string> = { terrain: '지형', edge: '가장자리', decoration: '나무·수풀', memoryPoints: '기억 지점', landscape: '원경 (등대섬)', light: '빛', assets: '길가 자산 (바위·오두막·비행기)' };
+                  return (
+                    <button key={gn.id} type="button" className={onNow ? 'ed-chip on' : 'ed-chip'}
+                      onClick={() => edit((d) => { d.spec.generators = { ...(d.spec.generators ?? {}), [gn.id]: !onNow }; })}>
+                      {KO[gn.id] ?? gn.label}</button>
+                  );
+                })}
+              </div>
               <h4>길 — 소재와 걸음 (BUILD 124)</h4>
               <label>소재
                 <select value={doc.spec.path.material ?? 'sand'}
