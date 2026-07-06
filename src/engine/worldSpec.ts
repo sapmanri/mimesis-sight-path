@@ -158,7 +158,7 @@ export type WorldSpec = {
     /** BUILD 124: 길의 소재 — 언제든 갈아끼울 수 있다. 생략 = 모랫길(팔레트를 따른다) */
     material?: RoadMaterialId;
     /** BUILD 129: 열차 길의 스타일 — 낡은 열차(기본) 또는 테제베 */
-    trainStyle?: 'old' | 'tgv';
+    trainStyle?: 'old' | 'tgv' | 'classic';
   };
 
   /** 지형 생성기 (절벽 둑길) */

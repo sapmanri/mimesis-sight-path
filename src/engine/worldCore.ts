@@ -553,7 +553,8 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
       }
     }
     const runC = walkC.clone(); runC.name = 'Running';
-    const idleC = THREE.AnimationUtils.subclip(walkC, 'Idle', 0, 2, 30);
+    // BUILD 160: 진정제 — 0~2프레임 루프는 15Hz 진동(모기 날개)이었다. 다리가 모이는 통과 자세 한 프레임으로 정지
+    const idleC = THREE.AnimationUtils.subclip(walkC, 'Idle', 7, 8, 30);
     animations = [walkC, runC, idleC]; // 조명 액션 등 부스러기는 태우지 않는다
   }
   return { group, animations, clipSpeeds };
@@ -950,12 +951,13 @@ type Frame = { t: number; p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vecto
 function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
   // BUILD 129: 열차의 두 얼굴 — 낡은 열차(기본)와 테제베
-  const style: 'old' | 'tgv' = SPEC.path.trainStyle ?? 'old';
-  const CAR_LEN = style === 'tgv' ? 3.6 : 2.7;
-  const GAP = style === 'tgv' ? 0.22 : 0.42;
+  // BUILD 160: 세 얼굴 — 클래식(기본, Vase의 객차 GLB) / 낡은 열차 / 테제베
+  const style: 'old' | 'tgv' | 'classic' = SPEC.path.trainStyle ?? 'classic';
+  const CAR_LEN = style === 'tgv' ? 3.6 : style === 'classic' ? 2.9 : 2.7;
+  const GAP = style === 'tgv' ? 0.22 : style === 'classic' ? 0.34 : 0.42;
   const PITCH = CAR_LEN + GAP;
-  const CAR_W = style === 'tgv' ? 0.7 : 0.74;
-  const CAR_H = style === 'tgv' ? 0.5 : 0.6;
+  const CAR_W = style === 'tgv' ? 0.7 : style === 'classic' ? 0.55 : 0.74;
+  const CAR_H = style === 'tgv' ? 0.5 : style === 'classic' ? 0.785 : 0.6; // classic: GLB 실측 비율(지붕→바퀴 밑 1.0) 기준 레일 높이 정합
   const rnd = worldRng(2611);
 
   // 누적 거리 → 프레임 보간
@@ -1014,6 +1016,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
   const darkC = new THREE.Color('#3d3a35');
 
   const carCount = Math.max(1, Math.floor((total - GAP) / PITCH));
+  const classicSlots: THREE.Group[] = []; // BUILD 160
   const roofEnds: { p: THREE.Vector3; tan: THREE.Vector3 }[] = []; // [앞끝, 뒷끝, 앞끝, ...] 판자용
   const wheelMats: THREE.Matrix4[] = [];
 
@@ -1022,11 +1025,21 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     const { p, tan } = atDist(dc);
     const color = bodyColors[k % bodyColors.length].clone().multiplyScalar(0.94 + rnd() * 0.12);
     const roofY = p.y - 0.015; // 걷는 면 — 커브 높이 바로 아래
-    const bodyC = new THREE.Vector3(p.x, roofY - CAR_H / 2 - 0.04, p.z);
-    // 차체
-    pushBox(pos, col, idx, bodyC, tan, CAR_LEN / 2, CAR_W / 2, CAR_H / 2, color);
-    // 지붕 판 (걷는 면 — 살짝 밝고 살짝 좁다)
-    pushBox(pos, col, idx, new THREE.Vector3(p.x, roofY - 0.02, p.z), tan, CAR_LEN / 2 - 0.05, CAR_W / 2 - 0.045, 0.02, roofC);
+    if (style === 'classic') {
+      // BUILD 160: 몸통은 GLB — 슬롯만 심고, 객차는 아래 attach에서 내려앉는다
+      const slot = new THREE.Group();
+      slot.position.set(p.x, roofY, p.z);
+      slot.rotation.y = Math.atan2(tan.x, tan.z);
+      slot.userData.tint = ['#7d4b40', '#465e55', '#6b5f4b'][k % 3];
+      classicSlots.push(slot);
+      g.add(slot);
+    } else {
+      const bodyC = new THREE.Vector3(p.x, roofY - CAR_H / 2 - 0.04, p.z);
+      // 차체
+      pushBox(pos, col, idx, bodyC, tan, CAR_LEN / 2, CAR_W / 2, CAR_H / 2, color);
+      // 지붕 판 (걷는 면 — 살짝 밝고 살짝 좁다)
+      pushBox(pos, col, idx, new THREE.Vector3(p.x, roofY - 0.02, p.z), tan, CAR_LEN / 2 - 0.05, CAR_W / 2 - 0.045, 0.02, roofC);
+    }
     // 테제베: 연속 창띠 + 허리 스트라이프 + 스커트(바퀴를 감춘다)
     if (style === 'tgv') {
       const r2 = new THREE.Vector3().crossVectors(tan, UP).normalize();
@@ -1079,7 +1092,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     const back = new THREE.Vector3().copy(p).addScaledVector(tan, -CAR_LEN / 2); back.y = roofY;
     roofEnds.push({ p: back, tan }, { p: front, tan });
     // 바퀴 자리 (인스턴스): 3축 × 양쪽
-    for (const ax of style === 'tgv' ? [] : [-0.36, 0, 0.36]) {
+    for (const ax of style === 'old' ? [-0.36, 0, 0.36] : []) { // classic: 대차가 GLB에 있다
       for (const sr of [-1, 1]) {
         const wp = new THREE.Vector3().copy(p).addScaledVector(tan, ax * CAR_LEN).addScaledVector(r, sr * (CAR_W / 2 - 0.02));
         wp.y = roofY - CAR_H - 0.1;
@@ -1165,6 +1178,39 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     wheels.castShadow = true;
     g.add(wheels);
   }
+
+  // BUILD 160: 클래식 객차 내려앉히기 — Vase의 PassengerCar GLB (실루엣 검수 ★, BUILD 149)
+  // 슬롯 원점 = 지붕 걷는 면. 실측 Box3로 스케일·오프셋을 잡는다 — 상수가 아니라 실측.
+  if (classicSlots.length) {
+    void defaultLoader('PassengerCar.glb').then((gltf) => {
+      const proto = gltf.scene;
+      const box = new THREE.Box3().setFromObject(proto);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const long = Math.max(size.x, size.z);
+      const s = CAR_LEN / Math.max(1e-6, long);
+      const lengthIsX = size.x >= size.z;
+      for (const slot of classicSlots) {
+        const car = proto.clone(true);
+        car.traverse((n) => {
+          const mesh = n as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          // 재질은 클론끼리 공유된다 — 색을 따로 입히려면 각자 옷을 가져야 한다
+          mesh.material = Array.isArray(mesh.material) ? mesh.material.map((m) => m.clone()) : mesh.material.clone();
+        });
+        applyPalette(car, slot.userData.tint as string);
+        const wrap = new THREE.Group();
+        car.position.set(-center.x, -box.max.y, -center.z); // 지붕 꼭대기를 슬롯 원점에
+        wrap.add(car);
+        wrap.scale.setScalar(s);
+        wrap.rotation.y = lengthIsX ? -Math.PI / 2 : 0; // 장축을 진행 방향(+Z)으로
+        slot.add(wrap);
+      }
+    }).catch(() => { /* 실패 시 판자와 레일의 길로 남는다 */ });
+  }
+
   return g;
 }
 

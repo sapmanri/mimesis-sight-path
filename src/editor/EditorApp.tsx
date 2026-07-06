@@ -804,7 +804,9 @@ export function EditorApp() {
               </label>
               {(doc.spec.path.material === 'train') && (
                 <div className="ed-wh-chips">
-                  <button type="button" className={(doc.spec.path.trainStyle ?? 'old') === 'old' ? 'ed-chip on' : 'ed-chip'}
+                  <button type="button" className={(doc.spec.path.trainStyle ?? 'classic') === 'classic' ? 'ed-chip on' : 'ed-chip'}
+                    onClick={() => edit((d) => { d.spec.path.trainStyle = 'classic'; })}>🚃 클래식 객차</button>
+                  <button type="button" className={doc.spec.path.trainStyle === 'old' ? 'ed-chip on' : 'ed-chip'}
                     onClick={() => edit((d) => { d.spec.path.trainStyle = 'old'; })}>🚂 낡은 열차</button>
                   <button type="button" className={doc.spec.path.trainStyle === 'tgv' ? 'ed-chip on' : 'ed-chip'}
                     onClick={() => edit((d) => { d.spec.path.trainStyle = 'tgv'; })}>🚄 테제베</button>
