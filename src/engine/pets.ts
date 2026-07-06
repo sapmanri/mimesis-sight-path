@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { applyHeightFog } from './worldCore';
 
 export type PetDef = { id: string; label: string; file: string; prefix: string; height: number };
 
@@ -47,7 +48,17 @@ export async function loadPet(def: PetDef): Promise<LoadedPet> {
   model.position.x -= c.x; model.position.z -= c.z;
   model.traverse((n) => {
     const mesh = n as THREE.Mesh;
-    if (mesh.isMesh) { mesh.castShadow = true; mesh.frustumCulled = false; }
+    if (!mesh.isMesh) return;
+    mesh.castShadow = true;
+    mesh.frustumCulled = false;
+    // BUILD 161: 펫도 세계의 문법을 따른다 — 자기 무늬는 입되(팔레트 미통과), 높이안개는 예외 없이.
+    // 워커 keepLook과 같은 규칙인데 BUILD 143 원복 때 빠뜨렸다 — 그래서 안개 속에서 혼자 쨍했다
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach((m) => {
+      const std = m as THREE.MeshStandardMaterial;
+      applyHeightFog(std);
+      std.needsUpdate = true;
+    });
   });
   group.add(model);
 

@@ -288,6 +288,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   });
   const charProgress = useRef(activeIndex); // 캐릭터의 현재 위치 (장면 단위 진행도)
   const strollDir = useRef(1); // BUILD 150: 열린 길 산책의 방향 — 끝에 닿으면 돌아선다
+  const strollGait = useRef({ next: 12 + Math.random() * 20, left: 0 }); // BUILD 161: 질주 본능 — 산책 중 가끔 이유 없이 뛴다
   const lastWant = useRef<number | null>(null); // 목적지 변경 감지 (루프에선 target이 want와 다른 수로 감긴다)
   const charSpeed = useRef(0);              // 현재 속도 (월드 유닛/초)
   const charYaw = useRef(0);                // BUILD 087: 몸의 방향 — 스냅하지 않고 돌아선다
@@ -698,6 +699,17 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     if (stroll) {
       // BUILD 150: 무한 산책 — 목적지는 늘 두 걸음 반 앞. 도착이 없으니 멈춤도 없다
       J.phase = 'walk';
+      // BUILD 161: 질주 본능 — 목적지가 없으면 뛸 계기도 없다. 그래서 가끔, 이유 없이 뛴다 (개가 그러듯이)
+      const SG = strollGait.current;
+      if (SG.left > 0) {
+        SG.left -= delta;
+        J.gait = 'run';
+        if (SG.left <= 0) { J.gait = 'walk'; SG.next = 18 + Math.random() * 32; }
+      } else {
+        SG.next -= delta;
+        if (SG.next <= 0) SG.left = 3.5 + Math.random() * 5;
+      }
+      J.gaitSwitchAt = -999; // 진행점 토글러는 산책에선 쉰다
       if (loopPath) {
         if (charProgress.current > scenes.length * 3) { charProgress.current -= scenes.length; } // 숫자 위생 — 무한히 걸어도 넘치지 않게
         J.target = charProgress.current + 2.5;

@@ -88,7 +88,7 @@ const HEIGHT_FOG = {
   strength: 1, // BUILD 131: 전역 세기 0~1 — 재질 컴파일 시점에 구워진다 (스펙 변경 → 세계 재건 → 재컴파일)
 };
 
-function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUILD 129: strength<1 = 안개에 덜 잠긴다 (열차 차체용)
+export function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUILD 129: strength<1 = 안개에 덜 잠긴다 (열차 차체용)
   // 주의: mix는 sRGB 인코딩된 최종 색 위에서 돌므로, 안개색도 sRGB 값 그대로 써야 배경과 정확히 섞인다
   const hex = parseInt(PALETTE.fog.slice(1), 16);
   const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
