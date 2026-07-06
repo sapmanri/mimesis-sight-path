@@ -1033,7 +1033,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     }
   }
 
-  g.add(colorMesh(pos, col, idx, { castShadow: true, receiveShadow: true, hfog: 0.35 })); // BUILD 129: 열차는 안개에 1/3만 잠긴다 — 투명열차 사건의 진범이 높이안개였다
+  g.add(colorMesh(pos, col, idx, { castShadow: true, receiveShadow: true })); // BUILD 133: 특례 철폐 — 안개는 이제 다이얼의 소관이다. 열차도 세계의 문법을 따른다 (BUILD 129의 0.35 상한은 다이얼이 없던 시절의 응급처치)
   // 창문: 발광 별도 메시
   if (wpos.length) {
     const wg = new THREE.BufferGeometry();

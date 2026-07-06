@@ -248,8 +248,9 @@
    "hat": "#c3c9cf"
   },
   "atmosphere": {
-   "heightFogTop": -0.1,
-   "heightFogBottom": -0.85
+   "heightFogTop": -0.35,
+   "heightFogBottom": -1.6,
+   "heightFogStrength": 0.8
   },
   "path": {
    "sceneSpacing": 7.2,
