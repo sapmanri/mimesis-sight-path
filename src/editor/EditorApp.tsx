@@ -204,6 +204,7 @@ function blankDoc(count: number, loop = false): WorldDoc {
   }
   const spec = clone(JEJU_SPEC);
   spec.path.loop = loop || undefined; // BUILD 150: 순환의 길
+  if (loop) { spec.path.loopStyle = 'wander'; spec.path.loopY = 0.9; } // BUILD 153: 새 순환로의 기본은 헤매는 길 — 동그라미는 마음을 식힌다
   spec.meta.name = loop ? '이름 없는 순환로' : '이름 없는 길';
   spec.meta.seed = 1 + Math.floor(Math.random() * 99999); // 지형·질감도 새 주사위
   // BUILD 130: 기본에는 딱 길만 — 등대섬(landscape), 길가 바위·오두막·비행기(assets), 나무·수풀(decoration)은 고르는 것
@@ -811,6 +812,16 @@ export function EditorApp() {
                   onChange={(e) => edit((d) => { d.spec.path.loop = e.target.checked || undefined; })} />
                 ♾️ 순환의 길 — 시작도 끝도 없다
               </label>
+              {!!doc.spec.path.loop && (
+                <div className="ed-wh-chips">
+                  <button type="button" className={(doc.spec.path.loopStyle ?? 'ring') === 'wander' ? 'ed-chip on' : 'ed-chip'}
+                    onClick={() => edit((d) => { d.spec.path.loopStyle = 'wander'; })}>🌀 헤매는 길</button>
+                  <button type="button" className={doc.spec.path.loopStyle === 'knot' ? 'ed-chip on' : 'ed-chip'}
+                    onClick={() => edit((d) => { d.spec.path.loopStyle = 'knot'; })}>🎗️ 매듭 (3회 교차)</button>
+                  <button type="button" className={(doc.spec.path.loopStyle ?? 'ring') === 'ring' ? 'ed-chip on' : 'ed-chip'}
+                    onClick={() => edit((d) => { d.spec.path.loopStyle = 'ring'; })}>⭕ 동그라미</button>
+                </div>
+              )}
               <label>굽이 <em>{Math.round((doc.spec.path.meanderA / 2.6) * 100)}%</em>
                 <input type="range" min="0" max="5.2" step="0.2" value={doc.spec.path.meanderA}
                   onChange={(e) => edit((d) => { const v = Number(e.target.value); d.spec.path.meanderA = v; d.spec.path.meanderB = +(v * 0.54).toFixed(2); })} />

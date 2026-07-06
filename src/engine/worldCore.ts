@@ -559,10 +559,35 @@ export function buildWorld(
   const pts = scenes.map((s, i) => {
     const meander = Math.sin(i * 1.35) * P.meanderA + Math.sin(i * 0.55 + 1.2) * P.meanderB;
     if (P.loop) {
-      // BUILD 150: 순환의 길 — 마디 길이를 지키는 반지름의 원 위에, 옆걸음과 굽이는 반지름 방향으로
       const N = scenes.length;
       const ang = (i / N) * Math.PI * 2;
+      const style = P.loopStyle ?? 'ring';
+      // BUILD 153: 매듭의 길 — 세잎 매듭. 길이 길 위를 세 번 건넌다 (교차 고도차 = 1.45×loopY)
+      if (style === 'knot') {
+        const sc = (N * P.sceneSpacing) / 25.53; // 세잎 매듭의 XZ 호길이 상수
+        const h = P.loopY ?? 2.0;
+        return new THREE.Vector3(
+          (Math.sin(ang) + 2 * Math.sin(2 * ang)) * sc,
+          -Math.sin(3 * ang) * h + s.position[1] * 1.2,
+          (Math.cos(ang) - 2 * Math.cos(2 * ang)) * sc,
+        );
+      }
       const R = Math.max(4.5, (N * P.sceneSpacing) / (Math.PI * 2));
+      // BUILD 153: 헤매는 길 — 원 위에 서로 어긋난 하모닉 넷을 겹치면, 걷는 눈엔 원이 사라진다
+      if (style === 'wander') {
+        const rng = worldRng(9137);
+        const ph = [rng() * 6.28, rng() * 6.28, rng() * 6.28, rng() * 6.28];
+        const rr = R * (1
+          + (0.24 + rng() * 0.08) * Math.sin(2 * ang + ph[0])
+          + (0.18 + rng() * 0.07) * Math.sin(3 * ang + ph[1])
+          + (0.13 + rng() * 0.05) * Math.sin(5 * ang + ph[2])
+          + (0.08 + rng() * 0.04) * Math.sin(7 * ang + ph[3])
+        ) + s.position[0] * P.lateralScale * 0.6 + meander;
+        const hy = P.loopY ?? 0.9; // 완만한 언덕 — 모르는 길은 오르내린다
+        const y = hy * (0.6 * Math.sin(3 * ang + ph[1]) + 0.4 * Math.sin(7 * ang + ph[3])) + s.position[1] * 1.2;
+        return new THREE.Vector3(Math.cos(ang) * rr, y, Math.sin(ang) * rr);
+      }
+      // BUILD 150: 동그라미 (기본) — 정직한 원. 이제는 셋 중 하나일 뿐
       const rr = R + s.position[0] * P.lateralScale * 0.6 + meander;
       return new THREE.Vector3(Math.cos(ang) * rr, s.position[1] * 1.2, Math.sin(ang) * rr);
     }

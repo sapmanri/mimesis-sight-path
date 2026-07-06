@@ -19,6 +19,18 @@
    "name": "끝없는 들길",
    "desc": "시작도 끝도 없는 순환로. 해가 뜨고 지고, 구름이 오가고, 당신은 그저 걷는다. ♾️와 함께.",
    "file": "endless-meadow.world.json"
+  },
+  {
+   "id": "unknown-road",
+   "name": "모르는 길",
+   "desc": "하염없이 걷는 헤매는 순환로 (둘레 256u — 반대편은 안개 너머). ♾️와 함께.",
+   "file": "unknown-road.world.json"
+  },
+  {
+   "id": "knot-road",
+   "name": "매듭의 길",
+   "desc": "길이 길 위를 세 번 건너는 세잎 매듭 고가로. ♾️와 함께.",
+   "file": "knot-road.world.json"
   }
  ]
 }

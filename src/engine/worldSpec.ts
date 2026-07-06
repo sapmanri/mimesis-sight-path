@@ -138,6 +138,10 @@ export type WorldSpec = {
     lateralScale: number;
     /** BUILD 150: 순환의 길 — true면 커브가 닫혀 시작도 끝도 없다 */
     loop?: boolean;
+    /** BUILD 153: 순환의 모양 — ring(정직한 원) / wander(하모닉 헤매기) / knot(세잎 매듭, 3회 교차) */
+    loopStyle?: 'ring' | 'wander' | 'knot';
+    /** BUILD 153: 순환 길의 높이 진폭 — wander는 언덕(기본 0.9), knot은 교차 클리어런스(기본 2.0, 고도차=1.45×이 값) */
+    loopY?: number;
     /** 사행(meander) 진폭 A/B — 길이 스스로 헤매는 정도 */
     meanderA: number;
     meanderB: number;
