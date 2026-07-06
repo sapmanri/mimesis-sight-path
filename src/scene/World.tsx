@@ -272,6 +272,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   // ---- BUILD 136: 구름 탈것 ----
   const ridingRef = useRef(false);
   const hipsRef = useRef<THREE.Object3D | null>(null); // BUILD 140: 골반 뼈 — 구름이 이 뼈를 추적한다
+  const footRef = useRef<THREE.Object3D | null>(null); // BUILD 142: 발 뼈 — 서서 타는 아이의 기준
   const hipsV = useMemo(() => new THREE.Vector3(), []);
   // BUILD 137: 엄마 구름 — 엉덩이에 걸치는 작은 구름 (돌멩이에 걸터앉듯, 다리는 밖으로 달랑)
   const cloudMount = useMemo(() => {
@@ -381,7 +382,11 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         ?? createWalkerRig(group, animations, spec.walker.timeScale);
       if (ridingRef.current) rigRef.current?.setRiding?.(true);
       hipsRef.current = null; // BUILD 140: 새 아이의 골반을 찾는다
-      group.traverse((n) => { if (!hipsRef.current && /hips$/i.test(n.name)) hipsRef.current = n; });
+      footRef.current = null; // BUILD 142: 발도
+      group.traverse((n) => {
+        if (!hipsRef.current && /hips$/i.test(n.name)) hipsRef.current = n;
+        if (!footRef.current && /(left)?foot$/i.test(n.name)) footRef.current = n;
+      });
       // BUILD 116→117: 등불 — 손 뼈에 진자로 매달린다. 뼈가 어떻게 돌아도 등불은 중력을 안다.
       if ((spec.walker as { lantern?: boolean }).lantern) {
         let hand: THREE.Object3D | null = null;
@@ -750,10 +755,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       const tt = clock.elapsedTime;
       // BUILD 140: 상수 추정 대신 골반 뼈 실측 — 캐릭터마다 앉는 높이가 제각각이었다 (파란 후드 사건)
       const seatH = rigRef.current?.rideSeat?.() ?? 0;
-      let cloudY = walker.position.y + seatH - 0.07; // 폴백: 서서 타는 아이(발밑) 또는 뼈 못 찾은 경우
+      let cloudY = walker.position.y + seatH - 0.07; // 최후 폴백
       if (seatH > 0 && hipsRef.current) {
         hipsRef.current.getWorldPosition(hipsV);
-        cloudY = hipsV.y - 0.17; // 골반 바로 아래 — 방석 윗면이 엉덩이에 닿는다
+        cloudY = hipsV.y - 0.17; // 앉는 아이: 골반 바로 아래
+      } else if (seatH === 0 && footRef.current) {
+        footRef.current.getWorldPosition(hipsV);
+        cloudY = hipsV.y - 0.095; // BUILD 142: 서는 아이는 발 뼈 실측 — 발이 살짝 묻히는 높이
       }
       cloudMount.position.set(
         walker.position.x + Math.sin(tt * 0.53 + 1) * 0.02,
@@ -764,8 +772,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     }
     // BUILD 141: 빗자루 — 골반 아래, 진행 방향으로 자루를 눕힌다
     if (broomMount.visible) {
-      let by = walker.position.y + (rigRef.current?.rideSeat?.() ?? 0) - 0.05;
-      if (hipsRef.current) { hipsRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.14; }
+      const seatB = rigRef.current?.rideSeat?.() ?? 0;
+      let by = walker.position.y + seatB - 0.05;
+      if (seatB > 0 && hipsRef.current) { hipsRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.14; }
+      else if (seatB === 0 && footRef.current) { footRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.1; } // BUILD 142: 서서 타면 발밑에 자루
       broomMount.position.set(walker.position.x, by, walker.position.z);
       broomMount.rotation.y = charYaw.current;
       broomMount.rotation.z = Math.sin(clock.elapsedTime * 1.1) * 0.03;
