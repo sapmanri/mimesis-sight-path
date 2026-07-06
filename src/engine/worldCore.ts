@@ -12,7 +12,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { ObservationScene } from '../data/jeju';
-import { isGeneratorEnabled, JEJU_SPEC, type WorldGeneratorId, type WorldPalette, type WorldSpec } from './worldSpec';
+import { isGeneratorEnabled, JEJU_SPEC, type RoadMaterialId, type WorldGeneratorId, type WorldPalette, type WorldSpec } from './worldSpec';
 import { ASSET_SETS, type AssetSet } from './worldSets';
 
 /**
@@ -124,29 +124,52 @@ function makeValueNoise(w: number, h: number, seed: number) {
   };
 }
 
-/** 길 상판: 모래알 그레인 + 흙 얼룩 + 드문 자갈점. 평균은 흰색(버텍스컬러 보존). */
-function makeGroundTexture() {
+/** BUILD 124: 길 상판 — 소재별 질감. 평균은 흰색(버텍스컬러 보존).
+ * sand 모랫길(원본) · asphalt 골재 스페클 · concrete 신축이음 · woodplank 널판+나뭇결 · mud 젖은 얼룩 · glass 매끈+빗금 하이라이트 */
+function makeGroundTexture(mat: RoadMaterialId = 'sand') {
   const S = 256;
   const data = new Uint8Array(S * S * 4);
   const n = makeValueNoise(S, S, 7133 + WORLD_SEED);
   const rnd = worldRng(9241);
+  // 소재의 손맛: 얼룩 세기 / 알갱이 세기 / 점 개수 / 어두운 점 비율 / 색온도(+따뜻 -차가움)
+  const P: Record<RoadMaterialId, { bl: number; gr: number; dots: number; darkBias: number; warm: number }> = {
+    sand:      { bl: 0.22, gr: 0.16, dots: 320, darkBias: 0.4,  warm: 1.0 },
+    asphalt:   { bl: 0.07, gr: 0.26, dots: 520, darkBias: 0.25, warm: 0.0 },
+    concrete:  { bl: 0.11, gr: 0.06, dots: 120, darkBias: 0.55, warm: 0.0 },
+    woodplank: { bl: 0.10, gr: 0.05, dots: 0,   darkBias: 0.5,  warm: 1.6 },
+    mud:       { bl: 0.34, gr: 0.06, dots: 90,  darkBias: 0.8,  warm: 1.2 },
+    glass:     { bl: 0.03, gr: 0.02, dots: 0,   darkBias: 0.5,  warm: -0.6 },
+  };
+  const c = P[mat];
+  const BOARD = 21; // 널판 폭(px) — 길이축(v)을 가로지르는 판자
   for (let y = 0; y < S; y += 1) {
+    const board = Math.floor(y / BOARD);
+    const boardTone = (n(0, board * 37, 5) - 0.5) * 0.12; // 판마다 다른 나무색
     for (let x = 0; x < S; x += 1) {
-      const blotch = n(x, y, 3) * 0.5 + n(x, y, 7) * 0.3 + n(x, y, 19) * 0.2; // 얼룩
-      const grain = (rnd() - 0.5) * 0.16;                                     // 모래알
-      let v = 1 + (blotch - 0.5) * 0.22 + grain;
-      let r = v, gr = v * (1 - (blotch - 0.5) * 0.06), b = v * (1 - (blotch - 0.5) * 0.12);
+      const blotch = n(x, y, 3) * 0.5 + n(x, y, 7) * 0.3 + n(x, y, 19) * 0.2;
+      const grain = (rnd() - 0.5) * c.gr;
+      let v = 1 + (blotch - 0.5) * c.bl + grain;
+      if (mat === 'woodplank') {
+        v += boardTone + (n(x, board * 53, 34) - 0.5) * 0.1; // 나뭇결은 판을 따라 흐른다
+        if (y % BOARD < 1) v *= 0.7;                          // 널판 사이 틈
+      }
+      if (mat === 'concrete' && y % 64 < 2) v *= 0.82;        // 신축 이음
+      if (mat === 'glass') v += (n(x + y, 0, 5) - 0.5) * 0.05; // 비스듬한 하이라이트 결
+      const w = c.warm;
+      const r = v * (1 + (blotch - 0.5) * 0.02 * w);
+      const gr2 = v * (1 - (blotch - 0.5) * 0.06 * Math.abs(w));
+      const b = v * (1 - (blotch - 0.5) * 0.12 * w);
       const idx = (y * S + x) * 4;
       data[idx] = Math.max(0, Math.min(255, r * 235));
-      data[idx + 1] = Math.max(0, Math.min(255, gr * 233));
+      data[idx + 1] = Math.max(0, Math.min(255, gr2 * 233));
       data[idx + 2] = Math.max(0, Math.min(255, b * 228));
       data[idx + 3] = 255;
     }
   }
-  // 드문 자갈/부스러기 점
-  for (let k = 0; k < 320; k += 1) {
+  // 드문 점: 모래의 자갈 / 아스팔트의 골재 / 진흙의 돌
+  for (let k = 0; k < c.dots; k += 1) {
     const cx = Math.floor(rnd() * S), cy = Math.floor(rnd() * S);
-    const dark = rnd() > 0.4;
+    const dark = rnd() < c.darkBias;
     const rad = rnd() > 0.85 ? 2 : 1;
     for (let dy = -rad; dy <= rad; dy += 1) for (let dx = -rad; dx <= rad; dx += 1) {
       if (dx * dx + dy * dy > rad * rad) continue;
@@ -155,6 +178,20 @@ function makeGroundTexture() {
       data[idx] = Math.min(255, data[idx] * m);
       data[idx + 1] = Math.min(255, data[idx + 1] * m);
       data[idx + 2] = Math.min(255, data[idx + 2] * m);
+    }
+  }
+  // 진흙: 크고 부드러운 젖은 얼룩
+  if (mat === 'mud') {
+    for (let k = 0; k < 46; k += 1) {
+      const cx = Math.floor(rnd() * S), cy = Math.floor(rnd() * S);
+      const rad = 3 + Math.floor(rnd() * 6);
+      for (let dy = -rad; dy <= rad; dy += 1) for (let dx = -rad; dx <= rad; dx += 1) {
+        const d2 = dx * dx + dy * dy;
+        if (d2 > rad * rad) continue;
+        const soft = 1 - (0.22 * (1 - d2 / (rad * rad)));
+        const idx = ((((cy + dy) % S + S) % S) * S + (((cx + dx) % S + S) % S)) * 4;
+        data[idx] *= soft; data[idx + 1] *= soft; data[idx + 2] *= soft;
+      }
     }
   }
   const tex = new THREE.DataTexture(data, S, S);
@@ -212,6 +249,16 @@ type ModelSpec = {
   keepLook?: boolean;    // BUILD 085: 팔레트 미적용 — 원래 텍스처/색 보존 (워커 등 주인공급)
   texture?: string;      // BUILD 085: 수동 바인딩할 텍스처 파일명 (FBX 변환에서 누락된 경우)
   clipSpeeds?: { walk: number; run: number }; // BUILD 091: 클립 고유속도 (원척, u/s)
+};
+
+// BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
+export const ROAD_MATERIALS: Record<RoadMaterialId, { label: string; top?: string; edge?: string }> = {
+  sand: { label: '모랫길' },
+  asphalt: { label: '아스팔트', top: '#4d5052', edge: '#404346' },
+  concrete: { label: '콘크리트', top: '#9aa0a2', edge: '#898f92' },
+  woodplank: { label: '나무판 다리', top: '#8a6f52', edge: '#755f45' },
+  mud: { label: '진흙길', top: '#6e5b46', edge: '#5f4f3e' },
+  glass: { label: '유리판', top: '#b5cdd2', edge: '#9fb8bd' },
 };
 
 export const MODELS: Record<string, ModelSpec> = {
@@ -808,10 +855,12 @@ type Frame = { t: number; p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vecto
 
 function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
-  const groundTex = makeGroundTexture();
+  const roadMatId: RoadMaterialId = SPEC.path.material ?? 'sand'; // BUILD 124
+  const roadMat = ROAD_MATERIALS[roadMatId];
+  const groundTex = makeGroundTexture(roadMatId);
   const cliffTex = makeCliffTexture();
-  const cSandTop = new THREE.Color(PALETTE.sandTop);
-  const cSandEdge = new THREE.Color(PALETTE.sandEdge);
+  const cSandTop = new THREE.Color(roadMat.top ?? PALETTE.sandTop);
+  const cSandEdge = new THREE.Color(roadMat.edge ?? PALETTE.sandEdge);
   const strata = [
     new THREE.Color(PALETTE.cliffHigh),
     new THREE.Color(PALETTE.cliffMid),
@@ -1051,7 +1100,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
 
     // 턱 부스러기: 가장자리에 걸치거나 반쯤 흘러내린 조각
     const lipCount = Math.min(80, Math.floor(frames.length / 5));
-    const lip = mkInst(lipCount, PALETTE.sandEdge);
+    const lip = mkInst(lipCount, '#' + cSandEdge.getHexString()); // BUILD 124: 소재를 따른다
     for (let k = 0; k < lipCount; k += 1) {
       const i = Math.floor((k / lipCount) * (frames.length - 1) + noise1(k * 3.7) * 5);
       const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
@@ -1084,7 +1133,7 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
 
     // 잔자갈: 가장자리로 갈수록 빽빽하게 (밀도 곡선 = 1 - rnd*rnd)
     const pebCount = Math.min(280, frames.length * 2);
-    const peb = mkInst(pebCount, PALETTE.sandEdge, 1.0);
+    const peb = mkInst(pebCount, '#' + cSandEdge.getHexString(), 1.0); // BUILD 124
     for (let k = 0; k < pebCount; k += 1) {
       const i = Math.floor(Math.abs(noise1(k * 1.7)) * (frames.length - 1));
       const f = frames[i];

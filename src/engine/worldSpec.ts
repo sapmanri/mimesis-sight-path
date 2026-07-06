@@ -48,6 +48,9 @@ export function isGeneratorEnabled(spec: WorldSpec, id: WorldGeneratorId): boole
   return spec.generators?.[id] !== false;
 }
 
+/** BUILD 124: 길의 소재. sand만 팔레트(sandTop/sandEdge)를 따른다 — 테마가 계절을 입힐 수 있게. */
+export type RoadMaterialId = 'sand' | 'asphalt' | 'concrete' | 'woodplank' | 'mud' | 'glass';
+
 export type WorldPalette = {
   fog: string;
   sandTop: string;
@@ -125,6 +128,8 @@ export type WorldSpec = {
     widthNoise: number;
     /** 커브 샘플 수 */
     samples: number;
+    /** BUILD 124: 길의 소재 — 언제든 갈아끼울 수 있다. 생략 = 모랫길(팔레트를 따른다) */
+    material?: RoadMaterialId;
   };
 
   /** 지형 생성기 (절벽 둑길) */

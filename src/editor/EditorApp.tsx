@@ -15,7 +15,8 @@ import { createPropObject, PROP_CATALOG, PROP_CATEGORIES, ANIMATED_PROPS, PROP_S
 import { compileScenes, type SceneBlueprint } from '../engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { THEME_KITS, applyThemeEnv, expandThemeSets } from '../engine/themeKits';
-import { WALKER_ROSTER } from '../engine/worldCore';
+import { ROAD_MATERIALS, WALKER_ROSTER } from '../engine/worldCore';
+import type { RoadMaterialId } from '../engine/worldSpec';
 import { jejuBlueprints } from '../data/jeju';
 
 const DRAFT_KEY = 'mimesis:world-draft:v1';
@@ -174,6 +175,34 @@ function PropsLayer({ list, selected, onSelect }: {
 
 function freshDoc(): WorldDoc {
   return { version: 1, name: 'JEJU, 시선을 따라 걷다', blueprints: clone(jejuBlueprints), spec: clone(JEJU_SPEC) };
+}
+
+// BUILD 125: 빈 문서 — 새 길의 첫 장. 기억 갯수만큼 길이 굽이치며 자라난다.
+// 첫 행위는 기억을 넣는 것. 길은 기억 사이의 걷는 시간이다.
+function blankDoc(count: number): WorldDoc {
+  const template = clone(jejuBlueprints[0]);
+  const bs: SceneBlueprint[] = [];
+  let x = 0;
+  let drift = 0;
+  for (let i = 0; i < count; i += 1) {
+    drift = drift * 0.6 + (Math.random() - 0.5) * 1.3; // 걸음마다 방향이 조금씩 튼다 (관성 유지)
+    x = Math.max(-3, Math.min(3, x + drift));
+    bs.push({
+      ...clone(template),
+      id: i + 1,
+      title: `기억 ${i + 1}`,
+      objectLabel: '',
+      emoji: '·',
+      text: '아직 쓰이지 않은\n기억.',
+      photo: undefined,
+      position: [+x.toFixed(2), 0, +(-2.8 * i).toFixed(2)],
+      importance: 1,
+    });
+  }
+  const spec = clone(JEJU_SPEC);
+  spec.meta.name = '이름 없는 길';
+  spec.meta.seed = 1 + Math.floor(Math.random() * 99999); // 지형·질감도 새 주사위
+  return { version: 1, name: '이름 없는 길', blueprints: bs, spec };
 }
 
 function loadDoc(): WorldDoc {
@@ -389,7 +418,13 @@ export function EditorApp() {
           <span className="ed-saved">{savedAt ? '자동저장됨' : ''}</span>
           <button type="button" onClick={undo} disabled={!histPast.current.length} title="되돌리기 (Ctrl+Z)">↩︎</button>
           <button type="button" onClick={redo} disabled={!histFuture.current.length} title="다시 실행 (Ctrl+Shift+Z / Ctrl+Y)">↪︎</button>
-          <button type="button" onClick={() => { if (confirm('제주 템플릿으로 새로 시작할까요? 현재 문서는 되돌리기(Ctrl+Z)로 복구할 수 있습니다.')) { replaceDoc(freshDoc()); setSel(0); } }}>새 문서</button>
+          <button type="button" onClick={() => {
+            const raw = prompt('몇 개의 기억으로 시작할까요? (2~30)\n그 수만큼 빈 길이 굽이치며 자라납니다.\n소재·마디 길이·굽이는 환경 탭에서 언제든.', '5');
+            if (raw == null) return;
+            const nMem = Math.max(2, Math.min(30, parseInt(raw, 10) || 5));
+            replaceDoc(blankDoc(nMem)); setSel(0);
+          }}>새 길</button>
+          <button type="button" onClick={() => { if (confirm('제주 템플릿으로 시작할까요? 현재 문서는 되돌리기(Ctrl+Z)로 복구할 수 있습니다.')) { replaceDoc(freshDoc()); setSel(0); } }}>제주 템플릿</button>
           <button type="button" onClick={() => fileRef.current?.click()}>가져오기</button>
           <button type="button" onClick={exportJson}>내보내기</button>
           <button type="button" className="ed-primary" onClick={openViewer}>뷰어에서 열기 ↗</button>
@@ -696,6 +731,23 @@ export function EditorApp() {
               <label className="ed-check">
                 <input type="checkbox" checked={themeKeepProps} onChange={(e) => setThemeKeepProps(e.target.checked)} />
                 기존 배치 유지 (끄면 테마가 배치를 새로 깐다)
+              </label>
+              <h4>길 — 소재와 걸음 (BUILD 124)</h4>
+              <label>소재
+                <select value={doc.spec.path.material ?? 'sand'}
+                  onChange={(e) => edit((d) => { d.spec.path.material = e.target.value as RoadMaterialId; })}>
+                  {Object.entries(ROAD_MATERIALS).map(([id, m]) => (
+                    <option key={id} value={id}>{m.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label>마디 길이 <em>{doc.spec.path.sceneSpacing.toFixed(1)}u</em>
+                <input type="range" min="4" max="12" step="0.2" value={doc.spec.path.sceneSpacing}
+                  onChange={(e) => edit((d) => { d.spec.path.sceneSpacing = Number(e.target.value); })} />
+              </label>
+              <label>굽이 <em>{Math.round((doc.spec.path.meanderA / 2.6) * 100)}%</em>
+                <input type="range" min="0" max="5.2" step="0.2" value={doc.spec.path.meanderA}
+                  onChange={(e) => edit((d) => { const v = Number(e.target.value); d.spec.path.meanderA = v; d.spec.path.meanderB = +(v * 0.54).toFixed(2); })} />
               </label>
               <h4>날씨</h4>
               <label>하늘
