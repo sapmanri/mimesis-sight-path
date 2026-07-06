@@ -480,9 +480,21 @@ export async function createPropObject(
       case 'windturbine': {
         const g = await loadKitModel('windturbine', loadModel);
         g.updateMatrixWorld(true);
-        const bladeNames = new Set(['Cylinder', 'Cylinder.001_Cylinder', 'Cylinder.002_Cylinder']);
+        // BUILD 142: 이름 매칭(1장만 잡혀 외날 셀프회전 사건) 대신 기하학 판별 —
+        // 상부 절반에 통째로 떠 있는 메시 = 날개. 타워는 바닥부터 솟으니 자연히 제외된다.
+        const gBox = new THREE.Box3().setFromObject(g);
+        const midY = gBox.min.y + (gBox.max.y - gBox.min.y) * 0.5;
         const blades: THREE.Object3D[] = [];
-        g.traverse((n) => { if (bladeNames.has(n.name)) blades.push(n); });
+        g.traverse((n) => {
+          const mesh = n as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const b = new THREE.Box3().setFromObject(mesh);
+          const w = Math.max(b.max.x - b.min.x, b.max.z - b.min.z);
+          if (b.min.y > midY && (b.max.y - b.min.y) < (gBox.max.y - gBox.min.y) * 0.45 && w < (gBox.max.x - gBox.min.x) * 1.2) {
+            // 상부에 떠 있고, 전체 높이의 절반을 넘지 않는 것 — 날개와 나셀
+            if ((b.max.y - b.min.y) > 0.04 || w > 0.04) blades.push(mesh);
+          }
+        });
         if (blades.length) {
           const box = new THREE.Box3();
           blades.forEach((b) => box.expandByObject(b));
