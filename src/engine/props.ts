@@ -263,7 +263,7 @@ export const PROP_SETS: PropSet[] = [
   {
     id: 'ranch', label: '🐄 목장',
     pieces: [
-      { obj: 'cowshed', dx: 0, dz: -0.9, scale: [3.2, 3.8], rotY: 0.2 },
+      { obj: 'cowshed', dx: 0, dz: -0.9, scale: [2.1, 2.5], rotY: 0.2 }, // BUILD 123: 기준치 2.6 반영 (net 5.5~6.5 유지)
       { obj: 'cow', dx: 0.9, dz: 0.5, jitter: 0.3, scale: [0.95, 1.05], roam: true },
       { obj: 'cow', dx: -0.8, dz: 0.8, jitter: 0.3, scale: [0.9, 1.0], roam: true },
       { obj: 'dog', dx: 0.4, dz: 1.1, jitter: 0.25, scale: [0.9, 1.1] },
@@ -466,8 +466,8 @@ export async function createPropObject(
         return await loadKitModel(objId, loadModel);
       case 'lamp': {
         const g = await loadKitModel('lamp', loadModel);
-        const glow = new THREE.PointLight('#ffd9a0', 1.7, 3.6, 2);
-        glow.position.y = 1.05;
+        const glow = new THREE.PointLight('#ffd9a0', 1.3, 2.4, 2); // BUILD 123: 몸집이 줄었으니 불빛도
+        glow.position.y = 0.32;
         g.add(glow);
         return g;
       }

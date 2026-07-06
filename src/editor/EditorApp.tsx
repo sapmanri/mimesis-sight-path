@@ -215,6 +215,9 @@ export function EditorApp() {
       if (e.key === 'Escape') { setPickTarget(null); setSelProp(null); return; }
       const tEl = e.target as HTMLElement;
       if (tEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(tEl.tagName)) return;
+      // BUILD 122: Ctrl/Cmd+Z 되돌리기 · Shift 붙이면 다시 실행 · Ctrl+Y도 다시 실행
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
       const prop = selProp ? (doc.props ?? []).find((q) => q.id === selProp) : null;
       const onScene = !prop && tab === 'scene';
       if (!prop && !onScene) return;
@@ -279,7 +282,36 @@ export function EditorApp() {
   const scenes = useMemo(() => compileScenes(preview.blueprints), [preview]);
   const cur = doc.blueprints[sel];
 
-  const edit = (fn: (d: WorldDoc) => void) => setDoc((d) => { const n = clone(d); fn(n); return n; });
+  // BUILD 122: 언두/리두 — 한꺼번에 내려앉은 세트도 한 번에 무를 수 있어야 한다.
+  // 400ms 안에 이어지는 편집(슬라이더 드래그, 화살표 연타)은 한 항목으로 뭉친다. 최대 60걸음.
+  const histPast = useRef<WorldDoc[]>([]);
+  const histFuture = useRef<WorldDoc[]>([]);
+  const histLastPush = useRef(0);
+  const edit = (fn: (d: WorldDoc) => void) => setDoc((d) => {
+    const now = Date.now();
+    if (now - histLastPush.current > 400) {
+      histPast.current.push(clone(d));
+      if (histPast.current.length > 60) histPast.current.shift();
+    }
+    histLastPush.current = now;
+    histFuture.current = [];
+    const n = clone(d); fn(n); return n;
+  });
+  const undo = () => {
+    if (!histPast.current.length) return;
+    setDoc((d) => { histFuture.current.push(clone(d)); return histPast.current.pop()!; });
+    histLastPush.current = 0;
+  };
+  const redo = () => {
+    if (!histFuture.current.length) return;
+    setDoc((d) => { histPast.current.push(clone(d)); return histFuture.current.pop()!; });
+    histLastPush.current = 0;
+  };
+  /** 문서 통째 교체 (새 문서/가져오기)도 되돌릴 수 있게 */
+  const replaceDoc = (next: WorldDoc) => {
+    setDoc((d) => { histPast.current.push(clone(d)); histFuture.current = []; return next; });
+    histLastPush.current = 0;
+  };
   const editScene = (fn: (s: SceneBlueprint) => void) => edit((d) => { fn(d.blueprints[sel]); });
 
   const addScene = () => edit((d) => {
@@ -330,7 +362,7 @@ export function EditorApp() {
     r.onload = () => {
       try {
         const d = JSON.parse(String(r.result));
-        if (d?.blueprints?.length && d?.spec) { setDoc(d); setSel(0); }
+        if (d?.blueprints?.length && d?.spec) { replaceDoc(d); setSel(0); }
         else alert('world.json 형식이 아닙니다');
       } catch { alert('JSON을 읽을 수 없습니다'); }
     };
@@ -355,7 +387,9 @@ export function EditorApp() {
         <input className="ed-docname" value={doc.name} onChange={(e) => edit((d) => { d.name = e.target.value; })} />
         <div className="ed-top-actions">
           <span className="ed-saved">{savedAt ? '자동저장됨' : ''}</span>
-          <button type="button" onClick={() => { if (confirm('제주 템플릿으로 새로 시작할까요? 현재 문서는 사라집니다.')) { setDoc(freshDoc()); setSel(0); } }}>새 문서</button>
+          <button type="button" onClick={undo} disabled={!histPast.current.length} title="되돌리기 (Ctrl+Z)">↩︎</button>
+          <button type="button" onClick={redo} disabled={!histFuture.current.length} title="다시 실행 (Ctrl+Shift+Z / Ctrl+Y)">↪︎</button>
+          <button type="button" onClick={() => { if (confirm('제주 템플릿으로 새로 시작할까요? 현재 문서는 되돌리기(Ctrl+Z)로 복구할 수 있습니다.')) { replaceDoc(freshDoc()); setSel(0); } }}>새 문서</button>
           <button type="button" onClick={() => fileRef.current?.click()}>가져오기</button>
           <button type="button" onClick={exportJson}>내보내기</button>
           <button type="button" className="ed-primary" onClick={openViewer}>뷰어에서 열기 ↗</button>

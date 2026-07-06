@@ -13,7 +13,7 @@ export type ThemeSetHint = {
   at: number;
   /** 길의 왼쪽(-1)/오른쪽(1). 생략하면 번갈아 */
   side?: -1 | 1;
-  /** 길에서 떨어지는 거리 (기본 1.7) */
+  /** 길에서 떨어지는 거리 (기본 0.35 — 길은 둑길이다, 멀리 밀면 허공에 뜬다) */
   spread?: number;
 };
 
@@ -61,7 +61,7 @@ export const THEME_KITS: ThemeKit[] = [
     weather: { kind: 'snow', rainAmount: 0.55, cloudAmount: 0.7, time: 'day' },
     sets: [
       { setId: 'winteryard', at: 0.28, side: 1 },
-      { setId: 'grove', at: 0.52, side: -1, spread: 2.0 },
+      { setId: 'grove', at: 0.52, side: -1 },
       { setId: 'winteryard', at: 0.78, side: -1 },
     ],
     walkerLantern: true,
@@ -94,7 +94,7 @@ export function expandThemeSets(
     const tl = Math.hypot(tx, tz) || 1;
     tx /= tl; tz /= tl;
     const side = hint.side ?? (i % 2 === 0 ? 1 : -1);
-    const spread = hint.spread ?? 1.7;
+    const spread = hint.spread ?? 0.35; // BUILD 123: 앵커=광장 중심. 1.7은 절벽 밖 허공이었다
     const cx = a[0] + -tz * side * spread;
     const cz = a[2] + tx * side * spread;
     out.push(...expandPropSet(setDef, cx, a[1], cz, (seedBase + i * 977) % 100000));
