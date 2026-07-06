@@ -308,6 +308,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const walkerPos = useRef<THREE.Vector3 | null>(null); // BUILD 098: 실제 위치 — 커브는 안내선일 뿐
   const lanternRef = useRef<THREE.Group | null>(null); // BUILD 117: 진자 등불 래퍼
   const prevNight = useRef(false); // BUILD 170: 밤의 문턱 감지
+  const recompileRite = useRef(0); // BUILD 178: 0=대기, 1=첫 프레임 집행, 2=완료
   // ---- BUILD 136: 구름 탈것 ----
   const ridingRef = useRef(false);
   // BUILD 146: 걷는 기계 탈출 — 문득 멈춰 두리번, 여분 클립 한 번, 그러고선 뛰어서 따라잡는다
@@ -951,6 +952,29 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   useFrame(({ camera, clock, scene }, delta) => {
     // BUILD 177: 진단 후크 — 콘솔에서 세계를 부검할 수 있게 (window.__W)
     (window as unknown as { __W?: unknown }).__W = { world, walker, scene, charProgress };
+    // BUILD 178: 리컴파일 의식 — 라이브 부검(브라우저 실험)으로 확정된 병:
+    // 일부 재질의 GPU 프로그램이 안개 없던 순간의 컴파일 결과로 캐시에 눌러앉아
+    // 시야안개를 영영 무시했다 (needsUpdate 한 번에 완치 — 실험으로 증명).
+    // 처방: 세계의 첫 프레임 직후, 그리고 비동기 소품이 다 도착한 뒤, 전 재질을 한 번 깨운다.
+    if (recompileRite.current < 2) {
+      if (recompileRite.current === 0) {
+        recompileRite.current = 1;
+        void world.ready.then(() => {
+          scene.traverse((o) => {
+            const om = (o as THREE.Mesh).material;
+            if (!om) return;
+            (Array.isArray(om) ? om : [om]).forEach((m) => { m.needsUpdate = true; });
+          });
+        });
+      } else {
+        recompileRite.current = 2;
+        scene.traverse((o) => {
+          const om = (o as THREE.Mesh).material;
+          if (!om) return;
+          (Array.isArray(om) ? om : [om]).forEach((m) => { m.needsUpdate = true; });
+        });
+      }
+    }
     // BUILD 157: 델타 클램핑 — 탭을 떠났다 오면 delta가 '몇 분'이 되어 모든 적분이 폭발한다.
     // 긴 공백을 짧은 한 걸음으로 자른다. 세계는 잠들었다 깬 것이지, 5분치 물리를 몰아서 살지 않는다.
     delta = Math.min(delta, 0.05);

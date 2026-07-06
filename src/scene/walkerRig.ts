@@ -361,6 +361,11 @@ export function createClipRig(
       }
       mixer.update(dt);
       if (headBone && lookYaw !== 0) headBone.rotation.y += lookYaw; // BUILD 146: 믹서가 쓴 위에 두리번을 얹는다
+      // BUILD 178: 고도 자가치유 — 앉기 침하(0.26u)의 복원이 전환 사고로 끊기면 몸이 떠 버린다.
+      // 제스처도 의자도 탈것도 없을 때, 몸의 기준 고도는 언제나 baseY로 스며 돌아온다
+      if (!riding && gesture === 'none' && chairPhase === 'none' && Math.abs(root.position.y - baseY) > 0.001) {
+        root.position.y += (baseY - root.position.y) * Math.min(1, dt * 2.2);
+      }
 
       // 앉기 침하: 앉는 동안 0.26u 가라앉고, 일어나면 같은 호흡으로 떠오른다
       // 마법 의자 등장/퇴장: 살짝 튀어올랐다 자리잡는 팝 (0.45s), 사라질 땐 빨려들 듯 (0.28s)
