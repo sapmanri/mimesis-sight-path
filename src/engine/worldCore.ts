@@ -1030,7 +1030,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
       const slot = new THREE.Group();
       slot.position.set(p.x, roofY, p.z);
       slot.rotation.y = Math.atan2(tan.x, tan.z);
-      slot.userData.tint = ['#7d4b40', '#465e55', '#6b5f4b'][k % 3];
+      slot.userData.tint = ['#96604f', '#5c7d6e', '#867457'][k % 3]; // BUILD 163: 안개·밤 보정 후에도 살 만큼 밝게
       classicSlots.push(slot);
       g.add(slot);
     } else {
@@ -1184,12 +1184,14 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
   if (classicSlots.length) {
     void defaultLoader('PassengerCar.glb').then((gltf) => {
       const proto = gltf.scene;
+      proto.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(proto);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
       const long = Math.max(size.x, size.z);
-      const s = CAR_LEN / Math.max(1e-6, long);
       const lengthIsX = size.x >= size.z;
+      const windowC2 = new THREE.MeshStandardMaterial({ color: '#ffe2ae', emissive: '#ffca6e', emissiveIntensity: 1.1, roughness: 0.6 });
+      const wrnd = worldRng(4144);
       for (const slot of classicSlots) {
         const car = proto.clone(true);
         car.traverse((n) => {
@@ -1204,9 +1206,33 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
         const wrap = new THREE.Group();
         car.position.set(-center.x, -box.max.y, -center.z); // 지붕 꼭대기를 슬롯 원점에
         wrap.add(car);
-        wrap.scale.setScalar(s);
+        wrap.scale.setScalar(CAR_LEN / Math.max(1e-6, long));
         wrap.rotation.y = lengthIsX ? -Math.PI / 2 : 0; // 장축을 진행 방향(+Z)으로
         slot.add(wrap);
+        // BUILD 163: 실측의 실측 — 구워진 회전이 1차 측정을 속여도, 조립 후 다시 재서 스스로 보정한다
+        slot.updateMatrixWorld(true);
+        const got = new THREE.Box3().setFromObject(wrap);
+        const gotSize = got.getSize(new THREE.Vector3());
+        const gotLen = Math.max(1e-6, gotSize.z); // 슬롯 로컬 +Z가 진행 방향
+        wrap.scale.multiplyScalar(CAR_LEN / gotLen);
+        slot.updateMatrixWorld(true);
+        got.setFromObject(wrap);
+        wrap.position.y -= got.max.y - slot.getWorldPosition(new THREE.Vector3()).y; // 지붕 = 걷는 면, 강제
+        // BUILD 163: 창문의 불 — 낡은 열차의 발광 창 문법을 이식 (원본 UDIM 텍스처의 빈자리를 빛으로)
+        slot.updateMatrixWorld(true);
+        got.setFromObject(wrap);
+        const halfW = (got.max.x - got.min.x) / 2; // 슬롯 로컬 X = 좌우
+        const carH = got.max.y - got.min.y;
+        const gwY = -carH * 0.42;
+        for (let w = 0; w < 5; w += 1) {
+          const off = (w - 2) * (CAR_LEN / 6.2);
+          for (const sr of [-1, 1]) {
+            if (wrnd() < 0.25) continue; // 불 꺼진 창
+            const pane = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.13, 0.16), windowC2);
+            pane.position.set(sr * (halfW * 0.9 + 0.006), gwY, off);
+            slot.add(pane);
+          }
+        }
       }
     }).catch(() => { /* 실패 시 판자와 레일의 길로 남는다 */ });
   }
