@@ -271,6 +271,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const lanternRef = useRef<THREE.Group | null>(null); // BUILD 117: 진자 등불 래퍼
   // ---- BUILD 136: 구름 탈것 ----
   const ridingRef = useRef(false);
+  // BUILD 146: 걷는 기계 탈출 — 문득 멈춰 두리번, 여분 클립 한 번, 그러고선 뛰어서 따라잡는다
+  const moment = useRef({ next: 6 + Math.random() * 8, left: 0, kind: 'look' as 'look' | 'clip', phase: 0 });
   const hipsRef = useRef<THREE.Object3D | null>(null); // BUILD 140: 골반 뼈 — 구름이 이 뼈를 추적한다
   const footRef = useRef<THREE.Object3D | null>(null); // BUILD 142: 발 뼈 — 서서 타는 아이의 기준
   const hipsV = useMemo(() => new THREE.Vector3(), []);
@@ -651,6 +653,22 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         const remainingWorld = Math.abs(remaining) * dWdP;
         let targetSpeed = J.gait === 'run' ? spec.walker.runSpeed : spec.walker.walkSpeed;
         if (ridingRef.current) targetSpeed = spec.walker.runSpeed; // BUILD 136: 구름은 뛰는 속도로 흐른다
+        // BUILD 146: 순간의 자유 — 멈춰서 딴짓. 목적지는 멀어지고, 끝나면 gait가 알아서 뛰게 한다
+        const M = moment.current;
+        if (M.left > 0) {
+          M.left -= delta;
+          targetSpeed = 0;
+          if (M.kind === 'look') { M.phase += delta; rigRef.current?.setLook?.(Math.sin(M.phase * 1.5) * 0.55); }
+          if (M.left <= 0) rigRef.current?.setLook?.(0);
+        } else if (!ridingRef.current && !(rigRef.current?.inspecting?.() ?? false)) {
+          M.next -= delta;
+          if (M.next <= 0) {
+            M.next = 9 + Math.random() * 11;
+            const d = rigRef.current?.flourish?.() ?? 0;
+            if (d > 0.2) { M.kind = 'clip'; M.left = Math.min(d, 4) + 0.35; } // 여분 클립이 있으면 그것
+            else { M.kind = 'look'; M.left = 1.3 + Math.random() * 1.3; M.phase = 0; } // 없으면 두리번
+          }
+        }
         if (remainingWorld < 1.1) targetSpeed = Math.min(targetSpeed, spec.walker.walkSpeed); // 도착 전 감속
         charSpeed.current += (targetSpeed - charSpeed.current) * Math.min(1, delta * 2.6);
         // BUILD 098: 진행도는 '접선 방향으로 실제 나아간 만큼'만 오른다

@@ -32,6 +32,10 @@ export type WalkerRig = {
   setRiding?: (on: boolean) => void;
   /** BUILD 138: 탑승 클립의 엉덩이 높이 — 바닥 양반다리 0.02, 의자 앉기 0.3, 서서 타면 0 */
   rideSeat?: () => number;
+  /** BUILD 146: 여분 클립 하나를 즉흥으로 — 재생 길이(초) 반환, 없거나 바쁘면 0 */
+  flourish?: () => number;
+  /** BUILD 146: 두리번 — 머리 뼈에 요 오프셋 (0이면 정면) */
+  setLook?: (y: number) => void;
   inspecting: () => boolean;
   /** 현재 걸음 위상 (bob 동기화용) */
   phase: () => number;
@@ -179,6 +183,15 @@ export function createClipRig(
   const sitIdle = sitIdleFloor ?? mk('Sitting', false) ?? mk('Sitting Idle', false);
   const rideSeatH = sitIdle ? (sitIdleFloor ? 0.02 : 0.17) : 0; // BUILD 139: 의자파 0.3→0.17 — 방석이 무릎을 파고들었다
   const standUp = mk('Sit_Floor_StandUp');
+  // BUILD 146: 여분 클립 — 로코모션/제스처에 안 쓰인 나머지가 이 아이의 개성이다
+  const knownNames = new Set([cWalk.name, cRun.name, cIdle.name,
+    'PickUp', 'Interact', 'Pickup', 'Sit_Floor_Down', 'Sit_Floor_Idle', 'Sitting', 'Sitting Idle', 'Sit_Floor_StandUp']);
+  const extras = animations
+    .filter((c) => !knownNames.has(c.name))
+    .map((c) => { const a = mixer.clipAction(c); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; return a; });
+  const headBone0 = null as THREE.Object3D | null; // findBone은 아래에서 정의 — 자리표시
+  void headBone0;
+  let lookYaw = 0;
 
   // BUILD 093: 접지 보정 — "허공 보행" 수정.
   // 정지 포즈 기준의 정렬은 클립이 재생되면 어긋난다 (Mixamo 힙 기준선 차이).
@@ -194,6 +207,7 @@ export function createClipRig(
   const footL = toeL ?? findBone(/LeftFoot$/i, /^footl$/i, /foot\.l/i);
   const footR = toeR ?? findBone(/RightFoot$/i, /^footr$/i, /foot\.r/i);
   const hipsBone = findBone(/Hips$/i, /pelvis/i, /^hips$/i);
+  const headBone = findBone(/Head$/i); // BUILD 146: 두리번용
   // 밑창: 발끝 뼈 기준 얇게, 발목 기준이면 두껍게
   const sole = toeL ? 0.012 : 0.035;
   const baseY = root.position.y;
@@ -239,7 +253,7 @@ export function createClipRig(
     current = a;
   };
 
-  type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp';
+  type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp' | 'flourish'; // BUILD 146
   let gesture: Gesture = 'none';
   let riding = false; // BUILD 136: 구름 위
   mixer.addEventListener('finished', (e) => {
@@ -247,6 +261,7 @@ export function createClipRig(
     if (a === sitDown && gesture === 'sitDown' && sitIdle) { switchTo(sitIdle, 0.25); gesture = 'sit'; }
     else if (a === standUp && gesture === 'standUp') { switchTo(idle, 0.3); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
     else if (a === pickup && gesture === 'pickup') { switchTo(idle, 0.4); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
+    else if (gesture === 'flourish' && extras.includes(a)) { switchTo(idle, 0.35); gesture = 'none'; gestureGrace = 0.6; rollingMin = Infinity; } // BUILD 146
   });
 
   // 걷기↔뛰기 전환 문턱: 두 고유속도의 기하평균 부근
@@ -270,6 +285,15 @@ export function createClipRig(
       else { switchTo(idle, 0.3); gestureGrace = 0.9; rollingMin = Infinity; }
     },
     rideSeat: () => rideSeatH, // BUILD 138
+    // BUILD 146: 즉흥 — 여분 클립 하나. 걷는 기계에게 주는 자유
+    flourish() {
+      if (riding || gesture !== 'none' || !extras.length) return 0;
+      const a = extras[Math.floor(Math.random() * extras.length)];
+      gesture = 'flourish';
+      switchTo(a, 0.3);
+      return a.getClip().duration;
+    },
+    setLook(y: number) { lookYaw = y; },
     playInspect(kind = 'pickup') {
       if (riding) return; // BUILD 138: 구름 위에선 도착 제스처를 받지 않는다
       if (gesture !== 'none') return;
@@ -336,6 +360,7 @@ export function createClipRig(
         this.stopInspect();
       }
       mixer.update(dt);
+      if (headBone && lookYaw !== 0) headBone.rotation.y += lookYaw; // BUILD 146: 믹서가 쓴 위에 두리번을 얹는다
 
       // 앉기 침하: 앉는 동안 0.26u 가라앉고, 일어나면 같은 호흡으로 떠오른다
       // 마법 의자 등장/퇴장: 살짝 튀어올랐다 자리잡는 팝 (0.45s), 사라질 땐 빨려들 듯 (0.28s)
