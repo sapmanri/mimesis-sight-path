@@ -424,6 +424,67 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gullsActive, spec.ambience?.sea, world, gullRoot]);
 
+  // BUILD 167: 밤하늘 — 별은 안개를 모른다 (fog:false가 옳은 유일한 존재).
+  // 흐르는 시간에선 nightK를 따라 떠오르고, 구름이 짙으면 가려진다.
+  const starsObj = useMemo(() => {
+    const N = 750;
+    const pos = new Float32Array(N * 3);
+    const R = 82;
+    for (let i = 0; i < N; i += 1) {
+      // 상반구 돔 — 지평선 근처는 성기게, 머리 위는 빽빽하게
+      const u = Math.random(); const v = Math.random();
+      const theta = u * Math.PI * 2;
+      const phi = Math.acos(1 - v * 0.92); // 0(천정)~살짝 위 지평선
+      pos[i * 3] = R * Math.sin(phi) * Math.cos(theta);
+      pos[i * 3 + 1] = R * Math.cos(phi) + 2;
+      pos[i * 3 + 2] = R * Math.sin(phi) * Math.sin(theta);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({
+      color: '#e8edf6', size: 0.14, sizeAttenuation: true,
+      transparent: true, opacity: 0, depthWrite: false, fog: false,
+    });
+    const pts = new THREE.Points(geo, mat);
+    pts.frustumCulled = false;
+    pts.renderOrder = -1;
+    return { pts, mat };
+  }, []);
+  const shooting = useRef<null | { mesh: THREE.Mesh; t: number; dur: number; from: THREE.Vector3; to: THREE.Vector3 }>(null);
+  const shootIn = useRef(30 + Math.random() * 60);
+  const shootMat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: '#fdf6e3', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }), []);
+
+  // BUILD 166: 스치는 사람 — 무한길은 외로운 길이다. 가끔 반대편에서 누군가 걸어온다.
+  // 스칠 때 서로 고개만 살짝 — 각자의 하루가 있으므로 멈추지 않는다 (인간극장의 문법).
+  const passerRoot = useMemo(() => new THREE.Group(), []);
+  const passer = useRef<null | {
+    group: THREE.Group; mixer: THREE.AnimationMixer; prog: number; dir: 1 | -1;
+    head: THREE.Object3D | null; headYaw: number; speed: number;
+  }>(null);
+  const passerIn = useRef(55 + Math.random() * 80); // 첫 만남은 1~2분 남짓 뒤
+  const passerLoading = useRef(false);
+  const spawnPasser = (walkDir: 1 | -1, spawnProg: number) => {
+    if (passerLoading.current || passer.current) return;
+    passerLoading.current = true;
+    void loadWalkerAsset(defaultLoader, 'random').then(({ group, animations, clipSpeeds }) => {
+      passerLoading.current = false;
+      const mixer = new THREE.AnimationMixer(group);
+      const cWalk = animations.find((a) => ['Walking_A', 'Walking', 'Walk'].includes(a.name)) ?? animations[0];
+      if (cWalk) {
+        const act = mixer.clipAction(cWalk);
+        const nat = clipSpeeds?.walk || 0.85;
+        act.timeScale = THREE.MathUtils.clamp(0.8 / nat, 0.55, 1.9); // 발이 땅을 무는 속도
+        act.play();
+      }
+      let head: THREE.Object3D | null = null;
+      group.traverse((o) => { if (!head && /head$/i.test(o.name)) head = o; });
+      passerRoot.add(group);
+      passer.current = { group, mixer, prog: spawnProg, dir: (walkDir * -1) as 1 | -1, head, headYaw: 0, speed: 0.78 + Math.random() * 0.14 };
+    }).catch(() => { passerLoading.current = false; });
+  };
+
   const poofRoot = useMemo(() => new THREE.Group(), []);
   const poofs = useRef<{ grp: THREE.Group; t: number }[]>([]);
   const spawnPoof = (at: THREE.Vector3) => {
@@ -1069,6 +1130,90 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         }
       }
     }
+    // BUILD 167: 밤하늘 — 밤의 깊이만큼 별이 떠오르고, 구름이 짙으면 가려진다
+    {
+      const flowT = skyOn && SKY.flowTime();
+      const nightK = flowT
+        ? dayLightAt(SKY.state.dayT).nightK
+        : ((spec.weather?.time ?? 'day') === 'night' ? 1 : 0);
+      const cloudHide = skyOn && SKY.flowWeather() ? SKY.state.cloud : (spec.weather?.cloudAmount ?? 0.35);
+      const want = nightK * (1 - cloudHide * 0.85) * (spec.weather?.kind === 'rain' ? 0 : 1);
+      starsObj.mat.opacity += (want * 0.9 - starsObj.mat.opacity) * Math.min(1, delta * 1.5);
+      // 별똥별 — 깊은 밤에만, 40~120초에 하나
+      const SH = shooting.current;
+      if (!SH && starsObj.mat.opacity > 0.35) {
+        shootIn.current -= delta;
+        if (shootIn.current <= 0) {
+          const a = Math.random() * Math.PI * 2;
+          const from = new THREE.Vector3(Math.cos(a) * 46, 26 + Math.random() * 16, Math.sin(a) * 46);
+          const to = from.clone().add(new THREE.Vector3((Math.random() - 0.5) * 46, -(9 + Math.random() * 12), (Math.random() - 0.5) * 46));
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 2.1), shootMat);
+          mesh.lookAt(to.clone().sub(from).add(mesh.position));
+          passerRoot.add(mesh); // 루트 재활용 — 하늘 소품도 한 지붕
+          shooting.current = { mesh, t: 0, dur: 0.75 + Math.random() * 0.5, from, to };
+        }
+      } else if (SH) {
+        SH.t += delta;
+        const k = Math.min(1, SH.t / SH.dur);
+        SH.mesh.position.lerpVectors(SH.from, SH.to, k);
+        SH.mesh.lookAt(SH.to);
+        shootMat.opacity = Math.sin(k * Math.PI) * 0.85 * starsObj.mat.opacity;
+        if (k >= 1) {
+          passerRoot.remove(SH.mesh);
+          shooting.current = null;
+          shootIn.current = 40 + Math.random() * 80;
+        }
+      }
+    }
+    // BUILD 166: 스치는 사람 — 산책 중에만, 한 번에 한 명만
+    if (stroll) {
+      const PS = passer.current;
+      const walkerDir = (loopPath ? 1 : strollDir.current) as 1 | -1;
+      if (!PS) {
+        passerIn.current -= delta;
+        if (passerIn.current <= 0) {
+          // 안개 너머에서 나타난다 — 시야 밖 18u 앞
+          const spawnProg = charProgress.current + walkerDir * (18 / dWdPn);
+          if (loopPath || (spawnProg > 0.5 && spawnProg < scenes.length - 1.5)) spawnPasser(walkerDir, spawnProg);
+          else passerIn.current = 20; // 열린 길 끝자락이면 조금 뒤에 다시
+        }
+      } else {
+        // 반대 방향으로 제 갈 길을 간다
+        const t0p = world.progressToT(PS.prog);
+        const p0p = world.curve.getPoint(t0p);
+        const t1p = world.progressToT(PS.prog + PS.dir * 0.01);
+        const dWdPp = Math.max(0.05, world.curve.getPoint(t1p).distanceTo(p0p) / 0.01);
+        PS.prog += (PS.dir * PS.speed * delta) / dWdPp;
+        const pt = world.curve.getPoint(world.progressToT(PS.prog));
+        const tanP = world.curve.getTangent(world.progressToT(PS.prog)).setY(0).normalize();
+        PS.group.position.copy(pt);
+        PS.group.rotation.y = Math.atan2(tanP.x * PS.dir, tanP.z * PS.dir);
+        PS.mixer.update(delta);
+        // 스칠 때 고개만 살짝 — 지나면 다시 앞을 본다
+        if (PS.head && walkerPos.current) {
+          const d = PS.group.position.distanceTo(walkerPos.current);
+          const want = d < 3.2 ? THREE.MathUtils.clamp(
+            (() => { const dx = walkerPos.current.x - PS.group.position.x; const dz = walkerPos.current.z - PS.group.position.z;
+              let a = Math.atan2(dx, dz) - PS.group.rotation.y;
+              while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; })(),
+            -0.6, 0.6) : 0;
+          PS.headYaw += (want - PS.headYaw) * Math.min(1, delta * 4);
+          PS.head.rotation.y += PS.headYaw;
+        }
+        // 뒤로 14u 멀어지면 안개 속으로 사라진다
+        const behind = (PS.prog - charProgress.current) * walkerDir;
+        const gone = behind < -(14 / dWdPn);
+        const offEnds = !loopPath && (PS.prog < 0.1 || PS.prog > scenes.length - 1.1);
+        if (gone || offEnds) {
+          passerRoot.remove(PS.group);
+          passer.current = null;
+          passerIn.current = 90 + Math.random() * 130; // 다음 인연은 1.5~3.5분 뒤
+        }
+      }
+    } else if (passer.current) { // 산책이 끝나면 인연도 접는다
+      passerRoot.remove(passer.current.group);
+      passer.current = null;
+    }
     // BUILD 149: 갈매기 비행 — 이중 원(선회원 자체가 드리프트)이라 같은 궤적이 없다
     if (gulls.current.length && gullRoot.visible) {
       const wind = windNow;
@@ -1298,6 +1443,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       <primitive object={broomMount} />
       <primitive object={petRoot} />
       <primitive object={gullRoot} />
+      <primitive object={passerRoot} />
+      <primitive object={starsObj.pts} />
       <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}
       <primitive
