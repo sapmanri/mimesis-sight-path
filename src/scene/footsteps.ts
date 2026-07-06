@@ -54,7 +54,7 @@ export function createFootsteps(): Footsteps {
       const t = ctx.currentTime;
       const k = Math.min(1, Math.max(0, intensity));
       const master = ctx.createGain();
-      master.gain.value = (0.05 + k * 0.09) * volume; // 조용한 세계 — 소리도 조심스럽게
+      master.gain.value = (0.028 + k * 0.05) * volume; // BUILD 175: 발소리 다이어트 — 바람과 새보다 앞서 걷지 않는다
       master.connect(ctx.destination);
 
       // 1) 무게: 사인 thud (주파수 살짝 랜덤 — 걸음마다 같은 소리는 없다)

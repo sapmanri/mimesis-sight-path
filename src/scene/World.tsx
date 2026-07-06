@@ -6,6 +6,7 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultL
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
+import { makeBubble, updateBubble, type Bubble } from './speech';
 import { createTinker, type Tinker } from './tinker';
 import { createPropObject, createPropAnimated, ANIMATED_PROPS, loadHandLanternAsset, type PlacedProp } from '../engine/props';
 import { footsteps } from './footsteps';
@@ -677,6 +678,18 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const shootMat = useMemo(() => new THREE.MeshBasicMaterial({
     color: '#fdf6e3', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
   }), []);
+
+  // BUILD 175: 말풍선 — 이 세계 사람들의 목소리 아닌 목소리
+  const bubbleRoot = useMemo(() => new THREE.Group(), []);
+  const bubbles = useRef<Bubble[]>([]);
+  const mutterIn = useRef(25 + Math.random() * 40); // 첫 혼잣말
+  const speak = (target: THREE.Object3D | null, yOff: number, icon?: string, pitch = 1) => {
+    if (!target || bubbles.current.length >= 3) return; // 수다스러운 세계는 사양
+    const b = makeBubble(target, yOff, icon);
+    bubbles.current.push(b);
+    bubbleRoot.add(b.sprite);
+    ambience.mumble(pitch);
+  };
 
   // BUILD 174: 허공답보 수술 — BUILD 093의 유령이 NPC들에게 부활했었다.
   // 정지 포즈 정렬은 클립이 재생되면 어긋난다(믹사모 힙 기준선 차이).
@@ -1446,6 +1459,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             mailRest.current = { until: tt3 + readLen, at: ms.grp.position.clone() };
             if (item) onMail?.(item);
             rigRef.current?.playInspect('pickup'); // 들여다본다 — 편지의 동작
+            speak(walker, 1.28, '✉');
             break;
           }
         }
@@ -1504,6 +1518,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             R.claw?.fadeOut(0.15);
             R.shout?.reset().fadeIn(0.15).play();
             ambience.roosterCrow(Math.max(0.25, 1 - dW2 / 6));
+            window.setTimeout(() => speak(walker, 1.28, '!'), 900); // 놀란 사람
           }
           // 아침이 깊어지면 — 안개가 데려간다 (사람이 안 볼 때)
           const over = !skyOn || !SKY.flowTime() || SKY.state.dayT > 0.38 || SKY.state.dayT < 0.19;
@@ -1571,6 +1586,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             spt.rested = true;
             campRest.current = { until: tt2 + 9 + Math.random() * 8, fire: spt.grp.position.clone() };
             if (!ridingRef.current) rigRef.current?.playInspect('sit');
+            speak(walker, 1.28, '♪'); // BUILD 175: 온기의 콧노래
+            if (spt.guest) window.setTimeout(() => { if (spt.guest) speak(spt.guest.group, 1.24, undefined, 1.1); }, 700); // 선객의 인사
           }
         }
       }
@@ -1607,6 +1624,23 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         departures.current = [];
       }
       if (campRest.current) { campRest.current = null; rigRef.current?.stopInspect(); }
+    }
+    // BUILD 175: 말풍선 — 갱신과 혼잣말
+    {
+      for (let i = bubbles.current.length - 1; i >= 0; i -= 1) {
+        if (updateBubble(bubbles.current[i], delta)) {
+          bubbleRoot.remove(bubbles.current[i].sprite);
+          bubbles.current.splice(i, 1);
+        }
+      }
+      // 혼잣말 — 걷는 중에만, 아무 이유 없이 (45~100초)
+      if (!ridingRef.current && !campRest.current && !mailRest.current) {
+        mutterIn.current -= delta;
+        if (mutterIn.current <= 0) {
+          mutterIn.current = 45 + Math.random() * 55;
+          speak(walker, 1.28);
+        }
+      }
     }
     // BUILD 174: 팅커벨 구출작전 — 무한로드의 길잡이로 전직.
     // 산책엔 목적지가 없으니 정찰할 곳도 없었다. 이제 팅커는 두 걸음 반 앞을 날며 길을 이끌고,
@@ -1670,6 +1704,12 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             -0.6, 0.6) : 0;
           PS.headYaw += (want - PS.headYaw) * Math.min(1, delta * 4);
           PS.head.rotation.y += PS.headYaw;
+          // BUILD 175: 스치는 인사 — 서로 웅얼, 한 번만
+          if (d < 2.6 && !(PS as unknown as { greeted?: boolean }).greeted) {
+            (PS as unknown as { greeted?: boolean }).greeted = true;
+            speak(PS.group, 1.28, undefined, 0.92 + Math.random() * 0.3);
+            window.setTimeout(() => speak(walker, 1.28), 420 + Math.random() * 300);
+          }
         }
         // 뒤로 14u 멀어지면 안개 속으로 사라진다
         const behind = (PS.prog - charProgress.current) * walkerDir;
@@ -1917,6 +1957,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       <primitive object={passerRoot} />
       <primitive object={waysideRoot} />
       <primitive object={mailRoot} />
+      <primitive object={bubbleRoot} />
       <primitive object={starsObj.pts} />
       <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}

@@ -333,6 +333,33 @@ function createAmbience() {
     crackleTimer = window.setTimeout(tick, 300);
   };
 
+  // ---------- BUILD 175: 웅얼거림 ----------
+  /** 심즈어 — 뜻 없는 3~6음절. 낮고 작게, 혼잣말의 부피로 */
+  const mumble = (pitch = 1) => {
+    if (!ensure() || !ctx || !master || muted) return;
+    let t = ctx.currentTime + 0.02;
+    const n = 3 + Math.floor(Math.random() * 4);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.6;
+    const out = ctx.createGain(); out.gain.value = 0.016;
+    lp.connect(out).connect(master);
+    for (let i = 0; i < n; i += 1) {
+      const dur = 0.055 + Math.random() * 0.07;
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      const f = (150 + Math.random() * 90) * pitch;
+      o.frequency.setValueAtTime(f, t);
+      o.frequency.linearRampToValueAtTime(f * (0.9 + Math.random() * 0.25), t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.8 + Math.random() * 0.2, t + 0.018);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g).connect(lp);
+      o.start(t); o.stop(t + dur + 0.02);
+      t += dur + 0.02 + Math.random() * 0.05;
+    }
+  };
+
   // ---------- BUILD 173: 꼬끼오 ----------
   /** 수탉 — 4음절: 꼬, 끼, 오오오(비브라토), 오(내려앉음). 만화적이지만 이 세계의 만화다 */
   const roosterCrow = (vol = 1) => {
@@ -459,6 +486,7 @@ function createAmbience() {
     thunder,
     gullCry,
     roosterCrow,
+    mumble,
     /** 모닥불 근접도 0~1 — 잉걸 게인과 타닥임 밀도가 함께 따른다 */
     setFire(level: number) {
       fireLevel = Math.min(1, Math.max(0, level));
