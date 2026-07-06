@@ -1023,7 +1023,16 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
               petPlay(P.idle);
             }
           }
-          P.group.position.y = wp.y; // 길의 높이를 따른다
+          // BUILD 154: 침하 수술 — 발밑은 '펫의 자리'에서 실측한다 (워커의 y를 빌리면 경사에서 가라앉는다)
+          // 워커 진행도 주변을 훑어 펫과 XZ로 가장 가까운 안내선 지점의 높이를 취한다
+          let bestY = wp.y; let bestD = Infinity;
+          for (let k = -6; k <= 2; k += 1) {
+            const pr = charProgress.current + (k * 0.45) / dWdPn; // 뒤로 2.7u, 앞으로 0.9u
+            const cp = world.curve.getPoint(world.progressToT(loopPath ? pr : Math.max(0, Math.min(scenes.length - 1, pr))));
+            const dd = (cp.x - P.group.position.x) ** 2 + (cp.z - P.group.position.z) ** 2;
+            if (dd < bestD) { bestD = dd; bestY = cp.y; }
+          }
+          P.group.position.y += (bestY - P.group.position.y) * Math.min(1, delta * 10); // 스냅 대신 스밈
         }
       }
     }
