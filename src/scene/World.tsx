@@ -270,12 +270,19 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const lanternRef = useRef<THREE.Group | null>(null); // BUILD 117: 진자 등불 래퍼
   // ---- BUILD 136: 구름 탈것 ----
   const ridingRef = useRef(false);
+  // BUILD 137: 엄마 구름 — 엉덩이에 걸치는 작은 구름 (돌멩이에 걸터앉듯, 다리는 밖으로 달랑)
   const cloudMount = useMemo(() => {
     const g = new THREE.Group();
     let sd = 4242; const rnd = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
-    g.add(makeCloudPuff(rnd, 0.5));
-    const p2 = makeCloudPuff(rnd, 0.34); p2.position.set(0.22, -0.05, 0.1); g.add(p2);
-    const p3 = makeCloudPuff(rnd, 0.3); p3.position.set(-0.2, -0.06, -0.08); g.add(p3);
+    g.add(makeCloudPuff(rnd, 0.13));
+    g.visible = false;
+    return g;
+  }, []);
+  // 아기 구름 — 옆에서 몽실몽실 따라다니는 꼬마
+  const babyCloud = useMemo(() => {
+    const g = new THREE.Group();
+    let sd = 7777; const rnd = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
+    g.add(makeCloudPuff(rnd, 0.075));
     g.visible = false;
     return g;
   }, []);
@@ -300,6 +307,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     ridingRef.current = on;
     rigRef.current?.setRiding?.(on);
     cloudMount.visible = on;
+    babyCloud.visible = on;
+    if (on && walkerPos.current) babyCloud.position.copy(walkerPos.current).add(new THREE.Vector3(0.4, 0.4, 0));
     if (walkerPos.current) spawnPoof(walkerPos.current); // 연기 펑 — 전환의 어색함을 가린다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [riding]);
@@ -685,15 +694,22 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       walker.rotation.z = sway;
     }
     walker.rotation.y = charYaw.current;
-    // BUILD 136: 구름이 발밑을 따른다 — 발이 살짝 묻히게(-0.12), 제 호흡으로 흔들리며
+    // BUILD 137: 엄마 구름은 엉덩이 밑을, 아기 구름은 옆을 — 몽실몽실
     if (cloudMount.visible) {
       const tt = clock.elapsedTime;
       cloudMount.position.set(
-        walker.position.x + Math.sin(tt * 0.53 + 1) * 0.03,
-        walker.position.y - 0.12 + Math.sin(tt * 1.3) * 0.012,
-        walker.position.z + Math.cos(tt * 0.61) * 0.03,
+        walker.position.x + Math.sin(tt * 0.53 + 1) * 0.02,
+        walker.position.y - 0.06 + Math.sin(tt * 1.3) * 0.01,
+        walker.position.z + Math.cos(tt * 0.61) * 0.02,
       );
-      cloudMount.rotation.y += delta * 0.15;
+      cloudMount.rotation.y += delta * 0.12;
+      // 아기: 오른쪽 옆 0.42u를 스프링으로 따라온다 — 늦게 출발하고 부드럽게 도착
+      const side = new THREE.Vector3(Math.cos(charYaw.current), 0, -Math.sin(charYaw.current));
+      const target = walker.position.clone()
+        .addScaledVector(side, 0.42 + Math.sin(tt * 0.4) * 0.06)
+        .add(new THREE.Vector3(0, -0.02 + Math.sin(tt * 1.1 + 3) * 0.035, 0));
+      babyCloud.position.lerp(target, Math.min(1, delta * 2.5));
+      babyCloud.rotation.y += delta * 0.2;
     }
     // 연기 펑 — 0.6초 살고 사라진다
     for (let i = poofs.current.length - 1; i >= 0; i -= 1) {
@@ -879,6 +895,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       {rain && <primitive object={rain.lines} />}
       {snow && <primitive object={snow.points} />}
       <primitive object={cloudMount} />
+      <primitive object={babyCloud} />
       <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}
       <primitive
