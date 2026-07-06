@@ -391,6 +391,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const gullRoot = useMemo(() => new THREE.Group(), []);
   const gulls = useRef<{ m: THREE.Object3D; R: number; th: number; om: number; alt: number; bobA: number; bobF: number; ph: number; roll: number }[]>([]);
   const gullCryIn = useRef(20 + Math.random() * 25);
+  const tinkerLead = useRef(1); // BUILD 174: 길잡이 리듬
   const gullsActive = (spec.weather?.time ?? 'day') === 'day'
     && (spec.weather?.kind ?? 'clear') !== 'rain' && spec.weather?.kind !== 'snow'
     && (spec.ambience?.sea ?? 0) > 0 && (spec.ambience?.life ?? 1) > 0;
@@ -625,6 +626,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             const idle = findC('Idle', 'Idle_A', 'idle');
             const pose = sit ?? idle ?? animations[0];
             if (pose) mixer.clipAction(pose).play(); // 앉을 줄 아는 아이는 앉고, 아니면 서서 불을 본다
+            groundNpc(g2, mixer); // BUILD 174: 불 위에 떠서 명상하지 않도록
             const a = Math.random() * Math.PI * 2;
             g2.position.set(Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55);
             g2.rotation.y = Math.atan2(-g2.position.x, -g2.position.z); // 불을 바라본다
@@ -700,6 +702,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       }
       let head: THREE.Object3D | null = null;
       group.traverse((o) => { if (!head && /head$/i.test(o.name)) head = o; });
+      groundNpc(group, mixer); // BUILD 174: 허공 보행 수술
       enforceFog(group);
       passerRoot.add(group);
       passer.current = { group, mixer, prog: spawnProg, dir: (walkDir * -1) as 1 | -1, head, headYaw: 0, speed: 0.78 + Math.random() * 0.14 };
@@ -1519,6 +1522,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           const wp2 = G.group.getWorldPosition(new THREE.Vector3());
           waysideRoot.add(G.group); // 세계 좌표 유지한 채 재입양
           G.group.position.copy(wp2);
+          groundNpc(G.group, mixer2); // BUILD 174: 일어설 때 다시 잰다 — 앉기와 걷기의 기준선이 다르므로
           departures.current.push({ group: G.group, mixer: mixer2, prog: spt.prog, dir: dirL, speed: 0.75 + Math.random() * 0.15, walked: 0 });
         }
       }
@@ -1592,6 +1596,34 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         departures.current = [];
       }
       if (campRest.current) { campRest.current = null; rigRef.current?.stopInspect(); }
+    }
+    // BUILD 174: 팅커벨 구출작전 — 무한로드의 길잡이로 전직.
+    // 산책엔 목적지가 없으니 정찰할 곳도 없었다. 이제 팅커는 두 걸음 반 앞을 날며 길을 이끌고,
+    // 길가에 무언가 나타나면 먼저 날아가 그 위를 맴돌며 알린다 — "저기 봐!"
+    if (stroll) {
+      tinkerLead.current -= delta;
+      let herald: THREE.Vector3 | null = null;
+      for (const spt of waySpots.current) {
+        const aheadBy = (spt.prog - charProgress.current) * (loopPath ? 1 : strollDir.current);
+        if (aheadBy > 0 && aheadBy < 9 / dWdPn && !(spt as unknown as { told?: boolean }).told) {
+          herald = spt.grp.position;
+          if (walkerPos.current && spt.grp.position.distanceTo(walkerPos.current) < 3.2) {
+            (spt as unknown as { told?: boolean }).told = true; // 소개 끝 — 다시 앞장선다
+          }
+          break;
+        }
+      }
+      if (tinkerLead.current <= 0) {
+        tinkerLead.current = 0.9 + Math.random() * 0.7;
+        if (herald) {
+          tinker.flyTo(herald.clone().add(new THREE.Vector3(0, 0.95, 0)), 0.8);
+        } else {
+          const leadP = world.curve.getPoint(world.progressToT(charProgress.current + (loopPath ? 1 : strollDir.current) * (2.4 / dWdPn)));
+          leadP.y += 1.05 + Math.sin(clock.elapsedTime * 1.3) * 0.15;
+          leadP.x += Math.sin(clock.elapsedTime * 0.7) * 0.3; // 길 위를 지그재그로 — 요정의 걸음
+          tinker.flyTo(leadP, 1.1);
+        }
+      }
     }
     // BUILD 170: 스치는 사람 승격 — 순환로에선 모드 불문 등장 (무한류 세계의 시민)
     if (stroll || loopPath) {
