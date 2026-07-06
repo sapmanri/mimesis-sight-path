@@ -112,7 +112,7 @@ export function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { 
         `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(bottom)}, ${glsl(top)}, vHFy)) * ${glsl(str)});`,
       );
   };
-  mat.customProgramCacheKey = () => `hfog|${top.toFixed(4)}|${bottom.toFixed(4)}|${str.toFixed(4)}|${PALETTE.fog}`;
+  mat.customProgramCacheKey = () => `hfog|${top.toFixed(4)}|${bottom.toFixed(4)}|${str.toFixed(4)}|${PALETTE.fog}|n${HFOG_NONCE}`; // BUILD 180: 논스 각인
   return mat;
 }
 
@@ -267,7 +267,14 @@ type ModelSpec = {
 // BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
 // BUILD 179: 돌 격리 실험 (Vase 제안 — 바이섹션) — 전부 끄고 0을 확인한 뒤, 한 그룹씩 복귀시켜 범인을 특정한다.
 // glb: rockSpots(rock0/3/7·caveA/B) / pebbles: 잔자갈 인스턴서(lip·frag·peb) / (스트리밍 풀은 World.tsx WAY_POOL)
-export const ROCK_GROUPS = { glb: false, pebbles: false };
+export const ROCK_GROUPS = { glb: false, pebbles: false, bushes: false }; // BUILD 180: 수풀도 격리 (스샷의 초록 다면체 덩이 = 수풀 계열)
+
+// BUILD 180: 셰이더 프로그램 논스 — 부검 결과, needsUpdate로도 재컴파일이 안 일어났다.
+// 같은 캐시 키의 프로그램이 살아 있으면 THREE는 onBeforeCompile을 다시 부르지 않는다 —
+// 오염된 프로그램(무안개 시절 컴파일)이 키 적중으로 영생했다. 월드를 지을 때마다 논스를
+// 올려 키 공간을 통째로 갈아치운다: 새 세계는 새 프로그램으로 시작한다.
+let HFOG_NONCE = 0;
+export function bumpHfogNonce() { HFOG_NONCE += 1; }
 
 export const ROAD_MATERIALS: Record<RoadMaterialId, { label: string; top?: string; edge?: string }> = {
   sand: { label: '모랫길' },
@@ -602,6 +609,7 @@ export function buildWorld(
   loadModel: ModelLoader = defaultLoader,
   spec: WorldSpec = JEJU_SPEC,
 ): BuiltWorld {
+  bumpHfogNonce(); // BUILD 180: 새 세계는 새 프로그램으로 — 오염된 캐시와 결별
   // ---- 0. BUILD 082: 명세 활성화. 이 아래의 모든 생성기는 spec을 읽는다. ----
   SPEC = spec;
   WORLD_SEED = spec.meta.seed | 0;
@@ -1574,8 +1582,8 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     const spillMeshes = greens.slice(0, 2).map((c) => mkInstG(blobGeo, c, 160));
     const hangMeshes = greens.slice(1, 3).map((c) => mkInstG(coneGeo, c, 130));
     const counters = [0, 0, 0, 0];
-    // 턱 수풀: 2~4덩이 뭉치가 가장자리에 반쯤 걸쳐 있다
-    const bushSpots = Math.min(52, Math.floor(frames.length / 8));
+    // 턱 수풀: 2~4덩이 뭉치가 가장자리에 반쯤 걸쳐 있다 (BUILD 180: 격리 대상)
+    const bushSpots = ROCK_GROUPS.bushes ? Math.min(52, Math.floor(frames.length / 8)) : 0; // BUILD 180: 격리
     for (let k = 0; k < bushSpots; k += 1) {
       const i = Math.floor(Math.abs(noise1(k * 5.3)) * (frames.length - 1));
       const f = frames[i];
@@ -1686,7 +1694,7 @@ function buildVegetation(frames: Frame[], widthAt: (t: number) => number, anchor
   const nearAnchor = (p: THREE.Vector3) => anchors.some((a) => a.distanceTo(p) < 1.3);
 
   // 수풀: 눌린 다면체 2~4덩이 뭉치
-  for (let k = 0; k < V.bushCount; k += 1) {
+  for (let k = 0; ROCK_GROUPS.bushes && k < V.bushCount; k += 1) { // BUILD 180: 격리
     const f = frames[Math.floor(rnd() * frames.length)];
     const w = widthAt(f.t);
     const side = rnd() > 0.5 ? 1 : -1;
