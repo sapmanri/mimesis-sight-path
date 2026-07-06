@@ -1126,7 +1126,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     // 침목 — 0.55u마다 하나, 어두운 나무
     const sleeperGeo = new THREE.BoxGeometry(0.86, 0.03, 0.14);
     const sleeperCount = Math.floor(total / 0.55);
-    const sleepers = new THREE.InstancedMesh(sleeperGeo, new THREE.MeshStandardMaterial({ color: '#4a3f35', roughness: 0.9 }), sleeperCount);
+    const sleepers = new THREE.InstancedMesh(sleeperGeo, applyHeightFog(new THREE.MeshStandardMaterial({ color: '#4a3f35', roughness: 0.9 })), sleeperCount);
     const SM = new THREE.Matrix4(); const SQ = new THREE.Quaternion(); const SE = new THREE.Euler(); const SV = new THREE.Vector3();
     for (let k = 0; k < sleeperCount; k += 1) {
       const { p, tan } = atDist(k * 0.55 + 0.2);
@@ -1172,7 +1172,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
   if (wheelMats.length) {
     const wheelGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.05, 10);
     wheelGeo.rotateZ(Math.PI / 2); // 축이 좌우를 향하게
-    const wheels = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: '#33302b', roughness: 0.85 }), wheelMats.length);
+    const wheels = new THREE.InstancedMesh(wheelGeo, applyHeightFog(new THREE.MeshStandardMaterial({ color: '#33302b', roughness: 0.85 })), wheelMats.length);
     wheelMats.forEach((m, i) => wheels.setMatrixAt(i, m));
     wheels.instanceMatrix.needsUpdate = true;
     wheels.castShadow = true;
@@ -1463,13 +1463,13 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
   {
     const rockGeo = new THREE.IcosahedronGeometry(1, 0);
     const mkInstG = (geo: THREE.BufferGeometry, color: string, count: number) => {
-      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 }), count);
+      const mesh = new THREE.InstancedMesh(geo, applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 })), count); // BUILD 165: 잔풀도 안개를 맞는다
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       return mesh;
     };
     const mkInst = (count: number, color: string, rough = 0.95) => {
-      const mesh = new THREE.InstancedMesh(rockGeo, new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 }), count);
+      const mesh = new THREE.InstancedMesh(rockGeo, applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 })), count); // BUILD 165: 잔자갈도
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       return mesh;
@@ -1620,8 +1620,8 @@ function colorMesh(
 function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
   const rnd = worldRng(4177);
-  const matA = new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 });
-  const matB = new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 });
+  const matA = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 })); // BUILD 165: 가장자리 풀도
+  const matB = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 }));
   const geo = new THREE.ConeGeometry(0.016, 0.16, 3); // 풀잎 한 가닥
   for (let k = 0; k < SPEC.decoration.grassCount; k += 1) {
     const i = Math.floor(rnd() * frames.length);
