@@ -17,7 +17,7 @@
   "fantasy": "🌌 Fantasy",
   "theme-kits": "🎬 Theme Kits"
  },
- "assetCount": 176,
+ "assetCount": 178,
  "totalBytes": 2667920289,
  "items": [
   {
@@ -2353,6 +2353,34 @@
    "status": "raw",
    "productionRef": null,
    "notes": "763메시 고밀도 — 감량 필요",
+   "catalogIds": []
+  },
+  {
+   "id": "eolic_turbine",
+   "sourceFile": "eolic_OBJ.rar",
+   "release": "assets-v4-pending",
+   "sizeBytes": 153387,
+   "downloadUrl": null,
+   "category": "sky_weather",
+   "subcategory": "animated",
+   "status": "in_production",
+   "productionRef": "windturbine",
+   "notes": "BUILD 136 기상. 부유섬 받침 포함, 로터 재부모화로 회전. eolic_FBX.rar은 손상(read overflow) — OBJ 사용",
+   "catalogIds": [
+    "windturbine"
+   ]
+  },
+  {
+   "id": "cloud_ride_obj",
+   "sourceFile": "cloud__1_.obj",
+   "release": "assets-v4-pending",
+   "sizeBytes": 94378,
+   "downloadUrl": null,
+   "category": "sky_weather",
+   "subcategory": "cloud",
+   "status": "raw",
+   "productionRef": null,
+   "notes": "클러스터 3개가 원점에서 흩어진 구조 — 탑승 구름은 makeCloudPuff 프로시저럴로 대체. 대형 구름 프롭 후보로 보류",
    "catalogIds": []
   }
  ]

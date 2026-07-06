@@ -922,6 +922,19 @@ export function EditorApp() {
               <label>뛰기 속도 <em>{doc.spec.walker.runSpeed.toFixed(2)} u/s</em>
                 <input type="range" min="1.0" max="2.6" step="0.02" value={doc.spec.walker.runSpeed} onChange={(e) => edit((d) => { d.spec.walker.runSpeed = Number(e.target.value); })} />
               </label>
+              <h4>탈것 (BUILD 136)</h4>
+              <label className="ed-check">
+                <input type="checkbox" checked={doc.spec.walker.mount?.enabled ?? false}
+                  onChange={(e) => edit((d) => { d.spec.walker.mount = { ...(d.spec.walker.mount ?? {}), enabled: e.target.checked, kind: d.spec.walker.mount?.kind ?? 'cloud' }; })} />
+                탈것 UI 표시 — 뷰어에 ☁️ 버튼, 누르면 연기 펑 하며 올라탄다
+              </label>
+              <label>종류
+                <select value={doc.spec.walker.mount?.kind ?? 'cloud'}
+                  onChange={(e) => edit((d) => { d.spec.walker.mount = { ...(d.spec.walker.mount ?? { enabled: false }), kind: e.target.value as 'cloud' | 'broom' }; })}>
+                  <option value="cloud">☁️ 구름 (뛰기 속도로 흐른다)</option>
+                  <option value="broom" disabled>🧹 마법 빗자루 — 예정</option>
+                </select>
+              </label>
               <label className="ed-check">
                 <input type="checkbox" checked={doc.spec.walker.lantern ?? false}
                   onChange={(e) => edit((d) => { d.spec.walker.lantern = e.target.checked; })} />

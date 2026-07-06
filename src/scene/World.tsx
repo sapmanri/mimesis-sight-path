@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
-import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, PALETTE } from '../engine/worldCore';
+import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE } from '../engine/worldCore';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
@@ -31,6 +31,8 @@ type WorldProps = {
   props?: PlacedProp[];
   /** BUILD 100: 에디터 자유 카메라 — true면 World는 카메라에 손대지 않는다 */
   freeCamera?: boolean;
+  /** BUILD 136: 구름 탑승 중 (뷰어 ☁️ 버튼) */
+  riding?: boolean;
   /** BUILD 113: 실제 월드 커브 앵커 노출 — 에디터 카메라가 기억 곁으로 날아가기 위해 */
   onAnchors?: (pts: [number, number, number][]) => void;
   /** BUILD 100: 길 탭 — 가장 가까운 기억 지점으로 걷기 */
@@ -41,7 +43,7 @@ type WorldProps = {
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, onPathTap, onScenePick, onAnchors }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
   useEffect(() => {
     onAnchors?.(world.anchors.map((a) => [a.p.x, a.p.y, a.p.z]));
@@ -171,10 +173,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     pinned: boolean; // BUILD 111: roam 꺼짐 — 제자리에서 숨만 쉰다
   };
   const roamers = useRef<Roamer[]>([]);
+  // BUILD 136: 스스로 움직이는 배치물 (풍력발전기 등) — 회전 노드와 부유 흔들림
+  const ambients = useRef<{ holder: THREE.Group; spin: THREE.Object3D | null; base: [number, number, number]; seed: number }[]>([]);
   useEffect(() => {
     let alive = true;
     propsGroup.clear();
     roamers.current = [];
+    ambients.current = [];
     (props ?? []).forEach((pp, i) => {
       const seed = pp.id.split('').reduce((a, c) => a + c.charCodeAt(0), 7) + i * 131;
       const wantAnimated = ANIMATED_PROPS.has(pp.obj);
@@ -233,6 +238,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         holder.scale.setScalar(pp.scale);
         holder.userData.propId = pp.id;
         propsGroup.add(holder);
+        if (obj.userData.spinNode || obj.userData.floaty) { // BUILD 136
+          ambients.current.push({ holder, spin: (obj.userData.spinNode as THREE.Object3D) ?? null, base: [pp.position[0], pp.position[1], pp.position[2]], seed: seed % 100 });
+        }
       });
     });
     return () => { alive = false; };
@@ -260,6 +268,41 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const userCam = useRef({ blend: 0, az: 0, el: 0.45, dist: 5.5, lastInput: -99, dragging: false });
   const walkerPos = useRef<THREE.Vector3 | null>(null); // BUILD 098: 실제 위치 — 커브는 안내선일 뿐
   const lanternRef = useRef<THREE.Group | null>(null); // BUILD 117: 진자 등불 래퍼
+  // ---- BUILD 136: 구름 탈것 ----
+  const ridingRef = useRef(false);
+  const cloudMount = useMemo(() => {
+    const g = new THREE.Group();
+    let sd = 4242; const rnd = () => { sd = (sd * 16807) % 2147483647; return (sd - 1) / 2147483646; };
+    g.add(makeCloudPuff(rnd, 0.5));
+    const p2 = makeCloudPuff(rnd, 0.34); p2.position.set(0.22, -0.05, 0.1); g.add(p2);
+    const p3 = makeCloudPuff(rnd, 0.3); p3.position.set(-0.2, -0.06, -0.08); g.add(p3);
+    g.visible = false;
+    return g;
+  }, []);
+  const poofRoot = useMemo(() => new THREE.Group(), []);
+  const poofs = useRef<{ grp: THREE.Group; t: number }[]>([]);
+  const spawnPoof = (at: THREE.Vector3) => {
+    const grp = new THREE.Group();
+    for (let i = 0; i < 9; i += 1) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), new THREE.MeshBasicMaterial({ color: '#e9edef', transparent: true, opacity: 0.95, depthWrite: false }));
+      const a = (i / 9) * Math.PI * 2;
+      m.position.set(Math.cos(a) * 0.08, (Math.random() - 0.3) * 0.1, Math.sin(a) * 0.08);
+      m.userData.dir = new THREE.Vector3(Math.cos(a) * 0.7, 0.35 + Math.random() * 0.5, Math.sin(a) * 0.7);
+      grp.add(m);
+    }
+    grp.position.copy(at).add(new THREE.Vector3(0, 0.35, 0));
+    poofRoot.add(grp);
+    poofs.current.push({ grp, t: 0 });
+  };
+  useEffect(() => {
+    const on = !!riding;
+    if (ridingRef.current === on) return;
+    ridingRef.current = on;
+    rigRef.current?.setRiding?.(on);
+    cloudMount.visible = on;
+    if (walkerPos.current) spawnPoof(walkerPos.current); // 연기 펑 — 전환의 어색함을 가린다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riding]);
   const lastTargetChange = useRef(0);       // BUILD 087: 연타 감지 (마우스 휙휙 → 뛴다)
   // BUILD 101: 길 탭은 '정확히 그 지점'으로 — 분수 진행도 타깃. activeIndex 동기화가 덮지 않게 잠근다.
   const tapLock = useRef<number | null>(null);
@@ -277,8 +320,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       walker.add(group);
       // BUILD 091: 보행 클립이 있으면 클립 리그 (미끄러짐 최종 해법: 속도-배속 동기).
       // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).
+      // BUILD 136: 새로 온 아이도 구름 위라면 바로 앉는다
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, spec.walker.timeScale);
+      if (ridingRef.current) rigRef.current?.setRiding?.(true);
       // BUILD 116→117: 등불 — 손 뼈에 진자로 매달린다. 뼈가 어떻게 돌아도 등불은 중력을 안다.
       if ((spec.walker as { lantern?: boolean }).lantern) {
         let hand: THREE.Object3D | null = null;
@@ -539,6 +584,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         const dWdP = Math.max(0.05, world.curve.getPoint(t1).distanceTo(p0) / 0.01); // 월드거리/진행도
         const remainingWorld = Math.abs(remaining) * dWdP;
         let targetSpeed = J.gait === 'run' ? spec.walker.runSpeed : spec.walker.walkSpeed;
+        if (ridingRef.current) targetSpeed = spec.walker.runSpeed; // BUILD 136: 구름은 뛰는 속도로 흐른다
         if (remainingWorld < 1.1) targetSpeed = Math.min(targetSpeed, spec.walker.walkSpeed); // 도착 전 감속
         charSpeed.current += (targetSpeed - charSpeed.current) * Math.min(1, delta * 2.6);
         // BUILD 098: 진행도는 '접선 방향으로 실제 나아간 만큼'만 오른다
@@ -594,6 +640,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       pos.lerp(anchor, Math.min(1, delta * 3));
     }
     pos.y = anchor.y; // 지면은 안내선이 정의한다
+    if (ridingRef.current) { // BUILD 136: 길 위 어느 높이를 둥둥 — 위아래 두 겹, 서로 다른 호흡
+      const tt = clock.elapsedTime;
+      pos.y = anchor.y + 0.55 + Math.sin(tt * 0.9) * 0.05 + Math.sin(tt * 1.7 + 2) * 0.035;
+    }
     const dir = tangent.clone().multiplyScalar(moving ? facing : 1);
 
     // 이번 프레임 실제 이동 거리 → 보폭 동기 (발이 미끄러지지 않는다)
@@ -635,6 +685,39 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       walker.rotation.z = sway;
     }
     walker.rotation.y = charYaw.current;
+    // BUILD 136: 구름이 발밑을 따른다 — 발이 살짝 묻히게(-0.12), 제 호흡으로 흔들리며
+    if (cloudMount.visible) {
+      const tt = clock.elapsedTime;
+      cloudMount.position.set(
+        walker.position.x + Math.sin(tt * 0.53 + 1) * 0.03,
+        walker.position.y - 0.12 + Math.sin(tt * 1.3) * 0.012,
+        walker.position.z + Math.cos(tt * 0.61) * 0.03,
+      );
+      cloudMount.rotation.y += delta * 0.15;
+    }
+    // 연기 펑 — 0.6초 살고 사라진다
+    for (let i = poofs.current.length - 1; i >= 0; i -= 1) {
+      const pf = poofs.current[i];
+      pf.t += delta;
+      const k = pf.t / 0.6;
+      pf.grp.children.forEach((m0) => {
+        const m = m0 as THREE.Mesh;
+        m.position.addScaledVector(m.userData.dir as THREE.Vector3, delta);
+        m.scale.setScalar(0.9 + k * 2.4);
+        (m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.95 * (1 - k));
+      });
+      if (k >= 1) { poofRoot.remove(pf.grp); poofs.current.splice(i, 1); }
+    }
+    // BUILD 136: 살아 숨쉬는 배치물 — 풍차는 돌고, 떠 있는 것은 흔들린다
+    for (const am of ambients.current) {
+      if (am.spin) am.spin.rotation.z += delta * 1.15;
+      const tt2 = clock.elapsedTime;
+      am.holder.position.set(
+        am.base[0] + Math.sin(tt2 * 0.31 + am.seed) * 0.06,
+        am.base[1] + Math.sin(tt2 * 0.45 + am.seed * 1.7) * 0.14,
+        am.base[2] + Math.cos(tt2 * 0.27 + am.seed) * 0.06,
+      );
+    }
     wasMoving.current = moving;
 
     // ---- 카메라 ---- (BUILD 100: freeCamera면 에디터가 조종한다 — 손대지 않는다)
@@ -795,6 +878,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         spec.atmosphere?.viewFogFar ?? (spec.weather?.kind === 'rain' ? 44 : spec.weather?.kind === 'snow' ? 50 : 58)]} /> {/* BUILD 131: 시야는 스펙이 정한다 — 비워두면 날씨가 정한다 */}
       {rain && <primitive object={rain.lines} />}
       {snow && <primitive object={snow.points} />}
+      <primitive object={cloudMount} />
+      <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}
       <primitive
         object={world.group}

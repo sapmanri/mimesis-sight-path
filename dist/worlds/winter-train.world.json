@@ -331,7 +331,11 @@
    "timeScale": 0.72,
    "walkSpeed": 0.58,
    "runSpeed": 2.1,
-   "lantern": true
+   "lantern": true,
+   "mount": {
+    "enabled": true,
+    "kind": "cloud"
+   }
   },
   "weather": {
    "kind": "snow",

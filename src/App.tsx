@@ -11,12 +11,13 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.49.1 · THE KIT RETIRES · BUILD 135';
+const BUILD_LABEL = 'v0.50.0 · RIDE THE CLOUD · BUILD 136';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const [muted, setMuted] = useState(false);
+  const [riding, setRiding] = useState(false); // BUILD 136: 구름 탑승
   // BUILD 099: 카드는 도착의 것 — 걷는 동안엔 접히고, 머무를 때 펼쳐진다
   const [cardAt, setCardAt] = useState<number | null>(0);
   // BUILD 096: 에디터 문서로 열기 (?draft=1) — 에디터가 지은 세계를 그대로 걷는다
@@ -142,6 +143,7 @@ export default function App() {
             onDepart={() => setCardAt(null)}
             onPathTap={goTo}
             props={draft?.props}
+            riding={riding}
           />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />
@@ -155,6 +157,14 @@ export default function App() {
             aria-label={muted ? '소리 켜기' : '소리 끄기'}
             onClick={() => { footsteps.unlock(); footsteps.setMuted(!muted); setMuted(!muted); }}
           >{muted ? '🔇' : '🔊'}</button>
+          {spec.walker?.mount?.enabled && (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={riding ? '구름에서 내리기' : '구름 타기'}
+              onClick={() => setRiding((v) => !v)}
+            >{riding ? '🚶' : '☁️'}</button>
+          )}
         </div>
         <div className="build-badge">{BUILD_LABEL}</div>
       </section>

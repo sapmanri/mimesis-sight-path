@@ -171,6 +171,8 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'wagon2', label: '객차', cat: '철길' },
   { id: 'signallight', label: '신호등', cat: '철길' },
   { id: 'railsection', label: '철길 조각', cat: '철길' },
+  // 하늘 (BUILD 136)
+  { id: 'windturbine', label: '풍력발전기 (부유·회전)', cat: '하늘' },
   // 겨울 (BUILD 119) — 창고에서 깨어난 것들
   { id: 'snowyhouse', label: '눈 덮인 집', cat: '겨울' },
   { id: 'snowman', label: '눈사람', cat: '겨울' },
@@ -474,6 +476,28 @@ export async function createPropObject(
       // BUILD 126: 철길
       case 'trainloco': case 'wagon2': case 'signallight': case 'railsection':
         return await loadKitModel(objId, loadModel);
+      // BUILD 136: 풍력발전기 — 날개 3장을 허브 중심 로터로 재부모화, World가 Z축으로 돌린다
+      case 'windturbine': {
+        const g = await loadKitModel('windturbine', loadModel);
+        g.updateMatrixWorld(true);
+        const bladeNames = new Set(['Cylinder', 'Cylinder.001_Cylinder', 'Cylinder.002_Cylinder']);
+        const blades: THREE.Object3D[] = [];
+        g.traverse((n) => { if (bladeNames.has(n.name)) blades.push(n); });
+        if (blades.length) {
+          const box = new THREE.Box3();
+          blades.forEach((b) => box.expandByObject(b));
+          const hub = box.getCenter(new THREE.Vector3());
+          const rotor = new THREE.Group();
+          const host = blades[0].parent ?? g;
+          host.add(rotor);
+          rotor.position.copy(host.worldToLocal(hub.clone()));
+          rotor.updateMatrixWorld(true);
+          blades.forEach((b) => rotor.attach(b)); // attach = 월드 자세 보존 재부모화
+          g.userData.spinNode = rotor;
+        }
+        g.userData.floaty = true; // 공중에 둥둥
+        return g;
+      }
       case 'lamp': {
         const g = await loadKitModel('lamp', loadModel);
         const glow = new THREE.PointLight('#ffd9a0', 1.3, 2.4, 2); // BUILD 123: 몸집이 줄었으니 불빛도

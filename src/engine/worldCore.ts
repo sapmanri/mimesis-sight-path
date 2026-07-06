@@ -319,6 +319,7 @@ export const MODELS: Record<string, ModelSpec> = {
   wagon2: { file: 'Wagon2.glb', height: 0.95, tint: '#7a5f52' },
   signallight: { file: 'SignalLight.glb', height: 0.9, tint: '#5a5f5c' },
   railsection: { file: 'RailSection.glb', height: 2.4, tint: '#6b665e', fitMaxDim: true }, // 12u 길이가 지배 축
+  windturbine: { file: 'Eolic.glb', height: 4.2, tint: '#c8cdd1' }, // BUILD 136: 부유섬 받침 포함 (Vase 업로드 eolic_OBJ)
 };
 
 // ---------- BUILD 093: WALKER ROSTER ----------

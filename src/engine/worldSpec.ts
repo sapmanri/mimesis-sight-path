@@ -218,6 +218,8 @@ export type WorldSpec = {
     character?: number | 'random';
     /** BUILD 116: 등불 — 손 뼈에 랜턴을 쥐고 걷는다. 밤길의 동반자 */
     lantern?: boolean;
+    /** BUILD 136: 탈것 — 뷰어에 ☁️ 버튼이 뜨고, 누르면 연기 펑 하며 구름에 올라탄다 */
+    mount?: { enabled?: boolean; kind?: 'cloud' | 'broom' };
   };
 };
 

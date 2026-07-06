@@ -28,6 +28,8 @@ export type WalkerRig = {
   stopInspect: () => void;
   /** BUILD 104: 마법 의자 자산 주입 (클립 리그 전용, 선택) */
   setChairAsset?: (obj: THREE.Group, seatY: number) => void;
+  /** BUILD 136: 탈것 — 앉은 채(없으면 선 채) 이동한다. 로코모션 배제 */
+  setRiding?: (on: boolean) => void;
   inspecting: () => boolean;
   /** 현재 걸음 위상 (bob 동기화용) */
   phase: () => number;
@@ -191,6 +193,7 @@ export function createClipRig(
   // 밑창: 발끝 뼈 기준 얇게, 발목 기준이면 두껍게
   const sole = toeL ? 0.012 : 0.035;
   const baseY = root.position.y;
+  const baseX = root.position.x; const baseZ = root.position.z; // BUILD 136: 탈것 하차 시 원점 복귀용
   let groundCorr = 0;
   // BUILD 094: '평균'이 아니라 '사이클 최저점'을 땅에 맞춘다 — 평균 정합은 접지 순간 발을 묻는다.
   // rollingMin: 즉시 내려가고, 천천히(0.12u/s) 올라오는 최저점 추적기.
@@ -234,6 +237,7 @@ export function createClipRig(
 
   type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp';
   let gesture: Gesture = 'none';
+  let riding = false; // BUILD 136: 구름 위
   mixer.addEventListener('finished', (e) => {
     const a = (e as unknown as { action: THREE.AnimationAction }).action;
     if (a === sitDown && gesture === 'sitDown' && sitIdle) { switchTo(sitIdle, 0.25); gesture = 'sit'; }
@@ -250,6 +254,16 @@ export function createClipRig(
     setChairAsset(obj: THREE.Group, seatY: number) {
       chairAsset = obj;
       chairSeatY = seatY;
+    },
+    // BUILD 136: 탈것 — 앉는 클립(Sit_Floor_Idle)이 있으면 앉아 타고, 없으면 서서 탄다
+    setRiding(on: boolean) {
+      riding = on;
+      gesture = 'none';
+      sitSink = 0;
+      root.position.set(baseX, baseY, baseZ);
+      if (chair && chairPhase !== 'none') { chair.visible = false; chairPhase = 'none'; }
+      if (on) switchTo(sitIdle ?? idle, 0.3);
+      else { switchTo(idle, 0.3); gestureGrace = 0.9; rollingMin = Infinity; }
     },
     playInspect(kind = 'pickup') {
       if (gesture !== 'none') return;
@@ -298,6 +312,7 @@ export function createClipRig(
       }
     },
     update(dt, _speed01, moving, _elapsed, distDelta) {
+      if (riding) { mixer.update(dt); return; } // BUILD 136: 구름 위에선 클립만 흐른다 — 걷기/침하/의자 전부 배제
       const v = dt > 0 ? distDelta / dt : 0;
       if (gesture === 'none') {
         if (moving && v > 0.02) {
