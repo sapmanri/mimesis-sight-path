@@ -323,6 +323,7 @@ export const MODELS: Record<string, ModelSpec> = {
   railsection: { file: 'RailSection.glb', height: 2.4, tint: '#6b665e', fitMaxDim: true }, // 12u 길이가 지배 축
   windturbine: { file: 'Eolic.glb', height: 4.2, tint: '#c8cdd1' }, // BUILD 136: 부유섬 받침 포함 (Vase 업로드 eolic_OBJ)
   broom: { file: 'Broom.glb', height: 1.15, tint: '#7a5a3a', fitMaxDim: true }, // BUILD 145: 0.85→1.15 — 엉덩이에 가려질 크기였다. GLB 노드의 Rx(-90) 제거로 눕은 게 원본
+  seagull: { file: 'Seagull.glb', height: 0.75, tint: '#e2e6e4', fitMaxDim: true }, // BUILD 149: 활공 자세 728정점 — 날개폭 0.75u. 갈매기는 날갯짓하지 않는다, 바람을 탄다
 };
 
 // ---------- BUILD 093: WALKER ROSTER ----------

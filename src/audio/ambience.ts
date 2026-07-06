@@ -287,6 +287,41 @@ function createAmbience() {
     o.start(t0); o.stop(t0 + 0.8);
   };
 
+  // ---------- BUILD 149: 갈매기 ----------
+  /** 끼룩 — 내려앉는 미음(mew). 1~3번, 멀리서. World의 갈매기들이 부른다 */
+  const gullCry = () => {
+    if (!ctx || ctx.state !== 'running' || !master || muted) return;
+    const calls = 1 + Math.floor(Math.random() * 3);
+    const pan = rnd(-0.9, 0.9);
+    let t = ctx.currentTime + rnd(0, 0.3);
+    const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    const out = ctx.createGain();
+    out.gain.value = rnd(0.006, 0.011) * Math.max(0.3, state.life);
+    if (p) { p.pan.value = pan; out.connect(p).connect(master); } else out.connect(master);
+    for (let i = 0; i < calls; i += 1) {
+      const dur = rnd(0.28, 0.42);
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      const f0 = rnd(1050, 1300);
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f0 * rnd(0.58, 0.7), t + dur); // 길게 미끄러져 내려앉는다
+      const vib = ctx.createOscillator(); // 갈매기 특유의 떨림
+      vib.type = 'sine'; vib.frequency.value = rnd(5.5, 7.5);
+      const vibG = ctx.createGain(); vibG.gain.value = f0 * 0.025;
+      vib.connect(vibG).connect(o.frequency);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = 950; bp.Q.value = 0.9;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(1, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(bp).connect(g).connect(out);
+      o.start(t); vib.start(t);
+      o.stop(t + dur + 0.02); vib.stop(t + dur + 0.02);
+      t += dur + rnd(0.12, 0.3);
+    }
+  };
+
   /** 첫 제스처에서 스스로 깨어난다 — 에디터든 뷰어든, 리스너를 따로 달 필요 없다 */
   const installGestureUnlock = () => {
     if (listenersInstalled) return;
@@ -305,6 +340,7 @@ function createAmbience() {
       if (ctx) applyTargets();
     },
     thunder,
+    gullCry,
     unlock() { ensure(); },
     setMuted(m: boolean) {
       muted = m;

@@ -350,6 +350,46 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     P.cur?.fadeOut(0.35);
     P.cur = a;
   };
+  // BUILD 149: 갈매기 — 파도가 부른다. sea>0 + 낮 + 맑음/흐림일 때만 하늘에 뜬다
+  const gullRoot = useMemo(() => new THREE.Group(), []);
+  const gulls = useRef<{ m: THREE.Object3D; R: number; th: number; om: number; alt: number; bobA: number; bobF: number; ph: number; roll: number }[]>([]);
+  const gullCryIn = useRef(20 + Math.random() * 25);
+  const gullsActive = (spec.weather?.time ?? 'day') === 'day'
+    && (spec.weather?.kind ?? 'clear') !== 'rain' && spec.weather?.kind !== 'snow'
+    && (spec.ambience?.sea ?? 0) > 0 && (spec.ambience?.life ?? 1) > 0;
+  useEffect(() => {
+    gullRoot.clear();
+    gulls.current = [];
+    if (!gullsActive) return;
+    let dead = false;
+    const sea = spec.ambience?.sea ?? 0;
+    const n = 2 + Math.round(sea * 3); // 파도가 높을수록 갈매기가 늘어난다 (0.55 → 4마리)
+    void loadKitModel('seagull', defaultLoader).then((proto) => {
+      if (dead) return;
+      const mid = world.curve.getPoint(0.5);
+      for (let i = 0; i < n; i += 1) {
+        const m = proto.clone();
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        gulls.current.push({
+          m,
+          R: 5 + Math.random() * 8,
+          th: Math.random() * Math.PI * 2,
+          om: dir * (0.06 + Math.random() * 0.08), // 느린 선회 — 갈매기는 서두르지 않는다
+          alt: 4.5 + Math.random() * 3,
+          bobA: 0.25 + Math.random() * 0.3,
+          bobF: 0.07 + Math.random() * 0.08,
+          ph: Math.random() * Math.PI * 2,
+          roll: 0,
+        });
+        m.position.set(mid.x, 6, mid.z);
+        m.rotation.order = 'YXZ';
+        gullRoot.add(m);
+      }
+    });
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gullsActive, spec.ambience?.sea, world, gullRoot]);
+
   const poofRoot = useMemo(() => new THREE.Group(), []);
   const poofs = useRef<{ grp: THREE.Group; t: number }[]>([]);
   const spawnPoof = (at: THREE.Vector3) => {
@@ -907,6 +947,35 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         }
       }
     }
+    // BUILD 149: 갈매기 비행 — 이중 원(선회원 자체가 드리프트)이라 같은 궤적이 없다
+    if (gulls.current.length) {
+      const wind = spec.weather?.wind ?? 0;
+      const mid = world.curve.getPoint(0.5);
+      const tNow = clock.elapsedTime;
+      for (const G of gulls.current) {
+        G.th += G.om * (1 + wind * 1.2) * delta; // 바람이 선회를 민다
+        const cx = mid.x + Math.sin(tNow * 0.021 + G.ph) * 4; // 선회 중심도 아주 느리게 떠돈다
+        const cz = mid.z + Math.cos(tNow * 0.017 + G.ph) * 4;
+        G.m.position.set(
+          cx + Math.cos(G.th) * G.R,
+          G.alt + Math.sin(tNow * G.bobF * Math.PI * 2 + G.ph) * G.bobA,
+          cz + Math.sin(G.th) * G.R,
+        );
+        // 진행 방향으로 기수를, 선회 안쪽으로 날개를 기울인다 (뱅킹)
+        const yaw = Math.atan2(-Math.sin(G.th) * G.om, Math.cos(G.th) * G.om);
+        G.m.rotation.y = yaw;
+        const wantRoll = -Math.sign(G.om) * (0.22 + Math.min(0.2, Math.abs(G.om) * 1.5)) ;
+        G.roll += (wantRoll - G.roll) * Math.min(1, delta * 2);
+        G.m.rotation.z = G.roll + Math.sin(tNow * 0.9 + G.ph) * 0.04; // 바람결에 미세하게 흔들린다
+        G.m.rotation.x = Math.sin(tNow * 0.5 + G.ph) * 0.03;
+      }
+      // 끼룩 — 24~55초에 한 번, 멀리서
+      gullCryIn.current -= delta;
+      if (gullCryIn.current <= 0) {
+        ambience.gullCry();
+        gullCryIn.current = 24 + Math.random() * 31;
+      }
+    }
     // 연기 펑 — 0.6초 살고 사라진다
     for (let i = poofs.current.length - 1; i >= 0; i -= 1) {
       const pf = poofs.current[i];
@@ -1094,6 +1163,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       <primitive object={babyCloud} />
       <primitive object={broomMount} />
       <primitive object={petRoot} />
+      <primitive object={gullRoot} />
       <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}
       <primitive
