@@ -270,6 +270,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const lanternRef = useRef<THREE.Group | null>(null); // BUILD 117: 진자 등불 래퍼
   // ---- BUILD 136: 구름 탈것 ----
   const ridingRef = useRef(false);
+  const hipsRef = useRef<THREE.Object3D | null>(null); // BUILD 140: 골반 뼈 — 구름이 이 뼈를 추적한다
+  const hipsV = useMemo(() => new THREE.Vector3(), []);
   // BUILD 137: 엄마 구름 — 엉덩이에 걸치는 작은 구름 (돌멩이에 걸터앉듯, 다리는 밖으로 달랑)
   const cloudMount = useMemo(() => {
     const g = new THREE.Group();
@@ -333,6 +335,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, spec.walker.timeScale);
       if (ridingRef.current) rigRef.current?.setRiding?.(true);
+      hipsRef.current = null; // BUILD 140: 새 아이의 골반을 찾는다
+      group.traverse((n) => { if (!hipsRef.current && /hips$/i.test(n.name)) hipsRef.current = n; });
       // BUILD 116→117: 등불 — 손 뼈에 진자로 매달린다. 뼈가 어떻게 돌아도 등불은 중력을 안다.
       if ((spec.walker as { lantern?: boolean }).lantern) {
         let hand: THREE.Object3D | null = null;
@@ -699,10 +703,16 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // BUILD 137: 엄마 구름은 엉덩이 밑을, 아기 구름은 옆을 — 몽실몽실
     if (cloudMount.visible) {
       const tt = clock.elapsedTime;
-      const seatH = rigRef.current?.rideSeat?.() ?? 0; // BUILD 138: 바닥파 0.02 / 의자파 0.3 / 서서 타는 아이 0
+      // BUILD 140: 상수 추정 대신 골반 뼈 실측 — 캐릭터마다 앉는 높이가 제각각이었다 (파란 후드 사건)
+      const seatH = rigRef.current?.rideSeat?.() ?? 0;
+      let cloudY = walker.position.y + seatH - 0.07; // 폴백: 서서 타는 아이(발밑) 또는 뼈 못 찾은 경우
+      if (seatH > 0 && hipsRef.current) {
+        hipsRef.current.getWorldPosition(hipsV);
+        cloudY = hipsV.y - 0.17; // 골반 바로 아래 — 방석 윗면이 엉덩이에 닿는다
+      }
       cloudMount.position.set(
         walker.position.x + Math.sin(tt * 0.53 + 1) * 0.02,
-        walker.position.y + seatH - 0.07 + Math.sin(tt * 1.3) * 0.01,
+        cloudY + Math.sin(tt * 1.3) * 0.01,
         walker.position.z + Math.cos(tt * 0.61) * 0.02,
       );
       cloudMount.rotation.y += delta * 0.12;
