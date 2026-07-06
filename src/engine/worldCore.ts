@@ -1017,6 +1017,43 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     }
   }
 
+  // BUILD 134: 철길 — 열차 아래엔 레일이 있다. 커브를 따라 함께 굽이친다.
+  // (Vase의 실사 PBR 텍스처 대신 프로시저럴 — 이 세계의 문법은 팔레트다)
+  {
+    const steelC = new THREE.Color('#63666a');
+    const railY = (py: number) => py - 0.015 - CAR_H - 0.2; // 바퀴 바닥 높이
+    const GAUGE = 0.34;
+    for (let i = 0; i < frames.length - 1; i += 1) {
+      const a = frames[i]; const b = frames[i + 1];
+      const dir = b.p.clone().sub(a.p); const len = dir.length();
+      if (len < 1e-5) continue;
+      dir.setY(0).normalize();
+      for (const sd of [-1, 1]) {
+        const ca = a.p.clone().add(a.nor.clone().multiplyScalar(sd * GAUGE));
+        const cb = b.p.clone().add(b.nor.clone().multiplyScalar(sd * GAUGE));
+        const mid = ca.clone().lerp(cb, 0.5);
+        mid.y = railY((a.p.y + b.p.y) / 2) + 0.022;
+        pushBox(pos, col, idx, mid, dir, len / 2 + 0.012, 0.018, 0.022, steelC);
+      }
+    }
+    // 침목 — 0.55u마다 하나, 어두운 나무
+    const sleeperGeo = new THREE.BoxGeometry(0.86, 0.03, 0.14);
+    const sleeperCount = Math.floor(total / 0.55);
+    const sleepers = new THREE.InstancedMesh(sleeperGeo, new THREE.MeshStandardMaterial({ color: '#4a3f35', roughness: 0.9 }), sleeperCount);
+    const SM = new THREE.Matrix4(); const SQ = new THREE.Quaternion(); const SE = new THREE.Euler(); const SV = new THREE.Vector3();
+    for (let k = 0; k < sleeperCount; k += 1) {
+      const { p, tan } = atDist(k * 0.55 + 0.2);
+      SE.set(0, Math.atan2(tan.x, tan.z) + Math.PI / 2, 0);
+      SQ.setFromEuler(SE);
+      SV.set(p.x, railY(p.y) - 0.018, p.z);
+      SM.compose(SV, SQ, new THREE.Vector3(1, 1, 1));
+      sleepers.setMatrixAt(k, SM);
+    }
+    sleepers.instanceMatrix.needsUpdate = true;
+    sleepers.receiveShadow = true;
+    g.add(sleepers);
+  }
+
   // 나무판자 — 동과 동 사이 지붕을 자동으로 잇는다 (한 틈에 두 장, 살짝 어긋나게)
   for (let k = 1; k < carCount; k += 1) {
     const a = roofEnds[k * 2 - 1]; // 앞 동의 앞끝
