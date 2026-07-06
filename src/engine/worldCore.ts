@@ -1731,6 +1731,7 @@ function buildMemoryObjects(
 }
 
 function std(color: string) {
+  // BUILD 162: 안개 면역 전수 해제 — std()를 쓰는 모든 프로시저럴(수풀·나무·잔풀·표지판 등)이 이제 안개를 맞는다
   return applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0 }));
 }
 

@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import {
-  KITS, MODELS, loadKitModel, loadKitModelWithClips, makeCloudPuff, defaultLoader, type ModelLoader,
+  KITS, MODELS, loadKitModel, loadKitModelWithClips, makeCloudPuff, defaultLoader, applyHeightFog, type ModelLoader,
 } from './worldCore';
 
 export type PlacedProp = {
@@ -193,7 +193,8 @@ function rng(seed: number) {
 }
 
 function std(color: string) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.92, metalness: 0 });
+  // BUILD 162: 배치물 프록시도 안개를 맞는다 — 세계의 문법에 예외 없음
+  return applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: 0.92, metalness: 0 }));
 }
 
 const GREENS = ['#3f5b3f', '#547a4c', '#6f9a5d'];
