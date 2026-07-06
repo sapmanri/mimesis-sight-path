@@ -107,6 +107,12 @@ export type WorldSpec = {
     heightFogTop: number;
     /** 이 높이에서 완전히 안개 */
     heightFogBottom: number;
+    /** BUILD 131: 높이안개 세기 0~1. 0 = 끔. 생략 = 1 (원본) */
+    heightFogStrength?: number;
+    /** BUILD 131: 시야안개 — 이 거리부터 흐려지기 시작. 생략 = 날씨 기본값 */
+    viewFogNear?: number;
+    /** BUILD 131: 시야안개 — 이 거리에서 완전히 안개. 생략 = 날씨 기본값 */
+    viewFogFar?: number;
   };
 
   /** 길 생성기. 길은 시간을 감싸는 정도로 좁고 조용해야 한다. */

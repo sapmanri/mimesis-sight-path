@@ -790,7 +790,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   return (
     <>
       <color attach="background" args={[world.fogColor]} />
-      <fog attach="fog" args={[world.fogColor, spec.weather?.kind === 'rain' ? 9 : spec.weather?.kind === 'snow' ? 10 : 12, spec.weather?.kind === 'rain' ? 44 : spec.weather?.kind === 'snow' ? 50 : 58]} />
+      <fog attach="fog" args={[world.fogColor,
+        spec.atmosphere?.viewFogNear ?? (spec.weather?.kind === 'rain' ? 9 : spec.weather?.kind === 'snow' ? 10 : 12),
+        spec.atmosphere?.viewFogFar ?? (spec.weather?.kind === 'rain' ? 44 : spec.weather?.kind === 'snow' ? 50 : 58)]} /> {/* BUILD 131: 시야는 스펙이 정한다 — 비워두면 날씨가 정한다 */}
       {rain && <primitive object={rain.lines} />}
       {snow && <primitive object={snow.points} />}
       {lightning && <primitive object={lightning.flash} />}

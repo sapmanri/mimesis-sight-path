@@ -83,6 +83,7 @@ export type BuiltWorld = {
 const HEIGHT_FOG = {
   top: JEJU_SPEC.atmosphere.heightFogTop,     // 이 높이부터 잠기기 시작
   bottom: JEJU_SPEC.atmosphere.heightFogBottom, // 이 높이에서 완전히 안개
+  strength: 1, // BUILD 131: 전역 세기 0~1 — 재질 컴파일 시점에 구워진다 (스펙 변경 → 세계 재건 → 재컴파일)
 };
 
 function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUILD 129: strength<1 = 안개에 덜 잠긴다 (열차 차체용)
@@ -98,7 +99,7 @@ function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUIL
       .replace('#include <common>', '#include <common>\nvarying float vHFy;')
       .replace(
         '#include <fog_fragment>',
-        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(HEIGHT_FOG.bottom)}, ${glsl(HEIGHT_FOG.top)}, vHFy)) * ${glsl(strength)});`,
+        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(HEIGHT_FOG.bottom)}, ${glsl(HEIGHT_FOG.top)}, vHFy)) * ${glsl(strength * HEIGHT_FOG.strength)});`,
       );
   };
   return mat;
@@ -537,6 +538,7 @@ export function buildWorld(
   Object.assign(PALETTE, spec.palette);
   HEIGHT_FOG.top = spec.atmosphere.heightFogTop;
   HEIGHT_FOG.bottom = spec.atmosphere.heightFogBottom;
+  HEIGHT_FOG.strength = spec.atmosphere.heightFogStrength ?? 1; // BUILD 131
 
   const group = new THREE.Group();
 

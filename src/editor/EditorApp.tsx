@@ -806,6 +806,28 @@ export function EditorApp() {
                 <input type="range" min="0" max="5.2" step="0.2" value={doc.spec.path.meanderA}
                   onChange={(e) => edit((d) => { const v = Number(e.target.value); d.spec.path.meanderA = v; d.spec.path.meanderB = +(v * 0.54).toFixed(2); })} />
               </label>
+              <h4>대기 — 안개의 문법 (BUILD 131)</h4>
+              <label>높이안개 세기 <em>{Math.round((doc.spec.atmosphere.heightFogStrength ?? 1) * 100)}%{(doc.spec.atmosphere.heightFogStrength ?? 1) === 0 ? ' (끔)' : ''}</em>
+                <input type="range" min="0" max="1" step="0.05" value={doc.spec.atmosphere.heightFogStrength ?? 1}
+                  onChange={(e) => edit((d) => { d.spec.atmosphere.heightFogStrength = Number(e.target.value); })} />
+              </label>
+              <label>잠김 시작 높이 <em>{doc.spec.atmosphere.heightFogTop.toFixed(2)}</em>
+                <input type="range" min="-1" max="2" step="0.05" value={doc.spec.atmosphere.heightFogTop}
+                  onChange={(e) => edit((d) => { const v = Number(e.target.value); d.spec.atmosphere.heightFogTop = v; if (d.spec.atmosphere.heightFogBottom >= v) d.spec.atmosphere.heightFogBottom = v - 0.1; })} />
+              </label>
+              <label>완전 잠김 높이 <em>{doc.spec.atmosphere.heightFogBottom.toFixed(2)}</em>
+                <input type="range" min="-3" max="1.9" step="0.05" value={doc.spec.atmosphere.heightFogBottom}
+                  onChange={(e) => edit((d) => { const v = Number(e.target.value); d.spec.atmosphere.heightFogBottom = Math.min(v, d.spec.atmosphere.heightFogTop - 0.1); })} />
+              </label>
+              <label>시야 흐림 시작 <em>{(doc.spec.atmosphere.viewFogNear ?? 12).toFixed(0)}u{doc.spec.atmosphere.viewFogNear == null ? ' (날씨 자동)' : ''}</em>
+                <input type="range" min="2" max="40" step="1" value={doc.spec.atmosphere.viewFogNear ?? 12}
+                  onChange={(e) => edit((d) => { d.spec.atmosphere.viewFogNear = Number(e.target.value); })} />
+              </label>
+              <label>시야 끝 <em>{(doc.spec.atmosphere.viewFogFar ?? 58).toFixed(0)}u{doc.spec.atmosphere.viewFogFar == null ? ' (날씨 자동)' : ''}</em>
+                <input type="range" min="15" max="160" step="1" value={doc.spec.atmosphere.viewFogFar ?? 58}
+                  onChange={(e) => edit((d) => { d.spec.atmosphere.viewFogFar = Math.max(Number(e.target.value), (d.spec.atmosphere.viewFogNear ?? 12) + 5); })} />
+              </label>
+              <button type="button" className="ed-chip" onClick={() => edit((d) => { delete d.spec.atmosphere.viewFogNear; delete d.spec.atmosphere.viewFogFar; })}>시야를 날씨 자동으로 되돌리기</button>
               <h4>날씨</h4>
               <label>하늘
                 <select
