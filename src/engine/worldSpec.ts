@@ -129,6 +129,8 @@ export type WorldSpec = {
     sceneSpacing: number;
     /** 장면 x 좌표 증폭 */
     lateralScale: number;
+    /** BUILD 150: 순환의 길 — true면 커브가 닫혀 시작도 끝도 없다 */
+    loop?: boolean;
     /** 사행(meander) 진폭 A/B — 길이 스스로 헤매는 정도 */
     meanderA: number;
     meanderB: number;

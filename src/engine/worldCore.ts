@@ -558,19 +558,33 @@ export function buildWorld(
   const P = spec.path;
   const pts = scenes.map((s, i) => {
     const meander = Math.sin(i * 1.35) * P.meanderA + Math.sin(i * 0.55 + 1.2) * P.meanderB;
+    if (P.loop) {
+      // BUILD 150: 순환의 길 — 마디 길이를 지키는 반지름의 원 위에, 옆걸음과 굽이는 반지름 방향으로
+      const N = scenes.length;
+      const ang = (i / N) * Math.PI * 2;
+      const R = Math.max(4.5, (N * P.sceneSpacing) / (Math.PI * 2));
+      const rr = R + s.position[0] * P.lateralScale * 0.6 + meander;
+      return new THREE.Vector3(Math.cos(ang) * rr, s.position[1] * 1.2, Math.sin(ang) * rr);
+    }
     return new THREE.Vector3(s.position[0] * P.lateralScale + meander, s.position[1] * 1.2, i * -P.sceneSpacing);
   });
-  const first = pts[0];
-  const second = pts[1];
-  const leadIn = first.clone().add(first.clone().sub(second).setLength(11));
-  const last = pts[pts.length - 1];
-  const prev = pts[pts.length - 2];
-  const leadOut = last.clone().add(last.clone().sub(prev).setLength(14));
-  const allPts = [leadIn, ...pts, leadOut];
-  const curve = new THREE.CatmullRomCurve3(allPts, false, 'centripetal', 0.5);
-  const span = allPts.length - 1;
-  const tOf = (i: number) => (i + 1) / span;
-  const progressToT = (progress: number) => tOf(Math.max(0, Math.min(scenes.length - 1, progress)));
+  // BUILD 150: 순환의 길 — 커브를 닫으면 시작도 끝도 없다. 리드인/아웃도 필요 없다 (돌아오는 길이 리드인이므로)
+  const loop = !!P.loop;
+  const allPts = loop ? pts : (() => {
+    const first = pts[0];
+    const second = pts[1];
+    const leadIn = first.clone().add(first.clone().sub(second).setLength(11));
+    const last = pts[pts.length - 1];
+    const prev = pts[pts.length - 2];
+    const leadOut = last.clone().add(last.clone().sub(prev).setLength(14));
+    return [leadIn, ...pts, leadOut];
+  })();
+  const curve = new THREE.CatmullRomCurve3(allPts, loop, 'centripetal', 0.5);
+  const span = allPts.length - (loop ? 0 : 1);
+  const tOf = (i: number) => (i + (loop ? 0 : 1)) / span;
+  const progressToT = loop
+    ? (progress: number) => { const n = scenes.length; const w = ((progress % n) + n) % n; return w / n; } // 감아 돈다
+    : (progress: number) => tOf(Math.max(0, Math.min(scenes.length - 1, progress)));
 
   const SAMPLES = P.samples;
   type Frame = { t: number; p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3 };

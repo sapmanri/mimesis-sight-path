@@ -28,6 +28,8 @@ type WorldProps = {
   onGroundPick?: (p: THREE.Vector3) => void;
   /** BUILD 099: 카드 페이즈 — 도착/출발 신호 */
   onArrive?: (index: number) => void;
+  /** BUILD 150: 무한 산책 — 목적지 없이 계속 걷는다. 순환 길에선 감아 돌고, 열린 길에선 왕복한다 */
+  stroll?: boolean;
   onDepart?: () => void;
   /** BUILD 100: 자유 배치물 (에디터가 놓은 사물들) */
   props?: PlacedProp[];
@@ -45,7 +47,7 @@ type WorldProps = {
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll }: WorldProps) {
   const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
   useEffect(() => {
     onAnchors?.(world.anchors.map((a) => [a.p.x, a.p.y, a.p.z]));
@@ -276,6 +278,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     gaitSwitchAt: -1,          // 이 progress를 지나면 걷기↔뛰기 전환 ("가끔은 걷다가 뛰다가")
   });
   const charProgress = useRef(activeIndex); // 캐릭터의 현재 위치 (장면 단위 진행도)
+  const strollDir = useRef(1); // BUILD 150: 열린 길 산책의 방향 — 끝에 닿으면 돌아선다
+  const lastWant = useRef<number | null>(null); // 목적지 변경 감지 (루프에선 target이 want와 다른 수로 감긴다)
   const charSpeed = useRef(0);              // 현재 속도 (월드 유닛/초)
   const charYaw = useRef(0);                // BUILD 087: 몸의 방향 — 스냅하지 않고 돌아선다
   // BUILD 099: 사용자 카메라 — 마우스가 잡으면 따르고, 4초 놓아두면 자동으로 되돌아간다
@@ -619,10 +623,27 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // ---- 여정 상태기 ----
     // 목적지가 바뀌면: 팅커가 먼저 날아간다. 사람은 팅커가 자리잡은 뒤에 출발한다.
     // BUILD 101: 탭 잠금이 이 activeIndex를 가리키면 분수 지점이 진짜 목적지다.
+    const loopPath = !!spec.path?.loop;
+    if (stroll) {
+      // BUILD 150: 무한 산책 — 목적지는 늘 두 걸음 반 앞. 도착이 없으니 멈춤도 없다
+      J.phase = 'walk';
+      if (loopPath) {
+        if (charProgress.current > scenes.length * 3) { charProgress.current -= scenes.length; } // 숫자 위생 — 무한히 걸어도 넘치지 않게
+        J.target = charProgress.current + 2.5;
+      } else {
+        if (strollDir.current > 0 && charProgress.current >= scenes.length - 1 - 0.03) strollDir.current = -1;
+        else if (strollDir.current < 0 && charProgress.current <= 0.03) strollDir.current = 1;
+        J.target = charProgress.current + strollDir.current * 2.5;
+      }
+    }
     if (tapLock.current !== null && Math.round(tapLock.current) !== activeIndex) tapLock.current = null;
     const wantTarget = tapLock.current ?? activeIndex;
-    if (J.target !== wantTarget) {
-      J.target = wantTarget;
+    if (!stroll && lastWant.current !== wantTarget) {
+      lastWant.current = wantTarget;
+      // 순환 길에선 늘 앞으로 감아 도는 쪽을 택한다 (마지막 기억 → 첫 기억도 계속 전진)
+      J.target = loopPath
+        ? charProgress.current + ((((wantTarget - charProgress.current) % scenes.length) + scenes.length) % scenes.length)
+        : wantTarget;
       const targetPos = curvePosAt(wantTarget).add(new THREE.Vector3(0, 1.1, 0));
       const dist = Math.abs(wantTarget - charProgress.current);
       tinker.flyTo(targetPos, Math.min(1.9, 0.8 + dist * 0.3));
@@ -740,7 +761,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // 안내선에서 벗어나면 허용치(0.12u) 밖에서만 스프링으로 당겨온다.
     const t = world.progressToT(charProgress.current);
     const anchor = world.curve.getPoint(t); // 안내선 위의 내 자리
-    const t1n = world.progressToT(Math.min(scenes.length - 1, charProgress.current + 0.01));
+    const t1n = world.progressToT(loopPath ? charProgress.current + 0.01 : Math.min(scenes.length - 1, charProgress.current + 0.01));
     const dWdPn = Math.max(0.05, world.curve.getPoint(t1n).distanceTo(anchor) / 0.01);
     const facing = moving ? Math.sign(remaining) || 1 : (Math.abs(charYaw.current) > Math.PI / 2 ? -1 : 1);
     const tangent = world.curve.getTangent(t).setY(0).normalize();
@@ -752,7 +773,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       // 추적점: 안내선을 따라 0.42u 앞 (진행 방향으로)
       const lookP = charProgress.current + facing * (0.42 / dWdPn);
       const pursuit = world.curve.getPoint(world.progressToT(
-        Math.max(0, Math.min(scenes.length - 1, lookP)),
+        loopPath ? lookP : Math.max(0, Math.min(scenes.length - 1, lookP)),
       ));
       let dYaw = Math.atan2(pursuit.x - pos.x, pursuit.z - pos.z) - charYaw.current;
       while (dYaw > Math.PI) dYaw -= Math.PI * 2;
@@ -801,8 +822,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       if (wasMoving.current && !moving) {
         // BUILD 101: 기억 '지점'에 닿았을 때만 카드가 펼쳐지고 몸이 앉는다.
         // 길 중간에 머무는 건 그냥 서서 바라보는 것.
-        const nearIdx = Math.round(charProgress.current);
-        if (Math.abs(charProgress.current - nearIdx) < 0.22) {
+        const rawIdx = Math.round(charProgress.current);
+        if (Math.abs(charProgress.current - rawIdx) < 0.22) {
+          const nearIdx = ((rawIdx % scenes.length) + scenes.length) % scenes.length; // BUILD 150: 순환 길에선 감아서 읽는다
           onArrive?.(nearIdx);
           const scene = scenes[nearIdx];
           const st = scene?.stillness ?? 0;

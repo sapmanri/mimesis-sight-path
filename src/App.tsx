@@ -12,13 +12,14 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.54.0 · GULLS OVER THE SEA · BUILD 149';
+const BUILD_LABEL = 'v0.55.0 · THE ENDLESS PATH · BUILD 150';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const [muted, setMuted] = useState(false);
   const [riding, setRiding] = useState(false); // BUILD 136: 구름 탑승
+  const [stroll, setStroll] = useState(false); // BUILD 150: 무한 산책 — 카드도 도착도 없이, 그냥 걷는다
   // BUILD 099: 카드는 도착의 것 — 걷는 동안엔 접히고, 머무를 때 펼쳐진다
   const [cardAt, setCardAt] = useState<number | null>(0);
   // BUILD 096: 에디터 문서로 열기 (?draft=1) — 에디터가 지은 세계를 그대로 걷는다
@@ -88,7 +89,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (mode !== 'auto') return;
+    if (mode !== 'auto' || stroll) return; // BUILD 150: 산책 중엔 카드 시계가 멈춘다
 
     const timer = window.setTimeout(() => {
       setActiveIndex((current) => {
@@ -98,7 +99,7 @@ export default function App() {
     }, scenes[activeIndex].dwellMs ?? 9000);
 
     return () => window.clearTimeout(timer);
-  }, [activeIndex, mode]);
+  }, [activeIndex, mode, stroll]);
 
   useEffect(() => {
     if (mode !== 'manual') return;
@@ -145,6 +146,7 @@ export default function App() {
             onPathTap={goTo}
             props={draft?.props}
             riding={riding}
+            stroll={stroll}
           />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />
@@ -158,6 +160,13 @@ export default function App() {
             aria-label={muted ? '소리 켜기' : '소리 끄기'}
             onClick={() => { footsteps.unlock(); ambience.unlock(); footsteps.setMuted(!muted); ambience.setMuted(!muted); setMuted(!muted); }}
           >{muted ? '🔇' : '🔊'}</button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={stroll ? '산책 끝내기' : '무한 산책'}
+            title={stroll ? '산책 끝내기 — 기억 앞에 다시 멈춘다' : '무한 산책 — 도착 없이 그냥 걷는다'}
+            onClick={() => { setStroll((v) => { const nv = !v; if (nv) setCardAt(null); return nv; }); }}
+          >{stroll ? '🧍' : '♾️'}</button>
           {spec.walker?.mount?.enabled && (
             <button
               type="button"

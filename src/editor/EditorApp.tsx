@@ -181,7 +181,7 @@ function freshDoc(): WorldDoc {
 
 // BUILD 125: 빈 문서 — 새 길의 첫 장. 기억 갯수만큼 길이 굽이치며 자라난다.
 // 첫 행위는 기억을 넣는 것. 길은 기억 사이의 걷는 시간이다.
-function blankDoc(count: number): WorldDoc {
+function blankDoc(count: number, loop = false): WorldDoc {
   const template = clone(jejuBlueprints[0]);
   const bs: SceneBlueprint[] = [];
   let x = 0;
@@ -203,7 +203,8 @@ function blankDoc(count: number): WorldDoc {
     });
   }
   const spec = clone(JEJU_SPEC);
-  spec.meta.name = '이름 없는 길';
+  spec.path.loop = loop || undefined; // BUILD 150: 순환의 길
+  spec.meta.name = loop ? '이름 없는 순환로' : '이름 없는 길';
   spec.meta.seed = 1 + Math.floor(Math.random() * 99999); // 지형·질감도 새 주사위
   // BUILD 130: 기본에는 딱 길만 — 등대섬(landscape), 길가 바위·오두막·비행기(assets), 나무·수풀(decoration)은 고르는 것
   spec.generators = { ...(spec.generators ?? {}), landscape: false, assets: false, decoration: false };
@@ -464,7 +465,8 @@ export function EditorApp() {
             const raw = prompt('몇 개의 기억으로 시작할까요? (2~30)\n그 수만큼 빈 길이 굽이치며 자라납니다.\n소재·마디 길이·굽이는 환경 탭에서 언제든.', '5');
             if (raw == null) return;
             const nMem = Math.max(2, Math.min(30, parseInt(raw, 10) || 5));
-            replaceDoc(blankDoc(nMem)); setSel(0);
+            const loop = window.confirm('순환하는 길로 만들까요?\n\n확인 = 시작도 끝도 없는 둥근 길 (무한 산책용)\n취소 = 지금까지의 열린 길');
+            replaceDoc(blankDoc(nMem, loop)); setSel(0);
           }}>새 길</button>
 
           <button type="button" onClick={() => fileRef.current?.click()}>가져오기</button>
@@ -803,6 +805,11 @@ export function EditorApp() {
               <label>마디 길이 <em>{doc.spec.path.sceneSpacing.toFixed(1)}u</em>
                 <input type="range" min="4" max="12" step="0.2" value={doc.spec.path.sceneSpacing}
                   onChange={(e) => edit((d) => { d.spec.path.sceneSpacing = Number(e.target.value); })} />
+              </label>
+              <label className="ed-check">
+                <input type="checkbox" checked={!!doc.spec.path.loop}
+                  onChange={(e) => edit((d) => { d.spec.path.loop = e.target.checked || undefined; })} />
+                ♾️ 순환의 길 — 시작도 끝도 없다
               </label>
               <label>굽이 <em>{Math.round((doc.spec.path.meanderA / 2.6) * 100)}%</em>
                 <input type="range" min="0" max="5.2" step="0.2" value={doc.spec.path.meanderA}
