@@ -39,6 +39,9 @@ function createAmbience() {
   let listenersInstalled = false;
   let birdTimer: number | null = null;
   let cricketTimer: number | null = null;
+  let fireLevel = 0; // BUILD 168: 모닥불 — 가까울수록 타닥거린다
+  let fireGain: GainNode | null = null;
+  let crackleTimer: number | null = null;
 
   // 레이어 노드들 (ensure에서 생성)
   let windLow: Layer & { lp: BiquadFilterNode } | null = null;
@@ -124,9 +127,19 @@ function createAmbience() {
         seaL = { gain: g };
         seaLfo = [lfo(ctx, g.gain, 0.071, 0), lfo(ctx, g.gain, 0.043, 0)];
       }
+      // BUILD 168: 모닥불 잉걸 — 낮은 웅웅거림. 타닥임은 스케줄러가 얹는다
+      {
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 380; lp.Q.value = 0.5;
+        const g = ctx.createGain(); g.gain.value = 0;
+        noiseSrc.connect(lp).connect(g).connect(master);
+        fireGain = g;
+        lfo(ctx, g.gain, 0.9, 0.002); // 잉걸의 숨
+      }
       applyTargets(0.1);
       scheduleBirds();
       scheduleCrickets();
+      scheduleCrackle();
     }
     if (ctx.state !== 'running') void ctx.resume(); // suspended뿐 아니라 iOS의 'interrupted'도
     return ctx.state === 'running';
@@ -289,6 +302,37 @@ function createAmbience() {
     o.start(t0); o.stop(t0 + 0.8);
   };
 
+  // ---------- BUILD 168: 타닥타닥 ----------
+  /** 장작 팝 — 25~60ms의 밴드패스 버스트. 가끔 두 번 연달아 */
+  const cracklePop = () => {
+    if (!ctx || !master || muted || fireLevel <= 0.02) return;
+    const t0 = ctx.currentTime;
+    const dur = 0.025 + Math.random() * 0.035;
+    const src = ctx.createBufferSource();
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * (dur + 0.01)), ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i += 1) d[i] = Math.random() * 2 - 1;
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1500 + Math.random() * 2300; bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.028 * fireLevel * (0.4 + Math.random() * 0.6), t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(bp).connect(g).connect(master);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  };
+  const scheduleCrackle = () => {
+    if (crackleTimer !== null) return;
+    const tick = () => {
+      if (ctx && ctx.state === 'running' && !muted && fireLevel > 0.02) {
+        cracklePop();
+        if (Math.random() < 0.3) window.setTimeout(cracklePop, 40 + Math.random() * 90); // 타-닥
+      }
+      crackleTimer = window.setTimeout(tick, (120 + Math.random() * 430) / Math.max(0.3, fireLevel || 1));
+    };
+    crackleTimer = window.setTimeout(tick, 300);
+  };
+
   // ---------- BUILD 149: 갈매기 ----------
   /** 끼룩 — 내려앉는 미음(mew). 1~3번, 멀리서. World의 갈매기들이 부른다 */
   const gullCry = () => {
@@ -377,6 +421,11 @@ function createAmbience() {
     },
     thunder,
     gullCry,
+    /** 모닥불 근접도 0~1 — 잉걸 게인과 타닥임 밀도가 함께 따른다 */
+    setFire(level: number) {
+      fireLevel = Math.min(1, Math.max(0, level));
+      if (ctx && fireGain) fireGain.gain.setTargetAtTime(fireLevel * 0.011, ctx.currentTime, 0.4);
+    },
     unlock() { installGestureUnlock(); wake(); },
     setMuted(m: boolean) {
       muted = m;

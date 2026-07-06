@@ -424,6 +424,92 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gullsActive, spec.ambience?.sea, world, gullRoot]);
 
+  // BUILD 168: 길가의 우연 — 안개는 무대 전환막이다.
+  // 뒤 안개로 사라진 것은 철거되고, 앞 안개 너머에서 새 것이 태어난다 (Vase의 유비식 스트리밍).
+  // 그리고 끝없는 하이킹의 심장 — 캠프파이어. 닿으면 앉아 쉬었다 간다.
+  const waysideRoot = useMemo(() => new THREE.Group(), []);
+  type WaySpot = {
+    grp: THREE.Group; prog: number; kind: 'campfire' | 'prop';
+    flames?: { m: THREE.Mesh; ph: number; s0: number }[];
+    light?: THREE.PointLight; rested?: boolean;
+  };
+  const waySpots = useRef<WaySpot[]>([]);
+  const wayIn = useRef(6);
+  const wayCount = useRef(0);
+  const campRest = useRef<null | { until: number; fire: THREE.Vector3 }>(null);
+  const fireSync = useRef(0);
+  const campfireProto = useRef<Promise<THREE.Group> | null>(null);
+  const WAY_POOL = ['stone11', 'rock3', 'suitcase', 'lamp', 'snowman'] as const;
+  const loadCampfire = () => {
+    if (!campfireProto.current) {
+      campfireProto.current = defaultLoader('CampfireSet.glb').then((gltf) => {
+        const root = gltf.scene;
+        // 정규화: 화덕 높이 0.5, 바닥 접지
+        const box = new THREE.Box3().setFromObject(root);
+        const size = box.getSize(new THREE.Vector3());
+        const sc = 0.5 / Math.max(1e-6, size.y);
+        root.scale.setScalar(sc);
+        box.setFromObject(root);
+        root.position.y -= box.min.y;
+        const c = box.getCenter(new THREE.Vector3());
+        root.position.x -= c.x; root.position.z -= c.z;
+        return root;
+      });
+    }
+    return campfireProto.current;
+  };
+  const spawnWayspot = (prog: number, kind: WaySpot['kind']) => {
+    const t = world.progressToT(prog);
+    const p = world.curve.getPoint(t);
+    const tan = world.curve.getTangent(t).setY(0).normalize();
+    const nor = new THREE.Vector3(-tan.z, 0, tan.x);
+    const side = Math.random() < 0.5 ? 1 : -1;
+    const grp = new THREE.Group();
+    grp.position.copy(p).addScaledVector(nor, side * (kind === 'campfire' ? 0.78 : 0.6 + Math.random() * 0.45));
+    grp.rotation.y = Math.random() * Math.PI * 2;
+    waysideRoot.add(grp);
+    const spot: WaySpot = { grp, prog, kind };
+    waySpots.current.push(spot);
+    if (kind === 'campfire') {
+      void loadCampfire().then((proto) => {
+        const set = proto.clone(true);
+        const flames: WaySpot['flames'] = [];
+        set.traverse((n) => {
+          const mesh = n as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.castShadow = true;
+          const isFlame = /flame/i.test(n.name) || /flame/i.test(n.parent?.name ?? '');
+          mesh.material = (mesh.material as THREE.Material).clone();
+          if (isFlame) {
+            // 불꽃: 팔레트를 태워버린다 — 발광 재질 + 아래서 제가 흔든다
+            const fm = mesh.material as THREE.MeshStandardMaterial;
+            fm.color?.set('#ff9a45');
+            fm.emissive = new THREE.Color('#ff7a2e');
+            fm.emissiveIntensity = 1.6;
+            fm.transparent = true; fm.opacity = 0.92;
+            fm.fog = false; // 불은 안개 속에서도 불이다
+            mesh.castShadow = false;
+            flames.push({ m: mesh, ph: Math.random() * 6.28, s0: mesh.scale.y });
+          } else {
+            const sm = mesh.material as THREE.MeshStandardMaterial;
+            if (sm.color) sm.color.set(/meat/i.test(n.name) ? '#a3563e' : '#6e5a44');
+            sm.roughness = 1; sm.metalness = 0;
+          }
+        });
+        // 발광 ≠ 광원 — 빛은 따로 데려온다 (BUILD 117의 교훈)
+        const light = new THREE.PointLight('#ff9a4e', 1.1, 5.2, 1.6);
+        light.position.set(0, 0.35, 0);
+        set.add(light);
+        spot.flames = flames;
+        spot.light = light;
+        grp.add(set);
+      });
+    } else {
+      const key = WAY_POOL[Math.floor(Math.random() * WAY_POOL.length)];
+      void loadKitModel(key, defaultLoader).then((obj) => { grp.add(obj); }).catch(() => {});
+    }
+  };
+
   // BUILD 167: 밤하늘 — 별은 안개를 모른다 (fog:false가 옳은 유일한 존재).
   // 흐르는 시간에선 nightK를 따라 떠오르고, 구름이 짙으면 가려진다.
   const starsObj = useMemo(() => {
@@ -1165,6 +1251,78 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         }
       }
     }
+    // BUILD 168: 길가의 우연 — 스트리밍 (산책 중에만)
+    if (stroll) {
+      const walkerDir2 = (loopPath ? 1 : strollDir.current) as 1 | -1;
+      // 생성: 앞 안개 너머(22u)에, 동시 2~3곳 유지
+      wayIn.current -= delta;
+      if (waySpots.current.length < 3 && wayIn.current <= 0) {
+        wayIn.current = 7 + Math.random() * 12;
+        const prog = charProgress.current + walkerDir2 * ((21 + Math.random() * 6) / dWdPn);
+        if (loopPath || (prog > 0.5 && prog < scenes.length - 1.5)) {
+          wayCount.current += 1;
+          spawnWayspot(prog, wayCount.current % 3 === 0 ? 'campfire' : 'prop'); // 세 번에 한 번은 모닥불
+        }
+      }
+      // 철거: 뒤 안개 너머(16u)로 사라진 것들
+      for (let i = waySpots.current.length - 1; i >= 0; i -= 1) {
+        const spt = waySpots.current[i];
+        const behind = (spt.prog - charProgress.current) * walkerDir2;
+        if (behind < -(16 / dWdPn)) {
+          waysideRoot.remove(spt.grp);
+          waySpots.current.splice(i, 1);
+        }
+      }
+      // 불꽃 일렁임 + 모닥불 쉼 + 타닥 소리
+      const tt2 = clock.elapsedTime;
+      let nearestFire = Infinity;
+      for (const spt of waySpots.current) {
+        if (spt.kind !== 'campfire') continue;
+        if (spt.flames) for (const F of spt.flames) {
+          F.m.scale.y = F.s0 * (1 + Math.sin(tt2 * 11 + F.ph) * 0.1 + Math.sin(tt2 * 23 + F.ph * 2) * 0.06);
+          (F.m.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.5 + Math.sin(tt2 * 17 + F.ph) * 0.35;
+        }
+        if (spt.light) spt.light.intensity = 1.05 + Math.sin(tt2 * 13.7) * 0.18 + Math.sin(tt2 * 5.3 + 1) * 0.12;
+        if (walkerPos.current) {
+          const d = spt.grp.position.distanceTo(walkerPos.current);
+          nearestFire = Math.min(nearestFire, d);
+          // 닿으면 쉬어간다 — 앉는 아이는 앉고, 하이커는 서서 불을 본다
+          if (!campRest.current && !spt.rested && d < 1.15) {
+            spt.rested = true;
+            campRest.current = { until: tt2 + 9 + Math.random() * 8, fire: spt.grp.position.clone() };
+            if (!ridingRef.current) rigRef.current?.playInspect('sit');
+          }
+        }
+      }
+      fireSync.current -= delta;
+      if (fireSync.current <= 0) {
+        fireSync.current = 0.5;
+        ambience.setFire(nearestFire === Infinity ? 0 : Math.max(0, 1 - nearestFire / 6));
+      }
+      // 쉼의 시간 — 목적지를 제자리에 묶고, 몸을 불 쪽으로 천천히 돌린다
+      const CR = campRest.current;
+      if (CR) {
+        if (tt2 < CR.until) {
+          J.target = charProgress.current;
+          const dxF = CR.fire.x - (walkerPos.current?.x ?? 0);
+          const dzF = CR.fire.z - (walkerPos.current?.z ?? 0);
+          let dyaw = Math.atan2(dxF, dzF) - charYaw.current;
+          while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+          while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+          charYaw.current += dyaw * Math.min(1, delta * 1.6);
+        } else {
+          campRest.current = null;
+          rigRef.current?.stopInspect();
+        }
+      }
+    } else {
+      if (waySpots.current.length) {
+        waySpots.current.forEach((spt) => waysideRoot.remove(spt.grp));
+        waySpots.current = [];
+        ambience.setFire(0);
+      }
+      if (campRest.current) { campRest.current = null; rigRef.current?.stopInspect(); }
+    }
     // BUILD 166: 스치는 사람 — 산책 중에만, 한 번에 한 명만
     if (stroll) {
       const PS = passer.current;
@@ -1444,6 +1602,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       <primitive object={petRoot} />
       <primitive object={gullRoot} />
       <primitive object={passerRoot} />
+      <primitive object={waysideRoot} />
       <primitive object={starsObj.pts} />
       <primitive object={poofRoot} />
       {lightning && <primitive object={lightning.flash} />}
