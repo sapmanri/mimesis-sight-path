@@ -12,7 +12,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.57.0 · SOUND FOR EVERY POCKET · BUILD 155';
+const BUILD_LABEL = 'v0.57.1 · DEW ON GLASS · BUILD 156';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -20,6 +20,20 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [riding, setRiding] = useState(false); // BUILD 136: 구름 탑승
   const [stroll, setStroll] = useState(false); // BUILD 150: 무한 산책 — 카드도 도착도 없이, 그냥 걷는다
+  const [uiIdle, setUiIdle] = useState(false); // BUILD 156: UI 유휴 — 틀어놓는 화면에서 단추는 유령이 된다
+  useEffect(() => {
+    let t = window.setTimeout(() => setUiIdle(true), 3500);
+    const wakeUi = () => {
+      setUiIdle(false);
+      window.clearTimeout(t);
+      t = window.setTimeout(() => setUiIdle(true), 3500);
+    };
+    ['pointermove', 'pointerdown', 'touchstart', 'keydown'].forEach((ev) => window.addEventListener(ev, wakeUi, { passive: true }));
+    return () => {
+      window.clearTimeout(t);
+      ['pointermove', 'pointerdown', 'touchstart', 'keydown'].forEach((ev) => window.removeEventListener(ev, wakeUi));
+    };
+  }, []);
   // BUILD 099: 카드는 도착의 것 — 걷는 동안엔 접히고, 머무를 때 펼쳐진다
   const [cardAt, setCardAt] = useState<number | null>(0);
   // BUILD 096: 에디터 문서로 열기 (?draft=1) — 에디터가 지은 세계를 그대로 걷는다
@@ -118,7 +132,7 @@ export default function App() {
   };
 
   return (
-    <main className="app-shell world-core-shell">
+    <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
       <header className="topbar road-only-topbar">
         <div>
           <p className="eyebrow">MIMESIS · OBSERVATION NO.001</p>
