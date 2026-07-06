@@ -177,7 +177,7 @@ export function createClipRig(
   const sitDown = mk('Sit_Floor_Down');
   const sitIdleFloor = mk('Sit_Floor_Idle', false); // BUILD 138: 바닥파/의자파 구분 — 엉덩이 높이가 다르다
   const sitIdle = sitIdleFloor ?? mk('Sitting', false) ?? mk('Sitting Idle', false);
-  const rideSeatH = sitIdle ? (sitIdleFloor ? 0.02 : 0.3) : 0;
+  const rideSeatH = sitIdle ? (sitIdleFloor ? 0.02 : 0.17) : 0; // BUILD 139: 의자파 0.3→0.17 — 방석이 무릎을 파고들었다
   const standUp = mk('Sit_Floor_StandUp');
 
   // BUILD 093: 접지 보정 — "허공 보행" 수정.
