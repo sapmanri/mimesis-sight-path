@@ -9,6 +9,7 @@ import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createTinker, type Tinker } from './tinker';
 import { createPropObject, createPropAnimated, ANIMATED_PROPS, loadHandLanternAsset, type PlacedProp } from '../engine/props';
 import { footsteps } from './footsteps';
+import { ambience } from '../audio/ambience';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
 // BUILD 090: 액자 수호 규칙 값 — 에디터 Camera 패널 노출 예정
@@ -103,6 +104,18 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       photosGroup.add(holder);
     });
   }, [scenes, world, photosGroup]);
+
+  // BUILD 148: 공기의 소리 — spec이 바뀌면 소리도 2~3초에 걸쳐 스며 바뀐다
+  useEffect(() => {
+    ambience.apply({
+      kind: spec.weather?.kind ?? 'clear',
+      wind: spec.weather?.wind ?? 0,
+      rainAmount: spec.weather?.rainAmount ?? 0.6,
+      time: spec.weather?.time ?? 'day',
+      sea: spec.ambience?.sea ?? 0,
+      life: spec.ambience?.life ?? 1,
+    });
+  }, [spec.weather, spec.ambience]);
 
   // BUILD 108: 번개 — 비 오는 밤, 세계가 두 번 깜빡인다
   const lightning = useMemo(() => {
@@ -1056,7 +1069,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     if (lightning) {
       const Lg = lightning;
       Lg.t += delta;
-      if (Lg.seq < 0 && Lg.t > Lg.nextAt) { Lg.seq = 0; Lg.t = 0; }
+      if (Lg.seq < 0 && Lg.t > Lg.nextAt) { Lg.seq = 0; Lg.t = 0; ambience.thunder(); } // BUILD 148: 빛이 먼저, 우르릉은 1~3초 뒤 — 거리감
       if (Lg.seq >= 0) {
         const seqT = Lg.t;
         let inten = 0;

@@ -84,6 +84,12 @@ export type WorldSpec = {
     /** BUILD 115: 낮과 밤 — 밤에는 태양의 자리를 달이 이어받는다 */
     time?: 'day' | 'night';
   };
+  /** BUILD 148: 공기의 소리 — 전부 실시간 합성이라 파일이 없다.
+   *  sea: 파도 0~1 (제주 0.55, 겨울 0) · life: 생명의 소리(낮 새, 밤 풀벌레) 밀도 0~1 */
+  ambience?: {
+    sea?: number;
+    life?: number;
+  };
   meta: {
     name: string;
     description?: string;
@@ -239,6 +245,8 @@ export const JEJU_SPEC: WorldSpec = {
     specVersion: 1,
     seed: 0,
   },
+  // BUILD 148: 바다에서 끝나는 기억 — 파도가 들린다
+  ambience: { sea: 0.55, life: 1 },
   palette: {
     fog: '#4a7285',
     sandTop: '#d6c9a4',

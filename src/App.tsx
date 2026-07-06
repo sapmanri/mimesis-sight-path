@@ -6,12 +6,13 @@ import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
 import { TouchTrail } from './components/TouchTrail';
 import { footsteps } from './scene/footsteps';
+import { ambience } from './audio/ambience';
 import { compileScenes } from './engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.52.1 · A LITTLE HIGHER · BUILD 147';
+const BUILD_LABEL = 'v0.53.0 · THE AIR HUMS · BUILD 148';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -38,7 +39,7 @@ export default function App() {
 
   // BUILD 095: 모바일 오디오 잠금 해제 — 어떤 제스처든 첫 접촉에서 (제스처 콜스택 안에서만 유효)
   useEffect(() => {
-    const unlock = () => footsteps.unlock();
+    const unlock = () => { footsteps.unlock(); ambience.unlock(); };
     window.addEventListener('pointerdown', unlock, { passive: true });
     window.addEventListener('touchstart', unlock, { passive: true });
     window.addEventListener('keydown', unlock);
@@ -155,7 +156,7 @@ export default function App() {
             type="button"
             className="icon-btn"
             aria-label={muted ? '소리 켜기' : '소리 끄기'}
-            onClick={() => { footsteps.unlock(); footsteps.setMuted(!muted); setMuted(!muted); }}
+            onClick={() => { footsteps.unlock(); ambience.unlock(); footsteps.setMuted(!muted); ambience.setMuted(!muted); setMuted(!muted); }}
           >{muted ? '🔇' : '🔊'}</button>
           {spec.walker?.mount?.enabled && (
             <button

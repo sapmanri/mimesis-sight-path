@@ -25,6 +25,8 @@ export type ThemeKit = {
   palette?: Partial<WorldPalette>;
   /** 날씨+시간 일괄. time 필드가 envTime 역할 */
   weather?: WorldSpec['weather'];
+  /** BUILD 148: 공기의 소리 — 테마가 파도와 생명의 밀도까지 정한다 */
+  ambience?: WorldSpec['ambience'];
   /** 길을 따라 내려앉는 세트들 */
   sets?: ThemeSetHint[];
   /** 걷는 사람이 등불을 든다 */
@@ -37,6 +39,7 @@ export const THEME_KITS: ThemeKit[] = [
     label: '🌊 제주 (기본)',
     description: '안개 위 절벽 둑길 — 원본 팔레트와 맑은 낮으로 되돌린다',
     weather: { kind: 'clear', time: 'day' },
+    ambience: { sea: 0.55, life: 1 },
   },
   {
     id: 'winter',
@@ -59,6 +62,7 @@ export const THEME_KITS: ThemeKit[] = [
       hat: '#c3c9cf',
     },
     weather: { kind: 'snow', rainAmount: 0.55, cloudAmount: 0.7, time: 'day' },
+    ambience: { sea: 0, life: 0.3 },
     sets: [
       { setId: 'winteryard', at: 0.28, side: 1 },
       { setId: 'grove', at: 0.52, side: -1 },
@@ -72,6 +76,7 @@ export const THEME_KITS: ThemeKit[] = [
 export function applyThemeEnv(spec: WorldSpec, theme: ThemeKit) {
   spec.palette = { ...JEJU_SPEC.palette, ...(theme.palette ?? {}) };
   if (theme.weather) spec.weather = { ...theme.weather };
+  if (theme.ambience) spec.ambience = { ...theme.ambience };
   spec.walker.lantern = theme.walkerLantern || undefined;
 }
 

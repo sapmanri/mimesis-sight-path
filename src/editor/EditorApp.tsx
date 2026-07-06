@@ -17,6 +17,7 @@ import { JEJU_SPEC, WORLD_PIPELINE, isGeneratorEnabled, type WorldSpec } from '.
 import { THEME_KITS, applyThemeEnv, expandThemeSets } from '../engine/themeKits';
 import { ROAD_MATERIALS, WALKER_ROSTER } from '../engine/worldCore';
 import { PET_ROSTER } from '../engine/pets';
+import { ambience } from '../audio/ambience';
 import type { RoadMaterialId } from '../engine/worldSpec';
 import { jejuBlueprints } from '../data/jeju';
 
@@ -238,6 +239,9 @@ export function EditorApp() {
   // BUILD 100: 픽 대상 일반화 — 기억 자리 / 새 배치물 / 배치물 자리 다시 찍기
   const [pickTarget, setPickTarget] = useState<null | 'scene' | 'prop-new' | 'prop-repos' | 'set-place'>(null);
   const [selSet, setSelSet] = useState(PROP_SETS[0].id); // BUILD 118
+  // BUILD 148: 에디터 소리 미리듣기 — 기본은 조용히. 켜면 다이얼이 귀에도 반영된다
+  const [soundPreview, setSoundPreview] = useState(false);
+  useEffect(() => { ambience.setMuted(!soundPreview); if (soundPreview) ambience.unlock(); }, [soundPreview]);
   const [themeKeepProps, setThemeKeepProps] = useState(true); // BUILD 121: 테마 적용 시 기존 배치 유지 여부
   const [propCat, setPropCat] = useState(PROP_CATEGORIES[0]);
   const [propObj, setPropObj] = useState(PROP_CATALOG[0].id);
@@ -845,6 +849,19 @@ export function EditorApp() {
               <label>구름 양 <em>{Math.round((doc.spec.weather?.cloudAmount ?? 0.5) * 100)}%</em>
                 <input type="range" min="0" max="1" step="0.05" value={doc.spec.weather?.cloudAmount ?? 0.5}
                   onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), cloudAmount: Number(e.target.value) }; })} />
+              </label>
+              <h4>공기의 소리</h4>
+              <label className="ed-check">
+                <input type="checkbox" checked={soundPreview} onChange={(e) => setSoundPreview(e.target.checked)} />
+                🔊 에디터에서 미리듣기
+              </label>
+              <label>파도 <em>{Math.round((doc.spec.ambience?.sea ?? 0) * 100)}%{(doc.spec.ambience?.sea ?? 0) === 0 ? ' (바다가 멀다)' : ''}</em>
+                <input type="range" min="0" max="1" step="0.05" value={doc.spec.ambience?.sea ?? 0}
+                  onChange={(e) => edit((d) => { d.spec.ambience = { ...(d.spec.ambience ?? {}), sea: Number(e.target.value) }; })} />
+              </label>
+              <label>생명의 소리 <em>{Math.round((doc.spec.ambience?.life ?? 1) * 100)}%</em>
+                <input type="range" min="0" max="1" step="0.05" value={doc.spec.ambience?.life ?? 1}
+                  onChange={(e) => edit((d) => { d.spec.ambience = { ...(d.spec.ambience ?? {}), life: Number(e.target.value) }; })} />
               </label>
               {((doc.spec.weather?.kind ?? 'clear') === 'rain' || doc.spec.weather?.kind === 'snow') && (
                 <>
