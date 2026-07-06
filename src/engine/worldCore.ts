@@ -1208,28 +1208,31 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
         wrap.add(car);
         wrap.scale.setScalar(CAR_LEN / Math.max(1e-6, long));
         wrap.rotation.y = lengthIsX ? -Math.PI / 2 : 0; // 장축을 진행 방향(+Z)으로
-        slot.add(wrap);
-        // BUILD 163: 실측의 실측 — 구워진 회전이 1차 측정을 속여도, 조립 후 다시 재서 스스로 보정한다
-        slot.updateMatrixWorld(true);
+        // BUILD 164: 중립 무대 — 측정은 언제나 자기 좌표계에서. 슬롯은 회전을 갖고 있어
+        // 월드 박스로 재면 폭을 길이로 착각한다 (창문이 허공에 뜬 사건의 전말).
+        // 회전 없는 임시 무대에서 조립·보정·실측을 끝낸 뒤에야 슬롯으로 옮긴다.
+        const stage = new THREE.Group();
+        stage.add(wrap);
+        stage.updateMatrixWorld(true);
         const got = new THREE.Box3().setFromObject(wrap);
         const gotSize = got.getSize(new THREE.Vector3());
-        const gotLen = Math.max(1e-6, gotSize.z); // 슬롯 로컬 +Z가 진행 방향
+        const gotLen = Math.max(1e-6, gotSize.z); // 무대에서 +Z = 진행 방향 (wrap 자체 회전 포함)
         wrap.scale.multiplyScalar(CAR_LEN / gotLen);
-        slot.updateMatrixWorld(true);
+        stage.updateMatrixWorld(true);
         got.setFromObject(wrap);
-        wrap.position.y -= got.max.y - slot.getWorldPosition(new THREE.Vector3()).y; // 지붕 = 걷는 면, 강제
-        // BUILD 163: 창문의 불 — 낡은 열차의 발광 창 문법을 이식 (원본 UDIM 텍스처의 빈자리를 빛으로)
-        slot.updateMatrixWorld(true);
+        wrap.position.y -= got.max.y; // 지붕 꼭대기 = 원점(걷는 면), 강제
+        stage.updateMatrixWorld(true);
         got.setFromObject(wrap);
-        const halfW = (got.max.x - got.min.x) / 2; // 슬롯 로컬 X = 좌우
+        const halfW = (got.max.x - got.min.x) / 2;
         const carH = got.max.y - got.min.y;
+        slot.add(wrap); // 이제야 무대에서 내려와 제 자리에 선다
         const gwY = -carH * 0.42;
         for (let w = 0; w < 5; w += 1) {
           const off = (w - 2) * (CAR_LEN / 6.2);
           for (const sr of [-1, 1]) {
             if (wrnd() < 0.25) continue; // 불 꺼진 창
             const pane = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.13, 0.16), windowC2);
-            pane.position.set(sr * (halfW * 0.9 + 0.006), gwY, off);
+            pane.position.set(sr * (halfW * 0.8 + 0.004), gwY, off); // 지붕 처마(halfW)보다 몸통은 좁다 — 벽에 붙인다
             slot.add(pane);
           }
         }
