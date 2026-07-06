@@ -74,9 +74,11 @@ export function applyToonShading(root: THREE.Object3D, options: ToonOptions = {}
   const { steps = 3, softness = 0.15, saturationBoost = 1.12 } = options;
   const gradientMap = createToonGradientMap(steps, softness);
 
+  let converted = 0;
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
     if (child.userData.__isOutlineShell) return;
+    converted++;
 
     // 원본 백업 (이미 백업돼 있으면 유지)
     if (!ORIGINAL_MATERIALS.has(child)) {
@@ -109,6 +111,7 @@ export function applyToonShading(root: THREE.Object3D, options: ToonOptions = {}
       ? child.material.map(convert)
       : convert(child.material);
   });
+  console.info('[toon] materials converted:', converted);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +139,9 @@ export function addInkOutline(root: THREE.Object3D, options: OutlineOptions = {}
       color,
       side: THREE.BackSide, // 뒤집힌 셸 → 실루엣만 보임
     });
+    // BUILD 184의 진범: enforceFog(applyHeightFog)는 onBeforeCompile을 '대입'으로 덮어쓴다.
+    // hfog 멱등 플래그를 미리 세워 이 재질을 건드리지 못하게 잠근다 — 두께 셰이더 사수.
+    outlineMat.userData.hfog = true;
 
     // 버텍스 셰이더에서 노멀 방향으로 밀어내되, 위치 기반 노이즈로 두께를 흔든다
     outlineMat.onBeforeCompile = (shader) => {
@@ -178,6 +184,7 @@ export function addInkOutline(root: THREE.Object3D, options: OutlineOptions = {}
   });
 
   OUTLINE_SHELLS.set(root, shells);
+  console.info('[toon] outline shells added:', shells.length);
 }
 
 // ---------------------------------------------------------------------------
