@@ -290,7 +290,7 @@ export const MODELS: Record<string, ModelSpec> = {
   // BUILD 092/093: 걷는 사람들. clipSpeeds = 루트 이동거리 ÷ 시간 (원척 정확값).
   walker: { file: 'LittleBoy.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'LittleBoy_texture.png', clipSpeeds: { walk: 1.48, run: 5.207 } },
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
-  chair: { file: 'Chair.glb', height: 0.64, tint: '#7e937f' }, // BUILD 104: 마법 의자 — 앉을 때 샤라락
+  chair: { file: 'Chair.glb', height: 0.44, tint: '#7e937f' }, // BUILD 176: 의자 다이어트 0.64→0.44 — 왕좌가 아니라 의자 (Vase 실측 판정: 줄이면 엉덩이에 맞는다)
   // BUILD 110: 동물들 — 소만 걷는다(스킨+클립 5종 이식본). 나머지는 길가에 선 조각들.
   cow: { file: 'Cow.glb', height: 0.95, tint: '#c9c2b4', keepLook: true },
   dog: { file: 'Dog.glb', height: 0.34, tint: '#8a7a5f' },

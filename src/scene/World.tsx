@@ -52,7 +52,15 @@ type WorldProps = {
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
 export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll, onMail }: WorldProps) {
-  const world = useMemo(() => buildWorld(scenes, undefined, spec), [scenes, spec]);
+  const world = useMemo(() => {
+    const w = buildWorld(scenes, undefined, spec);
+    // BUILD 176: 안개 일제 집행 — 길이 생성될 때 자동으로 따라붙는 모든 것(출처 불문)을
+    // 조립 직후 한 번에 소탕한다. 멱등이라 이미 맞은 것은 지나가고, 발광·fog:false만 면제.
+    // 개별 검거의 시대는 끝났다 — 이제 세계에 태어나는 순간이 곧 안개의 문법을 받는 순간이다.
+    enforceFog(w.group);
+    w.ready?.then?.(() => enforceFog(w.group)); // 비동기로 늦게 도착하는 것들(GLB 소품)도 한 번 더
+    return w;
+  }, [scenes, spec]);
   useEffect(() => {
     onAnchors?.(world.anchors.map((a) => [a.p.x, a.p.y, a.p.z]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
