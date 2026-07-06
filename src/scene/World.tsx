@@ -799,7 +799,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     if (broomMount.visible) {
       const seatB = rigRef.current?.rideSeat?.() ?? 0;
       let by = walker.position.y + seatB - 0.05;
-      if (seatB > 0 && hipsRef.current) { hipsRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.14; }
+      if (seatB > 0 && hipsRef.current) { hipsRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.10; } // BUILD 147: 살짝 위로 — 엉덩이가 자루에 닿게
       else if (seatB === 0 && footRef.current) { footRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.1; } // BUILD 142: 서서 타면 발밑에 자루
       broomMount.position.set(walker.position.x, by, walker.position.z);
       broomMount.rotation.y = charYaw.current;
