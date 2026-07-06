@@ -253,6 +253,10 @@ export const MODELS: Record<string, ModelSpec> = {
   scavenger: { file: 'Scavenger.glb', height: 0.95, tint: '#8f8a7a', keepLook: true },
   rock3: { file: 'Rock3.glb', height: 0.3, tint: '#6d6f64', fitMaxDim: true },
   rock7: { file: 'Rock7.glb', height: 0.3, tint: '#82796a', fitMaxDim: true },
+  // BUILD 119: 겨울이 창고에서 깨어난다 — Snowy_house.FBX.zip(분할 컬렉션) + snwmnnn.fbx
+  snowyhouse: { file: 'SnowyHouse.glb', height: 1.6, tint: '#cfd6d8', strip: 'Plane' }, // Plane = 6×6 눈밭 받침판 제거 (지형과 사각 충돌)
+  snowman: { file: 'Snowman.glb', height: 0.55, tint: '#dfe4e6' }, // 원점=바닥 눈덩이 중심, normalizeModel이 접지
+  pinesnow: { file: 'PineSnow.glb', height: 2.6, tint: '#5c6e60', fitMaxDim: true }, // 눈 소나무 3그루 군락 (141k verts, 한 덩어리)
 };
 
 // ---------- BUILD 093: WALKER ROSTER ----------

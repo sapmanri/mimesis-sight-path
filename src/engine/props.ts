@@ -166,6 +166,10 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'cowshed', label: '외양간', cat: '구조물' },
   { id: 'moon', label: '달', cat: '하늘' },
   { id: 'lamp', label: '남포등 (불빛)', cat: '구조물' }, // BUILD 117
+  // 겨울 (BUILD 119) — 창고에서 깨어난 것들
+  { id: 'snowyhouse', label: '눈 덮인 집', cat: '겨울' },
+  { id: 'snowman', label: '눈사람', cat: '겨울' },
+  { id: 'pinesnow', label: '눈 소나무 군락', cat: '겨울' },
   // 하늘
   { id: 'cloud', label: '뭉게구름', cat: '하늘' },
   { id: 'cloud-dark', label: '먹구름', cat: '하늘' },
@@ -288,6 +292,15 @@ export const PROP_SETS: PropSet[] = [
       { obj: 'bush', dx: -1.1, dz: 0.1, jitter: 0.4 },
       { obj: 'rock-small', dx: 0.7, dz: 0.1, jitter: 0.3, scale: [0.8, 1.3] },
       { obj: 'rock-small', dx: -0.5, dz: -0.9, jitter: 0.3, scale: [0.8, 1.3] },
+    ],
+  },
+  {
+    id: 'winteryard', label: '❄️ 겨울 마당',
+    pieces: [
+      { obj: 'snowyhouse', dx: 0, dz: -1.0, scale: [1.0, 1.15], rotY: 0.15 },
+      { obj: 'snowman', dx: 0.7, dz: 0.5, jitter: 0.2, scale: [0.9, 1.1], rotY: -0.5 },
+      { obj: 'pinesnow', dx: -1.2, dz: -0.5, jitter: 0.3, scale: [1.0, 1.3] },
+      { obj: 'lamp', dx: 0.45, dz: 1.0, jitter: 0.15 },
     ],
   },
   {
@@ -448,6 +461,9 @@ export async function createPropObject(
       case 'piggy': case 'bear': case 'deer': case 'boar': case 'wolf':
         return await loadKitModel(objId, loadModel);
       case 'cowshed': return await loadKitModel('cowshed', loadModel);
+      // BUILD 119: 겨울
+      case 'snowyhouse': case 'snowman': case 'pinesnow':
+        return await loadKitModel(objId, loadModel);
       case 'lamp': {
         const g = await loadKitModel('lamp', loadModel);
         const glow = new THREE.PointLight('#ffd9a0', 1.7, 3.6, 2);

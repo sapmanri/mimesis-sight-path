@@ -844,10 +844,13 @@
    "downloadUrl": "https://github.com/sapmanri/mimesis-sight-path/releases/download/assets-v1/Snowy_house.FBX.zip",
    "category": "architecture",
    "subcategory": "house",
-   "status": "raw",
-   "productionRef": null,
-   "notes": "Winter 테마 후보",
-   "catalogIds": []
+   "status": "in_production",
+   "productionRef": "snowyhouse",
+   "notes": "Winter 테마 — BUILD 119 기상. 분할 컬렉션: Collection=집(SnowyHouse.glb, Plane 받침 strip), Pine=눈 소나무 3그루(PineSnow.glb)",
+   "catalogIds": [
+    "snowyhouse",
+    "pinesnow"
+   ]
   },
   {
    "id": "tower_arlesfbx",
@@ -1355,10 +1358,12 @@
    "downloadUrl": "https://github.com/sapmanri/mimesis-sight-path/releases/download/assets-v3/snwmnnn.fbx",
    "category": "fantasy",
    "subcategory": "winter",
-   "status": "raw",
-   "productionRef": null,
-   "notes": "Winter 테마 후보",
-   "catalogIds": []
+   "status": "in_production",
+   "productionRef": "snowman",
+   "notes": "Winter 테마 — BUILD 119 기상. 3단 눈덩이+당근코, 무텍스처 팔레트 사양",
+   "catalogIds": [
+    "snowman"
+   ]
   },
   {
    "id": "tardis",
