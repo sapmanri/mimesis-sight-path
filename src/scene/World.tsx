@@ -952,10 +952,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   useFrame(({ camera, clock, scene }, delta) => {
     // BUILD 177: 진단 후크 — 콘솔에서 세계를 부검할 수 있게 (window.__W)
     (window as unknown as { __W?: unknown }).__W = { world, walker, scene, charProgress };
-    // BUILD 179: 안개 순찰 — 178의 1회성 의식은 의식 '뒤에' 도착하는 비동기 GLB들을 놓쳤다.
-    // 이제 2초마다 순찰: 아직 도장(userData.rited) 없는 재질만 깨운다. 신참이 없으면 비용 0에 수렴.
+    // BUILD 181: 안개 순찰 v2 — 179의 두 가지 헛발을 고친다:
+    // ① 첫 순찰이 frame 1(안개 부착 전)에 돌며 전원에게 '완료' 도장을 찍었다 → 첫 순찰은 1.5초 뒤
+    // ② needsUpdate만으론 같은 캐시 키의 낡은(무안개) 프로그램이 적중해 재컴파일이 안 일어난다
+    //    (라이브 부검으로 증명) → 고유 접미키를 부여해 캐시 적중 자체를 불가능하게 만든다.
+    //    신선 컴파일에는 안개 코드가 반드시 들어간다는 것도 부검으로 확인했다.
     recompileRite.current -= delta;
-    if (recompileRite.current <= 0) {
+    if (recompileRite.current <= 0 && clock.elapsedTime > 1.5) {
       recompileRite.current = 2;
       scene.traverse((o) => {
         const om = (o as THREE.Mesh).material;
@@ -963,6 +966,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         (Array.isArray(om) ? om : [om]).forEach((m) => {
           if (m.userData.rited) return;
           m.userData.rited = true;
+          const orig = m.customProgramCacheKey?.bind(m);
+          const stamp = `|patrol${Math.floor(clock.elapsedTime * 10)}`;
+          m.customProgramCacheKey = () => (orig ? orig() : '') + stamp;
           m.needsUpdate = true;
         });
       });
