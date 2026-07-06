@@ -151,7 +151,7 @@ function makeGroundTexture(mat: RoadMaterialId = 'sand') {
     glass:     { bl: 0.03, gr: 0.02, dots: 0,   darkBias: 0.5,  warm: -0.6 },
     train:     { bl: 0.05, gr: 0.04, dots: 0,   darkBias: 0.5,  warm: 0.0 }, // 열차 길은 지오메트리가 말한다 — 질감은 조용히
   };
-  const c = P[mat];
+  const c = P[mat] ?? P.sand; // BUILD 159: 미지의 소재는 모랫길로 — 오타 하나가 세계를 죽여선 안 된다
   const BOARD = 21; // 널판 폭(px) — 길이축(v)을 가로지르는 판자
   for (let y = 0; y < S; y += 1) {
     const board = Math.floor(y / BOARD);
@@ -1171,7 +1171,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
 function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
   const roadMatId: RoadMaterialId = SPEC.path.material ?? 'sand'; // BUILD 124
-  const roadMat = ROAD_MATERIALS[roadMatId];
+  const roadMat = ROAD_MATERIALS[roadMatId] ?? ROAD_MATERIALS.sand; // BUILD 159: 같은 방어
   const groundTex = makeGroundTexture(roadMatId);
   const cliffTex = makeCliffTexture();
   const cSandTop = new THREE.Color(roadMat.top ?? PALETTE.sandTop);

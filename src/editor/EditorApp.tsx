@@ -215,6 +215,12 @@ function blankDoc(count: number, loop = false): WorldDoc {
 
 /** BUILD 130: 문서 위생 — 중복 배치물 id를 치유한다 (유령의 근원이었던 쌍둥이 id) */
 function sanitizeDoc(d: WorldDoc): WorldDoc {
+  // BUILD 159: 소재 치유 — 알 수 없는 길 소재로 저장된 문서(오타 프리셋의 저주)를 로드 시 되살린다
+  if (d.spec?.path) {
+    const m = d.spec.path.material as string;
+    if (m === 'wood') d.spec.path.material = 'woodplank';
+    else if (m && !(m in ROAD_MATERIALS)) d.spec.path.material = 'sand';
+  }
   if (d.props?.length) {
     const seen = new Set<string>();
     d.props.forEach((pp) => {
