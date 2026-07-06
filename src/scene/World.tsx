@@ -676,11 +676,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           onArrive?.(nearIdx);
           const scene = scenes[nearIdx];
           const st = scene?.stillness ?? 0;
-          if (st >= 1.3) rig.playInspect('sit');
-          else if (st >= 0.65) rig.playInspect('pickup');
+          if (!ridingRef.current) { // BUILD 138: 구름 위에선 내려서 들여다보지 않는다 — 흘러가며 볼 뿐
+            if (st >= 1.3) rig.playInspect('sit');
+            else if (st >= 0.65) rig.playInspect('pickup');
+          }
         }
       }
-      if (!wasMoving.current && moving) { rig.stopInspect(); onDepart?.(); }
+      if (!wasMoving.current && moving) { if (!ridingRef.current) rig.stopInspect(); onDepart?.(); }
       const bob = moving && !rig.inspecting() ? Math.abs(Math.sin(rig.phase())) * (0.012 + speed01 * 0.014) : 0;
       walker.position.copy(pos).add(new THREE.Vector3(0, bob, 0));
       walker.rotation.z = 0;
@@ -697,9 +699,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     // BUILD 137: 엄마 구름은 엉덩이 밑을, 아기 구름은 옆을 — 몽실몽실
     if (cloudMount.visible) {
       const tt = clock.elapsedTime;
+      const seatH = rigRef.current?.rideSeat?.() ?? 0; // BUILD 138: 바닥파 0.02 / 의자파 0.3 / 서서 타는 아이 0
       cloudMount.position.set(
         walker.position.x + Math.sin(tt * 0.53 + 1) * 0.02,
-        walker.position.y - 0.06 + Math.sin(tt * 1.3) * 0.01,
+        walker.position.y + seatH - 0.07 + Math.sin(tt * 1.3) * 0.01,
         walker.position.z + Math.cos(tt * 0.61) * 0.02,
       );
       cloudMount.rotation.y += delta * 0.12;

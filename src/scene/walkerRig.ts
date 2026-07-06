@@ -30,6 +30,8 @@ export type WalkerRig = {
   setChairAsset?: (obj: THREE.Group, seatY: number) => void;
   /** BUILD 136: 탈것 — 앉은 채(없으면 선 채) 이동한다. 로코모션 배제 */
   setRiding?: (on: boolean) => void;
+  /** BUILD 138: 탑승 클립의 엉덩이 높이 — 바닥 양반다리 0.02, 의자 앉기 0.3, 서서 타면 0 */
+  rideSeat?: () => number;
   inspecting: () => boolean;
   /** 현재 걸음 위상 (bob 동기화용) */
   phase: () => number;
@@ -173,7 +175,9 @@ export function createClipRig(
   };
   const pickup = mk('PickUp') ?? mk('Interact') ?? mk('Pickup');
   const sitDown = mk('Sit_Floor_Down');
-  const sitIdle = mk('Sit_Floor_Idle', false) ?? mk('Sitting', false) ?? mk('Sitting Idle', false);
+  const sitIdleFloor = mk('Sit_Floor_Idle', false); // BUILD 138: 바닥파/의자파 구분 — 엉덩이 높이가 다르다
+  const sitIdle = sitIdleFloor ?? mk('Sitting', false) ?? mk('Sitting Idle', false);
+  const rideSeatH = sitIdle ? (sitIdleFloor ? 0.02 : 0.3) : 0;
   const standUp = mk('Sit_Floor_StandUp');
 
   // BUILD 093: 접지 보정 — "허공 보행" 수정.
@@ -265,7 +269,9 @@ export function createClipRig(
       if (on) switchTo(sitIdle ?? idle, 0.3);
       else { switchTo(idle, 0.3); gestureGrace = 0.9; rollingMin = Infinity; }
     },
+    rideSeat: () => rideSeatH, // BUILD 138
     playInspect(kind = 'pickup') {
+      if (riding) return; // BUILD 138: 구름 위에선 도착 제스처를 받지 않는다
       if (gesture !== 'none') return;
       // BUILD 105: 전원 의자 — 의자 높이 클립은 앉고, 바닥 클립은 의자 위에 양반다리로.
       // (의자파가 3/11뿐이라 열 번을 새로고침해도 의자를 못 보는 문제의 해답)
@@ -300,6 +306,7 @@ export function createClipRig(
       else if (sitIdle) { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 들여다보기가 없으면 앉는다
     },
     stopInspect() {
+      if (riding) return; // BUILD 138
       if (chair && chairPhase !== 'none' && chairPhase !== 'out') { chairPhase = 'out'; chairT = 0; }
       if (gesture === 'sit' || gesture === 'sitDown') {
         if (standUp) { gesture = 'standUp'; switchTo(standUp, 0.2); }
