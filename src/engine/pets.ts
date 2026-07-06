@@ -59,7 +59,7 @@ export async function loadPet(def: PetDef): Promise<LoadedPet> {
   const tricks = ['_Stretch', '_Flip', '_Bark', '_GivePaw', '_AskToPlay']
     .map(find)
     .filter((a): a is THREE.AnimationAction => !!a);
-  tricks.forEach((a) => { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = false; });
+  tricks.forEach((a) => { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }); // BUILD 144: 끝 포즈 유지 — 바인드 포즈로 튕기지 않게
   return {
     group,
     mixer,

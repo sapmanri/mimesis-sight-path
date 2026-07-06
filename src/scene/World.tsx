@@ -330,8 +330,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const petPlay = (a: THREE.AnimationAction | null) => {
     const P = pet.current;
     if (!P || !a || P.cur === a) return;
-    a.reset().fadeIn(0.25).play();
-    P.cur?.fadeOut(0.25);
+    a.reset().fadeIn(0.35).play(); // BUILD 144: 부드럽게
+    P.cur?.fadeOut(0.35);
     P.cur = a;
   };
   const poofRoot = useMemo(() => new THREE.Group(), []);
@@ -705,9 +705,11 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       pos.lerp(anchor, Math.min(1, delta * 3));
     }
     pos.y = anchor.y; // 지면은 안내선이 정의한다
-    if (ridingRef.current) { // BUILD 136: 길 위 어느 높이를 둥둥 — 위아래 두 겹, 서로 다른 호흡
+    if (ridingRef.current) { // BUILD 136: 길 위 어느 높이를 둥둥 — BUILD 144: 바람이 흔든다
       const tt = clock.elapsedTime;
-      pos.y = anchor.y + 0.55 + Math.sin(tt * 0.9) * 0.05 + Math.sin(tt * 1.7 + 2) * 0.035;
+      const wAmp = 1 + (spec.weather?.wind ?? 0) * 1.9; // 바람 0 = 편안~, 100% = 출렁출렁
+      pos.y = anchor.y + 0.55
+        + (Math.sin(tt * 0.9) * 0.05 + Math.sin(tt * 1.7 + 2) * 0.035 + Math.sin(tt * 0.37) * 0.045) * wAmp;
     }
     const dir = tangent.clone().multiplyScalar(moving ? facing : 1);
 
@@ -752,6 +754,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       walker.rotation.z = sway;
     }
     walker.rotation.y = charYaw.current;
+    if (ridingRef.current) walker.rotation.z = Math.sin(clock.elapsedTime * 1.1) * 0.035 * (1 + (spec.weather?.wind ?? 0) * 1.9); // BUILD 144: 몸도 함께 흔들린다
     // BUILD 137: 엄마 구름은 엉덩이 밑을, 아기 구름은 옆을 — 몽실몽실
     if (cloudMount.visible) {
       const tt = clock.elapsedTime;
@@ -765,10 +768,11 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         footRef.current.getWorldPosition(hipsV);
         cloudY = hipsV.y - 0.095; // BUILD 142: 서는 아이는 발 뼈 실측 — 발이 살짝 묻히는 높이
       }
+      const wA2 = 1 + (spec.weather?.wind ?? 0) * 1.9; // BUILD 144
       cloudMount.position.set(
-        walker.position.x + Math.sin(tt * 0.53 + 1) * 0.02,
-        cloudY + Math.sin(tt * 1.3) * 0.01,
-        walker.position.z + Math.cos(tt * 0.61) * 0.02,
+        walker.position.x + Math.sin(tt * 0.53 + 1) * 0.02 * wA2,
+        cloudY + Math.sin(tt * 1.3) * 0.012 * wA2,
+        walker.position.z + Math.cos(tt * 0.61) * 0.02 * wA2,
       );
       cloudMount.rotation.y += delta * 0.12;
     }
@@ -780,7 +784,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       else if (seatB === 0 && footRef.current) { footRef.current.getWorldPosition(hipsV); by = hipsV.y - 0.1; } // BUILD 142: 서서 타면 발밑에 자루
       broomMount.position.set(walker.position.x, by, walker.position.z);
       broomMount.rotation.y = charYaw.current;
-      broomMount.rotation.z = Math.sin(clock.elapsedTime * 1.1) * 0.03;
+      const wA = 1 + (spec.weather?.wind ?? 0) * 1.9; // BUILD 144
+      broomMount.rotation.z = Math.sin(clock.elapsedTime * 1.1) * 0.05 * wA;   // 롤
+      broomMount.rotation.x = Math.sin(clock.elapsedTime * 0.8 + 1) * 0.04 * wA; // 피치 — 파도를 타듯
     }
     if (cloudMount.visible || broomMount.visible) {
       const tt = clock.elapsedTime;
@@ -812,11 +818,14 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           P.timer -= delta;
           const dx0 = wp.x - P.group.position.x; const dz0 = wp.z - P.group.position.z;
           const dW = Math.hypot(dx0, dz0);
-          if (dW > 1.8 && P.mode !== 'chase') { P.mode = 'chase'; P.goal.set(wp.x, 0, wp.z); P.timer = 1.2; }
+          // BUILD 144: 리드줄에 물려도 하던 동작은 끝낸다 — 재롱 중 급발진(타타탁)의 진범이었다
+          if (dW > 1.8 && P.mode !== 'chase' && P.mode !== 'trick') { P.mode = 'chase'; P.goal.set(wp.x, 0, wp.z); P.timer = 1.2; }
           if (P.timer <= 0) {
             P.timer = 2 + Math.random() * 3;
             const r = Math.random();
-            if (r < 0.5) { // 어슬렁 — 걷는 사람 근처 아무 데나
+            if (dW > 1.4) { // 동작이 끝났는데 멀다 — 이제 리드줄이 끌린다
+              P.mode = 'chase'; P.goal.set(wp.x, 0, wp.z); P.timer = 1.2;
+            } else if (r < 0.5) { // 어슬렁 — 걷는 사람 근처 아무 데나
               P.mode = 'wander';
               const a = Math.random() * Math.PI * 2; const rr = 0.35 + Math.random() * 0.85;
               P.goal.set(wp.x + Math.cos(a) * rr, 0, wp.z + Math.sin(a) * rr);
@@ -825,17 +834,20 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             } else if (P.tricks.length) { // 재롱 한 번
               P.mode = 'trick';
               const t0 = P.tricks[Math.floor(Math.random() * P.tricks.length)];
-              t0.reset().fadeIn(0.2).play();
-              P.cur?.fadeOut(0.2);
+              t0.reset().fadeIn(0.3).play();
+              P.cur?.fadeOut(0.3);
               P.cur = t0;
-              P.timer = (t0.getClip().duration ?? 1.5) + 0.2;
+              P.timer = (t0.getClip().duration ?? 1.5) + 0.35; // 끝 포즈에서 숨 고르고 넘어간다
             } else { P.mode = 'idle'; }
           }
           if (P.mode !== 'trick') {
             const gx = P.goal.x - P.group.position.x; const gz = P.goal.z - P.group.position.z;
             const gd = Math.hypot(gx, gz);
             if (gd > 0.1) {
-              const running = P.mode === 'chase' && dW > 1.1;
+              // BUILD 144: 히스테리시스 — 한번 뛰기 시작하면 충분히 가까워질 때까지 뛴다 (문턱 파닥임 방지)
+              const wasRun = (P as unknown as { running?: boolean }).running ?? false;
+              const running = P.mode === 'chase' && (wasRun ? dW > 0.6 : dW > 1.3);
+              (P as unknown as { running?: boolean }).running = running;
               const spd = running ? 1.35 : 0.5;
               P.group.position.x += (gx / gd) * spd * delta;
               P.group.position.z += (gz / gd) * spd * delta;
