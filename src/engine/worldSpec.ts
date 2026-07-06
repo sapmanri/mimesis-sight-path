@@ -83,6 +83,13 @@ export type WorldSpec = {
     cloudAmount?: number;
     /** BUILD 115: 낮과 밤 — 밤에는 태양의 자리를 달이 이어받는다 */
     time?: 'day' | 'night';
+    /** BUILD 151·152: 흐름 — 세계가 스스로 산다. time: 하루가 흐른다(해가 뜨고 진다),
+     *  weather: 날씨가 유랑한다(구름·바람·비가 스스로 오간다). dayMinutes: 하루의 길이(기본 12분) */
+    flow?: {
+      time?: boolean;
+      weather?: boolean;
+      dayMinutes?: number;
+    };
   };
   /** BUILD 148: 공기의 소리 — 전부 실시간 합성이라 파일이 없다.
    *  sea: 파도 0~1 (제주 0.55, 겨울 0) · life: 생명의 소리(낮 새, 밤 풀벌레) 밀도 0~1 */

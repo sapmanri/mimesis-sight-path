@@ -890,6 +890,23 @@ export function EditorApp() {
                 <button type="button" className={doc.spec.weather?.time === 'night' ? 'ed-chip on' : 'ed-chip'}
                   onClick={() => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), time: 'night' }; })}>🌙 밤</button>
               </div>
+              <h4>흐름 — 세계가 스스로 산다</h4>
+              <label className="ed-check">
+                <input type="checkbox" checked={!!doc.spec.weather?.flow?.time}
+                  onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), flow: { ...(d.spec.weather?.flow ?? {}), time: e.target.checked || undefined } }; })} />
+                🌗 시간이 흐른다 — 해가 뜨고, 그림자가 돌고, 노을이 지고
+              </label>
+              {!!doc.spec.weather?.flow?.time && (
+                <label>하루의 길이 <em>{doc.spec.weather?.flow?.dayMinutes ?? 12}분</em>
+                  <input type="range" min="4" max="30" step="1" value={doc.spec.weather?.flow?.dayMinutes ?? 12}
+                    onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), flow: { ...(d.spec.weather?.flow ?? {}), dayMinutes: Number(e.target.value) } }; })} />
+                </label>
+              )}
+              <label className="ed-check">
+                <input type="checkbox" checked={!!doc.spec.weather?.flow?.weather}
+                  onChange={(e) => edit((d) => { d.spec.weather = { kind: 'clear', ...(d.spec.weather ?? {}), flow: { ...(d.spec.weather?.flow ?? {}), weather: e.target.checked || undefined } }; })} />
+                🌦️ 날씨가 흐른다 — 구름이 걷고, 바람이 일고, 비가 왔다 갠다
+              </label>
               <h4>{doc.spec.weather?.time === 'night' ? '달 (태양의 자리)' : '태양'}</h4>
               <label>빛의 세기 <em>{doc.spec.light.sunIntensity.toFixed(2)}</em>
                 <input type="range" min="0.2" max="2.4" step="0.05" value={doc.spec.light.sunIntensity}

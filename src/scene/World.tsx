@@ -10,6 +10,7 @@ import { createTinker, type Tinker } from './tinker';
 import { createPropObject, createPropAnimated, ANIMATED_PROPS, loadHandLanternAsset, type PlacedProp } from '../engine/props';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
+import { createSkyDrift, dayLightAt } from '../engine/skyDrift';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
 
 // BUILD 090: 액자 수호 규칙 값 — 에디터 Camera 패널 노출 예정
@@ -60,7 +61,13 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     return holder;
   }, []);
   const rigRef = useRef<WalkerRig | null>(null);
-  const { gl } = useThree();
+  const { gl, scene: r3fScene } = useThree();
+  // BUILD 151·152: 흐르는 하늘 — spec은 악보, sky는 연주
+  const sky = useRef(createSkyDrift());
+  useEffect(() => { sky.current.init(spec); }, [spec]);
+  const skyOn = !!(spec.weather?.flow?.time || spec.weather?.flow?.weather);
+  const ambSync = useRef(0);
+  const fogNow = useMemo(() => new THREE.Color(), []);
 
   // BUILD 108: 3D 폴라로이드 — 에디터에서 붙인 사진이 길 위에 선다.
   // 흰 액자, 가는 다리, 길을 등지고 살짝 기운 채.
@@ -121,16 +128,18 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
 
   // BUILD 108: 번개 — 비 오는 밤, 세계가 두 번 깜빡인다
   const lightning = useMemo(() => {
-    if (spec.weather?.kind !== 'rain' || !spec.weather?.lightning) return null;
+    const flowW = !!spec.weather?.flow?.weather && spec.weather?.kind !== 'snow'; // BUILD 151: 유랑하는 날씨는 언젠가 번개를 데려온다
+    if (!flowW && (spec.weather?.kind !== 'rain' || !spec.weather?.lightning)) return null;
     const flash = new THREE.AmbientLight('#dfe9f2', 0);
     return { flash, nextAt: 4 + Math.random() * 8, seq: -1, t: 0 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec.weather?.kind, spec.weather?.lightning]);
+  }, [spec.weather?.kind, spec.weather?.lightning, spec.weather?.flow?.weather]);
 
   // BUILD 107: 빗줄기 — 걷는 사람 주위에서 순환한다
   const rain = useMemo(() => {
-    if (spec.weather?.kind !== 'rain') return null;
-    const N = Math.round(250 + (spec.weather?.rainAmount ?? 0.6) * 1400);
+    const flowW = !!spec.weather?.flow?.weather && spec.weather?.kind !== 'snow'; // BUILD 151: 눈의 세계엔 비 대신 눈이 유랑한다
+    if (spec.weather?.kind !== 'rain' && !flowW) return null;
+    const N = Math.round(250 + Math.max(spec.weather?.rainAmount ?? 0.6, flowW ? 0.85 : 0) * 1400);
     const pos = new Float32Array(N * 6);
     const drops = new Float32Array(N * 4); // x,y,z,speed
     for (let i = 0; i < N; i += 1) {
@@ -146,7 +155,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     lines.frustumCulled = false;
     return { lines, drops, N };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec.weather?.kind, spec.weather?.rainAmount]);
+  }, [spec.weather?.kind, spec.weather?.rainAmount, spec.weather?.flow?.weather]);
 
   // BUILD 120: 눈발 — 비의 문법을 물려받되, 서두르지 않는다. 떨어지며 좌우로 흔들린다.
   const snow = useMemo(() => {
@@ -354,6 +363,26 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     P.cur?.fadeOut(0.35);
     P.cur = a;
   };
+  // BUILD 152: 하루의 빛 — world가 지은 조명들을 실측해 손잡이를 잡는다 (상수가 아니라 실측 — 늘 그랬듯)
+  const lightRig = useMemo(() => {
+    const par = world.sun.parent;
+    let hemi: THREE.HemisphereLight | undefined;
+    let fill: THREE.DirectionalLight | undefined;
+    par?.children.forEach((c) => {
+      if ((c as THREE.HemisphereLight).isHemisphereLight) hemi = c as THREE.HemisphereLight;
+      else if ((c as THREE.DirectionalLight).isDirectionalLight && c !== world.sun) fill = c as THREE.DirectionalLight;
+    });
+    const dayFog = world.fogColor.clone();
+    return {
+      hemi, fill,
+      baseSunInt: world.sun.intensity, baseHemiInt: hemi?.intensity ?? 1, baseFillInt: fill?.intensity ?? 1,
+      dayFog,
+      dawnFog: dayFog.clone().lerp(new THREE.Color('#b58a92'), 0.34),  // 장밋빛 새벽
+      duskFog: dayFog.clone().lerp(new THREE.Color('#c8794a'), 0.42),  // 금빛 노을
+      nightFog: dayFog.clone().lerp(new THREE.Color('#0d1420'), 0.75), // BUILD 115의 밤과 같은 수식
+    };
+  }, [world]);
+
   // BUILD 149: 갈매기 — 파도가 부른다. sea>0 + 낮 + 맑음/흐림일 때만 하늘에 뜬다
   const gullRoot = useMemo(() => new THREE.Group(), []);
   const gulls = useRef<{ m: THREE.Object3D; R: number; th: number; om: number; alt: number; bobA: number; bobF: number; ph: number; roll: number }[]>([]);
@@ -602,6 +631,45 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
 
   useFrame(({ camera, clock }, delta) => {
     cameraRef.current = camera;
+    // ---- BUILD 151·152: 하늘이 흐른다 ----
+    const SKY = sky.current;
+    if (skyOn) SKY.tick(delta);
+    const windNow = skyOn && SKY.flowWeather() ? SKY.state.wind : (spec.weather?.wind ?? 0);
+    if (skyOn) {
+      // 소리는 1.5초마다 하늘을 따라잡는다 (setTargetAtTime이 나머지를 스민다)
+      ambSync.current -= delta;
+      if (ambSync.current <= 0) {
+        ambSync.current = 1.5;
+        ambience.apply({
+          kind: SKY.state.kind, wind: windNow,
+          rainAmount: Math.max(0.15, SKY.state.rainMix),
+          time: SKY.state.time,
+          sea: spec.ambience?.sea ?? 0, life: spec.ambience?.life ?? 1,
+        });
+      }
+      // 갈매기는 하늘을 읽는다 — 밤이 오면, 비가 오면 내려앉는다
+      gullRoot.visible = SKY.state.time === 'day' && SKY.state.kind !== 'rain' && SKY.state.kind !== 'snow';
+      // BUILD 152: 하루의 빛 — 해의 높이가 그림자를 끌고 다닌다
+      if (SKY.flowTime()) {
+        const DL = dayLightAt(SKY.state.dayT);
+        const sun = world.sun;
+        const tp = sun.target.position;
+        sun.position.set(tp.x + DL.dir[0] * 34, tp.y + DL.dir[1] * 34, tp.z + DL.dir[2] * 34);
+        sun.color.set(DL.sunColor);
+        const cloudDim = SKY.flowWeather() ? (1 - SKY.state.cloud * 0.45) : 1;
+        sun.intensity = lightRig.baseSunInt * DL.sunIntensityK * cloudDim;
+        if (lightRig.hemi) lightRig.hemi.intensity = lightRig.baseHemiInt * DL.hemiK * (0.75 + cloudDim * 0.25);
+        if (lightRig.fill) lightRig.fill.intensity = lightRig.baseFillInt * DL.fillK;
+        // 안개와 하늘이 함께 물든다 — 새벽 장밋빛, 노을 금빛, 밤의 검푸름
+        fogNow.copy(lightRig.dayFog);
+        if (DL.dawnK > 0) fogNow.lerp(lightRig.dawnFog, DL.dawnK);
+        if (DL.duskK > 0) fogNow.lerp(lightRig.duskFog, DL.duskK);
+        if (DL.nightK > 0) fogNow.lerp(lightRig.nightFog, DL.nightK);
+        const fg = r3fScene.fog as THREE.Fog | null;
+        if (fg) fg.color.copy(fogNow);
+        if (r3fScene.background instanceof THREE.Color) r3fScene.background.copy(fogNow);
+      }
+    }
     const J = journey.current;
     const curvePosAt = (prog: number) => world.curve.getPoint(world.progressToT(prog));
 
@@ -800,7 +868,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     pos.y = anchor.y; // 지면은 안내선이 정의한다
     if (ridingRef.current) { // BUILD 136: 길 위 어느 높이를 둥둥 — BUILD 144: 바람이 흔든다
       const tt = clock.elapsedTime;
-      const wAmp = 1 + (spec.weather?.wind ?? 0) * 1.9; // 바람 0 = 편안~, 100% = 출렁출렁
+      const wAmp = 1 + windNow * 1.9; // 바람 0 = 편안~, 100% = 출렁출렁
       pos.y = anchor.y + 0.55
         + (Math.sin(tt * 0.9) * 0.05 + Math.sin(tt * 1.7 + 2) * 0.035 + Math.sin(tt * 0.37) * 0.045) * wAmp;
     }
@@ -848,7 +916,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       walker.rotation.z = sway;
     }
     walker.rotation.y = charYaw.current;
-    if (ridingRef.current) walker.rotation.z = Math.sin(clock.elapsedTime * 1.1) * 0.035 * (1 + (spec.weather?.wind ?? 0) * 1.9); // BUILD 144: 몸도 함께 흔들린다
+    if (ridingRef.current) walker.rotation.z = Math.sin(clock.elapsedTime * 1.1) * 0.035 * (1 + windNow * 1.9); // BUILD 144: 몸도 함께 흔들린다
     // BUILD 137: 엄마 구름은 엉덩이 밑을, 아기 구름은 옆을 — 몽실몽실
     if (cloudMount.visible) {
       const tt = clock.elapsedTime;
@@ -961,7 +1029,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     }
     // BUILD 141: 바람 — 하늘 구름이 흐른다. 센 날은 빠르게
     {
-      const wind = spec.weather?.wind ?? 0;
+      const wind = windNow;
       if (wind > 0 && world.clouds?.length) {
         for (const c of world.clouds) {
           c.position.x += (0.25 + 0.75 * (c.userData.drift ?? 0.5)) * wind * delta * 1.6;
@@ -970,8 +1038,8 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       }
     }
     // BUILD 149: 갈매기 비행 — 이중 원(선회원 자체가 드리프트)이라 같은 궤적이 없다
-    if (gulls.current.length) {
-      const wind = spec.weather?.wind ?? 0;
+    if (gulls.current.length && gullRoot.visible) {
+      const wind = windNow;
       const mid = world.curve.getPoint(0.5);
       const tNow = clock.elapsedTime;
       for (const G of gulls.current) {
@@ -1066,6 +1134,11 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
 
     // 빗줄기: 떨어지고, 바닥에 닿으면 하늘로 되돌아간다 (사람을 따라다니는 26u 상자)
     if (rain) {
+      const rainMixNow = skyOn && SKY.flowWeather()
+        ? (SKY.state.form === 'rain' ? SKY.state.rainMix : 0)
+        : (spec.weather?.kind === 'rain' ? 1 : 0);
+      rain.lines.visible = rainMixNow > 0.02;
+      rain.lines.geometry.setDrawRange(0, Math.floor(rain.N * rainMixNow) * 2);
       const arr = rain.lines.geometry.attributes.position.array as Float32Array;
       const D = rain.drops;
       const windX = Math.sin(clock.elapsedTime * 0.4) * 0.7;
@@ -1092,6 +1165,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
 
     // 눈발: 천천히 내리고, 바람에 흔들리고, 바닥에 닿으면 다시 하늘로 (사람을 따라다니는 26u 상자)
     if (snow) {
+      const snowMixNow = skyOn && SKY.flowWeather() ? SKY.state.rainMix : 1;
+      snow.points.visible = snowMixNow > 0.02;
+      snow.points.geometry.setDrawRange(0, Math.floor(snow.N * snowMixNow));
       const arr = snow.points.geometry.attributes.position.array as Float32Array;
       const F = snow.flakes;
       const t = clock.elapsedTime;
@@ -1160,7 +1236,11 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     if (lightning) {
       const Lg = lightning;
       Lg.t += delta;
-      if (Lg.seq < 0 && Lg.t > Lg.nextAt) { Lg.seq = 0; Lg.t = 0; ambience.thunder(); } // BUILD 148: 빛이 먼저, 우르릉은 1~3초 뒤 — 거리감
+      if (Lg.seq < 0 && Lg.t > Lg.nextAt) {
+        const allowed = skyOn && SKY.flowWeather() ? SKY.state.lightningOn : true; // BUILD 151: 번개는 폭우의 것
+        if (allowed) { Lg.seq = 0; Lg.t = 0; ambience.thunder(); } // BUILD 148: 빛이 먼저, 우르릉은 1~3초 뒤 — 거리감
+        else { Lg.t = 0; Lg.nextAt = 4 + Math.random() * 8; }
+      }
       if (Lg.seq >= 0) {
         const seqT = Lg.t;
         let inten = 0;

@@ -2,7 +2,23 @@
  "version": 1,
  "note": "프리셋 추가법: 에디터 '내보내기'로 얻은 world.json을 이 폴더에 넣고 아래 목록에 한 줄 추가 → 커밋",
  "presets": [
-  { "id": "jeju", "name": "JEJU, 시선을 따라 걷다", "desc": "안개 위 절벽 둑길. 문에서 시작해 바다에서 끝나는 기억.", "builtin": true },
-  { "id": "winter-train", "name": "겨울 열차", "desc": "눈 내리는 하늘을 달리는 열차의 지붕 위를 걷는다.", "file": "winter-train.world.json" }
+  {
+   "id": "jeju",
+   "name": "JEJU, 시선을 따라 걷다",
+   "desc": "안개 위 절벽 둑길. 문에서 시작해 바다에서 끝나는 기억.",
+   "builtin": true
+  },
+  {
+   "id": "winter-train",
+   "name": "겨울 열차",
+   "desc": "눈 내리는 하늘을 달리는 열차의 지붕 위를 걷는다.",
+   "file": "winter-train.world.json"
+  },
+  {
+   "id": "endless-meadow",
+   "name": "끝없는 들길",
+   "desc": "시작도 끝도 없는 순환로. 해가 뜨고 지고, 구름이 오가고, 당신은 그저 걷는다. ♾️와 함께.",
+   "file": "endless-meadow.world.json"
+  }
  ]
 }
