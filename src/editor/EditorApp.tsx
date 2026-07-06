@@ -87,6 +87,7 @@ function FlyRig({ home }: { home?: [number, number, number] }) {
   }, [gl]);
   const booted = useRef(false);
   useFrame((_, dt) => {
+    dt = Math.min(dt, 0.05); // BUILD 157: 델타 클램핑 — 에디터 카메라도 같은 규칙
     if (!booted.current) {
       booted.current = true;
       goHome(camera); // 처음 열면 캐릭터/기억을 바라보며 시작

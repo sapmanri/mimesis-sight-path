@@ -630,6 +630,9 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   };
 
   useFrame(({ camera, clock }, delta) => {
+    // BUILD 157: 델타 클램핑 — 탭을 떠났다 오면 delta가 '몇 분'이 되어 모든 적분이 폭발한다.
+    // 긴 공백을 짧은 한 걸음으로 자른다. 세계는 잠들었다 깬 것이지, 5분치 물리를 몰아서 살지 않는다.
+    delta = Math.min(delta, 0.05);
     cameraRef.current = camera;
     // ---- BUILD 151·152: 하늘이 흐른다 ----
     const SKY = sky.current;
@@ -980,6 +983,14 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           P.timer -= delta;
           const dx0 = wp.x - P.group.position.x; const dz0 = wp.z - P.group.position.z;
           const dW = Math.hypot(dx0, dz0);
+          // BUILD 157: 순간이동 보험 — 어떤 이유로든 리드줄 너머(7u)로 날아갔으면, 연기 펑과 함께 곁으로.
+          // 쫓아오는 데 5분 걸리는 개보다, 마법처럼 나타나는 개가 낫다
+          if (dW > 7) {
+            spawnPoof(P.group.position.clone().add(new THREE.Vector3(0, 0.15, 0)));
+            P.group.position.set(wp.x - Math.sin(charYaw.current) * 0.5, wp.y, wp.z - Math.cos(charYaw.current) * 0.5);
+            spawnPoof(P.group.position.clone().add(new THREE.Vector3(0, 0.15, 0)));
+            P.mode = 'idle'; P.goal.set(P.group.position.x, 0, P.group.position.z); P.timer = 0.8;
+          }
           // BUILD 144: 리드줄에 물려도 하던 동작은 끝낸다 — 재롱 중 급발진(타타탁)의 진범이었다
           if (dW > 1.8 && P.mode !== 'chase' && P.mode !== 'trick') { P.mode = 'chase'; P.goal.set(wp.x, 0, wp.z); P.timer = 1.2; }
           if (P.timer <= 0) {
