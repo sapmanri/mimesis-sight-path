@@ -234,6 +234,23 @@ export function EditorApp() {
   useEffect(() => {
     fetch('/assets/warehouse/registry_v2.json').then((r) => r.json()).then(setWarehouse).catch(() => setWarehouse(null));
   }, []);
+  // BUILD 127: 프리셋 — 파일을 들고 다니지 않아도 되는 기본 세계 목록 (/worlds/index.json)
+  type PresetMeta = { id: string; name: string; desc?: string; file?: string; builtin?: boolean };
+  const [presets, setPresets] = useState<PresetMeta[]>([]);
+  useEffect(() => {
+    fetch('/worlds/index.json').then((r) => r.json()).then((d) => setPresets(d?.presets ?? [])).catch(() => setPresets([]));
+  }, []);
+  const openPreset = async (id: string) => {
+    const meta = presets.find((q) => q.id === id);
+    if (!meta) return;
+    if (!confirm(`'${meta.name}' 프리셋을 열까요? 현재 문서는 되돌리기(Ctrl+Z)로 복구할 수 있습니다.`)) return;
+    if (meta.builtin || !meta.file) { replaceDoc(freshDoc()); setSel(0); return; }
+    try {
+      const d = await (await fetch('/worlds/' + meta.file)).json();
+      if (d?.blueprints?.length && d?.spec) { replaceDoc(d); setSel(0); }
+      else alert('world.json 형식이 아닙니다');
+    } catch { alert('프리셋을 불러올 수 없습니다'); }
+  };
   const [selProp, setSelProp] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   // BUILD 101: 키보드 트랜스폼 — 맵 에디터의 문법.
@@ -418,13 +435,17 @@ export function EditorApp() {
           <span className="ed-saved">{savedAt ? '자동저장됨' : ''}</span>
           <button type="button" onClick={undo} disabled={!histPast.current.length} title="되돌리기 (Ctrl+Z)">↩︎</button>
           <button type="button" onClick={redo} disabled={!histFuture.current.length} title="다시 실행 (Ctrl+Shift+Z / Ctrl+Y)">↪︎</button>
+          <select value="" onChange={(e) => { const id = e.target.value; e.currentTarget.value = ''; if (id) openPreset(id); }} title="기본 세계 목록에서 불러오기">
+            <option value="" disabled>프리셋 ▾</option>
+            {presets.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+          </select>
           <button type="button" onClick={() => {
             const raw = prompt('몇 개의 기억으로 시작할까요? (2~30)\n그 수만큼 빈 길이 굽이치며 자라납니다.\n소재·마디 길이·굽이는 환경 탭에서 언제든.', '5');
             if (raw == null) return;
             const nMem = Math.max(2, Math.min(30, parseInt(raw, 10) || 5));
             replaceDoc(blankDoc(nMem)); setSel(0);
           }}>새 길</button>
-          <button type="button" onClick={() => { if (confirm('제주 템플릿으로 시작할까요? 현재 문서는 되돌리기(Ctrl+Z)로 복구할 수 있습니다.')) { replaceDoc(freshDoc()); setSel(0); } }}>제주 템플릿</button>
+
           <button type="button" onClick={() => fileRef.current?.click()}>가져오기</button>
           <button type="button" onClick={exportJson}>내보내기</button>
           <button type="button" className="ed-primary" onClick={openViewer}>뷰어에서 열기 ↗</button>

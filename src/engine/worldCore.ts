@@ -139,6 +139,7 @@ function makeGroundTexture(mat: RoadMaterialId = 'sand') {
     woodplank: { bl: 0.10, gr: 0.05, dots: 0,   darkBias: 0.5,  warm: 1.6 },
     mud:       { bl: 0.34, gr: 0.06, dots: 90,  darkBias: 0.8,  warm: 1.2 },
     glass:     { bl: 0.03, gr: 0.02, dots: 0,   darkBias: 0.5,  warm: -0.6 },
+    train:     { bl: 0.05, gr: 0.04, dots: 0,   darkBias: 0.5,  warm: 0.0 }, // 열차 길은 지오메트리가 말한다 — 질감은 조용히
   };
   const c = P[mat];
   const BOARD = 21; // 널판 폭(px) — 길이축(v)을 가로지르는 판자
@@ -259,6 +260,7 @@ export const ROAD_MATERIALS: Record<RoadMaterialId, { label: string; top?: strin
   woodplank: { label: '나무판 다리', top: '#8a6f52', edge: '#755f45' },
   mud: { label: '진흙길', top: '#6e5b46', edge: '#5f4f3e' },
   glass: { label: '유리판', top: '#b5cdd2', edge: '#9fb8bd' },
+  train: { label: '열차 길', top: '#6e5a4d', edge: '#57493f' }, // BUILD 126: 길 자체가 열차다
 };
 
 export const MODELS: Record<string, ModelSpec> = {
@@ -304,6 +306,11 @@ export const MODELS: Record<string, ModelSpec> = {
   snowyhouse: { file: 'SnowyHouse.glb', height: 1.6, tint: '#cfd6d8', strip: 'Plane' }, // Plane = 6×6 눈밭 받침판 제거 (지형과 사각 충돌)
   snowman: { file: 'Snowman.glb', height: 0.55, tint: '#dfe4e6' }, // 원점=바닥 눈덩이 중심, normalizeModel이 접지
   pinesnow: { file: 'PineSnow.glb', height: 2.6, tint: '#5c6e60', fitMaxDim: true }, // 눈 소나무 3그루 군락 (141k verts, 한 덩어리)
+  // BUILD 126: 철길의 것들 — Vase 업로드 (트레인1.zip / Signal_Lights.FBX / 기찻길.zip)
+  trainloco: { file: 'TrainLoco.glb', height: 1.1, tint: '#6e5a4d' },
+  wagon2: { file: 'Wagon2.glb', height: 0.95, tint: '#7a5f52' },
+  signallight: { file: 'SignalLight.glb', height: 0.9, tint: '#5a5f5c' },
+  railsection: { file: 'RailSection.glb', height: 2.4, tint: '#6b665e', fitMaxDim: true }, // 12u 길이가 지배 축
 };
 
 // ---------- BUILD 093: WALKER ROSTER ----------
@@ -579,7 +586,7 @@ export function buildWorld(
   const on = (id: WorldGeneratorId) => isGeneratorEnabled(spec, id);
 
   // [terrain] 절벽 둑길 지오메트리
-  if (on('terrain')) group.add(buildTerrain(frames, widthAt));
+  if (on('terrain')) group.add(SPEC.path.material === 'train' ? buildTrainRoad(frames, widthAt) : buildTerrain(frames, widthAt)); // BUILD 126
   // [edge] 길 가장자리 풀잎
   if (on('edge')) group.add(buildEdgePlants(frames, widthAt));
 
@@ -852,6 +859,166 @@ async function attachModels(
 
 // ---------- terrain ----------
 type Frame = { t: number; p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vector3 };
+
+// ---------- BUILD 126: 열차 길 ----------
+// "길 자체가 열차여도 되. 열차 한동 한동씩이 이어져 있고 그 위를 걸어가는 것" — Vase.
+// 차체는 강체다 — 커브의 굽이에서 동과 동 사이가 진짜 열차처럼 꺾인다.
+// 동 사이 지붕엔 나무판자가 자동으로 걸린다. 발밑엔 바퀴, 창엔 불빛.
+function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
+  const g = new THREE.Group();
+  const CAR_LEN = 2.7;
+  const GAP = 0.42;
+  const PITCH = CAR_LEN + GAP;
+  const CAR_W = 0.74;   // 길폭보다 조금 넓게 — 지붕이 길이다
+  const CAR_H = 0.6;
+  const rnd = worldRng(2611);
+
+  // 누적 거리 → 프레임 보간
+  const distAt: number[] = [0];
+  for (let i = 1; i < frames.length; i += 1) distAt.push(distAt[i - 1] + frames[i].p.distanceTo(frames[i - 1].p));
+  const total = distAt[distAt.length - 1];
+  const atDist = (d: number) => {
+    let lo = 0; let hi = distAt.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (distAt[mid] < d) lo = mid + 1; else hi = mid; }
+    const i = Math.max(1, lo);
+    const t = (d - distAt[i - 1]) / Math.max(1e-6, distAt[i] - distAt[i - 1]);
+    const p = frames[i - 1].p.clone().lerp(frames[i].p, t);
+    const tan = frames[i - 1].tan.clone().lerp(frames[i].tan, t).setY(0).normalize();
+    return { p, tan };
+  };
+
+  const pos: number[] = []; const col: number[] = []; const idx: number[] = [];
+  const wpos: number[] = []; const wcol: number[] = []; const widx: number[] = [];
+  const UP = new THREE.Vector3(0, 1, 0);
+  /** 강체 박스를 버텍스컬러 버퍼에 민다. 면별 가짜 AO: 윗면 1.0 / 옆 0.82 / 앞뒤 0.74 / 바닥 0.55 */
+  const pushBox = (arrP: number[], arrC: number[], arrI: number[], c: THREE.Vector3, f: THREE.Vector3, hl: number, hw: number, hh: number, color: THREE.Color) => {
+    const r = new THREE.Vector3().crossVectors(f, UP).normalize();
+    const corner = (sf: number, sr: number, su: number) => new THREE.Vector3()
+      .copy(c).addScaledVector(f, sf * hl).addScaledVector(r, sr * hw).addScaledVector(UP, su * hh);
+    const v = [
+      corner(-1, -1, -1), corner(1, -1, -1), corner(1, 1, -1), corner(-1, 1, -1), // 아래 4
+      corner(-1, -1, 1), corner(1, -1, 1), corner(1, 1, 1), corner(-1, 1, 1),     // 위 4
+    ];
+    const faces: [number[], number][] = [
+      [[4, 5, 6, 7], 1.0],   // top
+      [[0, 3, 2, 1], 0.55],  // bottom
+      [[0, 1, 5, 4], 0.82],  // side
+      [[2, 3, 7, 6], 0.82],  // side
+      [[1, 2, 6, 5], 0.74],  // 앞
+      [[3, 0, 4, 7], 0.74],  // 뒤
+    ];
+    faces.forEach(([q, shade]) => {
+      const base = arrP.length / 3;
+      q.forEach((vi) => {
+        arrP.push(v[vi].x, v[vi].y, v[vi].z);
+        arrC.push(color.r * shade, color.g * shade, color.b * shade);
+      });
+      arrI.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    });
+  };
+
+  const bodyColors = ['#7a5148', '#4f6259', '#6a6153'].map((c2) => new THREE.Color(c2));
+  const roofC = new THREE.Color('#8b8377');
+  const plankC = new THREE.Color('#8a6f52');
+  const windowC = new THREE.Color('#ffe2ae');
+  const darkC = new THREE.Color('#3d3a35');
+
+  const carCount = Math.max(1, Math.floor((total - GAP) / PITCH));
+  const roofEnds: { p: THREE.Vector3; tan: THREE.Vector3 }[] = []; // [앞끝, 뒷끝, 앞끝, ...] 판자용
+  const wheelMats: THREE.Matrix4[] = [];
+
+  for (let k = 0; k < carCount; k += 1) {
+    const dc = GAP * 0.5 + k * PITCH + CAR_LEN / 2;
+    const { p, tan } = atDist(dc);
+    const color = bodyColors[k % bodyColors.length].clone().multiplyScalar(0.94 + rnd() * 0.12);
+    const roofY = p.y - 0.015; // 걷는 면 — 커브 높이 바로 아래
+    const bodyC = new THREE.Vector3(p.x, roofY - CAR_H / 2 - 0.04, p.z);
+    // 차체
+    pushBox(pos, col, idx, bodyC, tan, CAR_LEN / 2, CAR_W / 2, CAR_H / 2, color);
+    // 지붕 판 (걷는 면 — 살짝 밝고 살짝 좁다)
+    pushBox(pos, col, idx, new THREE.Vector3(p.x, roofY - 0.02, p.z), tan, CAR_LEN / 2 - 0.05, CAR_W / 2 - 0.045, 0.02, roofC);
+    // 굴뚝 — 맨 앞 동은 기관차다
+    if (k === 0) {
+      const chim = new THREE.Vector3().copy(p).addScaledVector(tan, CAR_LEN * 0.32);
+      chim.y = roofY + 0.17;
+      pushBox(pos, col, idx, chim, tan, 0.055, 0.055, 0.17, darkC);
+      const cap = chim.clone(); cap.y += 0.19;
+      pushBox(pos, col, idx, cap, tan, 0.085, 0.085, 0.03, darkC);
+    }
+    // 창문 — 옆면에 4개씩, 밤에 은은히 빛난다 (발광 재질 ≠ 광원: 보이기만 한다)
+    const r = new THREE.Vector3().crossVectors(tan, UP).normalize();
+    for (let w = 0; w < 4; w += 1) {
+      const off = (w - 1.5) * (CAR_LEN / 4.6);
+      for (const sr of [-1, 1]) {
+        if (rnd() < 0.22) continue; // 불 꺼진 창
+        const wc = new THREE.Vector3().copy(p).addScaledVector(tan, off).addScaledVector(r, sr * (CAR_W / 2 + 0.004));
+        wc.y = roofY - CAR_H * 0.42;
+        pushBox(wpos, wcol, widx, wc, tan, 0.09, 0.006, 0.075, windowC);
+      }
+    }
+    // 연결기 — 동 사이 아래쪽 어두운 이음쇠
+    if (k > 0) {
+      const jd = GAP * 0.5 + k * PITCH - GAP / 2;
+      const j = atDist(jd);
+      const jc = new THREE.Vector3(j.p.x, j.p.y - CAR_H - 0.02, j.p.z);
+      pushBox(pos, col, idx, jc, j.tan, GAP / 2 + 0.06, 0.07, 0.05, darkC);
+    }
+    // 지붕 끝점 기록 (판자용)
+    const front = new THREE.Vector3().copy(p).addScaledVector(tan, CAR_LEN / 2); front.y = roofY;
+    const back = new THREE.Vector3().copy(p).addScaledVector(tan, -CAR_LEN / 2); back.y = roofY;
+    roofEnds.push({ p: back, tan }, { p: front, tan });
+    // 바퀴 자리 (인스턴스): 3축 × 양쪽
+    for (const ax of [-0.36, 0, 0.36]) {
+      for (const sr of [-1, 1]) {
+        const wp = new THREE.Vector3().copy(p).addScaledVector(tan, ax * CAR_LEN).addScaledVector(r, sr * (CAR_W / 2 - 0.02));
+        wp.y = roofY - CAR_H - 0.1;
+        const m = new THREE.Matrix4().makeRotationY(Math.atan2(tan.x, tan.z));
+        m.premultiply(new THREE.Matrix4().makeTranslation(0, 0, 0)); // 자리 이동은 아래서
+        m.setPosition(wp);
+        wheelMats.push(m);
+      }
+    }
+  }
+
+  // 나무판자 — 동과 동 사이 지붕을 자동으로 잇는다 (한 틈에 두 장, 살짝 어긋나게)
+  for (let k = 1; k < carCount; k += 1) {
+    const a = roofEnds[k * 2 - 1]; // 앞 동의 앞끝
+    const b = roofEnds[k * 2];     // 뒷 동의 뒷끝
+    const mid = a.p.clone().lerp(b.p, 0.5);
+    const dir = b.p.clone().sub(a.p);
+    const len = dir.length(); dir.normalize();
+    for (const so of [-0.14, 0.13]) {
+      const r = new THREE.Vector3().crossVectors(dir, UP).normalize();
+      const c2 = mid.clone().addScaledVector(r, so + (rnd() - 0.5) * 0.03);
+      c2.y += 0.012;
+      const pc = plankC.clone().multiplyScalar(0.92 + rnd() * 0.16);
+      pushBox(pos, col, idx, c2, dir, len / 2 + 0.24, 0.11, 0.014, pc);
+    }
+  }
+
+  g.add(colorMesh(pos, col, idx, { castShadow: true, receiveShadow: true }));
+  // 창문: 발광 별도 메시
+  if (wpos.length) {
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3));
+    wg.setAttribute('color', new THREE.Float32BufferAttribute(wcol, 3));
+    wg.setIndex(widx);
+    wg.computeVertexNormals();
+    const wm = new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ vertexColors: true, emissive: new THREE.Color('#ffd9a0'), emissiveIntensity: 0.6, roughness: 0.5 }));
+    g.add(wm);
+  }
+  // 바퀴: 인스턴스 한 방
+  if (wheelMats.length) {
+    const wheelGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.05, 10);
+    wheelGeo.rotateZ(Math.PI / 2); // 축이 좌우를 향하게
+    const wheels = new THREE.InstancedMesh(wheelGeo, new THREE.MeshStandardMaterial({ color: '#33302b', roughness: 0.85 }), wheelMats.length);
+    wheelMats.forEach((m, i) => wheels.setMatrixAt(i, m));
+    wheels.instanceMatrix.needsUpdate = true;
+    wheels.castShadow = true;
+    g.add(wheels);
+  }
+  return g;
+}
 
 function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();

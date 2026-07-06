@@ -49,7 +49,7 @@ export function isGeneratorEnabled(spec: WorldSpec, id: WorldGeneratorId): boole
 }
 
 /** BUILD 124: 길의 소재. sand만 팔레트(sandTop/sandEdge)를 따른다 — 테마가 계절을 입힐 수 있게. */
-export type RoadMaterialId = 'sand' | 'asphalt' | 'concrete' | 'woodplank' | 'mud' | 'glass';
+export type RoadMaterialId = 'sand' | 'asphalt' | 'concrete' | 'woodplank' | 'mud' | 'glass' | 'train';
 
 export type WorldPalette = {
   fog: string;

@@ -17,7 +17,7 @@
   "fantasy": "🌌 Fantasy",
   "theme-kits": "🎬 Theme Kits"
  },
- "assetCount": 166,
+ "assetCount": 176,
  "totalBytes": 2667920289,
  "items": [
   {
@@ -2269,6 +2269,91 @@
    "productionRef": null,
    "catalogIds": [],
    "notes": "랜턴 팩 추정 (메시 21개, 6.6×10×14u) — 검수 대기"
+  },
+  {
+   "id": "train1_wagons",
+   "sourceFile": "트레인1.zip",
+   "release": "assets-v4-pending",
+   "sizeBytes": 14890602,
+   "downloadUrl": null,
+   "category": "props",
+   "subcategory": "railway",
+   "status": "in_production",
+   "productionRef": "wagon2",
+   "notes": "BUILD 126 기상. TRAIN+WAGON1~3 — WAGON2가 객차 프롭, TRAIN이 기관차 프롭. 원본 assets-v4 업로드 대기",
+   "catalogIds": [
+    "trainloco",
+    "wagon2"
+   ]
+  },
+  {
+   "id": "signal_lights",
+   "sourceFile": "Signal_Lights.FBX",
+   "release": "assets-v4-pending",
+   "sizeBytes": 95552,
+   "downloadUrl": null,
+   "category": "props",
+   "subcategory": "railway",
+   "status": "in_production",
+   "productionRef": "signallight",
+   "notes": "BUILD 126 기상. 원본 assets-v4 업로드 대기",
+   "catalogIds": [
+    "signallight"
+   ]
+  },
+  {
+   "id": "rail_tracks",
+   "sourceFile": "기찻길.zip",
+   "release": "assets-v4-pending",
+   "sizeBytes": 18431052,
+   "downloadUrl": null,
+   "category": "road",
+   "subcategory": "railway",
+   "status": "in_production",
+   "productionRef": "railsection",
+   "notes": "BUILD 126 기상. rail.fbx만 사용(텍스처팩은 미사용—팔레트 사양). 원본 assets-v4 업로드 대기",
+   "catalogIds": [
+    "railsection"
+   ]
+  },
+  {
+   "id": "steam_train_030",
+   "sourceFile": "0-3-0SteamTrainFBX.FBX",
+   "release": "assets-v4-pending",
+   "sizeBytes": 24685968,
+   "downloadUrl": null,
+   "category": "props",
+   "subcategory": "railway",
+   "status": "raw",
+   "productionRef": null,
+   "notes": "29MB 웹 과체중 — 감량(데시메이션) 필요. 텍스처 5장 실물",
+   "catalogIds": []
+  },
+  {
+   "id": "train_final_2",
+   "sourceFile": "train_final_2_.rar",
+   "release": "assets-v4-pending",
+   "sizeBytes": 24686087,
+   "downloadUrl": null,
+   "category": "props",
+   "subcategory": "railway",
+   "status": "raw",
+   "productionRef": null,
+   "notes": "48MB + bbox 붕괴 — 검수 필요",
+   "catalogIds": []
+  },
+  {
+   "id": "wagon_heavy",
+   "sourceFile": "wagon.fbx",
+   "release": "assets-v4-pending",
+   "sizeBytes": 9913952,
+   "downloadUrl": null,
+   "category": "props",
+   "subcategory": "railway",
+   "status": "raw",
+   "productionRef": null,
+   "notes": "763메시 고밀도 — 감량 필요",
+   "catalogIds": []
   }
  ]
 }

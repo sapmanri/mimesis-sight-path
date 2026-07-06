@@ -166,6 +166,11 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'cowshed', label: '외양간', cat: '구조물' },
   { id: 'moon', label: '달', cat: '하늘' },
   { id: 'lamp', label: '남포등 (불빛)', cat: '구조물' }, // BUILD 117
+  // 철길 (BUILD 126) — Vase가 가져온 열차들
+  { id: 'trainloco', label: '기관차', cat: '철길' },
+  { id: 'wagon2', label: '객차', cat: '철길' },
+  { id: 'signallight', label: '신호등', cat: '철길' },
+  { id: 'railsection', label: '철길 조각', cat: '철길' },
   // 겨울 (BUILD 119) — 창고에서 깨어난 것들
   { id: 'snowyhouse', label: '눈 덮인 집', cat: '겨울' },
   { id: 'snowman', label: '눈사람', cat: '겨울' },
@@ -463,6 +468,9 @@ export async function createPropObject(
       case 'cowshed': return await loadKitModel('cowshed', loadModel);
       // BUILD 119: 겨울
       case 'snowyhouse': case 'snowman': case 'pinesnow':
+        return await loadKitModel(objId, loadModel);
+      // BUILD 126: 철길
+      case 'trainloco': case 'wagon2': case 'signallight': case 'railsection':
         return await loadKitModel(objId, loadModel);
       case 'lamp': {
         const g = await loadKitModel('lamp', loadModel);
