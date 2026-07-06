@@ -27,6 +27,7 @@ export type WeatherState =
   | 'fog-morning';
 
 export type ObjectKit =
+  | 'none'
   | 'door-kit'
   | 'person-kit'
   | 'cloud-kit'
@@ -71,6 +72,7 @@ export const weatherFog: Record<WeatherState, { color: string; near: number; far
 };
 
 export const objectKitVariants: Record<ObjectKit, string[]> = {
+  none: ['empty'], // BUILD 128: 오브젝트 없이 기억만 있는 자리 — 그게 기본이다
   'person-kit': ['back-view'],
   'cloud-kit': ['empty'],
   'door-kit': ['door-panel', 'handle', 'threshold-shadow', 'weathered-frame'],

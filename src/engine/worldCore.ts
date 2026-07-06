@@ -85,7 +85,7 @@ const HEIGHT_FOG = {
   bottom: JEJU_SPEC.atmosphere.heightFogBottom, // 이 높이에서 완전히 안개
 };
 
-function applyHeightFog(mat: THREE.MeshStandardMaterial) {
+function applyHeightFog(mat: THREE.MeshStandardMaterial, strength = 1) { // BUILD 129: strength<1 = 안개에 덜 잠긴다 (열차 차체용)
   // 주의: mix는 sRGB 인코딩된 최종 색 위에서 돌므로, 안개색도 sRGB 값 그대로 써야 배경과 정확히 섞인다
   const hex = parseInt(PALETTE.fog.slice(1), 16);
   const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
@@ -98,7 +98,7 @@ function applyHeightFog(mat: THREE.MeshStandardMaterial) {
       .replace('#include <common>', '#include <common>\nvarying float vHFy;')
       .replace(
         '#include <fog_fragment>',
-        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), 1.0 - smoothstep(${glsl(HEIGHT_FOG.bottom)}, ${glsl(HEIGHT_FOG.top)}, vHFy));`,
+        `#include <fog_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(HEIGHT_FOG.bottom)}, ${glsl(HEIGHT_FOG.top)}, vHFy)) * ${glsl(strength)});`,
       );
   };
   return mat;
@@ -866,11 +866,13 @@ type Frame = { t: number; p: THREE.Vector3; tan: THREE.Vector3; nor: THREE.Vecto
 // 동 사이 지붕엔 나무판자가 자동으로 걸린다. 발밑엔 바퀴, 창엔 불빛.
 function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
-  const CAR_LEN = 2.7;
-  const GAP = 0.42;
+  // BUILD 129: 열차의 두 얼굴 — 낡은 열차(기본)와 테제베
+  const style: 'old' | 'tgv' = SPEC.path.trainStyle ?? 'old';
+  const CAR_LEN = style === 'tgv' ? 3.6 : 2.7;
+  const GAP = style === 'tgv' ? 0.22 : 0.42;
   const PITCH = CAR_LEN + GAP;
-  const CAR_W = 0.74;   // 길폭보다 조금 넓게 — 지붕이 길이다
-  const CAR_H = 0.6;
+  const CAR_W = style === 'tgv' ? 0.7 : 0.74;
+  const CAR_H = style === 'tgv' ? 0.5 : 0.6;
   const rnd = worldRng(2611);
 
   // 누적 거리 → 프레임 보간
@@ -917,8 +919,13 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     });
   };
 
-  const bodyColors = ['#7a5148', '#4f6259', '#6a6153'].map((c2) => new THREE.Color(c2));
-  const roofC = new THREE.Color('#8b8377');
+  const bodyColors = (style === 'tgv'
+    ? ['#dfe3e8', '#dfe3e8', '#d6dbe1']            // 은백 — 테제베는 한 몸처럼 이어진다
+    : ['#7d4b40', '#465e55', '#6b5f4b']            // BUILD 129: 낡은 열차 — 안개 보정 후에도 색이 남게 깊게
+  ).map((c2) => new THREE.Color(c2));
+  const roofC = new THREE.Color(style === 'tgv' ? '#c6ccd2' : '#8b8377');
+  const stripeC = new THREE.Color('#3d5a80'); // 테제베 허리띠
+  const glassC = new THREE.Color('#2e3438');  // 테제베 연속 창띠
   const plankC = new THREE.Color('#8a6f52');
   const windowC = new THREE.Color('#ffe2ae');
   const darkC = new THREE.Color('#3d3a35');
@@ -937,8 +944,29 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     pushBox(pos, col, idx, bodyC, tan, CAR_LEN / 2, CAR_W / 2, CAR_H / 2, color);
     // 지붕 판 (걷는 면 — 살짝 밝고 살짝 좁다)
     pushBox(pos, col, idx, new THREE.Vector3(p.x, roofY - 0.02, p.z), tan, CAR_LEN / 2 - 0.05, CAR_W / 2 - 0.045, 0.02, roofC);
-    // 굴뚝 — 맨 앞 동은 기관차다
-    if (k === 0) {
+    // 테제베: 연속 창띠 + 허리 스트라이프 + 스커트(바퀴를 감춘다)
+    if (style === 'tgv') {
+      const r2 = new THREE.Vector3().crossVectors(tan, UP).normalize();
+      for (const sr of [-1, 1]) {
+        const bandC = new THREE.Vector3().copy(p).addScaledVector(r2, sr * (CAR_W / 2 + 0.004));
+        bandC.y = roofY - CAR_H * 0.3;
+        pushBox(pos, col, idx, bandC, tan, CAR_LEN / 2 - 0.18, 0.005, 0.06, glassC);
+        const strC = bandC.clone(); strC.y = roofY - CAR_H * 0.62;
+        pushBox(pos, col, idx, strC, tan, CAR_LEN / 2 - 0.02, 0.005, 0.022, stripeC);
+      }
+      const skirt = new THREE.Vector3(p.x, roofY - CAR_H - 0.09, p.z);
+      pushBox(pos, col, idx, skirt, tan, CAR_LEN / 2 - 0.08, CAR_W / 2 - 0.06, 0.1, bodyColors[0].clone().multiplyScalar(0.85));
+      // 맨 앞: 유선형 코 — 낮아지며 좁아지는 쐐기 3단
+      if (k === 0) {
+        for (let nq = 0; nq < 3; nq += 1) {
+          const noseC = new THREE.Vector3().copy(p).addScaledVector(tan, CAR_LEN / 2 + 0.14 + nq * 0.24);
+          noseC.y = roofY - CAR_H * (0.42 + nq * 0.16);
+          pushBox(pos, col, idx, noseC, tan, 0.14, (CAR_W / 2) * (0.82 - nq * 0.2), CAR_H * (0.5 - nq * 0.13), bodyColors[0]);
+        }
+      }
+    }
+    // 굴뚝 — 맨 앞 동은 기관차다 (낡은 열차만)
+    if (style === 'old' && k === 0) {
       const chim = new THREE.Vector3().copy(p).addScaledVector(tan, CAR_LEN * 0.32);
       chim.y = roofY + 0.17;
       pushBox(pos, col, idx, chim, tan, 0.055, 0.055, 0.17, darkC);
@@ -947,7 +975,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     }
     // 창문 — 옆면에 4개씩, 밤에 은은히 빛난다 (발광 재질 ≠ 광원: 보이기만 한다)
     const r = new THREE.Vector3().crossVectors(tan, UP).normalize();
-    for (let w = 0; w < 4; w += 1) {
+    for (let w = 0; style === 'old' && w < 4; w += 1) {
       const off = (w - 1.5) * (CAR_LEN / 4.6);
       for (const sr of [-1, 1]) {
         if (rnd() < 0.22) continue; // 불 꺼진 창
@@ -968,7 +996,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     const back = new THREE.Vector3().copy(p).addScaledVector(tan, -CAR_LEN / 2); back.y = roofY;
     roofEnds.push({ p: back, tan }, { p: front, tan });
     // 바퀴 자리 (인스턴스): 3축 × 양쪽
-    for (const ax of [-0.36, 0, 0.36]) {
+    for (const ax of style === 'tgv' ? [] : [-0.36, 0, 0.36]) {
       for (const sr of [-1, 1]) {
         const wp = new THREE.Vector3().copy(p).addScaledVector(tan, ax * CAR_LEN).addScaledVector(r, sr * (CAR_W / 2 - 0.02));
         wp.y = roofY - CAR_H - 0.1;
@@ -996,7 +1024,7 @@ function buildTrainRoad(frames: Frame[], widthAt: (t: number) => number) {
     }
   }
 
-  g.add(colorMesh(pos, col, idx, { castShadow: true, receiveShadow: true }));
+  g.add(colorMesh(pos, col, idx, { castShadow: true, receiveShadow: true, hfog: 0.35 })); // BUILD 129: 열차는 안개에 1/3만 잠긴다 — 투명열차 사건의 진범이 높이안개였다
   // 창문: 발광 별도 메시
   if (wpos.length) {
     const wg = new THREE.BufferGeometry();
@@ -1379,7 +1407,7 @@ function colorMesh(
   pos: number[],
   col: number[],
   idx: number[],
-  { castShadow = false, receiveShadow = false, uv, map }: { castShadow?: boolean; receiveShadow?: boolean; uv?: number[]; map?: THREE.Texture },
+  { castShadow = false, receiveShadow = false, uv, map, hfog = 1 }: { castShadow?: boolean; receiveShadow?: boolean; uv?: number[]; map?: THREE.Texture; hfog?: number },
 ) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -1387,7 +1415,7 @@ function colorMesh(
   if (uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
-  const mat = applyHeightFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: map ?? null }));
+  const mat = applyHeightFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: map ?? null }), hfog);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = castShadow;
   mesh.receiveShadow = receiveShadow;
@@ -1513,6 +1541,7 @@ function buildMemoryObjects(
 ) {
   const g = new THREE.Group();
   scenes.forEach((scene, i) => {
+    if (scene.objectKit === 'none') return; // BUILD 128: 오브젝트 없는 기억 — 자리는 비어 있어도 기억은 있다
     const a = anchors[i];
     const kit = KITS[scene.objectKit] ?? KITS.default;
     const obj = kit(worldRng(100 + i * 37));

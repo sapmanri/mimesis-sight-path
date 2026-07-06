@@ -121,7 +121,7 @@ type WarehouseItem = {
 };
 type WarehouseReg = { registryVersion: string; assetCount: number; taxonomy: Record<string, string>; items: WarehouseItem[] };
 
-const KITS = ['door-kit', 'person-kit', 'cloud-kit', 'suitcase-kit', 'book-kit', 'cup-kit', 'stone-wall-kit', 'cd-shelf-kit', 'fruit-kit', 'airplane-wing-kit', 'sea-edge-kit'] as const;
+const KITS = ['none', 'door-kit', 'person-kit', 'cloud-kit', 'suitcase-kit', 'book-kit', 'cup-kit', 'stone-wall-kit', 'cd-shelf-kit', 'fruit-kit', 'airplane-wing-kit', 'sea-edge-kit'] as const; // BUILD 128: 기본은 '없음' — 기억만 있는 자리
 const PATHS = ['straight', 'soft-curve', 'deep-curve', 'bridge', 'stair', 'threshold', 'open-field'] as const;
 const SURFACES = ['dry-stone', 'wet-stone', 'mud', 'sand', 'grass-edge', 'snow-thin', 'rain-puddle', 'moss-aged'] as const;
 const WEATHERS = ['clear-day', 'soft-cloud', 'rain-cloud', 'drizzle', 'moon-night', 'sunset-fade', 'fog-morning'] as const;
@@ -195,6 +195,7 @@ function blankDoc(count: number): WorldDoc {
       emoji: '·',
       text: '아직 쓰이지 않은\n기억.',
       photo: undefined,
+      objectKit: 'none', // BUILD 128: 기본은 없음 — 오브젝트는 고르는 것
       position: [+x.toFixed(2), 0, +(-2.8 * i).toFixed(2)],
       importance: 1,
     });
@@ -238,7 +239,7 @@ export function EditorApp() {
   type PresetMeta = { id: string; name: string; desc?: string; file?: string; builtin?: boolean };
   const [presets, setPresets] = useState<PresetMeta[]>([]);
   useEffect(() => {
-    fetch('/worlds/index.json').then((r) => r.json()).then((d) => setPresets(d?.presets ?? [])).catch(() => setPresets([]));
+    fetch('/worlds/index.json?v=' + Date.now()).then((r) => r.json()).then((d) => setPresets(d?.presets ?? [])).catch(() => setPresets([])); // 캐시 우회
   }, []);
   const openPreset = async (id: string) => {
     const meta = presets.find((q) => q.id === id);
@@ -374,6 +375,7 @@ export function EditorApp() {
       objectLabel: 'new memory',
       emoji: '✦',
       text: '아직 쓰이지 않은\n기억.',
+      objectKit: 'none', // BUILD 128
       position: [last.position[0] + dx, last.position[1], last.position[2] + dz],
       photo: undefined,
     });
@@ -555,7 +557,7 @@ export function EditorApp() {
               <label>문장<textarea rows={4} value={cur.text} onChange={(e) => editScene((s) => { s.text = e.target.value; })} /></label>
               <label>사물 (오브젝트 킷)
                 <select value={cur.objectKit} onChange={(e) => editScene((s) => { s.objectKit = e.target.value as SceneBlueprint['objectKit']; })}>
-                  {KITS.map((k) => <option key={k} value={k}>{k}</option>)}
+                  {KITS.map((k) => <option key={k} value={k}>{k === 'none' ? '없음 (기억만)' : k}</option>)}
                 </select>
               </label>
               <div className="ed-grid2">
@@ -762,6 +764,14 @@ export function EditorApp() {
                   ))}
                 </select>
               </label>
+              {(doc.spec.path.material === 'train') && (
+                <div className="ed-wh-chips">
+                  <button type="button" className={(doc.spec.path.trainStyle ?? 'old') === 'old' ? 'ed-chip on' : 'ed-chip'}
+                    onClick={() => edit((d) => { d.spec.path.trainStyle = 'old'; })}>🚂 낡은 열차</button>
+                  <button type="button" className={doc.spec.path.trainStyle === 'tgv' ? 'ed-chip on' : 'ed-chip'}
+                    onClick={() => edit((d) => { d.spec.path.trainStyle = 'tgv'; })}>🚄 테제베</button>
+                </div>
+              )}
               <label>마디 길이 <em>{doc.spec.path.sceneSpacing.toFixed(1)}u</em>
                 <input type="range" min="4" max="12" step="0.2" value={doc.spec.path.sceneSpacing}
                   onChange={(e) => edit((d) => { d.spec.path.sceneSpacing = Number(e.target.value); })} />
