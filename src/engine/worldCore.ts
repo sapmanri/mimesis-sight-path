@@ -345,6 +345,9 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // BUILD 098: Kid2 구제 — 자기 FBX 애니로 재빌드 (지난번 glb 경로가 문제였다).
   // 텍스처는 원래 없는 단색 디자인 (#e7e7e7 석고 아이). 고유속도는 월드 실측.
   { file: 'Kid2.glb', height: 0.9, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 1.3328, run: 3.5529 } },
+  // BUILD 158: 하이커 — 걷는 데 특화된 사람. 클립도 걷기 하나뿐, 그래서 이 세계의 적임자.
+  // clipSpeeds.walk = 힙 트랙 실측 드리프트 5.13(원척)/1.0s. run은 같은 클립 두 배속 기준.
+  { file: 'Hiker.glb', height: 0.95, tint: '#57534a', keepLook: true, texture: 'Hiker_texture.png', clipSpeeds: { walk: 5.13, run: 10.3 } },
 ];
 
 
@@ -526,7 +529,34 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
   const clipSpeeds = spec.clipSpeeds
     ? { walk: spec.clipSpeeds.walk * ns, run: spec.clipSpeeds.run * ns }
     : null;
-  return { group, animations: gltf.animations, clipSpeeds };
+  // BUILD 158: 외길 어댑터 — 걷기 클립 하나뿐인 캐릭터(믹사모 단일 익스포트)를 로스터 규격으로.
+  // Walk = 원클립(루트모션 벗김) / Running = 같은 클립(발 물림은 timeScale이 맞춘다) / Idle = 첫 자세 미세 루프.
+  // 걷기밖에 모르는 캐릭터에게 개성 클립은 없다 — 걷기가 곧 개성이다.
+  let animations = gltf.animations;
+  const WALK_CAND = ['Walking_A', 'Walking', 'Walk'];
+  if (spec.clipSpeeds && animations.length && !animations.some((a) => WALK_CAND.includes(a.name))) {
+    const src = animations.find((a) => a.name.includes('mixamo.com'))
+      ?? animations.reduce((m, a) => (a.duration > m.duration ? a : m), animations[0]);
+    const walkC = src.clone();
+    walkC.name = 'Walk';
+    // 루트모션 벗기기: 힙 수평 드리프트의 선형 성분을 빼서 제자리 걸음으로 (Y의 바운스는 남긴다)
+    const hipT = walkC.tracks.find((t) => /hips\.position$/i.test(t.name));
+    if (hipT) {
+      const times = hipT.times; const vals = hipT.values;
+      const n = times.length; const T = (times[n - 1] - times[0]) || 1;
+      const dx = vals[(n - 1) * 3] - vals[0];
+      const dz = vals[(n - 1) * 3 + 2] - vals[2];
+      for (let i = 0; i < n; i += 1) {
+        const k = (times[i] - times[0]) / T;
+        vals[i * 3] -= dx * k;
+        vals[i * 3 + 2] -= dz * k;
+      }
+    }
+    const runC = walkC.clone(); runC.name = 'Running';
+    const idleC = THREE.AnimationUtils.subclip(walkC, 'Idle', 0, 2, 30);
+    animations = [walkC, runC, idleC]; // 조명 액션 등 부스러기는 태우지 않는다
+  }
+  return { group, animations, clipSpeeds };
 }
 
 function seededRandom(seed: number) {
