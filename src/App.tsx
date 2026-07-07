@@ -6,6 +6,7 @@ import { PlanetWorld } from './scene/PlanetWorld';
 import { walkerCount } from './engine/worldCore';
 import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact, type PlanetApi } from './scene/planetSpec';
 import { PROP_CATALOG } from './engine/props';
+import { PET_ROSTER } from './engine/pets';
 
 // ---------- BUILD 207: 행성 에디터 — 다이얼 한 줄 ----------
 function Dial({ label, value, min, max, step, onChange, fmt }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt?: (v: number) => string }) {
@@ -34,7 +35,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.5.0 · THE SNOWGLOBE HUMS · BUILD 223';
+const BUILD_LABEL = 'v1.6.0 · SHE WALKS, RUNS, AND FLIES · BUILD 224';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -90,6 +91,7 @@ export default function App() {
     });
   };
   const [planetWalker, setPlanetWalker] = useState(-1);
+  const [planetPaused, setPlanetPaused] = useState(false); // BUILD 224: 찍기의 평화
   // BUILD 214: 소품 심기 — 접점은 PlanetWorld가 매 프레임 보고한다
   const planetContact = useRef<PlanetContact | null>(null);
   const [propPick, setPropPick] = useState('tree');
@@ -274,7 +276,7 @@ export default function App() {
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} onFlag={onFlagPop} contactRef={planetContact} apiRef={planetApi} />
+            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} paused={planetPaused} onMemory={setMemCard} onFlag={onFlagPop} contactRef={planetContact} apiRef={planetApi} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
@@ -314,7 +316,8 @@ export default function App() {
         )}
         <div style={{ position: 'fixed', top: 18, right: planetEdit ? 318 : 18, display: 'flex', gap: 10, zIndex: 6 }}>
           {([['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] }))],
-            ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())]] as [string, () => void][]).map(([label, fn]) => (
+            ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())],
+            [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v)]] as [string, () => void][]).map(([label, fn]) => (
             <button key={label} type="button" onClick={fn} style={{
               width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
               border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
@@ -349,6 +352,16 @@ export default function App() {
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, margin: '10px 0', cursor: 'pointer' }}>
               <input type="checkbox" checked={pSpec.roam ?? false} onChange={(e) => updSpec((s) => ({ ...s, roam: e.target.checked }))} />
               🧭 자유 배회 — 지구본 모드 (길·기억 없이 마음대로)
+            </label>
+            <Dial label="뛰기 주기 (s · 0=안 뜀)" value={pSpec.runEvery ?? 45} min={0} max={180} step={5} onChange={(v) => updSpec((s) => ({ ...s, runEvery: v }))} />
+            <Dial label="탈것 주기 (s · 0=안 탐)" value={pSpec.rideEvery ?? 120} min={0} max={360} step={10} onChange={(v) => updSpec((s) => ({ ...s, rideEvery: v }))} />
+            <label style={{ display: 'block', fontSize: 11, margin: '6px 0' }}>
+              반려 — 뒤를 따라오는 작은 식구
+              <select value={pSpec.pet ?? 'none'} onChange={(e) => updSpec((s) => ({ ...s, pet: e.target.value }))}
+                style={{ width: '100%', marginTop: 4, background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 6, padding: 5 }}>
+                <option value="none">없음</option>
+                {PET_ROSTER.map((pd) => <option key={pd.id} value={pd.id}>{pd.label}</option>)}
+              </select>
             </label>
             <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 2px' }}>하늘</div>
             <Dial label="달 크기 (행성=1)" value={M.size} min={0.08} max={0.6} step={0.005} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, size: v } }))} />

@@ -1,7 +1,8 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader } from '../engine/worldCore';
+import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader, makeCloudPuff, loadKitModel } from '../engine/worldCore';
+import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
@@ -320,7 +321,7 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
   return tex;
 }
 
-export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
+export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
   const { scene, camera, gl } = useThree();
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
   // BUILD 214: 시야 거리 다이얼 — 씬 안개 near/far 즉답 갱신
@@ -521,6 +522,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
     void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
       holder.add(group);
+      walkerGroupRef.current = group; // BUILD 224: 탈것 리프트가 이 그룹을 든다
       // BUILD 212: 캐릭터도 안개에 잠긴다 — 본토 hfog를 행성 rfog로 갈아입힘
       group.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -533,6 +535,32 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
     }).catch(() => { /* 조용한 행성 */ });
     return () => { alive = false; };
   }, [holder, walkerIdx]);
+
+  // BUILD 224: 반려 — 그녀 뒤를 종종종 따라오는 작은 식구
+  useEffect(() => {
+    const def = PET_ROSTER.find((x) => x.id === spec.pet);
+    if (!def) { petRef.current = null; return undefined; }
+    let alive = true;
+    void loadPet(def).then((pet) => {
+      if (!alive) return;
+      pet.group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+          .forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+      });
+      holder.add(pet.group);
+      petRef.current = { pet, d: new THREE.Vector3(), last: new THREE.Vector3(), cur: null, t1: new THREE.Vector3(), t2: new THREE.Vector3(), q1: new THREE.Quaternion() };
+      pet.idle?.play();
+      petRef.current.cur = pet.idle;
+    });
+    return () => {
+      alive = false;
+      const cur = petRef.current;
+      if (cur) holder.remove(cur.pet.group);
+      petRef.current = null;
+    };
+  }, [holder, spec.pet]);
 
   useEffect(() => {
     ambience.apply({ kind: 'clear', wind: 0.28, rainAmount: 0, time: 'day', sea: 0, life: 0.5 });
@@ -702,6 +730,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
   const spinAng = useRef(0); // BUILD 212: 조석고정 대비 추가 자전 누적각
   const dayAng = useRef(0);  // BUILD 214: 태양 공전각 (낮밤)
   const earState = useRef<'day' | 'night'>('day'); // BUILD 223: 귀의 낮밤 (히스테리시스)
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  // BUILD 224: 걷다, 뛰다, 날다 — 이동 상태기. 주기는 스펙 슬라이더가 정하고 나머지는 지가 알아서.
+  const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, lift: 0, mount: null as THREE.Group | null, mountKind: '' });
+  const walkerGroupRef = useRef<THREE.Group | null>(null);
+  const petRef = useRef<{ pet: LoadedPet; d: THREE.Vector3; last: THREE.Vector3; cur: THREE.AnimationAction | null; t1: THREE.Vector3; t2: THREE.Vector3; q1: THREE.Quaternion } | null>(null);
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
@@ -720,7 +754,59 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
     P.cooldown = Math.max(0, P.cooldown - dt);
     P.memCooldown = Math.max(0, P.memCooldown - dt);
     let moving = true;
-    if (P.phase !== 'walk') {
+    // BUILD 224: 이동 상태기 — 지가 걷다 뛰다 탈것 탔다가 내렸다가
+    const MV = moveState.current;
+    const el = state.clock.elapsedTime;
+    const runEvery = SP.runEvery ?? 45;
+    const rideEvery = SP.rideEvery ?? 120;
+    if (MV.nextRun < 0) { MV.nextRun = el + 14 + Math.random() * 18; MV.nextRide = el + 35 + Math.random() * 45; }
+    if (!pausedRef.current && MV.mode === 'walk' && P.phase === 'walk') {
+      if (rideEvery > 0 && el >= MV.nextRide) {
+        MV.mode = 'ride';
+        MV.until = el + 12 + Math.random() * 10;
+        rigRef.current?.setRiding?.(true);
+        MV.mountKind = Math.random() < 0.35 ? 'broom' : 'cloud';
+        if (MV.mountKind === 'cloud') {
+          const c = makeCloudPuff(() => Math.random(), 1.1);
+          c.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
+          holder.add(c);
+          MV.mount = c;
+        } else {
+          void loadKitModel('broom', defaultLoader).then((g2) => {
+            if (moveState.current.mode !== 'ride' || moveState.current.mount) { return; }
+            g2.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
+            g2.rotation.y = Math.PI / 2;
+            holder.add(g2);
+            moveState.current.mount = g2;
+          });
+        }
+      } else if (runEvery > 0 && el >= MV.nextRun) {
+        MV.mode = 'run';
+        MV.until = el + 6 + Math.random() * 6;
+      }
+    }
+    if (MV.mode === 'run' && el >= MV.until) {
+      MV.mode = 'walk';
+      MV.nextRun = el + runEvery * (0.7 + Math.random() * 0.6);
+    }
+    const liftTarget = MV.mode === 'ride' && el < MV.until ? 1.15 : 0;
+    MV.lift += (liftTarget - MV.lift) * Math.min(1, dt * 1.7);
+    if (MV.mode === 'ride' && el >= MV.until && MV.lift < 0.04) {
+      MV.mode = 'walk';
+      rigRef.current?.setRiding?.(false);
+      if (MV.mount) { holder.remove(MV.mount); MV.mount = null; }
+      MV.nextRide = el + Math.max(30, rideEvery * (0.75 + Math.random() * 0.5));
+      MV.nextRun = Math.max(MV.nextRun, el + 8);
+    }
+    const spdMul = MV.mode === 'ride' ? 2.6 : MV.mode === 'run' ? 2.3 : 1;
+    if (walkerGroupRef.current) walkerGroupRef.current.position.y = MV.lift;
+    if (MV.mount) {
+      MV.mount.position.y = MV.lift - (MV.mountKind === 'broom' ? 0.1 : 0.3) + (MV.lift > 0.2 ? Math.sin(el * 2.1) * 0.045 : 0);
+    }
+    if (pausedRef.current) moving = false;
+    if (pausedRef.current) {
+      // BUILD 224: 정지 — 시간이 멈춘 지구본. 찍기의 평화.
+    } else if (P.phase !== 'walk') {
       moving = false;
       P.timer -= dt;
       if (P.timer <= 0) {
@@ -737,9 +823,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
       }
     } else if (SP.roam) {
       // BUILD 219: 지구본 모드 — 기억 정차도 교차로 고민도 없다. 가끔 그냥 멈춰 설 뿐 (평균 ~14s)
-      if (P.cooldown <= 0 && Math.random() < dt * 0.07) { P.phase = 'ponder'; P.timer = 1.2 + Math.random() * 2.2; P.jumpTo = -1; }
+      if (MV.mode === 'walk' && P.cooldown <= 0 && Math.random() < dt * 0.07) { P.phase = 'ponder'; P.timer = 1.2 + Math.random() * 2.2; P.jumpTo = -1; }
     } else {
-      S.current += SP.walkSpeed * dt;
+      S.current += SP.walkSpeed * spdMul * dt;
       const sm = ((S.current % built.arcLen) + built.arcLen) % built.arcLen;
       // 기억이 먼저 — 그 자리에 서서 문장을 읽는다
       if (P.memCooldown <= 0) {
@@ -778,7 +864,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
         // 마음의 바람 — 진행방향이 천천히 흔들린다
         RM.T.applyQuaternion(Q.setFromAxisAngle(RM.d, wanderNoise(state.clock.elapsedTime * 0.16) * 0.5 * dt));
         const rS = built.surfaceR(RM.d);
-        const th = (SP.walkSpeed * dt) / Math.max(1, rS);
+        const th = (SP.walkSpeed * spdMul * dt) / Math.max(1, rS);
         v.crossVectors(RM.d, RM.T).normalize();
         Q.setFromAxisAngle(v, th);
         RM.d.applyQuaternion(Q).normalize();
@@ -793,7 +879,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
       built.curve.getTangentAt(t, T);
     }
     // BUILD 220: 우연의 이벤트 — 이야기가 적힌 소품 곁을 지나면 폽. 배회든 길이든.
-    if (P.phase === 'walk' && P.memCooldown <= 0 && (SP.props?.length ?? 0) > 0) {
+    if (P.phase === 'walk' && MV.mode === 'walk' && !pausedRef.current && P.memCooldown <= 0 && (SP.props?.length ?? 0) > 0) {
       v.copy(p).normalize();
       for (const pr of SP.props) {
         if (!pr.title && !pr.text) continue;
@@ -820,9 +906,35 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
       built.planet.quaternion.slerp(Q, k);
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
-    rigRef.current?.update(dt, 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * dt : 0);
+    rigRef.current?.update(dt, MV.mode === 'run' ? 0.9 : 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * spdMul * dt : 0);
     PLANET_CENTER.copy(built.planet.position);
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
+    // BUILD 224: 반려의 걸음 — 그녀 뒤 0.6u를 목표로 부드럽게 따라온다 (행성 좌표로 계산, 월드로 환산)
+    const PT = petRef.current;
+    if (PT) {
+      const r0 = p.length();
+      PT.t1.crossVectors(U, T).normalize(); // 옆 축
+      PT.q1.setFromAxisAngle(PT.t1, 0.62 / Math.max(1, r0)); // 뒤로 (전진의 역방향 회전)
+      PT.t2.copy(U).applyQuaternion(PT.q1).normalize();
+      if (PT.d.lengthSq() < 0.5) PT.d.copy(PT.t2);
+      PT.d.lerp(PT.t2, Math.min(1, dt * (2.0 + spdMul))).normalize();
+      const wp = PT.t2.copy(PT.d).multiplyScalar(built.surfaceR(PT.d) + 0.005);
+      built.planet.localToWorld(wp);
+      const vel = PT.t1.copy(wp).sub(PT.last);
+      const pv = dt > 0 ? vel.length() / dt : 0;
+      PT.pet.group.up.set(0, 1, 0);
+      if (pv > 0.05) { PT.pet.group.lookAt(wp.x + vel.x * 8, wp.y, wp.z + vel.z * 8); }
+      PT.pet.group.position.copy(wp);
+      PT.last.copy(wp);
+      const want = !moving || pv < 0.04 ? PT.pet.idle : (pv > 0.85 && PT.pet.run ? PT.pet.run : PT.pet.walk);
+      if (want && want !== PT.cur) {
+        PT.cur?.fadeOut(0.22);
+        want.reset().fadeIn(0.22).play();
+        PT.cur = want;
+      }
+      if (PT.cur && PT.cur !== PT.pet.idle) PT.cur.timeScale = THREE.MathUtils.clamp(pv / 0.75, 0.6, 2.6);
+      PT.pet.mixer.update(dt);
+    }
 
     // 하늘: 달의 공전(스펙 실시간) + 태양 자리
     ang.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period));

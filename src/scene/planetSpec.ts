@@ -18,6 +18,9 @@ export type PlanetSpec = {
   wobble: number;      // 위도 요동 배율
   ponderChance: number;// 교차로에서 저 길을 고를 확률
   roam: boolean;       // BUILD 219: 지구본 모드 — 길 없이 마음대로 배회
+  runEvery: number;    // BUILD 224: 뛰기 주기 (s, 0=안 뜀) — 평균 이 간격으로 한바탕 달린다
+  rideEvery: number;   // BUILD 224: 탈것 주기 (s, 0=안 탐) — 구름/빗자루에 올라 한 바퀴
+  pet: string;         // BUILD 224: 반려 ('none' | PET_ROSTER id)
   moon: { size: number; dist: number; period: number; tilt: number; light: number; spin: number };
   sun: { az: number; el: number; period: number }; // 방위·고도 (deg), 공전 주기 (s · 0=고정 정오)
   viewDist: number;    // 시야 거리 (씬 안개 far, u)
@@ -36,6 +39,9 @@ export const DEFAULT_PLANET_SPEC: PlanetSpec = {
   wobble: 1.0,
   ponderChance: 0.5,
   roam: false,
+  runEvery: 45,
+  rideEvery: 120,
+  pet: 'none',
   moon: { size: 0.273, dist: 34, period: 150, tilt: 15, light: 2.2, spin: 1 },
   sun: { az: 40, el: 52, period: 0 },
   viewDist: 41, // 구판 고정값 R×3.4(=40.8)의 계승
