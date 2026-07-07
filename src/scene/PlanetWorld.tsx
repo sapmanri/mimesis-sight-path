@@ -6,16 +6,14 @@ import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 
-// ---------- BUILD 194: 작은 행성 (LE PETIT MONDE) ----------
-// Vase: "지구본 같은 것에 구불한 길이 여러 바퀴 감겨 있고, 가끔 교차하고,
-//        캐릭터는 무한히 걷는다. 사람 눈엔 행성 전체가 보이지 않는다."
-// 핵심 트릭: 걷는 사람이 행성을 도는 게 아니라, 행성이 발밑에서 구른다.
-// 워커는 늘 세계 원점(중력 = +Y)에 서 있으므로 리그·카메라·발소리·안개가
-// 평평한 세계의 문법 그대로 작동한다. 행성 전체가 하나의 그룹으로 회전한다.
+// ---------- BUILD 195: 작은 행성 v2 — 맨 행성, 얽힌 길들 ----------
+// Vase 재설계: 육교 없음(길은 행성 표면에만 산다 — 교차는 그냥 평면에서 겹친다),
+// 돌·풀·장미·구름 등 오브젝트는 나중에(맨 행성), 길은 별개 존재가 아니라
+// "구체 위에 그려진 길" — 기존 길 재질의 문법으로: 철길(열차 없이 노반만)·모래길·판자길.
+// 핵심 트릭은 v1 그대로: 사람이 아니라 행성이 발밑에서 구른다.
 
-const R = 8; // 행성 반지름 — 매듭맵 한 변 정도의 몸집
-const WRAPS = 5; // 길이 행성을 감는 바퀴 수
-const WALK = 0.58; // 기존 세계와 같은 보행 속도
+const R = 8;
+const WALK = 0.58;
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -28,7 +26,6 @@ function mulberry32(seed: number) {
   };
 }
 
-// 언덕: 방향 벡터로 결정되는 결정론적 노이즈 [-1, 1]
 function hills(d: THREE.Vector3) {
   return (
     Math.sin(d.x * 5.3 + d.y * 3.7) * 0.45 +
@@ -37,76 +34,68 @@ function hills(d: THREE.Vector3) {
   );
 }
 
+// 구면 감김 곡선: 경도 W바퀴 + 위도 하모닉 요동, 축을 기울여 가닥마다 다른 자세로 얽힌다
+function winding(wraps: number, h: [number, number, number, number, number, number], tilt: THREE.Quaternion, n = 560) {
+  const dirs: THREE.Vector3[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const u = i / n;
+    const phi = Math.PI * 2 * wraps * u;
+    const theta = Math.PI / 2 + h[0] * Math.sin(Math.PI * 2 * h[1] * u + h[2]) + h[3] * Math.sin(Math.PI * 2 * h[4] * u + h[5]);
+    const d = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
+    dirs.push(d.applyQuaternion(tilt));
+  }
+  return dirs;
+}
+
+// 길의 뼈대 프레임: 접점 p(표면 위 lift만큼), 진행 T, 위 U(=방사), 가로 B
+function frameAt(curve: THREE.CatmullRomCurve3, t: number, out: { p: THREE.Vector3; T: THREE.Vector3; U: THREE.Vector3; B: THREE.Vector3 }) {
+  curve.getPointAt(t, out.p);
+  curve.getTangentAt(t, out.T);
+  out.U.copy(out.p).normalize();
+  out.B.crossVectors(out.T, out.U).normalize();
+}
+
 export function PlanetWorld() {
   const { scene, camera } = useThree();
-  // 헌법 최신 판례(BUILD 191): frame 1이 무안개로 렌더되면 동기 재질이 USE_FOG 없이 영생한다.
-  // 행성의 재질은 전부 동기 생성이므로, 렌더 시점에 시야안개를 명령형으로 선주입한다.
+  // BUILD 191 판례: frame 1 무안개 컴파일 방지 — 렌더 시점 선주입
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, 34);
 
   const built = useMemo(() => {
     const planet = new THREE.Group();
+    const eul = (x: number, y: number, z: number) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z));
 
-    // ---------- 1. 실타래 곡선: 구면 다중 감김 + 하모닉 요동 ----------
-    // 위도가 정수 하모닉으로 출렁이고 경도가 WRAPS바퀴 돌아 제자리로 — 닫힌 실타래.
-    const N = 720;
-    const dirs: THREE.Vector3[] = [];
-    for (let i = 0; i < N; i += 1) {
-      const u = i / N;
-      const phi = Math.PI * 2 * WRAPS * u;
-      const theta = Math.PI / 2 + 0.62 * Math.sin(Math.PI * 2 * 3 * u + 0.7) + 0.21 * Math.sin(Math.PI * 2 * 7 * u + 2.1);
-      dirs.push(new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi)));
-    }
+    // ---------- 1. 세 가닥의 길 (전부 표면 위, 육교 없음 — 교차는 평면에서 겹친다) ----------
+    const roads = [
+      { kind: 'sand' as const, lift: 0.020, dirs: winding(4, [0.62, 3, 0.7, 0.21, 7, 2.1], eul(0, 0, 0)) },
+      { kind: 'rail' as const, lift: 0.030, dirs: winding(3, [0.55, 2, 1.9, 0.18, 5, 0.4], eul(0.94, 0.3, 0.42)) },
+      { kind: 'plank' as const, lift: 0.040, dirs: winding(2, [0.50, 3, 4.0, 0.15, 6, 1.2], eul(-0.72, 1.9, 0.2)) },
+    ].map((r) => {
+      const pts = r.dirs.map((d) => d.clone().multiplyScalar(R + r.lift));
+      const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
+      curve.arcLengthDivisions = 1800;
+      return { ...r, curve, len: curve.getLength() };
+    });
+    const walkerRoad = roads[0]; // 모래길이 걷는 이의 길
 
-    // 교차 탐지: 3D로 가깝지만 길로는 먼 두 지점 = 교차. 뒤에 지나는 가닥을 육교로 띄운다.
-    // (매듭의 길 문법 — 어떤 굽이에선 위로, 어떤 굽이에선 아래로: 길이 직물처럼 짜인다)
-    const elev = new Float32Array(N);
-    {
-      const kept: number[] = [];
-      const base = dirs.map((d) => d.clone().multiplyScalar(R));
-      for (let i = 0; i < N; i += 1) {
-        for (let j = i + 45; j < N; j += 1) {
-          const gap = Math.min(j - i, N - (j - i));
-          if (gap < 45) continue;
-          if (base[i].distanceToSquared(base[j]) < 0.81) {
-            if (!kept.some((k) => Math.min(Math.abs(k - j), N - Math.abs(k - j)) < 16)) kept.push(j);
-          }
-        }
-      }
-      for (const j of kept) {
-        for (let dk = -26; dk <= 26; dk += 1) {
-          const k = (j + dk + N) % N;
-          elev[k] = Math.min(1.5, elev[k] + 1.15 * Math.exp(-((dk / 8) ** 2)));
-        }
-      }
-    }
-    const pts = dirs.map((d, i) => d.clone().multiplyScalar(R + 0.06 + elev[i]));
-    const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
-    curve.arcLengthDivisions = 2400;
-    const arcLen = curve.getLength();
-
-    // ---------- 2. 행성 본체: 낮은 언덕 + 길목 다림질 ----------
+    // ---------- 2. 맨 행성: 낮은 언덕 + 길목 다림질 (오브젝트는 나중에 — Vase 재가) ----------
+    const corridor: THREE.Vector3[] = [];
+    for (const r of roads) for (let i = 0; i < r.dirs.length; i += 3) corridor.push(r.dirs[i]);
     const geo = new THREE.IcosahedronGeometry(R, 4);
     const pos = geo.getAttribute('position');
     const colors = new Float32Array(pos.count * 3);
     const cHigh = new THREE.Color(PALETTE.cliffHigh);
     const cEdge = new THREE.Color(PALETTE.sandEdge);
-    const cTop = new THREE.Color(PALETTE.sandTop);
-    const cPlant = new THREE.Color(PALETTE.plant);
-    const corridor = dirs.filter((_, i) => i % 3 === 0); // 길목 판정용 성긴 표본
     const vd = new THREE.Vector3();
     const cc = new THREE.Color();
     for (let i = 0; i < pos.count; i += 1) {
       vd.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
       let best = -1;
       for (const c of corridor) { const dp = vd.dot(c); if (dp > best) best = dp; }
-      const ang = Math.acos(Math.min(1, best)); // 길까지의 각거리
-      const iron = THREE.MathUtils.smoothstep(ang, 0.07, 0.17); // 길목은 다려서 평평하게
-      const h = hills(vd) * 0.18 * iron;
+      const iron = THREE.MathUtils.smoothstep(Math.acos(Math.min(1, best)), 0.06, 0.16); // 길목은 다려서
+      const h = hills(vd) * 0.16 * iron;
       const r2 = R + h;
       pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
-      cc.copy(cEdge).lerp(cHigh, THREE.MathUtils.clamp(h / 0.18 * 0.5 + 0.5, 0, 1));
-      if (hills(vd.clone().multiplyScalar(2.3)) > 0.55) cc.lerp(cPlant, 0.3); // 드문 풀빛 얼룩
-      cc.lerp(cTop, 1 - iron); // 길목은 모랫빛
+      cc.copy(cEdge).lerp(cHigh, THREE.MathUtils.clamp((h / 0.16) * 0.5 + 0.5, 0, 1));
       colors[i * 3] = cc.r; colors[i * 3 + 1] = cc.g; colors[i * 3 + 2] = cc.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -118,172 +107,123 @@ export function PlanetWorld() {
     ground.receiveShadow = true;
     planet.add(ground);
 
-    // ---------- 3. 길 리본 ----------
-    {
-      const RN = 1000;
-      const hw = 0.34;
+    // ---------- 3. 길 페인터들 — 기존 길 재질의 문법 ----------
+    const F = { p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(), B: new THREE.Vector3() };
+    const mkRibbon = (curve: THREE.CatmullRomCurve3, hw: number, inner: string, edge: string, extraLift = 0, rn = 760) => {
+      // 4정점 링(가장자리·안쪽·안쪽·가장자리) — 안쪽은 길색, 가장자리는 어둡게 (모래길 문법)
+      const cIn = new THREE.Color(inner);
+      const cEd = new THREE.Color(edge);
       const rp: number[] = [];
       const rc: number[] = [];
       const ri: number[] = [];
-      const T = new THREE.Vector3();
-      const U = new THREE.Vector3();
-      const B = new THREE.Vector3();
-      for (let i = 0; i < RN; i += 1) {
-        const t = i / RN;
-        const p = curve.getPointAt(t);
-        curve.getTangentAt(t, T);
-        U.copy(p).normalize();
-        B.crossVectors(T, U).normalize();
-        const lift = U.clone().multiplyScalar(0.02);
-        const L = p.clone().add(B.clone().multiplyScalar(hw)).add(lift);
-        const Rv = p.clone().add(B.clone().multiplyScalar(-hw)).add(lift);
-        rp.push(L.x, L.y, L.z, Rv.x, Rv.y, Rv.z);
-        rc.push(cTop.r, cTop.g, cTop.b, cTop.r, cTop.g, cTop.b);
+      for (let i = 0; i < rn; i += 1) {
+        frameAt(curve, i / rn, F);
+        const lift = F.U.clone().multiplyScalar(extraLift);
+        for (const [off, col] of [[-hw, cEd], [-hw * 0.72, cIn], [hw * 0.72, cIn], [hw, cEd]] as [number, THREE.Color][]) {
+          const v = F.p.clone().addScaledVector(F.B, off).add(lift);
+          rp.push(v.x, v.y, v.z);
+          rc.push(col.r, col.g, col.b);
+        }
       }
-      for (let i = 0; i < RN; i += 1) {
-        const a = i * 2;
-        const n = ((i + 1) % RN) * 2;
-        ri.push(a, a + 1, n, a + 1, n + 1, n);
+      for (let i = 0; i < rn; i += 1) {
+        const a = i * 4;
+        const n2 = ((i + 1) % rn) * 4;
+        for (let q = 0; q < 3; q += 1) ri.push(a + q, a + q + 1, n2 + q, a + q + 1, n2 + q + 1, n2 + q);
       }
       const rg = new THREE.BufferGeometry();
       rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3));
       rg.setAttribute('color', new THREE.Float32BufferAttribute(rc, 3));
       rg.setIndex(ri);
       rg.computeVertexNormals();
-      const ribbon = new THREE.Mesh(
+      const mesh = new THREE.Mesh(
         rg,
         applyHeightFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }), 0.4),
       );
-      ribbon.receiveShadow = true;
-      planet.add(ribbon);
+      mesh.receiveShadow = true;
+      return mesh;
+    };
+    const mkCrossties = (curve: THREE.CatmullRomCurve3, len: number, spacing: number, size: [number, number, number], color: string, extraLift: number) => {
+      // 침목/판자: 길을 가로지르는 각재 인스턴서 (열차길·판자길 문법)
+      const count = Math.floor(len / spacing);
+      const mesh = new THREE.InstancedMesh(
+        new THREE.BoxGeometry(size[0], size[1], size[2]),
+        applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0 }), 0.4),
+        count,
+      );
+      const M = new THREE.Matrix4();
+      const basis = new THREE.Matrix4();
+      const Q = new THREE.Quaternion();
+      const S = new THREE.Vector3(1, 1, 1);
+      for (let k = 0; k < count; k += 1) {
+        frameAt(curve, k / count, F);
+        basis.makeBasis(F.B, F.U, F.T); // 각재의 X=가로, Y=위, Z=진행
+        Q.setFromRotationMatrix(basis);
+        M.compose(F.p.clone().addScaledVector(F.U, extraLift), Q, S);
+        mesh.setMatrixAt(k, M);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    };
+    const mkRails = (curve: THREE.CatmullRomCurve3, gauge: number, extraLift: number, rn = 760) => {
+      // 두 가닥의 레일 — 가는 연속 리본 (worldCore 열차길의 강철 톤)
+      const g2 = new THREE.Group();
+      const cR = new THREE.Color('#33302b');
+      for (const side of [-1, 1]) {
+        const rp: number[] = [];
+        const ri: number[] = [];
+        const rc: number[] = [];
+        for (let i = 0; i < rn; i += 1) {
+          frameAt(curve, i / rn, F);
+          const lift = F.U.clone().multiplyScalar(extraLift);
+          const c2 = F.p.clone().addScaledVector(F.B, side * gauge).add(lift);
+          for (const off of [-0.014, 0.014]) {
+            const v = c2.clone().addScaledVector(F.B, off);
+            rp.push(v.x, v.y, v.z);
+            rc.push(cR.r, cR.g, cR.b);
+          }
+        }
+        for (let i = 0; i < rn; i += 1) {
+          const a = i * 2;
+          const n2 = ((i + 1) % rn) * 2;
+          ri.push(a, a + 1, n2, a + 1, n2 + 1, n2);
+        }
+        const rg = new THREE.BufferGeometry();
+        rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3));
+        rg.setAttribute('color', new THREE.Float32BufferAttribute(rc, 3));
+        rg.setIndex(ri);
+        rg.computeVertexNormals();
+        const mesh = new THREE.Mesh(rg, applyHeightFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.25, side: THREE.DoubleSide }), 0.4));
+        g2.add(mesh);
+      }
+      return g2;
+    };
+
+    // 모래길 (걷는 이의 길)
+    planet.add(mkRibbon(walkerRoad.curve, 0.34, PALETTE.sandTop, PALETTE.sandEdge));
+    // 철길: 자갈 노반 + 침목 + 레일 — 열차는 없다 ("열차 빼고 열차 아래에 있던 열차길")
+    {
+      const rr = roads[1];
+      planet.add(mkRibbon(rr.curve, 0.30, PALETTE.cliffMid, PALETTE.cliffLow));
+      planet.add(mkCrossties(rr.curve, rr.len, 0.5, [0.42, 0.022, 0.085], '#4a3f35', 0.014));
+      planet.add(mkRails(rr.curve, 0.13, 0.032));
+    }
+    // 판자길: 흙바탕 + 널판
+    {
+      const pr = roads[2];
+      planet.add(mkRibbon(pr.curve, 0.28, PALETTE.cliffLow, PALETTE.basalt ?? PALETTE.cliffDeep));
+      planet.add(mkCrossties(pr.curve, pr.len, 0.34, [0.5, 0.02, 0.24], '#8a6f4d', 0.016));
     }
 
-    // ---------- 4. 입주민: 새 식구(돌·풀포기)와 장미 한 송이 ----------
-    const surfaceAt = (d: THREE.Vector3) => {
-      let best = -1;
-      for (const c of corridor) { const dp = d.dot(c); if (dp > best) best = dp; }
-      const iron = THREE.MathUtils.smoothstep(Math.acos(Math.min(1, best)), 0.07, 0.17);
-      return R + hills(d) * 0.18 * iron;
-    };
-    const orient = (obj: THREE.Object3D, d: THREE.Vector3) => {
-      obj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
-    };
-    const rnd = mulberry32(20260707);
-    const randDir = () => {
-      const z = rnd() * 2 - 1;
-      const a = rnd() * Math.PI * 2;
-      const s = Math.sqrt(1 - z * z);
-      return new THREE.Vector3(s * Math.cos(a), z, s * Math.sin(a));
-    };
-    // 돌 — BUILD 193의 새 식구와 같은 혈통 (단일 디자인)
-    {
-      const sGeo = new THREE.IcosahedronGeometry(1, 1);
-      const pa = sGeo.getAttribute('position');
-      const n1 = (x: number) => Math.sin(x * 12.9898) * 0.5;
-      for (let i = 0; i < pa.count; i += 1) {
-        pa.setXYZ(i, pa.getX(i) * (1 + n1(i * 3.1) * 0.18), pa.getY(i) * (0.72 + n1(i * 5.7) * 0.12), pa.getZ(i) * (1 + n1(i * 7.3) * 0.18));
-      }
-      sGeo.computeVertexNormals();
-      const sA = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.cliffMid, roughness: 1, flatShading: true }), 0.5);
-      const sB = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.sandEdge, roughness: 1, flatShading: true }), 0.5);
-      for (let k = 0; k < 10; k += 1) {
-        const d = randDir();
-        const r = 0.06 + rnd() * 0.1;
-        const m = new THREE.Mesh(sGeo, rnd() > 0.5 ? sA : sB);
-        m.scale.set(r * (1 + rnd() * 0.4), r * 0.8, r * (1 + rnd() * 0.4));
-        m.position.copy(d).multiplyScalar(surfaceAt(d) + r * 0.2);
-        orient(m, d);
-        m.castShadow = true;
-        m.receiveShadow = true;
-        planet.add(m);
-      }
-    }
-    // 풀포기 — plant 톤 순응
-    {
-      const tGeo = new THREE.ConeGeometry(0.02, 0.19, 3);
-      const tA = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 }), 0.5);
-      const tB = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 }), 0.5);
-      for (let k = 0; k < 22; k += 1) {
-        const d = randDir();
-        const tuft = new THREE.Group();
-        const n = 4 + Math.floor(rnd() * 4);
-        for (let b = 0; b < n; b += 1) {
-          const m = new THREE.Mesh(tGeo, rnd() > 0.5 ? tA : tB);
-          const lean = 0.25 + rnd() * 0.4;
-          m.position.set((rnd() - 0.5) * 0.09, 0.085, (rnd() - 0.5) * 0.09);
-          m.scale.set(1, 0.8 + rnd() * 0.9, 1);
-          m.rotation.set((rnd() - 0.5) * lean, rnd() * Math.PI, (rnd() - 0.5) * lean);
-          m.castShadow = true;
-          tuft.add(m);
-        }
-        tuft.position.copy(d).multiplyScalar(surfaceAt(d));
-        orient(tuft, d);
-        planet.add(tuft);
-      }
-    }
-    // 장미 한 송이 — 이 행성엔 단 하나 (u=0.13, 길가 반 발짝 옆)
-    {
-      const t = 0.13;
-      const p = curve.getPointAt(t);
-      const T = curve.getTangentAt(t);
-      const U = p.clone().normalize();
-      const B = new THREE.Vector3().crossVectors(T, U).normalize();
-      const d = p.clone().add(B.multiplyScalar(0.55)).normalize();
-      const rose = new THREE.Group();
-      const stem = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.008, 0.01, 0.15, 5),
-        applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 }), 0.5),
-      );
-      stem.position.y = 0.075;
-      const bud = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.034, 0),
-        applyHeightFog(new THREE.MeshStandardMaterial({ color: '#c2564f', roughness: 0.85, flatShading: true }), 0.5),
-      );
-      bud.position.y = 0.16;
-      bud.scale.y = 1.25;
-      const leafG = new THREE.ConeGeometry(0.016, 0.05, 3);
-      const leafM = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 }), 0.5);
-      [-0.5, 0.7].forEach((a, i2) => {
-        const leaf = new THREE.Mesh(leafG, leafM);
-        leaf.position.set(Math.cos(a) * 0.02, 0.06 + i2 * 0.035, Math.sin(a) * 0.02);
-        leaf.rotation.z = a;
-        rose.add(leaf);
-      });
-      stem.castShadow = true;
-      bud.castShadow = true;
-      rose.add(stem, bud);
-      rose.position.copy(d).multiplyScalar(surfaceAt(d));
-      orient(rose, d);
-      planet.add(rose);
-    }
-    // 낮은 구름 세 점 — 행성과 함께 굴러 지평선 너머에서 온다
-    {
-      const cM = new THREE.MeshStandardMaterial({ color: PALETTE.white, roughness: 1, transparent: true, opacity: 0.85 });
-      cM.fog = true;
-      for (let k = 0; k < 3; k += 1) {
-        const d = randDir();
-        const cloud = new THREE.Group();
-        const n = 3 + Math.floor(rnd() * 2);
-        for (let b = 0; b < n; b += 1) {
-          const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34 + rnd() * 0.28, 0), cM);
-          m.position.set((rnd() - 0.5) * 0.9, (rnd() - 0.5) * 0.16, (rnd() - 0.5) * 0.5);
-          m.scale.y = 0.55;
-          cloud.add(m);
-        }
-        cloud.position.copy(d).multiplyScalar(R + 2.1 + rnd() * 0.8);
-        orient(cloud, d);
-        planet.add(cloud);
-      }
-    }
-
-    return { planet, curve, arcLen };
+    return { planet, curve: walkerRoad.curve, arcLen: walkerRoad.len };
   }, []);
 
-  // ---------- 걷는 사람: 세계 원점에 서고, 행성이 구른다 ----------
+  // ---------- 걷는 사람 ----------
   const holder = useMemo(() => {
     const h = new THREE.Group();
-    h.position.y = 0.022; // 리본 표면 두께만큼
-    h.rotation.y = Math.PI / 2; // 화면 오른쪽으로 걷는다 (모델 정면 = +Z → +X)
+    h.position.y = 0.024;
+    h.rotation.y = Math.PI / 2;
     return h;
   }, []);
   const rigRef = useRef<WalkerRig | null>(null);
@@ -310,18 +250,18 @@ export function PlanetWorld() {
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
   }), []);
   useFrame((state, rawDt) => {
-    const dt = Math.min(0.05, rawDt); // 헌법 3조: 시간은 덮치지 않는다
+    const dt = Math.min(0.05, rawDt); // 헌법 3조
     S.current += WALK * dt;
     const t = ((S.current / built.arcLen) % 1 + 1) % 1;
-    const { p, T, U, F, Z, M, Q } = tmp;
+    const { p, T, U, F: Fw, Z, M, Q } = tmp;
     built.curve.getPointAt(t, p);
     built.curve.getTangentAt(t, T);
     U.copy(p).normalize();
-    F.copy(T).addScaledVector(U, -T.dot(U)).normalize();
-    Z.crossVectors(F, U);
-    M.makeBasis(F, U, Z);
-    Q.setFromRotationMatrix(M).conjugate(); // 접점의 (전방, 위) → (+X, +Y)
-    if (firstFrame.current) { // 첫 프레임은 스냅 — 행성이 '떠오르며 등장'하지 않게
+    Fw.copy(T).addScaledVector(U, -T.dot(U)).normalize();
+    Z.crossVectors(Fw, U);
+    M.makeBasis(Fw, U, Z);
+    Q.setFromRotationMatrix(M).conjugate();
+    if (firstFrame.current) {
       firstFrame.current = false;
       built.planet.quaternion.copy(Q);
       built.planet.position.y = -p.length();
@@ -331,7 +271,6 @@ export function PlanetWorld() {
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
     rigRef.current?.update(dt, 0.5, true, state.clock.elapsedTime, WALK * dt);
-    // 카메라: 손에 든 시선 — 아주 작은 흔들림만
     const e = state.clock.elapsedTime;
     camera.position.set(Math.sin(e * 0.11) * 0.14, 2.25 + Math.sin(e * 0.07) * 0.06, 5.6);
     camera.lookAt(0, 1.02, 0);
