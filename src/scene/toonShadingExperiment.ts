@@ -143,19 +143,16 @@ export function addInkOutline(root: THREE.Object3D, options: OutlineOptions = {}
     // hfog 멱등 플래그를 미리 세워 이 재질을 건드리지 못하게 잠근다 — 두께 셰이더 사수.
     outlineMat.userData.hfog = true;
 
-    // 클립 공간에서 화면 비례 두께로 민다 — 모델/뼈 스케일 무관 (BUILD 185 괴물 사건의 해법).
-    // 만년필처럼 거리와 상관없이 선 굵기가 일정하다. vn.xy를 정규화하지 않아
-    // 카메라를 정면으로 보는 면(실루엣 내부)은 자연히 밀리지 않는다.
+    // 클립 공간에서 화면 비례 두께로 민다 — 모델/뼈 스케일 무관, 만년필처럼 거리에도 굵기 일정.
+    // BUILD 187 교훈 2제:
+    //  1) normalMatrix는 Basic 재질에서 0행렬로 온다 → mat3(modelViewMatrix)로 직접 변환 (스모크 테스트 3A/3B로 확정)
+    //  2) 값은 유니폼 대신 셰이더 소스에 스냅샷 — BUILD 132(안개가 변하지 않던 사건)와 같은 집안 관례
+    const g = (v: number) => v.toFixed(5);
     outlineMat.onBeforeCompile = (shader) => {
-      shader.uniforms.uNdc = { value: thickness };
-      shader.uniforms.uIrregularity = { value: irregularity };
-
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
           `#include <common>
-           uniform float uNdc;
-           uniform float uIrregularity;
            float inkNoise(vec3 p) {
              return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
            }`
@@ -163,11 +160,12 @@ export function addInkOutline(root: THREE.Object3D, options: OutlineOptions = {}
         .replace(
           '#include <project_vertex>',
           `#include <project_vertex>
-           vec3 vn = normalMatrix * normalize(normal);
-           float n = inkNoise(floor(normalize(position) * 40.0)) - 0.5;
-           gl_Position.xy += vn.xy * uNdc * (1.0 + n * uIrregularity) * gl_Position.w;`
+           vec3 vn = normalize(mat3(modelViewMatrix) * normal);
+           float nz = inkNoise(floor(normalize(position) * 40.0)) - 0.5;
+           gl_Position.xy += vn.xy * ${g(thickness)} * (1.0 + nz * ${g(irregularity)}) * gl_Position.w;`
         );
     };
+    outlineMat.customProgramCacheKey = () => `inkOutline|${g(thickness)}|${g(irregularity)}`;
 
     let shell: THREE.Mesh;
     if (child instanceof THREE.SkinnedMesh) {
