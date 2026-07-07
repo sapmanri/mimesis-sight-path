@@ -798,7 +798,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const rideEvery = SP.rideEvery ?? 120;
     if (MV.nextRun < 0) { MV.nextRun = el + 14 + Math.random() * 18; MV.nextRide = el + 35 + Math.random() * 45; }
     if (!pausedRef.current && MV.mode === 'walk' && P.phase === 'walk') {
-      if (rideEvery > 0 && el >= MV.nextRide) {
+      if (rideEvery > 0 && el >= MV.nextRide && !rigRef.current?.setRiding) {
+        MV.nextRide = el + 40; // 이 아이는 앉을 줄 모른다 — 본토도 절차 릭은 태우지 않았다 (공중 걷기 사건)
+      } else if (rideEvery > 0 && el >= MV.nextRide) {
         MV.mode = 'ride';
         MV.rideStart = el;
         MV.until = el + 12 + Math.random() * 10;
@@ -1004,18 +1006,33 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       const wp = PT.t2.copy(PT.d).multiplyScalar(built.surfaceR(PT.d) + 0.005);
       built.planet.localToWorld(wp);
       const vel = PT.t1.copy(wp).sub(PT.last);
-      const pv = dt > 0 ? vel.length() / dt : 0;
-      PT.pet.group.up.set(0, 1, 0);
-      if (pv > 0.05) { PT.pet.group.lookAt(wp.x + vel.x * 8, wp.y, wp.z + vel.z * 8); }
       PT.pet.group.position.copy(wp);
       PT.last.copy(wp);
-      const want = !moving || pv < 0.04 ? PT.pet.idle : (pv > 0.85 && PT.pet.run ? PT.pet.run : PT.pet.walk);
-      if (want && want !== PT.cur) {
-        PT.cur?.fadeOut(0.22);
-        want.reset().fadeIn(0.22).play();
-        PT.cur = want;
+      // BUILD 229: 미끄러짐의 진범 — 이 세계에선 펫도 월드에선 거의 정지해 있고 행성이 구른다.
+      // 걸음 판정은 월드 속도가 아니라 '지면 상대속도'로: 그녀의 전진(+Z) + 수렴 성분.
+      const fwdV = moving ? SP.walkSpeed * spdMul : 0;
+      const rvx = dt > 0 ? vel.x / dt : 0;
+      const rvz = (dt > 0 ? vel.z / dt : 0) + fwdV;
+      const pvRel = Math.hypot(rvx, rvz);
+      // 본토 petPlay 원문(BUILD 141/144): walk ?? idle 폴백, 0.35 페이드, 자연 재생 속도
+      const petPlay = (a: THREE.AnimationAction | null) => {
+        if (!a || PT.cur === a) return;
+        a.reset().fadeIn(0.35).play();
+        PT.cur?.fadeOut(0.35);
+        PT.cur = a;
+      };
+      if (!moving || pvRel < 0.06) petPlay(PT.pet.idle);
+      else petPlay(pvRel > 0.85 ? (PT.pet.run ?? PT.pet.walk) : (PT.pet.walk ?? PT.pet.idle));
+      if (PT.cur) PT.cur.timeScale = 1;
+      // 본토 요 스무딩(dt*7) — 지면 상대 진행 방향을 본다
+      PT.pet.group.up.set(0, 1, 0);
+      if (pvRel > 0.06) {
+        const wantYaw = Math.atan2(rvx, rvz);
+        let dy2 = wantYaw - PT.pet.group.rotation.y;
+        while (dy2 > Math.PI) dy2 -= Math.PI * 2;
+        while (dy2 < -Math.PI) dy2 += Math.PI * 2;
+        PT.pet.group.rotation.y += dy2 * Math.min(1, dt * 7);
       }
-      if (PT.cur && PT.cur !== PT.pet.idle) PT.cur.timeScale = THREE.MathUtils.clamp(pv / 0.75, 0.6, 2.6);
       PT.pet.mixer.update(dt);
     }
 
