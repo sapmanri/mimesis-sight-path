@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { loadWalkerAsset, applyHeightFog, PALETTE } from '../engine/worldCore';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
@@ -15,8 +15,51 @@ import { ambience } from '../audio/ambience';
 
 const R = 8;
 const WALK = 0.58;
-const DUNE = 0.14; // 사구 진폭
-const PLANET_THEME: 'desert' = 'desert'; // 테마 슬롯 — 남극·화산이 들어올 자리
+const DUNE = 0.14; // 사막 테마의 사구 진폭
+
+// ---------- BUILD 198: 테마 시스템 — 색맵은 구체에, 높이맵은 지형과 패스에 ----------
+// "별이라는 게 맨들맨들하지만은 않잖아" — 높이맵이 지형 정점을 밀고, 패스가 그 굴곡을
+// 그대로 따라간다. 걷는 이는 실제 크레이터 능선을 오르내린다.
+const THEMES = {
+  desert: { kind: 'procedural' as const },
+  moon: { kind: 'maps' as const, color: 'assets/planet/moon_color.jpg', height: 'assets/planet/moon_height.png', amp: 0.3 },
+};
+const PLANET_THEME: keyof typeof THEMES = 'moon';
+
+// 높이맵 샘플러 — SphereGeometry의 UV 규약과 정확히 같은 dir→(u,v) 사상 (색과 굴곡이 어긋나지 않게)
+async function loadHeightSampler(url: string) {
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = rej;
+    im.src = url;
+  });
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const ctx = c.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, c.width, c.height).data;
+  const w = c.width;
+  const h = c.height;
+  return (dir: THREE.Vector3) => {
+    // three SphereGeometry: x=-cosφ·sinθ, z=sinφ·sinθ, y=cosθ / uv=(φ/2π, 1-θ/π)
+    const theta = Math.acos(THREE.MathUtils.clamp(dir.y, -1, 1));
+    let u = Math.atan2(dir.z, -dir.x) / (Math.PI * 2);
+    if (u < 0) u += 1;
+    const fx = u * (w - 1);
+    const fy = (theta / Math.PI) * (h - 1);
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    const x1 = (x0 + 1) % w;
+    const y1 = Math.min(h - 1, y0 + 1);
+    const tx = fx - x0;
+    const ty = fy - y0;
+    const g = (x: number, y: number) => px[(y * w + x) * 4] / 255;
+    const v = g(x0, y0) * (1 - tx) * (1 - ty) + g(x1, y0) * tx * (1 - ty) + g(x0, y1) * (1 - tx) * ty + g(x1, y1) * tx * ty;
+    return (v - 0.5) * 2; // [-1, 1]
+  };
+}
 
 function hills(d: THREE.Vector3) {
   return (
@@ -66,42 +109,64 @@ export function PlanetWorld() {
   // BUILD 191 판례: frame 1 무안개 컴파일 방지 — 렌더 시점 선주입
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, 34);
 
-  const built = useMemo(() => {
-    const planet = new THREE.Group();
+  type Built = { planet: THREE.Group; curve: THREE.CatmullRomCurve3; arcLen: number };
+  const [built, setBuilt] = useState<Built | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      // ---------- 0. 테마 준비: 색맵 + 높이 함수 ----------
+      const theme = THEMES[PLANET_THEME];
+      let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * DUNE;
+      let map: THREE.Texture;
+      if (theme.kind === 'maps') {
+        const loader = new THREE.TextureLoader();
+        map = await loader.loadAsync(theme.color);
+        map.colorSpace = THREE.SRGBColorSpace;
+        map.wrapS = THREE.RepeatWrapping;
+        map.anisotropy = 4;
+        const sample = await loadHeightSampler(theme.height);
+        heightAt = (d) => sample(d) * theme.amp;
+      } else {
+        map = makeDesertTexture();
+      }
+      if (!alive) return;
 
-    // ---------- 1. 보이지 않는 길: 구면 4바퀴 감김, 사구의 높낮이를 그대로 따른다 ----------
-    const N = 560;
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i < N; i += 1) {
-      const u = i / N;
-      const phi = Math.PI * 2 * 4 * u;
-      const theta = Math.PI / 2 + 0.62 * Math.sin(Math.PI * 2 * 3 * u + 0.7) + 0.21 * Math.sin(Math.PI * 2 * 7 * u + 2.1);
-      const d = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
-      pts.push(d.multiplyScalar(R + hills(d) * DUNE + 0.005)); // 지면 그 자체가 길이다
-    }
-    const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
-    curve.arcLengthDivisions = 1800;
-    const arcLen = curve.getLength();
+      const planet = new THREE.Group();
 
-    // ---------- 2. 사막 행성 — 다림질 없는 온전한 사구 ----------
-    const geo = new THREE.SphereGeometry(R, 96, 64);
-    const pos = geo.getAttribute('position');
-    const vd = new THREE.Vector3();
-    for (let i = 0; i < pos.count; i += 1) {
-      vd.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
-      const r2 = R + hills(vd) * DUNE;
-      pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
-    }
-    geo.computeVertexNormals();
-    const themeTex = PLANET_THEME === 'desert' ? makeDesertTexture() : makeDesertTexture();
-    const ground = new THREE.Mesh(
-      geo,
-      applyHeightFog(new THREE.MeshStandardMaterial({ map: themeTex, roughness: 1, metalness: 0 }), 0.5),
-    );
-    ground.receiveShadow = true;
-    planet.add(ground);
+      // ---------- 1. 보이지 않는 길: 지형의 높낮이(크레이터·사구)를 그대로 따른다 ----------
+      const N = 560;
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i < N; i += 1) {
+        const u = i / N;
+        const phi = Math.PI * 2 * 4 * u;
+        const theta = Math.PI / 2 + 0.62 * Math.sin(Math.PI * 2 * 3 * u + 0.7) + 0.21 * Math.sin(Math.PI * 2 * 7 * u + 2.1);
+        const d = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
+        pts.push(d.multiplyScalar(R + heightAt(d) + 0.005)); // 지면 그 자체가 길이다
+      }
+      const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
+      curve.arcLengthDivisions = 1800;
+      const arcLen = curve.getLength();
 
-    return { planet, curve, arcLen };
+      // ---------- 2. 행성 본체 — 높이맵이 정점을 민다 ----------
+      const geo = new THREE.SphereGeometry(R, 128, 96);
+      const pos = geo.getAttribute('position');
+      const vd = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i += 1) {
+        vd.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
+        const r2 = R + heightAt(vd);
+        pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
+      }
+      geo.computeVertexNormals();
+      const ground = new THREE.Mesh(
+        geo,
+        applyHeightFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.5),
+      );
+      ground.receiveShadow = true;
+      planet.add(ground);
+
+      setBuilt({ planet, curve, arcLen });
+    })();
+    return () => { alive = false; };
   }, []);
 
   // ---------- 걷는 사람 ----------
@@ -185,6 +250,7 @@ export function PlanetWorld() {
     v: new THREE.Vector3(),
   }), []);
   useFrame((state, rawDt) => {
+    if (!built) return; // 테마가 아직 오는 중
     const dt = Math.min(0.05, rawDt); // 헌법 3조
     S.current += WALK * dt;
     const t = ((S.current / built.arcLen) % 1 + 1) % 1;
@@ -255,7 +321,7 @@ export function PlanetWorld() {
         shadow-camera-bottom={-12}
       />
       <directionalLight color="#9fc4c9" intensity={0.22} position={[-5, 3, -4]} />
-      <primitive object={built.planet} />
+      {built && <primitive object={built.planet} />}
       <primitive object={holder} />
     </>
   );
