@@ -20,6 +20,14 @@ const PLANET_CENTER = new THREE.Vector3(0, -12, 0);
 // 지형과 캐릭터가 같은 유니폼을 공유한다. (구판은 리터럴 굽기 — 캐릭터는 다이얼을 못 들었다.)
 // uRF = (bottom, top, strength). mul만 재질별 리터럴(정적).
 const RFOG = { v: new THREE.Vector3(11.9, 12.3, 0.8), color: new THREE.Color('#ffffff') };
+// BUILD 215: 안개 기준면 — 명목 R이 아니라 '길의 평균 반경'(그녀가 딛는 높이)을 0점으로.
+// 지구는 바다가 낮아 길이 R 아래를 지난다 — R 기준이면 수위 0.02에 이미 무릎(실화).
+const RFOG_BASE = { r: 12 };
+function updateRFogBand(fogLevel: number, fogStrength: number) {
+  const R0 = RFOG_BASE.r;
+  const lv = Math.max(fogLevel, 0.001);
+  RFOG.v.set(R0 - lv * 0.25 - 0.02, R0 + lv, fogLevel <= 0.01 ? 0 : fogStrength);
+}
 // BUILD 214: 낮밤 — 낮 하늘색(테마 안개색)과 밤 하늘색 사이를 태양 고도가 오간다
 const DAY_SKY = new THREE.Color('#ffffff');
 const NIGHT_SKY = new THREE.Color('#161d26');
@@ -240,9 +248,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef }: { sp
 
   // BUILD 212: 안개 다이얼은 유니폼 직행 — 재건축 없는 즉답 (지형·캐릭터 공유)
   useEffect(() => {
-    const R = spec.radius;
-    const lv = Math.max(spec.fogLevel, 0.001);
-    RFOG.v.set(R - lv * 0.25 - 0.02, R + lv, spec.fogLevel <= 0.01 ? 0 : spec.fogStrength);
+    if (RFOG_BASE.r < spec.radius * 0.5 || RFOG_BASE.r > spec.radius * 2) RFOG_BASE.r = spec.radius; // 재건축 전 임시 기준
+    updateRFogBand(spec.fogLevel, spec.fogStrength);
     RFOG.color.set(PALETTE.fog);
     DAY_SKY.set(PALETTE.fog);
   }, [spec.radius, spec.fogLevel, spec.fogStrength, spec.theme]);
@@ -332,6 +339,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef }: { sp
         const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
         curve.arcLengthDivisions = 1800;
         const arcLen = curve.getLength();
+        // BUILD 215: 길의 평균 반경 실측 — 안개 수위의 0점
+        {
+          let acc = 0;
+          const NS = 120;
+          const pv = new THREE.Vector3();
+          for (let i = 0; i < NS; i += 1) acc += curve.getPointAt(i / NS, pv).length();
+          RFOG_BASE.r = acc / NS;
+          updateRFogBand(specRef.current.fogLevel, specRef.current.fogStrength);
+        }
 
         const crossings: { a: number; b: number }[] = [];
         {

@@ -33,7 +33,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.1.0 · GARDENS, DUSK AND DISTANCE · BUILD 214';
+const BUILD_LABEL = 'v1.1.1 · FOG AT HER ANKLES · BUILD 215';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -243,7 +243,7 @@ export default function App() {
             </label>
             <Dial label="반지름" value={pSpec.radius} min={5} max={22} step={0.5} onChange={(v) => updSpec((s) => ({ ...s, radius: v }))} />
             <Dial label="굴곡" value={pSpec.relief} min={0} max={2.5} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, relief: v }))} />
-            <Dial label="안개 수위" value={pSpec.fogLevel} min={0} max={1.2} step={0.02} onChange={(v) => updSpec((s) => ({ ...s, fogLevel: v }))} />
+            <Dial label="안개 수위" value={pSpec.fogLevel} min={0} max={1.2} step={0.01} onChange={(v) => updSpec((s) => ({ ...s, fogLevel: v }))} />
             <Dial label="안개 농도" value={pSpec.fogStrength} min={0} max={1} step={0.02} onChange={(v) => updSpec((s) => ({ ...s, fogStrength: v }))} />
             <Dial label="시야 거리" value={pSpec.viewDist ?? 41} min={10} max={140} step={1} onChange={(v) => updSpec((s) => ({ ...s, viewDist: v }))} />
             <Dial label="걸음" value={pSpec.walkSpeed} min={0.25} max={1.4} step={0.01} onChange={(v) => updSpec((s) => ({ ...s, walkSpeed: v }))} />
