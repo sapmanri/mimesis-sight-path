@@ -267,18 +267,9 @@ type ModelSpec = {
 // BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
 // BUILD 179: 돌 격리 실험 (Vase 제안 — 바이섹션) — 전부 끄고 0을 확인한 뒤, 한 그룹씩 복귀시켜 범인을 특정한다.
 // glb: rockSpots(rock0/3/7·caveA/B) / pebbles: 잔자갈 인스턴서(lip·frag·peb) / (스트리밍 풀은 World.tsx WAY_POOL)
-export const ROCK_GROUPS = { glb: true, pebbles: true, bushes: true, grass: true }; // BUILD 191: 격리 전면 해제 — 진범은 frame 1 무안개 컴파일이었다(fogfirst 판결). 스위치는 킬스위치로 존치
+// BUILD 193: ROCK_GROUPS 격리 기구 철거 — 옛 용의자들(GLB 바위·잔자갈 3겹·수풀·턱풀)은 코드에서 삭제됐다. 사건 파일은 BUILD 179~192 커밋 로그에.
 
-// BUILD 189: 강철 풀 A/B 결정 실험 — 뷰어 쿼리 스위치 (인계 §5 30분 코스)
-//   ?grass=on   대조군: 격리를 무시하고 잔풀 풀잎을 기존 hfog 재질 그대로 켠다 (증상 재현용)
-//   ?grass=bare 실험군: 같은 풀잎을 applyHeightFog 계보(onBeforeCompile·customProgramCacheKey)에서
-//               완전히 뺀 맨 MeshStandardMaterial로 켠다
-//   판정: 원거리(15u+) 풀이 bare에서만 잠기면 hfog/캐시키 계통 유죄. 둘 다 강철이면 재질 무죄(렌더 경로).
-//   ※ 헤드리스 검산(BUILD 189): heightFogTop -0.35 / bottom -1.6 인데 잔풀은 y≈0에 산다 —
-//     smoothstep상 잔풀의 높이안개는 수치적으로 정확히 0이 정상. 강철 풀의 용의는 시야안개뿐이며,
-//     근접 8~12u 크리스프는 viewFogNear 때문에 무죄다. 판정은 반드시 원거리로만 할 것.
 const VIEW_QS = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search) : null;
-export const GRASS_MODE: 'off' | 'on' | 'bare' = VIEW_QS?.get('grass') === 'bare' ? 'bare' : VIEW_QS?.get('grass') === 'on' ? 'on' : 'off';
 export const FOG_FIRST = VIEW_QS?.get('fogfirst') !== '0'; // BUILD 191: 상시 승격 — ?fogfirst=1&grass=on 라이브 판결로 frame 1 무안개 컴파일 확정. ?fogfirst=0은 법의학용 탈출구
 
 // BUILD 180: 셰이더 프로그램 논스 — 부검 결과, needsUpdate로도 재컴파일이 안 일어났다.
@@ -744,20 +735,7 @@ export function buildWorld(
 
   // [decoration] 바위 산란 지점: 절벽 모서리(rim)와 벽면(face)
   const rockSpots: { pos: THREE.Vector3; rotY: number; scale: number; face: boolean }[] = [];
-  if (on('decoration') && ROCK_GROUPS.glb) { // BUILD 179: 격리 실험
-    const rrnd = worldRng(6612);
-    for (let k = 0; k < SPEC.decoration.rockCount; k += 1) {
-      const i = Math.floor(rrnd() * frames.length);
-      const f = frames[i];
-      const w = widthAt(f.t);
-      const side = rrnd() > 0.5 ? 1 : -1;
-      const onFace = rrnd() > 0.55;
-      const out = onFace ? w * (0.92 + rrnd() * 0.2) : w * (0.82 + rrnd() * 0.14);
-      const y = onFace ? f.p.y - 0.12 - rrnd() * 0.28 : f.p.y - 0.03;
-      const pos = f.p.clone().add(f.nor.clone().multiplyScalar(side * out)).setY(y);
-      rockSpots.push({ pos, rotY: rrnd() * Math.PI * 2, scale: 0.35 + rrnd() * 0.85, face: onFace });
-    }
-  }
+  // BUILD 193: GLB 바위(rock0/3/7·동굴벽) 자동배치 삭제 — Vase 재가. 에셋은 창고에 남아 수동 소품으로만 산다.
 
   // [decoration] BUILD 089: 식생 — 수풀과 작은 나무 (기억 앵커 주변은 비워둔다)
   if (on('decoration')) {
@@ -1505,142 +1483,34 @@ function buildTerrain(frames: Frame[], widthAt: (t: number) => number) {
     g.add(colorMesh(pos, col, idx, {}));
   }
 
-  // ---------- BUILD 102: 길 끝단 자연화 — 부스러기·파편·자갈 ----------
-  // 칼로 자른 단면을 깨는 세 겹: 턱에 걸친 부스러기, 떨어져 나가 떠 있는 파편,
-  // 가장자리로 갈수록 빽빽해지는 잔자갈.
+  // ---------- BUILD 193: 길가의 돌 — 새 식구는 하나의 디자인만 ----------
+  // Vase 재가: 옛 3겹(부스러기·파편·잔자갈)과 턱 수풀·매달림풀 전원 코드에서 삭제.
+  // 팔레트에 순응하는 낮은 돌 하나만 드문드문 남긴다. 삭제가 곧 결정이다.
   {
-    const rockGeo = new THREE.IcosahedronGeometry(1, 0);
-    const mkInstG = (geo: THREE.BufferGeometry, color: string, count: number) => {
-      const mesh = new THREE.InstancedMesh(geo, applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0 })), count); // BUILD 165: 잔풀도 안개를 맞는다
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      return mesh;
-    };
-    const mkInst = (count: number, color: string, rough = 0.95) => {
-      const mesh = new THREE.InstancedMesh(rockGeo, applyHeightFog(new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 })), count); // BUILD 165: 잔자갈도
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      return mesh;
-    };
-    const M = new THREE.Matrix4();
-    const Q = new THREE.Quaternion();
-    const E = new THREE.Euler();
-    const V = new THREE.Vector3();
-    const S = new THREE.Vector3();
-    const place = (mesh: THREE.InstancedMesh, k: number, p: THREE.Vector3, sc: THREE.Vector3, rot: number) => {
-      E.set(noise1(rot) * 1.2, rot * 2.6, noise1(rot + 9) * 1.2);
-      Q.setFromEuler(E);
-      V.copy(p);
-      S.copy(sc);
-      M.compose(V, Q, S);
-      mesh.setMatrixAt(k, M);
-    };
-
-    // 턱 부스러기: 가장자리에 걸치거나 반쯤 흘러내린 조각
-    const lipCount = Math.min(80, Math.floor(frames.length / 5));
-    const lip = mkInst(ROCK_GROUPS.pebbles ? lipCount : 0, '#' + cSandEdge.getHexString()); // BUILD 179: 격리
-    for (let k = 0; k < lipCount; k += 1) {
-      const i = Math.floor((k / lipCount) * (frames.length - 1) + noise1(k * 3.7) * 5);
-      const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
+    const rnd2 = worldRng(7741);
+    const stoneGeo = new THREE.IcosahedronGeometry(1, 1);
+    const pa = stoneGeo.getAttribute('position');
+    for (let i = 0; i < pa.count; i += 1) { // 정점 노이즈를 한 번 구워두는 단일 디자인
+      pa.setXYZ(i, pa.getX(i) * (1 + noise1(i * 3.1) * 0.18), pa.getY(i) * (0.72 + noise1(i * 5.7) * 0.12), pa.getZ(i) * (1 + noise1(i * 7.3) * 0.18));
+    }
+    stoneGeo.computeVertexNormals();
+    const stoneA = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.cliffMid, roughness: 1, metalness: 0, flatShading: true }));
+    const stoneB = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.sandEdge, roughness: 1, metalness: 0, flatShading: true }));
+    const nStones = Math.min(16, Math.floor(frames.length / 30));
+    for (let k = 0; k < nStones; k += 1) {
+      const f = frames[Math.floor(rnd2() * frames.length)];
       const w = widthAt(f.t);
       const side = k % 2 === 0 ? 1 : -1;
-      const out = w * (1.02 + Math.abs(noise1(k * 1.9)) * 0.16); // BUILD 105: 길 위가 아니라 가장자리 바깥에
-      const r = 0.035 + Math.abs(noise1(k * 2.3)) * 0.1;
-      const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * out));
-      p.y += 0.01 - Math.abs(noise1(k * 4.1)) * r * 1.6; // 일부는 턱 아래로 반쯤 흘러내림
-      place(lip, k, p, S.set(r * (1 + Math.abs(noise1(k)) * 0.6), r * 0.7, r * (1 + Math.abs(noise1(k + 5)) * 0.4)), k * 1.13);
+      const r = 0.05 + rnd2() * 0.09;
+      const m = new THREE.Mesh(stoneGeo, rnd2() > 0.5 ? stoneA : stoneB);
+      m.scale.set(r * (1 + rnd2() * 0.4), r * 0.8, r * (1 + rnd2() * 0.4));
+      m.position.copy(f.p.clone().add(f.nor.clone().multiplyScalar(side * w * (0.86 + rnd2() * 0.12))));
+      m.position.y += r * 0.25;
+      m.rotation.y = rnd2() * Math.PI * 2;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      g.add(m);
     }
-    lip.instanceMatrix.needsUpdate = true;
-    g.add(lip);
-
-    // 부유 파편: 떨어져 나가 아직 허공에 머무는 돌 (공중섬의 문법)
-    const fragCount = Math.min(40, Math.floor(frames.length / 10));
-    const frag = mkInst(ROCK_GROUPS.pebbles ? fragCount : 0, PALETTE.cliffHigh); // BUILD 179: 격리
-    for (let k = 0; k < fragCount; k += 1) {
-      const i = Math.floor((k / fragCount) * (frames.length - 1) + noise1(k * 7.7) * 9);
-      const f = frames[Math.max(0, Math.min(frames.length - 1, i))];
-      const w = widthAt(f.t);
-      const side = noise1(k * 3.3) > 0 ? 1 : -1;
-      const r = 0.05 + Math.abs(noise1(k * 5.1)) * 0.1;
-      const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * w * (1.18 + Math.abs(noise1(k * 2.2)) * 0.45)));
-      p.y -= 0.25 + Math.abs(noise1(k * 6.4)) * 0.75;
-      place(frag, k, p, S.set(r, r * 0.8, r), k * 2.31);
-    }
-    frag.instanceMatrix.needsUpdate = true;
-    g.add(frag);
-
-    // 잔자갈: 가장자리로 갈수록 빽빽하게 (밀도 곡선 = 1 - rnd*rnd)
-    const pebCount = Math.min(280, frames.length * 2);
-    const peb = mkInst(ROCK_GROUPS.pebbles ? pebCount : 0, '#' + cSandEdge.getHexString(), 1.0); // BUILD 179: 격리
-    for (let k = 0; k < pebCount; k += 1) {
-      const i = Math.floor(Math.abs(noise1(k * 1.7)) * (frames.length - 1));
-      const f = frames[i];
-      const w = widthAt(f.t);
-      const side = k % 2 === 0 ? 1 : -1;
-      const towardEdge = 1 - Math.abs(noise1(k * 2.9)) * Math.abs(noise1(k * 4.3)); // 가장자리 편중
-      const out = w * (0.5 + towardEdge * 0.44);
-      const r = 0.012 + Math.abs(noise1(k * 3.1)) * 0.028;
-      const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * out));
-      p.y += r * 0.4;
-      place(peb, k, p, S.set(r * 1.3, r * 0.55, r), k * 0.77);
-    }
-    peb.instanceMatrix.needsUpdate = true;
-    g.add(peb);
-
-    // BUILD 103: 가장자리 초목 스필 — 레퍼런스의 진짜 주인공.
-    // 턱에 걸터앉은 수풀 덩이 + 절벽면에 매달려 바깥으로 뻗은 풀.
-    const greens = SPEC.decoration.vegetation.greens;
-    const blobGeo = new THREE.IcosahedronGeometry(1, 0);
-    const coneGeo = new THREE.ConeGeometry(0.011, 0.12, 3);
-    const spillMeshes = greens.slice(0, 2).map((c) => mkInstG(blobGeo, c, ROCK_GROUPS.grass ? 160 : 0)); // BUILD 182: 격리
-    const hangMeshes = greens.slice(1, 3).map((c) => mkInstG(coneGeo, c, ROCK_GROUPS.grass ? 130 : 0)); // BUILD 182: 격리
-    const counters = [0, 0, 0, 0];
-    // 턱 수풀: 2~4덩이 뭉치가 가장자리에 반쯤 걸쳐 있다 (BUILD 180: 격리 대상)
-    const bushSpots = ROCK_GROUPS.bushes ? Math.min(52, Math.floor(frames.length / 8)) : 0; // BUILD 180: 격리
-    for (let k = 0; k < bushSpots; k += 1) {
-      const i = Math.floor(Math.abs(noise1(k * 5.3)) * (frames.length - 1));
-      const f = frames[i];
-      const w = widthAt(f.t);
-      const side = k % 2 === 0 ? 1 : -1;
-      const base = f.p.clone().add(f.nor.clone().multiplyScalar(side * w * (0.86 + Math.abs(noise1(k * 1.7)) * 0.17)));
-      const n = 2 + Math.floor(Math.abs(noise1(k * 3.9)) * 3);
-      for (let b2 = 0; b2 < n; b2 += 1) {
-        const mi = (k + b2) % 2;
-        const mesh = spillMeshes[mi];
-        const r = 0.055 + Math.abs(noise1(k * 2.1 + b2 * 7)) * 0.075;
-        V.set(base.x + noise1(k * 9 + b2 * 3) * 0.09, base.y + r * 0.42 - Math.abs(noise1(k + b2 * 11)) * 0.05, base.z + noise1(k * 4 + b2 * 5) * 0.09);
-        E.set(0, noise1(k * 1.3 + b2) * 3, noise1(k * 2.7 + b2) * 0.25);
-        Q.setFromEuler(E);
-        S.set(r * (1 + Math.abs(noise1(b2 + k)) * 0.4), r * 0.62, r * (1 + Math.abs(noise1(b2 + k + 3)) * 0.4));
-        M.compose(V, Q, S);
-        mesh.setMatrixAt(counters[mi], M);
-        counters[mi] += 1;
-      }
-    }
-    // 매달린 풀: 절벽면에서 바깥·아래로 뻗는다
-    const hangCount = Math.min(120, Math.floor(frames.length / 3.5));
-    for (let k = 0; k < hangCount; k += 1) {
-      const i = Math.floor(Math.abs(noise1(k * 6.1)) * (frames.length - 1));
-      const f = frames[i];
-      const w = widthAt(f.t);
-      const side = k % 2 === 0 ? 1 : -1;
-      const mi = k % 2;
-      const mesh = hangMeshes[mi];
-      const p2 = f.p.clone().add(f.nor.clone().multiplyScalar(side * w * (1.0 + Math.abs(noise1(k * 2.4)) * 0.05)));
-      p2.y -= 0.03 + Math.abs(noise1(k * 3.8)) * 0.3;
-      V.copy(p2);
-      // 바깥으로 기울어 매달림: 법선 방향으로 눕는다
-      const outYaw = Math.atan2(f.nor.x * side, f.nor.z * side);
-      E.set(0, outYaw, -(0.7 + Math.abs(noise1(k * 1.9)) * 0.7));
-      Q.setFromEuler(E);
-      const sc = 0.8 + Math.abs(noise1(k * 4.4)) * 1.1;
-      S.set(sc, sc, sc);
-      M.compose(V, Q, S);
-      mesh.setMatrixAt(counters[2 + mi], M);
-      counters[2 + mi] += 1;
-    }
-    spillMeshes.forEach((m, i2) => { m.count = counters[i2]; m.instanceMatrix.needsUpdate = true; g.add(m); });
-    hangMeshes.forEach((m, i2) => { m.count = counters[2 + i2]; m.instanceMatrix.needsUpdate = true; g.add(m); });
   }
 
   return g;
@@ -1668,10 +1538,8 @@ function colorMesh(
 function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
   const rnd = worldRng(4177);
-  const dress = (m: THREE.MeshStandardMaterial) => (GRASS_MODE === 'bare' ? m : applyHeightFog(m)); // BUILD 189: 실험군은 hfog 계보 완전 배제
-  const matA = dress(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 })); // BUILD 165: 가장자리 풀도
-  const matB = dress(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 }));
-  if (!ROCK_GROUPS.grass && GRASS_MODE === 'off') return new THREE.Group(); // BUILD 182: 격리 (189: 실험 스위치가 연다)
+  const matA = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 })); // BUILD 165: 가장자리 풀도
+  const matB = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 })); // BUILD 193: 재판 종료 — 실험 게이트 철거, 상시
   const geo = new THREE.ConeGeometry(0.016, 0.16, 3); // 풀잎 한 가닥
   for (let k = 0; k < SPEC.decoration.grassCount; k += 1) {
     const i = Math.floor(rnd() * frames.length);
@@ -1708,27 +1576,30 @@ function buildVegetation(frames: Frame[], widthAt: (t: number) => number, anchor
   const blobGeo = new THREE.IcosahedronGeometry(1, 0);
   const nearAnchor = (p: THREE.Vector3) => anchors.some((a) => a.distanceTo(p) < 1.3);
 
-  // 수풀: 눌린 다면체 2~4덩이 뭉치
-  for (let k = 0; ROCK_GROUPS.bushes && k < V.bushCount; k += 1) { // BUILD 180: 격리
+  // BUILD 193: 수풀(채도 높은 greens 다면체) 삭제 → 새 식구는 풀포기 하나의 디자인만.
+  // 잔풀 날과 같은 혈통, 조금 크고 촘촘한 포기 — plant 톤에 순응한다.
+  const tuftGeo = new THREE.ConeGeometry(0.02, 0.19, 3);
+  const tuftA = std(PALETTE.plant);
+  const tuftB = std(PALETTE.plantDark);
+  for (let k = 0; k < Math.min(20, V.bushCount); k += 1) {
     const f = frames[Math.floor(rnd() * frames.length)];
     const w = widthAt(f.t);
     const side = rnd() > 0.5 ? 1 : -1;
-    const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * (w - 0.12 - rnd() * 0.2)));
+    const p = f.p.clone().add(f.nor.clone().multiplyScalar(side * (w - 0.14 - rnd() * 0.2)));
     if (nearAnchor(p)) continue;
-    const bush = new THREE.Group();
-    const n = 2 + Math.floor(rnd() * 3);
+    const tuft = new THREE.Group();
+    const n = 5 + Math.floor(rnd() * 3);
     for (let b = 0; b < n; b += 1) {
-      const m = new THREE.Mesh(blobGeo, mats[Math.floor(rnd() * 2)]); // 짙은/중간 톤만
-      const r = 0.09 + rnd() * 0.1;
-      m.scale.set(r * (1 + rnd() * 0.4), r * 0.62, r * (1 + rnd() * 0.4));
-      m.position.set((rnd() - 0.5) * 0.16, r * 0.5, (rnd() - 0.5) * 0.16);
-      m.rotation.y = rnd() * Math.PI;
+      const m = new THREE.Mesh(tuftGeo, rnd() > 0.5 ? tuftA : tuftB);
+      const lean = 0.25 + rnd() * 0.4;
+      m.position.set((rnd() - 0.5) * 0.09, 0.085, (rnd() - 0.5) * 0.09);
+      m.scale.set(1, 0.8 + rnd() * 0.9, 1);
+      m.rotation.set((rnd() - 0.5) * lean, rnd() * Math.PI, (rnd() - 0.5) * lean);
       m.castShadow = true;
-      m.receiveShadow = true;
-      bush.add(m);
+      tuft.add(m);
     }
-    bush.position.copy(p);
-    g.add(bush);
+    tuft.position.copy(p);
+    g.add(tuft);
   }
 
   // 작은 나무: 밑동 + 눌린 캐노피 2~3층 — 릴의 둥근 활엽 실루엣
