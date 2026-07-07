@@ -33,7 +33,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.2.2 · THE MOON KEEPS HER OWN LIGHT · BUILD 218';
+const BUILD_LABEL = 'v1.3.0 · SHE WANDERS THE GLOBE · BUILD 219';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -325,6 +325,10 @@ export default function App() {
             <Dial label="감김 (바퀴)" value={pSpec.wraps} min={2} max={7} step={1} onChange={(v) => updSpec((s) => ({ ...s, wraps: v }))} />
             <Dial label="길의 요동" value={pSpec.wobble} min={0.2} max={1.8} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, wobble: v }))} />
             <Dial label="교차로 — 저 길을 고를 확률" value={pSpec.ponderChance} min={0} max={1} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, ponderChance: v }))} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, margin: '10px 0', cursor: 'pointer' }}>
+              <input type="checkbox" checked={pSpec.roam ?? false} onChange={(e) => updSpec((s) => ({ ...s, roam: e.target.checked }))} />
+              🧭 자유 배회 — 지구본 모드 (길·기억 없이 마음대로)
+            </label>
             <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 2px' }}>하늘</div>
             <Dial label="달 크기 (행성=1)" value={M.size} min={0.08} max={0.6} step={0.005} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, size: v } }))} />
             <Dial label="달 거리" value={M.dist} min={16} max={70} step={1} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, dist: v } }))} />

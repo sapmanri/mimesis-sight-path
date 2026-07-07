@@ -17,6 +17,7 @@ export type PlanetSpec = {
   wraps: number;       // 길이 행성을 감는 바퀴
   wobble: number;      // 위도 요동 배율
   ponderChance: number;// 교차로에서 저 길을 고를 확률
+  roam: boolean;       // BUILD 219: 지구본 모드 — 길 없이 마음대로 배회
   moon: { size: number; dist: number; period: number; tilt: number; light: number; spin: number };
   sun: { az: number; el: number; period: number }; // 방위·고도 (deg), 공전 주기 (s · 0=고정 정오)
   viewDist: number;    // 시야 거리 (씬 안개 far, u)
@@ -34,6 +35,7 @@ export const DEFAULT_PLANET_SPEC: PlanetSpec = {
   wraps: 4,
   wobble: 1.0,
   ponderChance: 0.5,
+  roam: false,
   moon: { size: 0.273, dist: 34, period: 150, tilt: 15, light: 2.2, spin: 1 },
   sun: { az: 40, el: 52, period: 0 },
   viewDist: 41, // 구판 고정값 R×3.4(=40.8)의 계승

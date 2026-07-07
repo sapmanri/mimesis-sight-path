@@ -23,6 +23,8 @@ const RFOG = { v: new THREE.Vector3(11.9, 12.3, 0.8), color: new THREE.Color('#f
 // BUILD 215: 안개 기준면 — 명목 R이 아니라 '길의 평균 반경'(그녀가 딛는 높이)을 0점으로.
 // 지구는 바다가 낮아 길이 R 아래를 지난다 — R 기준이면 수위 0.02에 이미 무릎(실화).
 const RFOG_BASE = { r: 12 };
+// BUILD 219: 배회자의 바람 — 세 사인의 합, 부드러운 마음의 흔들림
+const wanderNoise = (x: number) => Math.sin(x * 1.7) * 0.55 + Math.sin(x * 3.7 + 1.3) * 0.3 + Math.sin(x * 7.1 + 4.2) * 0.15;
 function updateRFogBand(fogLevel: number, fogStrength: number) {
   const R0 = RFOG_BASE.r;
   const lv = Math.max(fogLevel, 0.001);
@@ -244,7 +246,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
   onMemRef.current = onMemory;
 
   // 무거운 다이얼만 재건축을 부른다
-  const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.moon.size]);
+  const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.moon.size, spec.roam ? 1 : 0]);
 
   // BUILD 212: 안개 다이얼은 유니폼 직행 — 재건축 없는 즉답 (지형·캐릭터 공유)
   useEffect(() => {
@@ -258,14 +260,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
     planet: THREE.Group; curve: THREE.CatmullRomCurve3; arcLen: number;
     crossings: { a: number; b: number }[]; R: number;
     moon: THREE.Mesh; moonLight: THREE.PointLight; sun: THREE.Mesh; sky: THREE.Group;
+    surfaceR: (d: THREE.Vector3) => number; // BUILD 219: 단위방향 → 지형 반경 (배회의 발판)
   };
   const [built, setBuilt] = useState<Built | null>(null);
   useEffect(() => {
     let alive = true;
     const timer = setTimeout(() => {
       void (async () => {
-        const s0 = JSON.parse(buildKey) as [PlanetSpec['theme'], number, number, number, number, number];
-        const [themeName, R, relief, wraps, wobble, moonSize] = s0;
+        const s0 = JSON.parse(buildKey) as [PlanetSpec['theme'], number, number, number, number, number, number];
+        const [themeName, R, relief, wraps, wobble, moonSize, roamF] = s0;
         const theme = THEMES[themeName];
         // 안개(211에서 수위 방향 반전, 212에서 유니폼화)는 위의 RFOG 이펙트가 관리한다.
         let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * 0.14 * relief;
@@ -366,7 +369,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
           }
         }
 
-        if (map) map = bakeTrailOntoMap(map, curve, R);
+        if (map && !roamF) map = bakeTrailOntoMap(map, curve, R); // BUILD 219: 지구본 모드는 길 자국을 남기지 않는다
         if (ready) {
           const mm = (ready as THREE.Mesh).material as THREE.MeshStandardMaterial;
           if (map) { mm.map = map; mm.needsUpdate = true; }
@@ -406,7 +409,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
         const sun = new THREE.Mesh(new THREE.SphereGeometry(R * 0.21, 24, 16), sunMat);
         sky.add(sun);
 
-        setBuilt({ planet, curve, arcLen, crossings, R, moon, moonLight, sun, sky });
+        setBuilt({ planet, curve, arcLen, crossings, R, moon, moonLight, sun, sky, surfaceR: (d) => R + heightAt(d) });
       })();
     }, 300);
     return () => { alive = false; clearTimeout(timer); };
@@ -589,6 +592,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
+  const roamRef = useRef<{ d: THREE.Vector3; T: THREE.Vector3 } | null>(null); // BUILD 219: 배회자의 현재 방향·진행
+  useEffect(() => { roamRef.current = null; }, [built, spec.roam]);
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
@@ -607,11 +612,19 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
       P.timer -= dt;
       if (P.timer <= 0) {
         if (P.phase === 'memory') { onMemRef.current?.(null); P.memCooldown = 6; }
+        if (P.phase === 'ponder' && SP.roam && roamRef.current) {
+          // 멈춰 섰다 일어나면 마음이 바뀐다 — 크게 한 번 튼다
+          const turn = (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 1.8);
+          roamRef.current.T.applyQuaternion(tmp.Q.setFromAxisAngle(roamRef.current.d, turn));
+        }
         if (P.phase === 'ponder' && P.jumpTo >= 0) S.current = P.jumpTo;
         P.phase = 'walk';
         P.jumpTo = -1;
         P.cooldown = 8;
       }
+    } else if (SP.roam) {
+      // BUILD 219: 지구본 모드 — 기억 정차도 교차로 고민도 없다. 가끔 그냥 멈춰 설 뿐 (평균 ~14s)
+      if (P.cooldown <= 0 && Math.random() < dt * 0.07) { P.phase = 'ponder'; P.timer = 1.2 + Math.random() * 2.2; P.jumpTo = -1; }
     } else {
       S.current += SP.walkSpeed * dt;
       const sm = ((S.current % built.arcLen) + built.arcLen) % built.arcLen;
@@ -638,10 +651,34 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
         }
       }
     }
-    const t = ((S.current / built.arcLen) % 1 + 1) % 1;
     const { p, T, U, F: Fw, Z, M, Q, v } = tmp;
-    built.curve.getPointAt(t, p);
-    built.curve.getTangentAt(t, T);
+    if (SP.roam) {
+      // BUILD 219: 자유 배회 — 접점 d와 진행 T를 구면 위에서 직접 민다. 곡선은 출발점만 빌려준다.
+      if (!roamRef.current) {
+        const d0 = built.curve.getPointAt(0, new THREE.Vector3()).normalize();
+        const t0 = built.curve.getTangentAt(0, new THREE.Vector3());
+        t0.addScaledVector(d0, -t0.dot(d0)).normalize();
+        roamRef.current = { d: d0, T: t0 };
+      }
+      const RM = roamRef.current;
+      if (moving) {
+        // 마음의 바람 — 진행방향이 천천히 흔들린다
+        RM.T.applyQuaternion(Q.setFromAxisAngle(RM.d, wanderNoise(state.clock.elapsedTime * 0.16) * 0.5 * dt));
+        const rS = built.surfaceR(RM.d);
+        const th = (SP.walkSpeed * dt) / Math.max(1, rS);
+        v.crossVectors(RM.d, RM.T).normalize();
+        Q.setFromAxisAngle(v, th);
+        RM.d.applyQuaternion(Q).normalize();
+        RM.T.applyQuaternion(Q);
+        RM.T.addScaledVector(RM.d, -RM.T.dot(RM.d)).normalize();
+      }
+      p.copy(RM.d).multiplyScalar(built.surfaceR(RM.d) + 0.005);
+      T.copy(RM.T);
+    } else {
+      const t = ((S.current / built.arcLen) % 1 + 1) % 1;
+      built.curve.getPointAt(t, p);
+      built.curve.getTangentAt(t, T);
+    }
     U.copy(p).normalize();
     Fw.copy(T).addScaledVector(U, -T.dot(U)).normalize();
     Z.crossVectors(Fw, U);
