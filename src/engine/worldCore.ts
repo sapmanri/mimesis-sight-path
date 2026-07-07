@@ -269,6 +269,18 @@ type ModelSpec = {
 // glb: rockSpots(rock0/3/7·caveA/B) / pebbles: 잔자갈 인스턴서(lip·frag·peb) / (스트리밍 풀은 World.tsx WAY_POOL)
 export const ROCK_GROUPS = { glb: false, pebbles: false, bushes: false, grass: false }; // BUILD 182: 강철 풀(잔풀·가장자리풀)도 격리 — 원인 불명, 증거는 인계 문서에
 
+// BUILD 189: 강철 풀 A/B 결정 실험 — 뷰어 쿼리 스위치 (인계 §5 30분 코스)
+//   ?grass=on   대조군: 격리를 무시하고 잔풀 풀잎을 기존 hfog 재질 그대로 켠다 (증상 재현용)
+//   ?grass=bare 실험군: 같은 풀잎을 applyHeightFog 계보(onBeforeCompile·customProgramCacheKey)에서
+//               완전히 뺀 맨 MeshStandardMaterial로 켠다
+//   판정: 원거리(15u+) 풀이 bare에서만 잠기면 hfog/캐시키 계통 유죄. 둘 다 강철이면 재질 무죄(렌더 경로).
+//   ※ 헤드리스 검산(BUILD 189): heightFogTop -0.35 / bottom -1.6 인데 잔풀은 y≈0에 산다 —
+//     smoothstep상 잔풀의 높이안개는 수치적으로 정확히 0이 정상. 강철 풀의 용의는 시야안개뿐이며,
+//     근접 8~12u 크리스프는 viewFogNear 때문에 무죄다. 판정은 반드시 원거리로만 할 것.
+const VIEW_QS = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search) : null;
+export const GRASS_MODE: 'off' | 'on' | 'bare' = VIEW_QS?.get('grass') === 'bare' ? 'bare' : VIEW_QS?.get('grass') === 'on' ? 'on' : 'off';
+export const FOG_FIRST = VIEW_QS?.get('fogfirst') === '1'; // BUILD 189: 시야안개 명령형 선주입 스위치 — frame 1 무안개 컴파일 가설(§5.7)의 정공법
+
 // BUILD 180: 셰이더 프로그램 논스 — 부검 결과, needsUpdate로도 재컴파일이 안 일어났다.
 // 같은 캐시 키의 프로그램이 살아 있으면 THREE는 onBeforeCompile을 다시 부르지 않는다 —
 // 오염된 프로그램(무안개 시절 컴파일)이 키 적중으로 영생했다. 월드를 지을 때마다 논스를
@@ -1655,9 +1667,10 @@ function colorMesh(
 function buildEdgePlants(frames: Frame[], widthAt: (t: number) => number) {
   const g = new THREE.Group();
   const rnd = worldRng(4177);
-  const matA = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 })); // BUILD 165: 가장자리 풀도
-  const matB = applyHeightFog(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 }));
-  if (!ROCK_GROUPS.grass) return new THREE.Group(); // BUILD 182: 격리
+  const dress = (m: THREE.MeshStandardMaterial) => (GRASS_MODE === 'bare' ? m : applyHeightFog(m)); // BUILD 189: 실험군은 hfog 계보 완전 배제
+  const matA = dress(new THREE.MeshStandardMaterial({ color: PALETTE.plant, roughness: 1 })); // BUILD 165: 가장자리 풀도
+  const matB = dress(new THREE.MeshStandardMaterial({ color: PALETTE.plantDark, roughness: 1 }));
+  if (!ROCK_GROUPS.grass && GRASS_MODE === 'off') return new THREE.Group(); // BUILD 182: 격리 (189: 실험 스위치가 연다)
   const geo = new THREE.ConeGeometry(0.016, 0.16, 3); // 풀잎 한 가닥
   for (let k = 0; k < SPEC.decoration.grassCount; k += 1) {
     const i = Math.floor(rnd() * frames.length);

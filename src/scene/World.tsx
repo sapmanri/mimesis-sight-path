@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
-import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE, enforceFog } from '../engine/worldCore';
+import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE, enforceFog, FOG_FIRST } from '../engine/worldCore';
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
@@ -73,6 +73,12 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   }, []);
   const rigRef = useRef<WalkerRig | null>(null);
   const { gl, scene: r3fScene } = useThree();
+  // BUILD 189: ?fogfirst=1 — <fog attach>가 커밋되기 전, 렌더 시점에 시야안개를 명령형으로 선주입한다.
+  // frame 1이 무안개로 렌더되어 셰이더가 USE_FOG 없이 구워진다는 가설(인계 §5.7)의 정공법 스위치.
+  // <fog attach>가 커밋되면 자기 인스턴스로 교체하지만, 그때는 이미 안개 있는 프레임만 존재한다.
+  if (FOG_FIRST && !r3fScene.fog) {
+    r3fScene.fog = new THREE.Fog(PALETTE.fog, spec.atmosphere?.viewFogNear ?? 12, spec.atmosphere?.viewFogFar ?? 58);
+  }
   // BUILD 151·152: 흐르는 하늘 — spec은 악보, sky는 연주
   const sky = useRef(createSkyDrift());
   useEffect(() => { sky.current.init(spec); }, [spec]);
