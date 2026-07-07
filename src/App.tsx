@@ -13,7 +13,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.79.0 · LE PETIT MONDE · BUILD 194';
+const BUILD_LABEL = 'v0.79.1 · LE PETIT MONDE · BUILD 194.1';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -138,9 +138,12 @@ export default function App() {
   if (planetMode) {
     return (
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
-        <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-          <PlanetWorld />
-        </Canvas>
+        <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
+          {/* BUILD 194.1: .world-canvas는 .world-core-viewport 안에서만 화면을 채운다 — 래퍼 누락 핫픽스 */}
+          <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
+            <PlanetWorld />
+          </Canvas>
+        </div>
         <div className="atmosphere-grain" aria-hidden="true" />
         <div className="build-badge">{BUILD_LABEL}</div>
       </main>
