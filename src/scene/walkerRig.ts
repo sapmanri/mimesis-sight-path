@@ -202,10 +202,10 @@ export function createClipRig(
     return f;
   };
   // 발끝(ToeBase) 뼈가 있으면 그걸 쓴다 — 발바닥에 가장 가깝다. 없으면 발목.
-  const toeL = findBone(/LeftToeBase$/i, /LeftToe/i);
-  const toeR = findBone(/RightToeBase$/i, /RightToe/i);
-  const footL = toeL ?? findBone(/LeftFoot$/i, /^footl$/i, /foot\.l/i);
-  const footR = toeR ?? findBone(/RightFoot$/i, /^footr$/i, /foot\.r/i);
+  const toeL = findBone(/LeftToeBase$/i, /LeftToe/i, /L_ToeBase$/i); // BUILD 206: VRoid(J_Bip_L_ToeBase)
+  const toeR = findBone(/RightToeBase$/i, /RightToe/i, /R_ToeBase$/i);
+  const footL = toeL ?? findBone(/LeftFoot$/i, /^footl$/i, /foot\.l/i, /L_Foot$/i); // BUILD 206: VRoid(J_Bip_L_Foot)
+  const footR = toeR ?? findBone(/RightFoot$/i, /^footr$/i, /foot\.r/i, /R_Foot$/i);
   const hipsBone = findBone(/Hips$/i, /pelvis/i, /^hips$/i);
   const headBone = findBone(/Head$/i); // BUILD 146: 두리번용
   // 밑창: 발끝 뼈 기준 얇게, 발목 기준이면 두껍게

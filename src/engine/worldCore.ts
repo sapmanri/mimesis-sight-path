@@ -263,6 +263,7 @@ type ModelSpec = {
   texture?: string;      // BUILD 085: 수동 바인딩할 텍스처 파일명 (FBX 변환에서 누락된 경우)
   clipSpeeds?: { walk: number; run: number }; // BUILD 091: 클립 고유속도 (원척, u/s)
   animFrom?: string;     // BUILD 202: 클립 기증자 GLB — 자기 클립이 없는 캐릭터는 걷기를 물려받는다
+  retargetFrom?: string; // BUILD 206: 골격이 다른 기증자(VRoid 등) — 이름 매핑 + rest 보정 리타겟
 };
 
 // BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
@@ -370,6 +371,9 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // BUILD 158: 하이커 — 걷는 데 특화된 사람. 클립도 걷기 하나뿐, 그래서 이 세계의 적임자.
   // clipSpeeds.walk = 힙 트랙 실측 드리프트 5.13(원척)/1.0s. run은 같은 클립 두 배속 기준.
   { file: 'Hiker.glb', height: 0.95, tint: '#57534a', keepLook: true, texture: 'Hiker_texture.png', clipSpeeds: { walk: 5.13, run: 10.3 } },
+  // BUILD 206: VRoid 아바타 — Mixamo가 기리깅 골격(193본)을 거부해 리타겟 실험으로 입단.
+  // 텍스처 25장 임베드(웹 다이어트 16.7→7.6MB), retargetClip이 rest 차이를 보정한다.
+  { file: 'Vroid01.glb', height: 0.95, tint: '#57534a', keepLook: true, retargetFrom: 'Hiker.glb', clipSpeeds: { walk: 1.165, run: 2.339 } },
   // BUILD 203: 차차 5인방 하차 — 이식 클립이 바인드 포즈 불일치로 누워 걷는 공포를 연출
   // (다리 뼈 rest 쿼터니언 [0.05,0.04,0.995,-0.07] = Mixamo 표준과 골격 자체가 다르다).
   // 파일·animFrom 규칙은 보존. 재입단 정도: Mixamo 자동 리깅 → Walking(With Skin) → 외길 어댑터.
@@ -588,6 +592,46 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
   // BUILD 202: 클립 이식 — 같은 mixamorig 골격이면 이름 바인딩으로 그대로 걷는다.
   // 단 position 트랙은 기증자의 몸 치수 기준이므로, 힙 rest 높이 비율로 스케일해 옮긴다
   // (실측: Hiker 3.189 vs Chacha 0.713 — 그대로 물리면 수혜자가 하늘로 솟는다).
+  if (spec.retargetFrom) {
+    // BUILD 206: 골격이 다른 캐릭터(VRoid J_Bip_*)에게 Mixamo 걷기를 리타겟한다.
+    // SkeletonUtils.retargetClip이 rest 포즈 차이를 바인드 행렬로 보정 — 차차식 생이식과 다르다.
+    // scale = 수혜자 힙 rest / 기증자 힙 rest (실측 0.724 / 3.189 = 0.227).
+    const { retargetClip } = await import('three/examples/jsm/utils/SkeletonUtils.js');
+    const donor = await loadModel(spec.retargetFrom);
+    const findSkinned = (root: THREE.Object3D) => {
+      let sm: THREE.SkinnedMesh | null = null;
+      root.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh && !sm) sm = m; });
+      return sm;
+    };
+    const src = findSkinned(donor.scene);
+    const tgt = findSkinned(gltf.scene);
+    if (src && tgt) {
+      donor.scene.updateMatrixWorld(true);
+      gltf.scene.updateMatrixWorld(true);
+      const hipsRestY = (sceneRoot: THREE.Object3D) => {
+        let y = 0;
+        sceneRoot.traverse((o) => { if (!y && /Hips$/.test(o.name)) y = Math.abs(o.position.y); });
+        return y || 1;
+      };
+      const VROID_TO_MIXAMO: Record<string, string> = {
+        J_Bip_C_Hips: 'mixamorig:Hips', J_Bip_C_Spine: 'mixamorig:Spine', J_Bip_C_Chest: 'mixamorig:Spine1',
+        J_Bip_C_UpperChest: 'mixamorig:Spine2', J_Bip_C_Neck: 'mixamorig:Neck', J_Bip_C_Head: 'mixamorig:Head',
+        J_Bip_L_Shoulder: 'mixamorig:LeftShoulder', J_Bip_L_UpperArm: 'mixamorig:LeftArm', J_Bip_L_LowerArm: 'mixamorig:LeftForeArm', J_Bip_L_Hand: 'mixamorig:LeftHand',
+        J_Bip_R_Shoulder: 'mixamorig:RightShoulder', J_Bip_R_UpperArm: 'mixamorig:RightArm', J_Bip_R_LowerArm: 'mixamorig:RightForeArm', J_Bip_R_Hand: 'mixamorig:RightHand',
+        J_Bip_L_UpperLeg: 'mixamorig:LeftUpLeg', J_Bip_L_LowerLeg: 'mixamorig:LeftLeg', J_Bip_L_Foot: 'mixamorig:LeftFoot', J_Bip_L_ToeBase: 'mixamorig:LeftToeBase',
+        J_Bip_R_UpperLeg: 'mixamorig:RightUpLeg', J_Bip_R_LowerLeg: 'mixamorig:RightLeg', J_Bip_R_Foot: 'mixamorig:RightFoot', J_Bip_R_ToeBase: 'mixamorig:RightToeBase',
+      };
+      const srcClip = donor.animations.find((a) => /mixamo|walk/i.test(a.name)) ?? donor.animations[0];
+      if (srcClip) {
+        const clip = retargetClip(tgt, src, srcClip, {
+          names: VROID_TO_MIXAMO,
+          hip: 'mixamorig:Hips',
+          scale: hipsRestY(gltf.scene) / hipsRestY(donor.scene),
+        } as never);
+        animations = [clip];
+      }
+    }
+  }
   if (spec.animFrom) {
     const donor = await loadModel(spec.animFrom);
     const hipsRestY = (scene: THREE.Object3D) => {
