@@ -1,7 +1,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset, applyHeightFog, PALETTE } from '../engine/worldCore';
+import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader } from '../engine/worldCore';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
@@ -23,8 +23,14 @@ const DUNE = 0.14; // 사막 테마의 사구 진폭
 const THEMES = {
   desert: { kind: 'procedural' as const },
   moon: { kind: 'maps' as const, color: 'assets/planet/moon_color.jpg', height: 'assets/planet/moon_height.png', amp: 0.3 },
+  // BUILD 199: 진짜 조각된 굴곡 — 메시 자체가 행성이 된다. 정점 반경을 등장방형 그리드로
+  // 구워 패스가 그 지형을 그대로 따른다. boost = 원본 굴곡(±3%)의 과장 배율.
+  luna: { kind: 'meshworld' as const, file: 'LunaMesh.glb', color: 'assets/planet/moon_color.jpg', boost: 2.2 },
 };
-const PLANET_THEME: keyof typeof THEMES = 'moon';
+const PLANET_THEME: keyof typeof THEMES = (() => {
+  const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('theme') : null;
+  return q && q in THEMES ? (q as keyof typeof THEMES) : 'luna'; // 기본은 최신 실험 — ?theme=moon|desert로 회귀
+})();
 
 // 높이맵 샘플러 — SphereGeometry의 UV 규약과 정확히 같은 dir→(u,v) 사상 (색과 굴곡이 어긋나지 않게)
 async function loadHeightSampler(url: string) {
@@ -118,7 +124,77 @@ export function PlanetWorld() {
       const theme = THEMES[PLANET_THEME];
       let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * DUNE;
       let map: THREE.Texture;
-      if (theme.kind === 'maps') {
+      let meshGround: THREE.Mesh | null = null; // meshworld: 메시 자체가 지형이다
+      if (theme.kind === 'meshworld') {
+        const [gltf, colorTex] = await Promise.all([
+          defaultLoader(theme.file),
+          new THREE.TextureLoader().loadAsync(theme.color),
+        ]);
+        colorTex.colorSpace = THREE.SRGBColorSpace;
+        colorTex.wrapS = THREE.RepeatWrapping;
+        colorTex.anisotropy = 4;
+        map = colorTex;
+        let src: THREE.Mesh | null = null;
+        gltf.scene.updateMatrixWorld(true);
+        gltf.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && !src) src = m; });
+        if (!src) throw new Error('meshworld: 메시 없음');
+        const srcMesh = src as THREE.Mesh;
+        const geo2 = (srcMesh.geometry as THREE.BufferGeometry).clone();
+        geo2.applyMatrix4(srcMesh.matrixWorld);
+        // 중심·평균 반경 실측 → 정규화 + 굴곡 부스트 (헌법 1조: 실측하라)
+        const pa = geo2.getAttribute('position');
+        const ctr = new THREE.Vector3();
+        for (let i = 0; i < pa.count; i += 1) ctr.add(new THREE.Vector3(pa.getX(i), pa.getY(i), pa.getZ(i)));
+        ctr.divideScalar(pa.count);
+        let meanR = 0;
+        for (let i = 0; i < pa.count; i += 1) meanR += Math.hypot(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
+        meanR /= pa.count;
+        // 반경 그리드(128×64) — 패스가 지형을 따라가게 하는 높이 사전
+        const GW = 128;
+        const GH = 64;
+        const acc = new Float64Array(GW * GH);
+        const cnt = new Uint16Array(GW * GH);
+        const dv = new THREE.Vector3();
+        for (let i = 0; i < pa.count; i += 1) {
+          dv.set(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
+          const r = dv.length();
+          const rb = 1 + (r / meanR - 1) * theme.boost; // 굴곡 과장
+          dv.divideScalar(r);
+          pa.setXYZ(i, dv.x * rb * R, dv.y * rb * R, dv.z * rb * R); // 정점을 제자리에서 굽는다
+          const th = Math.acos(THREE.MathUtils.clamp(dv.y, -1, 1));
+          let u = Math.atan2(dv.z, -dv.x) / (Math.PI * 2);
+          if (u < 0) u += 1;
+          const gi = Math.min(GH - 1, Math.floor((th / Math.PI) * GH)) * GW + Math.min(GW - 1, Math.floor(u * GW));
+          acc[gi] += rb * R - R;
+          cnt[gi] += 1;
+        }
+        const grid = new Float32Array(GW * GH);
+        for (let i = 0; i < grid.length; i += 1) grid[i] = cnt[i] ? acc[i] / cnt[i] : NaN;
+        for (let pass = 0; pass < 4; pass += 1) { // 빈 칸은 이웃 평균으로 메운다
+          for (let y = 0; y < GH; y += 1) for (let x = 0; x < GW; x += 1) {
+            const i = y * GW + x;
+            if (!Number.isNaN(grid[i])) continue;
+            let s2 = 0; let n2 = 0;
+            for (const [ddx, ddy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const j = Math.min(GH - 1, Math.max(0, y + ddy)) * GW + ((x + ddx + GW) % GW);
+              if (!Number.isNaN(grid[j])) { s2 += grid[j]; n2 += 1; }
+            }
+            if (n2) grid[i] = s2 / n2;
+          }
+        }
+        heightAt = (d) => {
+          const th = Math.acos(THREE.MathUtils.clamp(d.y, -1, 1));
+          let u = Math.atan2(d.z, -d.x) / (Math.PI * 2);
+          if (u < 0) u += 1;
+          const gx = Math.min(GW - 1, Math.floor(u * GW));
+          const gy = Math.min(GH - 1, Math.floor((th / Math.PI) * GH));
+          const v = grid[gy * GW + gx];
+          return Number.isNaN(v) ? 0 : v;
+        };
+        geo2.computeVertexNormals();
+        meshGround = new THREE.Mesh(geo2, applyHeightFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.5));
+        meshGround.receiveShadow = true;
+      } else if (theme.kind === 'maps') {
         const loader = new THREE.TextureLoader();
         map = await loader.loadAsync(theme.color);
         map.colorSpace = THREE.SRGBColorSpace;
@@ -147,22 +223,26 @@ export function PlanetWorld() {
       curve.arcLengthDivisions = 1800;
       const arcLen = curve.getLength();
 
-      // ---------- 2. 행성 본체 — 높이맵이 정점을 민다 ----------
-      const geo = new THREE.SphereGeometry(R, 128, 96);
-      const pos = geo.getAttribute('position');
-      const vd = new THREE.Vector3();
-      for (let i = 0; i < pos.count; i += 1) {
-        vd.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
-        const r2 = R + heightAt(vd);
-        pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
+      // ---------- 2. 행성 본체 — meshworld는 구운 메시 그대로, 나머지는 높이맵이 정점을 민다 ----------
+      if (meshGround) {
+        planet.add(meshGround);
+      } else {
+        const geo = new THREE.SphereGeometry(R, 128, 96);
+        const pos = geo.getAttribute('position');
+        const vd = new THREE.Vector3();
+        for (let i = 0; i < pos.count; i += 1) {
+          vd.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
+          const r2 = R + heightAt(vd);
+          pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
+        }
+        geo.computeVertexNormals();
+        const ground = new THREE.Mesh(
+          geo,
+          applyHeightFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.5),
+        );
+        ground.receiveShadow = true;
+        planet.add(ground);
       }
-      geo.computeVertexNormals();
-      const ground = new THREE.Mesh(
-        geo,
-        applyHeightFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.5),
-      );
-      ground.receiveShadow = true;
-      planet.add(ground);
 
       setBuilt({ planet, curve, arcLen });
     })();
