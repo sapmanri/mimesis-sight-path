@@ -733,7 +733,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   // BUILD 224: 걷다, 뛰다, 날다 — 이동 상태기. 주기는 스펙 슬라이더가 정하고 나머지는 지가 알아서.
-  const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, lift: 0, mount: null as THREE.Group | null, mountKind: '' });
+  const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
   const walkerGroupRef = useRef<THREE.Group | null>(null);
   const petRef = useRef<{ pet: LoadedPet; d: THREE.Vector3; last: THREE.Vector3; cur: THREE.AnimationAction | null; t1: THREE.Vector3; t2: THREE.Vector3; q1: THREE.Quaternion } | null>(null);
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
@@ -771,6 +771,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           c.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
           holder.add(c);
           MV.mount = c;
+          if (petRef.current) {
+            // BUILD 225: 본토 판례(BUILD 141) — 펫에겐 아기구름을 내어준다
+            const bc = makeCloudPuff(() => Math.random(), 0.52);
+            bc.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
+            holder.add(bc);
+            MV.babyMount = bc;
+          }
         } else {
           void loadKitModel('broom', defaultLoader).then((g2) => {
             if (moveState.current.mode !== 'ride' || moveState.current.mount) { return; }
@@ -795,6 +802,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       MV.mode = 'walk';
       rigRef.current?.setRiding?.(false);
       if (MV.mount) { holder.remove(MV.mount); MV.mount = null; }
+      if (MV.babyMount) { holder.remove(MV.babyMount); MV.babyMount = null; }
       MV.nextRide = el + Math.max(30, rideEvery * (0.75 + Math.random() * 0.5));
       MV.nextRun = Math.max(MV.nextRun, el + 8);
     }
@@ -802,6 +810,11 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     if (walkerGroupRef.current) walkerGroupRef.current.position.y = MV.lift;
     if (MV.mount) {
       MV.mount.position.y = MV.lift - (MV.mountKind === 'broom' ? 0.1 : 0.3) + (MV.lift > 0.2 ? Math.sin(el * 2.1) * 0.045 : 0);
+    }
+    if (MV.babyMount) {
+      // 아기구름 — 본체 곁 0.46u, 살짝 다른 박자로 둥실 (본토 BUILD 141의 호흡)
+      MV.babyMount.position.set(0.46 + Math.sin(el * 0.4) * 0.05, MV.lift - 0.32 + Math.sin(el * 1.1 + 3) * 0.035, -0.08);
+      MV.babyMount.rotation.y += dt * 0.2;
     }
     if (pausedRef.current) moving = false;
     if (pausedRef.current) {
@@ -911,7 +924,19 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
     // BUILD 224: 반려의 걸음 — 그녀 뒤 0.6u를 목표로 부드럽게 따라온다 (행성 좌표로 계산, 월드로 환산)
     const PT = petRef.current;
-    if (PT) {
+    if (PT && MV.lift > 0.08) {
+      // BUILD 225: 탈것 위에선 함께 탄다 — 빗자루면 뒤 솔방석, 구름이면 아기구름 위
+      if (MV.mountKind === 'broom') PT.t1.set(0, MV.lift - 0.02, -0.36);
+      else if (MV.babyMount) PT.t1.set(MV.babyMount.position.x, MV.babyMount.position.y + 0.05, MV.babyMount.position.z);
+      else PT.t1.set(0.46, MV.lift - 0.27, -0.08);
+      PT.pet.group.position.lerp(PT.t1, Math.min(1, dt * 3.2));
+      PT.pet.group.up.set(0, 1, 0);
+      PT.pet.group.rotation.set(0, 0, 0);
+      const wantR = PT.pet.sit ?? PT.pet.idle;
+      if (wantR && wantR !== PT.cur) { PT.cur?.fadeOut(0.25); wantR.reset().fadeIn(0.25).play(); PT.cur = wantR; }
+      PT.last.copy(PT.pet.group.position);
+      PT.pet.mixer.update(dt);
+    } else if (PT) {
       const r0 = p.length();
       PT.t1.crossVectors(U, T).normalize(); // 옆 축
       PT.q1.setFromAxisAngle(PT.t1, 0.62 / Math.max(1, r0)); // 뒤로 (전진의 역방향 회전)
