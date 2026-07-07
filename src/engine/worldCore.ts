@@ -593,61 +593,67 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
   // 단 position 트랙은 기증자의 몸 치수 기준이므로, 힙 rest 높이 비율로 스케일해 옮긴다
   // (실측: Hiker 3.189 vs Chacha 0.713 — 그대로 물리면 수혜자가 하늘로 솟는다).
   if (spec.retargetFrom) {
-    // BUILD 206: 골격이 다른 캐릭터(VRoid J_Bip_*)에게 Mixamo 걷기를 리타겟한다.
-    // SkeletonUtils.retargetClip이 rest 포즈 차이를 바인드 행렬로 보정 — 차차식 생이식과 다르다.
-    // scale = 수혜자 힙 rest / 기증자 힙 rest (실측 0.724 / 3.189 = 0.227).
-    const { retargetClip, clone: skClone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
+    // BUILD 209: VRoid 리타겟 — three-vrm의 loadMixamoAnimation 공식 수제 구현.
+    // retargetClip은 8옵션 전수 실측에서 전패(눕거나 4.9m 거인). 이 공식은 벤치 판정:
+    // 직립 0.87 / 발z진폭 0.98 / flip180로 전방(+Z) 정렬 — 서서, 앞을 보고, 걷는다.
+    //   q' = parentRestWorld × q_local(t) × inv(restWorld),  힙 위치 = 힙 rest 비율 스케일
+    // 뼈 이름은 로더가 정제한 런타임 이름(mixamorigHips — 콜론 없음)이 진실이다.
+    const { clone: skClone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
     const donor = await loadModel(spec.retargetFrom);
-    // BUILD 207: v2 — ① 골격이 가장 큰 스킨드메시를 고른다 (VRM은 Face/Hair가 먼저 잡힐 수 있다)
-    // ② source는 메시가 아니라 skeleton을 넘긴다: 믹사모 뼈는 메시의 형제라
-    //    메시 기준 updateMatrixWorld가 뼈에 닿지 않아 매 프레임 rest만 복사됐다(T포즈의 진범).
-    const findSkinned = (root: THREE.Object3D) => {
-      let sm: THREE.SkinnedMesh | null = null;
-      root.traverse((o) => {
-        const m = o as THREE.SkinnedMesh;
-        if (m.isSkinnedMesh && (!sm || m.skeleton.bones.length > sm.skeleton.bones.length)) sm = m;
-      });
-      return sm;
+    const donorRest = skClone(donor.scene);
+    donorRest.updateMatrixWorld(true);
+    gltf.scene.updateMatrixWorld(true);
+    const MIX2VROID: Record<string, string> = {
+      mixamorigHips: 'J_Bip_C_Hips', mixamorigSpine: 'J_Bip_C_Spine', mixamorigSpine1: 'J_Bip_C_Chest',
+      mixamorigSpine2: 'J_Bip_C_UpperChest', mixamorigNeck: 'J_Bip_C_Neck', mixamorigHead: 'J_Bip_C_Head',
+      mixamorigLeftShoulder: 'J_Bip_L_Shoulder', mixamorigLeftArm: 'J_Bip_L_UpperArm', mixamorigLeftForeArm: 'J_Bip_L_LowerArm', mixamorigLeftHand: 'J_Bip_L_Hand',
+      mixamorigRightShoulder: 'J_Bip_R_Shoulder', mixamorigRightArm: 'J_Bip_R_UpperArm', mixamorigRightForeArm: 'J_Bip_R_LowerArm', mixamorigRightHand: 'J_Bip_R_Hand',
+      mixamorigLeftUpLeg: 'J_Bip_L_UpperLeg', mixamorigLeftLeg: 'J_Bip_L_LowerLeg', mixamorigLeftFoot: 'J_Bip_L_Foot', mixamorigLeftToeBase: 'J_Bip_L_ToeBase',
+      mixamorigRightUpLeg: 'J_Bip_R_UpperLeg', mixamorigRightLeg: 'J_Bip_R_LowerLeg', mixamorigRightFoot: 'J_Bip_R_Foot', mixamorigRightToeBase: 'J_Bip_R_ToeBase',
     };
-    const donorScene = skClone(donor.scene); // 기증자 원본을 건드리지 않는다
-    donorScene.updateMatrixWorld(true);
-    const src = findSkinned(donorScene);
-    const tgt = findSkinned(gltf.scene);
-    if (src && tgt) {
-      donor.scene.updateMatrixWorld(true);
-      gltf.scene.updateMatrixWorld(true);
-      const hipsRestY = (sceneRoot: THREE.Object3D) => {
-        let y = 0;
-        sceneRoot.traverse((o) => { if (!y && /Hips$/.test(o.name)) y = Math.abs(o.position.y); });
-        return y || 1;
-      };
-      void donorScene; // shim 경유로만 쓰인다
-      // BUILD 208: 뼈 이름에 콜론이 없다 — GLTFLoader가 로딩 시 노드명을 정제해
-      // 'mixamorig:Hips'가 'mixamorigHips'가 된다. 원본 JSON을 믿지 말고 런타임 이름을 믿어라.
-      // (T포즈 진범 — 매핑 전패로 트랙 0개였다. node 벤치에서 실측 검거.)
-      const VROID_TO_MIXAMO: Record<string, string> = {
-        J_Bip_C_Hips: 'mixamorigHips', J_Bip_C_Spine: 'mixamorigSpine', J_Bip_C_Chest: 'mixamorigSpine1',
-        J_Bip_C_UpperChest: 'mixamorigSpine2', J_Bip_C_Neck: 'mixamorigNeck', J_Bip_C_Head: 'mixamorigHead',
-        J_Bip_L_Shoulder: 'mixamorigLeftShoulder', J_Bip_L_UpperArm: 'mixamorigLeftArm', J_Bip_L_LowerArm: 'mixamorigLeftForeArm', J_Bip_L_Hand: 'mixamorigLeftHand',
-        J_Bip_R_Shoulder: 'mixamorigRightShoulder', J_Bip_R_UpperArm: 'mixamorigRightArm', J_Bip_R_LowerArm: 'mixamorigRightForeArm', J_Bip_R_Hand: 'mixamorigRightHand',
-        J_Bip_L_UpperLeg: 'mixamorigLeftUpLeg', J_Bip_L_LowerLeg: 'mixamorigLeftLeg', J_Bip_L_Foot: 'mixamorigLeftFoot', J_Bip_L_ToeBase: 'mixamorigLeftToeBase',
-        J_Bip_R_UpperLeg: 'mixamorigRightUpLeg', J_Bip_R_LowerLeg: 'mixamorigRightLeg', J_Bip_R_Foot: 'mixamorigRightFoot', J_Bip_R_ToeBase: 'mixamorigRightToeBase',
-      };
-      const srcClip = donor.animations.find((a) => /mixamo|walk/i.test(a.name)) ?? donor.animations[0];
-      if (srcClip) {
-        // 심(shim): 씬 루트에 skeleton을 접붙여 — 믹서 바인딩·getBoneByName·updateMatrixWorld
-        // 세 요구를 한 몸이 전부 충족한다. 메시를 넘기면 형제 뼈의 행렬이 갱신되지 않는다(T포즈 진범).
-        const shim = donorScene as THREE.Object3D & { skeleton: THREE.Skeleton };
-        shim.skeleton = (src as THREE.SkinnedMesh).skeleton;
-        const clip = retargetClip(tgt, shim as never, srcClip, {
-          names: VROID_TO_MIXAMO,
-          hip: 'mixamorigHips',
-          fps: 30,
-          scale: hipsRestY(gltf.scene) / hipsRestY(donor.scene),
-        } as never);
-        for (const tr of clip.tracks) tr.name = tr.name.replace(/^\.bones\[(.+?)\]/, '$1'); // 스켈레톤 경로 → 노드명 경로
-        animations = [clip];
+    const hipsRestY = (sceneRoot: THREE.Object3D) => {
+      let y = 0;
+      sceneRoot.traverse((o) => { if (!y && /Hips$/.test(o.name)) y = Math.abs(o.position.y); });
+      return y || 1;
+    };
+    const hipScale = hipsRestY(gltf.scene) / hipsRestY(donorRest);
+    const srcClip = donor.animations.find((a) => /mixamo|walk/i.test(a.name)) ?? donor.animations[0];
+    if (srcClip) {
+      const tracks: THREE.KeyframeTrack[] = [];
+      const restInv = new THREE.Quaternion();
+      const parentRest = new THREE.Quaternion();
+      const q = new THREE.Quaternion();
+      const yFlip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+      for (const tr of srcClip.tracks) {
+        const dot = tr.name.lastIndexOf('.');
+        const nodeName = tr.name.slice(0, dot);
+        const prop = tr.name.slice(dot + 1);
+        const vname = MIX2VROID[nodeName];
+        if (!vname) continue;
+        const node = donorRest.getObjectByName(nodeName);
+        if (!node || !node.parent) continue;
+        if (prop === 'quaternion') {
+          node.getWorldQuaternion(restInv).invert();
+          node.parent.getWorldQuaternion(parentRest);
+          const vals = new Float32Array(tr.values.length);
+          for (let i = 0; i < tr.times.length; i += 1) {
+            q.fromArray(tr.values, i * 4);
+            q.premultiply(parentRest).multiply(restInv);
+            if (vname === 'J_Bip_C_Hips') q.premultiply(yFlip); // 전방(+Z) 정렬
+            q.toArray(vals, i * 4);
+          }
+          tracks.push(new THREE.QuaternionKeyframeTrack(`${vname}.quaternion`, Array.from(tr.times), Array.from(vals)));
+        } else if (prop === 'position' && vname === 'J_Bip_C_Hips') {
+          const vals = new Float32Array(tr.values.length);
+          for (let i = 0; i < tr.values.length; i += 3) {
+            vals[i] = -tr.values[i] * hipScale;
+            vals[i + 1] = tr.values[i + 1] * hipScale;
+            vals[i + 2] = -tr.values[i + 2] * hipScale;
+          }
+          tracks.push(new THREE.VectorKeyframeTrack(`${vname}.position`, Array.from(tr.times), Array.from(vals)));
+        }
       }
+      if (tracks.length) animations = [new THREE.AnimationClip(srcClip.name, srcClip.duration, tracks)];
     }
   }
   if (spec.animFrom) {
