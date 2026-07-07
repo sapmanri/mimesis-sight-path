@@ -321,6 +321,9 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
   return tex;
 }
 
+const MNT_V = new THREE.Vector3(); // BUILD 231: 탈것 뼈 실측용 스크래치
+const PET_V = new THREE.Vector3(); // BUILD 231: 펫 위치 환산용 — PT.t2를 쓰면 yawFrom(=PT.t2 별칭)이 덮여 요가 죽는다
+
 export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
   const { scene, camera, gl } = useThree();
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
@@ -559,6 +562,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       liftGroup.add(group);
       holder.updateMatrixWorld(true); // BUILD 228/230: 릭의 침하(rollingMin)가 쓰레기 행렬을 기억하지 않게 — 교체 침하 사건
       walkerGroupRef.current = group; // BUILD 224: 탈것 리프트가 이 그룹을 든다
+      // BUILD 231: 본토 BUILD 140/142 그대로 — 구름은 골반 뼈를, 자루는 발 뼈를 추적한다
+      hipsPRef.current = null;
+      footPRef.current = null;
+      group.traverse((n) => {
+        if (!hipsPRef.current && /hips$/i.test(n.name)) hipsPRef.current = n;
+        if (!footPRef.current && /(left)?foot$/i.test(n.name)) footPRef.current = n;
+      });
       // BUILD 212: 캐릭터도 안개에 잠긴다 — 본토 hfog를 행성 rfog로 갈아입힘
       group.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -773,6 +783,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   // BUILD 224: 걷다, 뛰다, 날다 — 이동 상태기. 주기는 스펙 슬라이더가 정하고 나머지는 지가 알아서.
   const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, rideStart: 0, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
   const walkerGroupRef = useRef<THREE.Group | null>(null);
+  const hipsPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 140): 골반 뼈
+  const footPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 142): 발 뼈
   // BUILD 230: 부양의 진범 — 리프트가 릭 소유의 루트 y(침하 시스템의 자리)를 매 프레임 덮어썼다.
   // 릭의 침하는 기억 기반이라 밟히면 발이 클립 여유고만큼 영구히 뜬다. 리프트는 별도 부모로 분리.
   const liftGroup = useMemo(() => new THREE.Group(), []);
@@ -867,17 +879,27 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     }
     const spdMul = MV.mode === 'ride' ? 2.6 : MV.mode === 'run' ? 2.3 : 1;
     liftGroup.position.y = MV.lift; // BUILD 230: 릭의 땅은 릭이 소유한다
-    // BUILD 228: 좌석은 본토 실측 문법 — rideSeat()이 있으면 골반 아래, 없으면 발밑
+    // BUILD 231: 탈것 높이는 본토 원문 그대로 — 상수 추정 대신 뼈 실측 (본토 140/142/147)
     const seatH = rigRef.current?.rideSeat?.() ?? 0;
-    const mountY = MV.lift + seatH - (seatH > 0 ? (MV.mountKind === 'broom' ? 0.10 : 0.14) : (MV.mountKind === 'broom' ? 0.10 : 0.09));
+    let mountY = MV.lift + seatH - (MV.mountKind === 'broom' ? 0.05 : 0.07); // 본토 최후 폴백
+    if (seatH > 0 && hipsPRef.current) {
+      hipsPRef.current.getWorldPosition(MNT_V);
+      holder.worldToLocal(MNT_V);
+      mountY = MNT_V.y - (MV.mountKind === 'broom' ? 0.10 : 0.17); // 앉는 아이: 골반 바로 아래 (본토 147/140)
+    } else if (seatH === 0 && footPRef.current) {
+      footPRef.current.getWorldPosition(MNT_V);
+      holder.worldToLocal(MNT_V);
+      mountY = MNT_V.y - (MV.mountKind === 'broom' ? 0.1 : 0.095); // 서는 아이: 발 뼈 실측 (본토 142)
+    }
     if (MV.mount) {
       MV.mount.position.set(Math.sin(el * 0.53 + 1) * 0.02, mountY + Math.sin(el * 1.3) * 0.012, Math.cos(el * 0.61) * 0.02);
       if (MV.mountKind === 'cloud') MV.mount.rotation.y += dt * 0.12;
       else { MV.mount.rotation.z = Math.sin(el * 1.1) * 0.05; MV.mount.rotation.x = Math.sin(el * 0.8 + 1) * 0.04; } // 파도를 타듯 (본토 BUILD 144)
     }
     if (MV.babyMount) {
-      // 아기구름 — 오른쪽 옆 0.42u, 살짝 다른 박자로 둥실 (본토 BUILD 141의 호흡)
-      MV.babyMount.position.set(0.42 + Math.sin(el * 0.4) * 0.06, mountY - 0.02 + Math.sin(el * 1.1 + 3) * 0.035, 0);
+      // BUILD 231: 아기구름은 본토 원문 — 몸 기준(-0.02) 스프링 추적(lerp dt·2.5), 좌석 기준이 아니다
+      MNT_V.set(0.42 + Math.sin(el * 0.4) * 0.06, MV.lift - 0.02 + Math.sin(el * 1.1 + 3) * 0.035, 0);
+      MV.babyMount.position.lerp(MNT_V, Math.min(1, dt * 2.5));
       MV.babyMount.rotation.y += dt * 0.2;
     }
     if (pausedRef.current) moving = false;
@@ -1070,13 +1092,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           petPlay(PT.pet.idle);
         }
       }
-      const wp = PT.t2.copy(PT.d).multiplyScalar(built.surfaceR(PT.d) + 0.005);
+      const wp = PET_V.copy(PT.d).multiplyScalar(built.surfaceR(PT.d) + 0.005); // BUILD 231: 전용 스크래치 — yawFrom 별칭 보호
       built.planet.localToWorld(wp);
+      holder.worldToLocal(wp); // BUILD 231: 펫의 부모는 holder(y축 90° 회전) — 월드 좌표를 그대로 넣으면 90° 돌아간 자리에서 미끄러진다
       PT.pet.group.position.copy(wp);
       PT.pet.group.up.set(0, 1, 0);
       if (yawFrom) {
         // 요: 지면 상대 이동 방향 = 로컬 이동 델타를 행성 회전으로 월드에 사상 (본토 스무딩 dt*7)
         PT.t1.copy(PT.d).sub(yawFrom).applyQuaternion(built.planet.quaternion);
+        PT.t1.applyQuaternion(holder.getWorldQuaternion(PT.q1).invert()); // BUILD 231: holder 로컬로 — 요도 좌표계를 따라야 한다
         if (PT.t1.lengthSq() > 1e-10) {
           const wantYaw = Math.atan2(PT.t1.x, PT.t1.z);
           let dy2 = wantYaw - PT.pet.group.rotation.y;
