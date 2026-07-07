@@ -679,6 +679,20 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
       built.curve.getPointAt(t, p);
       built.curve.getTangentAt(t, T);
     }
+    // BUILD 220: 우연의 이벤트 — 이야기가 적힌 소품 곁을 지나면 폽. 배회든 길이든.
+    if (P.phase === 'walk' && P.memCooldown <= 0 && (SP.props?.length ?? 0) > 0) {
+      v.copy(p).normalize();
+      for (const pr of SP.props) {
+        if (!pr.title && !pr.text) continue;
+        const cosA = Math.min(1, Math.max(-1, v.x * pr.dir[0] + v.y * pr.dir[1] + v.z * pr.dir[2]));
+        if (Math.acos(cosA) * p.length() < 1.15) {
+          P.phase = 'memory';
+          P.timer = 4;
+          onMemRef.current?.({ title: pr.title ?? '…', text: pr.text ?? '', t: 0, stay: 4 });
+          break;
+        }
+      }
+    }
     U.copy(p).normalize();
     Fw.copy(T).addScaledVector(U, -T.dot(U)).normalize();
     Z.crossVectors(Fw, U);

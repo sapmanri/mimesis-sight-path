@@ -33,7 +33,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.3.0 · SHE WANDERS THE GLOBE · BUILD 219';
+const BUILD_LABEL = 'v1.3.1 · CHANCE ENCOUNTERS · BUILD 220';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -378,6 +378,14 @@ export default function App() {
                       width: '100%', padding: '5px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
                       border: '1px dashed rgba(216,178,110,0.55)', background: 'rgba(216,178,110,0.1)', color: '#e8dcc2',
                     }}>⊕ 자리 다시 찍기</button>
+                    <input placeholder="이벤트 제목 (비우면 조용한 소품)" value={pr.title ?? ''}
+                      onClick={(ev) => ev.stopPropagation()}
+                      onChange={(ev) => updSpec((s) => ({ ...s, props: (s.props ?? []).map((x) => (x.id === pr.id ? { ...x, title: ev.target.value } : x)) }))}
+                      style={{ width: '100%', marginTop: 6, background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 6, padding: 5, fontSize: 11, boxSizing: 'border-box' }} />
+                    <textarea placeholder="가까이 가면 폽 — 여기 적은 이야기가 뜹니다" value={pr.text ?? ''} rows={3}
+                      onClick={(ev) => ev.stopPropagation()}
+                      onChange={(ev) => updSpec((s) => ({ ...s, props: (s.props ?? []).map((x) => (x.id === pr.id ? { ...x, text: ev.target.value } : x)) }))}
+                      style={{ width: '100%', marginTop: 4, background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 6, padding: 5, fontSize: 11, boxSizing: 'border-box', resize: 'vertical' }} />
                   </div>
                 )}
               </div>
