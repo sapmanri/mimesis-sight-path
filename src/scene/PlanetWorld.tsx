@@ -236,7 +236,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
         const s0 = JSON.parse(buildKey) as [PlanetSpec['theme'], number, number, number, number, number, number, number];
         const [themeName, R, relief, wraps, wobble, fogLevel, fogStrength, moonSize] = s0;
         const theme = THEMES[themeName];
-        const band = { top: R + 0.04, bottom: R - fogLevel };
+        // BUILD 211: 안개는 하늘로 — 수위 = 지표 위 안개 천장 높이.
+        // (구판은 top=R+0.04 고정에 bottom=R-fogLevel — 올릴수록 행성 중심으로 자라는 지하수였다.)
+        // 지표(rfd=R)에서 짙고(≈0.8×농도) top에서 소멸, 골짜기·크레이터엔 물처럼 고인다. 0 = 무안개.
+        const lv = Math.max(fogLevel, 0.001);
+        const band = { top: R + lv, bottom: R - lv * 0.25 - 0.02 };
+        const fogStrength2 = fogLevel <= 0.01 ? 0 : fogStrength;
         let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * 0.14 * relief;
         let map: THREE.Texture | null = null;
         let ready: THREE.Object3D | null = null;
@@ -279,7 +284,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
           geo2.computeVertexNormals();
           geo2.computeBoundingSphere();
           geo2.computeBoundingBox();
-          const mesh = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), band, fogStrength * 0.62));
+          const mesh = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), band, fogStrength2 * 0.62));
           mesh.frustumCulled = false;
           mesh.receiveShadow = true;
           ready = mesh;
@@ -347,7 +352,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
             pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
           }
           geo.computeVertexNormals();
-          const ground = new THREE.Mesh(geo, applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 }), band, fogStrength));
+          const ground = new THREE.Mesh(geo, applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 }), band, fogStrength2));
           ground.receiveShadow = true;
           planet.add(ground);
           if (cloudsTex) {

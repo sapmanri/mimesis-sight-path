@@ -5,7 +5,7 @@ export type PlanetSpec = {
   theme: 'earth' | 'luna' | 'moon' | 'desert';
   radius: number;      // 행성 반지름 (u)
   relief: number;      // 굴곡 배율 (테마 기본 진폭에 곱)
-  fogLevel: number;    // 방사 안개 수위 — 평균 표면 아래 몇 u까지 잠기나
+  fogLevel: number;    // 방사 안개 수위 — 지표 위 몇 u까지 차오르나 (0 = 무안개)
   fogStrength: number; // 방사 안개 농도
   walkSpeed: number;   // 걸음 (u/s)
   wraps: number;       // 길이 행성을 감는 바퀴
