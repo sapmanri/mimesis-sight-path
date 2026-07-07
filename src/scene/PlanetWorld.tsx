@@ -319,7 +319,7 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
   return tex;
 }
 
-export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
+export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
   const { scene, camera, gl } = useThree();
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
   // BUILD 214: 시야 거리 다이얼 — 씬 안개 near/far 즉답 갱신
@@ -333,6 +333,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
   specRef.current = spec;
   const onMemRef = useRef(onMemory);
   onMemRef.current = onMemory;
+  const onFlagRef = useRef(onFlag);
+  onFlagRef.current = onFlag;
 
   // 무거운 다이얼만 재건축을 부른다
   const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.moon.size, spec.roam ? 1 : 0]);
@@ -869,6 +871,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
         const cosA = Math.min(1, Math.max(-1, v.x * fl.dir[0] + v.y * fl.dir[1] + v.z * fl.dir[2]));
         const arc = Math.acos(cosA) * rl;
         const target = fl.v > 0.5 ? (arc < 2.2 ? 1 : 0) : (arc < 1.6 ? 1 : 0);
+        // BUILD 222: 폽의 순간 — 속삭임 한 줄. "아, 저기가 그리스구나."
+        if (target === 1 && fl.v <= 0.001 && rec.title) onFlagRef.current?.(rec.title);
         fl.v = Math.min(1, Math.max(0, fl.v + (target > fl.v ? 1 : -1) * dt * 3.4));
         const e = target === 1 ? backOut(fl.v) : fl.v * fl.v;
         const inner = rec.anchor.children[0];

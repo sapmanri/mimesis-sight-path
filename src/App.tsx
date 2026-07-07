@@ -33,7 +33,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.4.0 · FLAGS OF THE LITTLE EARTH · BUILD 221';
+const BUILD_LABEL = 'v1.4.1 · OH, SO THAT IS GREECE · BUILD 222';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -97,6 +97,14 @@ export default function App() {
   const planetApi = useRef<PlanetApi | null>(null);
   const [placeArm, setPlaceArm] = useState<null | { mode: 'new' } | { mode: 'move'; id: string }>(null);
   const [propSel, setPropSel] = useState<string | null>(null);
+  // BUILD 222: 깃발 속삭임 — 멈추지 않고, 이름만 스친다
+  const [flagWhisper, setFlagWhisper] = useState<string | null>(null);
+  const whisperTimer = useRef<number | null>(null);
+  const onFlagPop = (name: string) => {
+    setFlagWhisper(name);
+    if (whisperTimer.current) window.clearTimeout(whisperTimer.current);
+    whisperTimer.current = window.setTimeout(() => setFlagWhisper(null), 3400);
+  };
   const placeAt = (e: React.PointerEvent) => {
     const hit = planetApi.current?.pick(e.clientX, e.clientY);
     if (!hit || !placeArm) { setPlaceArm(null); return; }
@@ -265,10 +273,22 @@ export default function App() {
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} contactRef={planetContact} apiRef={planetApi} />
+            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} onFlag={onFlagPop} contactRef={planetContact} apiRef={planetApi} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
+        {flagWhisper && (
+          <div key={flagWhisper + String(Date.now() % 7)} style={{
+            position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 6,
+            padding: '8px 22px', borderRadius: 999, fontSize: 14, letterSpacing: 1,
+            color: '#f4efe2', background: 'rgba(18,24,26,0.72)', border: '1px solid rgba(216,178,110,0.3)',
+            backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+            animation: 'whisper-in 0.45s cubic-bezier(0.34,1.56,0.64,1)',
+          }}>
+            <style>{'@keyframes whisper-in { from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.92); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }'}</style>
+            저기는, {flagWhisper}
+          </div>
+        )}
         {placeArm && (
           <div onPointerDown={placeAt} style={{
             position: 'fixed', inset: 0, zIndex: 7, cursor: 'crosshair',
