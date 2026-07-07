@@ -192,7 +192,13 @@ export function PlanetWorld() {
           return Number.isNaN(v) ? 0 : v;
         };
         geo2.computeVertexNormals();
+        // BUILD 199.1: GLTF 로더가 원본(반지름 1)의 바운딩을 미리 박아둔다 — 정점을 R로
+        // 부풀린 뒤 재계산하지 않으면 프러스텀 컬링이 낡은 공으로 판정해, 카메라 각도에
+        // 따라 행성 전체가 사라진다. 재계산 + 행성은 세계 그 자체이므로 컬링 면제.
+        geo2.computeBoundingSphere();
+        geo2.computeBoundingBox();
         meshGround = new THREE.Mesh(geo2, applyHeightFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.5));
+        meshGround.frustumCulled = false;
         meshGround.receiveShadow = true;
       } else if (theme.kind === 'maps') {
         const loader = new THREE.TextureLoader();
