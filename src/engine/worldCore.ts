@@ -374,10 +374,10 @@ export const WALKER_ROSTER: ModelSpec[] = [
   { file: 'Hiker.glb', height: 0.95, tint: '#57534a', keepLook: true, texture: 'Hiker_texture.png', clipSpeeds: { walk: 5.13, run: 10.3 } },
   // BUILD 206: VRoid 아바타 — Mixamo가 기리깅 골격(193본)을 거부해 리타겟 실험으로 입단.
   // 텍스처 25장 임베드(웹 다이어트 16.7→7.6MB), retargetClip이 rest 차이를 보정한다.
-  // BUILD 232: Girl1 — Vase가 믹사모에서 직접 따온 9클립(걷기·뛰기·아이들·줍기·앉기·하품·춤 3종)을
-  // BUILD 210 수식 그대로 오프라인 베이크(30fps FK, 좀비팔 정렬 A 포함). 몸은 Vroid01(텍스처 임베드) 재사용.
-  // clipSpeeds는 힙 트랙 드리프트 실측(1.181/2.575) — 루트모션은 벗겨서 담았다.
-  { file: 'Girl1.glb', height: 0.95, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 1.181, run: 2.575 } },
+  // BUILD 233: 232 철회 — 오프라인 베이크가 손·발·목이 뒤집힌 좀비를 낳았다 (Vase 목격).
+  // 단일 방향 정렬(A)은 뼈 축 비틀림을 구속하지 못한다 — 기증자 전역 자세가 Hiker와 다르면 무너진다.
+  // FK 수치검증(직립·접지)은 거꾸로 붙은 손발을 통과시킨다. 눈으로 보기 전엔 캐릭터를 내보내지 마라.
+  { file: 'Vroid01.glb', height: 0.95, tint: '#57534a', keepLook: true, retargetFrom: 'Hiker.glb', clipSpeeds: { walk: 1.165, run: 2.339 } },
   // BUILD 203: 차차 5인방 하차 — 이식 클립이 바인드 포즈 불일치로 누워 걷는 공포를 연출
   // (다리 뼈 rest 쿼터니언 [0.05,0.04,0.995,-0.07] = Mixamo 표준과 골격 자체가 다르다).
   // 파일·animFrom 규칙은 보존. 재입단 정도: Mixamo 자동 리깅 → Walking(With Skin) → 외길 어댑터.
