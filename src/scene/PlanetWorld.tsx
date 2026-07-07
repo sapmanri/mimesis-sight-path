@@ -5,6 +5,7 @@ import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader } from '../engi
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
+import { planetSound } from '../audio/planetSound';
 import type { PlanetSpec, PlanetMemory, PlanetContact, PlanetApi, PlanetProp } from './planetSpec';
 import type { MutableRefObject } from 'react';
 import { createPropObject } from '../engine/props';
@@ -535,6 +536,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
 
   useEffect(() => {
     ambience.apply({ kind: 'clear', wind: 0.28, rainAmount: 0, time: 'day', sea: 0, life: 0.5 });
+    planetSound.startGrains(); // BUILD 223: 오르골 낟알 — 30초~1분에 한 알
+    return () => planetSound.stopGrains();
   }, []);
 
   // BUILD 216: 표면 소품 v2 — 증분 동기화. 키보드 편집이 초당 수십 번 스펙을 바꿔도
@@ -698,6 +701,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
   const ang = useRef(Math.random() * Math.PI * 2);
   const spinAng = useRef(0); // BUILD 212: 조석고정 대비 추가 자전 누적각
   const dayAng = useRef(0);  // BUILD 214: 태양 공전각 (낮밤)
+  const earState = useRef<'day' | 'night'>('day'); // BUILD 223: 귀의 낮밤 (히스테리시스)
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
@@ -843,6 +847,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
     v.set(Math.cos(th) * Math.cos(az), Math.sin(th), Math.cos(th) * Math.sin(az));
     built.sun.position.copy(v).multiplyScalar(built.R * 6.5);
     const dl = THREE.MathUtils.smoothstep(Math.sin(th), -0.12, 0.3); // 낮의 정도 (해가 지평선 아래로 조금 내려가야 완전한 밤)
+    // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
+    if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
+    else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
     if (dirLightRef.current) {
       dirLightRef.current.position.copy(v).multiplyScalar(20);
       dirLightRef.current.intensity = 1.35 * (0.05 + 0.95 * dl);
@@ -872,7 +879,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, onFlag, contactRef
         const arc = Math.acos(cosA) * rl;
         const target = fl.v > 0.5 ? (arc < 2.2 ? 1 : 0) : (arc < 1.6 ? 1 : 0);
         // BUILD 222: 폽의 순간 — 속삭임 한 줄. "아, 저기가 그리스구나."
-        if (target === 1 && fl.v <= 0.001 && rec.title) onFlagRef.current?.(rec.title);
+        if (target === 1 && fl.v <= 0.001) { if (rec.title) onFlagRef.current?.(rec.title); planetSound.pop(true); } // BUILD 223: 통—
+        if (target === 0 && fl.v >= 0.999) planetSound.pop(false); // 쇽
         fl.v = Math.min(1, Math.max(0, fl.v + (target > fl.v ? 1 : -1) * dt * 3.4));
         const e = target === 1 ? backOut(fl.v) : fl.v * fl.v;
         const inner = rec.anchor.children[0];

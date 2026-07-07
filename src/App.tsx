@@ -28,12 +28,13 @@ import { ProgressNav } from './components/ProgressNav';
 import { TouchTrail } from './components/TouchTrail';
 import { footsteps } from './scene/footsteps';
 import { ambience } from './audio/ambience';
+import { planetSound } from './audio/planetSound';
 import { compileScenes } from './engine/blueprint';
 import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.4.1 · OH, SO THAT IS GREECE · BUILD 222';
+const BUILD_LABEL = 'v1.5.0 · THE SNOWGLOBE HUMS · BUILD 223';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -505,7 +506,7 @@ export default function App() {
             type="button"
             className="icon-btn"
             aria-label={muted ? '소리 켜기' : '소리 끄기'}
-            onClick={() => { footsteps.unlock(); ambience.unlock(); footsteps.setMuted(!muted); ambience.setMuted(!muted); setMuted(!muted); }}
+            onClick={() => { footsteps.unlock(); ambience.unlock(); planetSound.unlock(); footsteps.setMuted(!muted); ambience.setMuted(!muted); planetSound.setMuted(!muted); setMuted(!muted); }}
           >{muted ? '🔇' : '🔊'}</button>
           <button
             type="button"
