@@ -67,6 +67,34 @@ async function loadHeightSampler(url: string) {
   };
 }
 
+// ---------- BUILD 200: 방사 안개 — 높이의 기준이 행성의 중심이다 ----------
+// 프래그먼트의 '고도'를 (월드 y가 아니라) 행성 중심으로부터의 거리로 잰다.
+// 평균 표면 R보다 파인 곳(크레이터 바닥·골짜기)일수록 안개에 잠긴다 —
+// 움푹한 곳에선 걷는 이의 발목까지. 중심은 매 프레임 유니폼으로 따라온다.
+const PLANET_CENTER = new THREE.Vector3(0, -R, 0);
+const RFOG = { top: R + 0.04, bottom: R - 0.30, strength: 0.8 };
+function applyRadialFog(mat: THREE.MeshStandardMaterial, strength = RFOG.strength) {
+  if (mat.userData.rfog) return mat;
+  mat.userData.rfog = true;
+  const hex = parseInt(PALETTE.fog.slice(1), 16);
+  const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
+  const glsl = (n: number) => n.toFixed(4);
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uPlanetC = { value: PLANET_CENTER }; // 참조 공유 — 프레임마다 따라 움직인다
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRFw;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\nvRFw = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRFw;\nuniform vec3 uPlanetC;')
+      .replace(
+        '#include <fog_fragment>',
+        `#include <fog_fragment>\nfloat rfd = distance(vRFw, uPlanetC);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(RFOG.bottom)}, ${glsl(RFOG.top)}, rfd)) * ${glsl(strength)});`,
+      );
+  };
+  mat.customProgramCacheKey = () => `rfog|${RFOG.top.toFixed(3)}|${RFOG.bottom.toFixed(3)}|${strength.toFixed(3)}|${PALETTE.fog}`;
+  return mat;
+}
+
 function hills(d: THREE.Vector3) {
   return (
     Math.sin(d.x * 5.3 + d.y * 3.7) * 0.45 +
@@ -197,7 +225,7 @@ export function PlanetWorld() {
         // 따라 행성 전체가 사라진다. 재계산 + 행성은 세계 그 자체이므로 컬링 면제.
         geo2.computeBoundingSphere();
         geo2.computeBoundingBox();
-        meshGround = new THREE.Mesh(geo2, applyHeightFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.5));
+        meshGround = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 })));
         meshGround.frustumCulled = false;
         meshGround.receiveShadow = true;
       } else if (theme.kind === 'maps') {
@@ -244,7 +272,7 @@ export function PlanetWorld() {
         geo.computeVertexNormals();
         const ground = new THREE.Mesh(
           geo,
-          applyHeightFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.5),
+          applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 })),
         );
         ground.receiveShadow = true;
         planet.add(ground);
@@ -267,6 +295,12 @@ export function PlanetWorld() {
     let alive = true;
     void loadWalkerAsset(undefined, 'random').then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
+      group.traverse((o) => { // BUILD 200: 움푹한 곳에선 발목이 안개에 잠긴다
+        const m = o as THREE.Mesh;
+        if (m.isMesh && (m.material as THREE.MeshStandardMaterial)?.isMeshStandardMaterial) {
+          applyRadialFog(m.material as THREE.MeshStandardMaterial, 0.7);
+        }
+      });
       holder.add(group);
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, 0.72);
@@ -358,6 +392,7 @@ export function PlanetWorld() {
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
     rigRef.current?.update(dt, 0.5, true, state.clock.elapsedTime, WALK * dt);
+    PLANET_CENTER.copy(built.planet.position); // 방사 안개의 기준점이 행성을 따라간다
 
     const C = cam.current;
     const manual = performance.now() < C.manualUntil;
