@@ -6,7 +6,6 @@ import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultL
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
-import { applyToonShading, addInkOutline } from './toonShadingExperiment';
 import { makeBubble, updateBubble, type Bubble } from './speech';
 import { createTinker, type Tinker } from './tinker';
 import { createPropObject, createPropAnimated, ANIMATED_PROPS, loadHandLanternAsset, type PlacedProp } from '../engine/props';
@@ -786,12 +785,6 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       if (!alive) return;
       walker.clear();
       walker.add(group);
-      // BUILD 183: 셀 셰이딩 실험 — ?toon=1 로만 켠다. 그림책 계조 + 잉크 아웃라인. 룩 확정 전까지 워커 한정.
-      if (new URLSearchParams(window.location.search).get('toon') === '1') {
-        applyToonShading(group, { steps: 3, softness: 0.15 });
-        enforceFog(group); // 교체된 툰 머티리얼에 높이 안개 — 반드시 아웃라인보다 먼저 (BUILD 185 교훈)
-        addInkOutline(group, { thickness: 0.006, color: 0x2b2118, irregularity: 0.4 });
-      }
       // BUILD 091: 보행 클립이 있으면 클립 리그 (미끄러짐 최종 해법: 속도-배속 동기).
       // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).
       // BUILD 136: 새로 온 아이도 구름 위라면 바로 앉는다

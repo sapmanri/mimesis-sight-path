@@ -9,7 +9,6 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         editor: resolve(__dirname, 'editor.html'),
-        toonTest: resolve(__dirname, 'toon-test.html'),
       },
     },
   },
