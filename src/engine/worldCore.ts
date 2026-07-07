@@ -370,14 +370,9 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // BUILD 158: 하이커 — 걷는 데 특화된 사람. 클립도 걷기 하나뿐, 그래서 이 세계의 적임자.
   // clipSpeeds.walk = 힙 트랙 실측 드리프트 5.13(원척)/1.0s. run은 같은 클립 두 배속 기준.
   { file: 'Hiker.glb', height: 0.95, tint: '#57534a', keepLook: true, texture: 'Hiker_texture.png', clipSpeeds: { walk: 5.13, run: 10.3 } },
-  // BUILD 202: 차차 5인방 — 팩의 recorded_clip은 쇼케이스 릴(걷기 사이클 없음, 발 뼈 FK 실측으로 판정).
-  // 걷기는 하이커에게 이식받는다(animFrom). 스킨은 팩의 T_Skin Neutral을 수동 바인딩.
-  // clipSpeeds = 5.13 × (자기 힙 rest / 하이커 3.189), 5인 개별 실측.
-  { file: 'Chacha01.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha01_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 1.147, run: 2.302 } },
-  { file: 'Chacha02.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha02_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 0.147, run: 0.295 } },
-  { file: 'Chacha03.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha03_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 1.155, run: 2.318 } },
-  { file: 'Chacha04.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha04_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 1.163, run: 2.335 } },
-  { file: 'Chacha05.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha05_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 0.149, run: 0.300 } },
+  // BUILD 203: 차차 5인방 하차 — 이식 클립이 바인드 포즈 불일치로 누워 걷는 공포를 연출
+  // (다리 뼈 rest 쿼터니언 [0.05,0.04,0.995,-0.07] = Mixamo 표준과 골격 자체가 다르다).
+  // 파일·animFrom 규칙은 보존. 재입단 정도: Mixamo 자동 리깅 → Walking(With Skin) → 외길 어댑터.
 ];
 
 
@@ -535,6 +530,7 @@ export async function loadKitModel(key: string, loadModel: ModelLoader) {
 }
 
 /** 워커 실물 (Peasant Nolant): 정규화된 그룹 + Walk/Idle 애니메이션 클립 */
+export const walkerCount = () => WALKER_ROSTER.length; // BUILD 203: 임시 버튼의 순환용
 export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, character: number | 'random' = 'random') {
   // BUILD 093: 오늘의 걷는 사람 — 로스터에서 뽑는다
   const idx = character === 'random'
@@ -552,6 +548,14 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
       map.flipY = false;
       map.colorSpace = THREE.SRGBColorSpace;
     }
+    // BUILD 203: 다중 재질 캐릭터(피부+단색 옷)는 '이미 텍스처를 입던 재질'에만 교체를 적용한다 —
+    // 전 재질 도포는 단색 옷들이 피부 아틀라스의 엉뚱한 좌표를 물고 점토가 되는 사고를 냈다.
+    const matSet = new Set<THREE.Material>();
+    gltf.scene.traverse((n2) => {
+      const m2 = n2 as THREE.Mesh;
+      if (m2.isMesh) (Array.isArray(m2.material) ? m2.material : [m2.material]).forEach((mm) => matSet.add(mm));
+    });
+    const soleMaterial = matSet.size <= 1;
     gltf.scene.traverse((node) => {
       const mesh = node as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -561,7 +565,8 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       mats.forEach((m) => {
         const std = m as THREE.MeshStandardMaterial;
-        if (map && std.color) { std.map = map; std.color.set('#ffffff'); }
+        const wantsMap = soleMaterial || !!std.map || /skin/i.test(std.name ?? '');
+        if (map && std.color && wantsMap) { std.map = map; std.color.set('#ffffff'); }
         std.roughness = 1;
         std.metalness = 0;
         applyHeightFog(std);

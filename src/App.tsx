@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { PlanetWorld } from './scene/PlanetWorld';
+import { walkerCount } from './engine/worldCore';
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
 import { TouchTrail } from './components/TouchTrail';
@@ -13,7 +14,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.87.0 · FIVE NEW WALKERS · BUILD 202';
+const BUILD_LABEL = 'v0.88.0 · THE PONDERING CROSSROADS · BUILD 204';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -51,6 +52,9 @@ export default function App() {
   });
   // BUILD 194: ?planet=1 — 작은 행성 전용 입구. 기존 세계와 코드가 섞이지 않는 별도 무대.
   const [planetMode] = useState(() => new URLSearchParams(window.location.search).has('planet'));
+  // BUILD 204: 에디터 맛보기 임시 버튼 — 🪐 행성 순환 / 🚶 캐릭터 교체
+  const [planetTheme, setPlanetTheme] = useState(0);
+  const [planetWalker, setPlanetWalker] = useState(-1);
   const scenes = draft?.scenes ?? jejuScenes;
   const [spec] = useState<WorldSpec>(draft?.spec ?? JEJU_SPEC);
   const lastMoveAt = useRef(0);
@@ -141,8 +145,24 @@ export default function App() {
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           {/* BUILD 194.1: .world-canvas는 .world-core-viewport 안에서만 화면을 채운다 — 래퍼 누락 핫픽스 */}
           <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-            <PlanetWorld />
+            <PlanetWorld themeIdx={planetTheme} walkerIdx={planetWalker} />
           </Canvas>
+        </div>
+        <div style={{ position: 'fixed', top: 18, right: 18, display: 'flex', gap: 10, zIndex: 6 }}>
+          {[['🪐', () => setPlanetTheme((i) => i + 1)], ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())]].map(([label, fn]) => (
+            <button
+              key={label as string}
+              type="button"
+              onClick={fn as () => void}
+              style={{
+                width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
+                backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff',
+              }}
+            >
+              {label as string}
+            </button>
+          ))}
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
         <div className="build-badge">{BUILD_LABEL}</div>

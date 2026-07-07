@@ -6,71 +6,17 @@ import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 
-// ---------- BUILD 197: 작은 행성 v4 — 보이지 않는 길 ----------
-// Vase: "길 자체를 없애줘. 길 아래 패스는 남아 있고, 그냥 지면을 걸어다니는 걸로.
-//        나중에 그 패스를 기준으로 텍스처를 입혀보자."
-// · 길 시각물(리본·침목·레일·널판) 전부 철거 — 패스는 보이지 않는 안내선으로만 산다
-// · 패스가 지형(사구)의 높낮이를 그대로 따라간다 — 걷는 이는 맨 모래 위를 걷는다
-// · 카메라: 드래그로 직접 돌리고(휠 줌), 9초 놓아두면 자동 로밍으로 스르르 복귀
+// ---------- BUILD 204: 작은 행성 v6 — 고민하는 교차로, 더 큰 별, 손님 행성 ----------
+// · R 8→12: 전체가 한눈에 예상되지 않는 크기 (다음 행성은 아예 작게도 — Vase)
+// · luna 굴곡 부스트 2.2→1.25: 오르내림이 튀지 않게
+// · 교차로: 자기 길이 스스로와 만나는 곳에서 잠깐 멈춰 고민하다, 한쪽을 골라 걷는다
+// · 임시 버튼(App): 🪐 행성 순환 / 🚶 캐릭터 교체 — 에디터의 맛보기
+// · meshkeep: 자기 재질을 그대로 입는 손님 행성 (Planet3)
 
-const R = 8;
+const R = 12;
 const WALK = 0.58;
-const DUNE = 0.14; // 사막 테마의 사구 진폭
+const DUNE = 0.14;
 
-// ---------- BUILD 198: 테마 시스템 — 색맵은 구체에, 높이맵은 지형과 패스에 ----------
-// "별이라는 게 맨들맨들하지만은 않잖아" — 높이맵이 지형 정점을 밀고, 패스가 그 굴곡을
-// 그대로 따라간다. 걷는 이는 실제 크레이터 능선을 오르내린다.
-const THEMES = {
-  desert: { kind: 'procedural' as const },
-  moon: { kind: 'maps' as const, color: 'assets/planet/moon_color.jpg', height: 'assets/planet/moon_height.png', amp: 0.3 },
-  // BUILD 199: 진짜 조각된 굴곡 — 메시 자체가 행성이 된다. 정점 반경을 등장방형 그리드로
-  // 구워 패스가 그 지형을 그대로 따른다. boost = 원본 굴곡(±3%)의 과장 배율.
-  luna: { kind: 'meshworld' as const, file: 'LunaMesh.glb', color: 'assets/planet/moon_color.jpg', boost: 2.2 },
-};
-const PLANET_THEME: keyof typeof THEMES = (() => {
-  const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('theme') : null;
-  return q && q in THEMES ? (q as keyof typeof THEMES) : 'luna'; // 기본은 최신 실험 — ?theme=moon|desert로 회귀
-})();
-
-// 높이맵 샘플러 — SphereGeometry의 UV 규약과 정확히 같은 dir→(u,v) 사상 (색과 굴곡이 어긋나지 않게)
-async function loadHeightSampler(url: string) {
-  const img = await new Promise<HTMLImageElement>((res, rej) => {
-    const im = new Image();
-    im.onload = () => res(im);
-    im.onerror = rej;
-    im.src = url;
-  });
-  const c = document.createElement('canvas');
-  c.width = img.width;
-  c.height = img.height;
-  const ctx = c.getContext('2d')!;
-  ctx.drawImage(img, 0, 0);
-  const px = ctx.getImageData(0, 0, c.width, c.height).data;
-  const w = c.width;
-  const h = c.height;
-  return (dir: THREE.Vector3) => {
-    // three SphereGeometry: x=-cosφ·sinθ, z=sinφ·sinθ, y=cosθ / uv=(φ/2π, 1-θ/π)
-    const theta = Math.acos(THREE.MathUtils.clamp(dir.y, -1, 1));
-    let u = Math.atan2(dir.z, -dir.x) / (Math.PI * 2);
-    if (u < 0) u += 1;
-    const fx = u * (w - 1);
-    const fy = (theta / Math.PI) * (h - 1);
-    const x0 = Math.floor(fx);
-    const y0 = Math.floor(fy);
-    const x1 = (x0 + 1) % w;
-    const y1 = Math.min(h - 1, y0 + 1);
-    const tx = fx - x0;
-    const ty = fy - y0;
-    const g = (x: number, y: number) => px[(y * w + x) * 4] / 255;
-    const v = g(x0, y0) * (1 - tx) * (1 - ty) + g(x1, y0) * tx * (1 - ty) + g(x0, y1) * (1 - tx) * ty + g(x1, y1) * tx * ty;
-    return (v - 0.5) * 2; // [-1, 1]
-  };
-}
-
-// ---------- BUILD 200: 방사 안개 — 높이의 기준이 행성의 중심이다 ----------
-// 프래그먼트의 '고도'를 (월드 y가 아니라) 행성 중심으로부터의 거리로 잰다.
-// 평균 표면 R보다 파인 곳(크레이터 바닥·골짜기)일수록 안개에 잠긴다 —
-// 움푹한 곳에선 걷는 이의 발목까지. 중심은 매 프레임 유니폼으로 따라온다.
 const PLANET_CENTER = new THREE.Vector3(0, -R, 0);
 const RFOG = { top: R + 0.04, bottom: R - 0.30, strength: 0.8 };
 function applyRadialFog(mat: THREE.MeshStandardMaterial, strength = RFOG.strength) {
@@ -80,7 +26,7 @@ function applyRadialFog(mat: THREE.MeshStandardMaterial, strength = RFOG.strengt
   const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
   const glsl = (n: number) => n.toFixed(4);
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uPlanetC = { value: PLANET_CENTER }; // 참조 공유 — 프레임마다 따라 움직인다
+    shader.uniforms.uPlanetC = { value: PLANET_CENTER };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vRFw;')
       .replace('#include <fog_vertex>', '#include <fog_vertex>\nvRFw = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -138,10 +84,86 @@ function makeDesertTexture() {
   return tex;
 }
 
-// ---------- BUILD 201: 밟혀 다져진 길 — 패스 궤적을 텍스처에 직접 굽는다 ----------
-// 리본도 오브젝트도 아니다. 누군가 오래 걸어 모래가 다져진 '흔적'을 색맵 위에
-// 세 겹의 붓질(넓고 옅게 → 좁고 짙게 → 발끝만)로 새긴다. 위도에 따른 등장방형
-// 가로 늘어짐(1/sinθ)은 타원으로 보정, 경도 이음매는 양쪽에 겹쳐 그린다.
+const THEMES = {
+  luna: { kind: 'meshworld' as const, file: 'LunaMesh.glb', color: 'assets/planet/moon_color.jpg', boost: 1.25 },
+  moon: { kind: 'maps' as const, color: 'assets/planet/moon_color.jpg', height: 'assets/planet/moon_height.png', amp: 0.3 },
+  desert: { kind: 'procedural' as const },
+  rocky: { kind: 'meshkeep' as const, file: 'Planet3.glb' }, // 손님 행성 — 자기 재질 그대로
+};
+const THEME_ORDER = ['luna', 'moon', 'desert', 'rocky'] as const;
+
+async function loadHeightSampler(url: string) {
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = rej;
+    im.src = url;
+  });
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const ctx = c.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, c.width, c.height).data;
+  const w = c.width;
+  const h = c.height;
+  return (dir: THREE.Vector3) => {
+    const theta = Math.acos(THREE.MathUtils.clamp(dir.y, -1, 1));
+    let u = Math.atan2(dir.z, -dir.x) / (Math.PI * 2);
+    if (u < 0) u += 1;
+    const fx = u * (w - 1);
+    const fy = (theta / Math.PI) * (h - 1);
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    const x1 = (x0 + 1) % w;
+    const y1 = Math.min(h - 1, y0 + 1);
+    const tx = fx - x0;
+    const ty = fy - y0;
+    const g = (x: number, y: number) => px[(y * w + x) * 4] / 255;
+    const v = g(x0, y0) * (1 - tx) * (1 - ty) + g(x1, y0) * tx * (1 - ty) + g(x0, y1) * (1 - tx) * ty + g(x1, y1) * tx * ty;
+    return (v - 0.5) * 2;
+  };
+}
+
+// 정점 무리 → 등장방형 반경 그리드 (빈 칸은 이웃 평균으로)
+function gridFromRadii(entries: { dir: THREE.Vector3; off: number }[]) {
+  const GW = 128;
+  const GH = 64;
+  const acc = new Float64Array(GW * GH);
+  const cnt = new Uint32Array(GW * GH);
+  for (const e of entries) {
+    const th = Math.acos(THREE.MathUtils.clamp(e.dir.y, -1, 1));
+    let u = Math.atan2(e.dir.z, -e.dir.x) / (Math.PI * 2);
+    if (u < 0) u += 1;
+    const gi = Math.min(GH - 1, Math.floor((th / Math.PI) * GH)) * GW + Math.min(GW - 1, Math.floor(u * GW));
+    acc[gi] += e.off;
+    cnt[gi] += 1;
+  }
+  const grid = new Float32Array(GW * GH);
+  for (let i = 0; i < grid.length; i += 1) grid[i] = cnt[i] ? acc[i] / cnt[i] : NaN;
+  for (let pass = 0; pass < 5; pass += 1) {
+    for (let y = 0; y < GH; y += 1) for (let x = 0; x < GW; x += 1) {
+      const i = y * GW + x;
+      if (!Number.isNaN(grid[i])) continue;
+      let s2 = 0; let n2 = 0;
+      for (const [ddx, ddy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const j = Math.min(GH - 1, Math.max(0, y + ddy)) * GW + ((x + ddx + GW) % GW);
+        if (!Number.isNaN(grid[j])) { s2 += grid[j]; n2 += 1; }
+      }
+      if (n2) grid[i] = s2 / n2;
+    }
+  }
+  return (d: THREE.Vector3) => {
+    const th = Math.acos(THREE.MathUtils.clamp(d.y, -1, 1));
+    let u = Math.atan2(d.z, -d.x) / (Math.PI * 2);
+    if (u < 0) u += 1;
+    const gx = Math.min(GW - 1, Math.floor(u * GW));
+    const gy = Math.min(GH - 1, Math.floor((th / Math.PI) * GH));
+    const v = grid[gy * GW + gx];
+    return Number.isNaN(v) ? 0 : v;
+  };
+}
+
 function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3): THREE.Texture {
   const img = map.image as HTMLImageElement | { data: Uint8ClampedArray; width: number; height: number };
   const W2 = img.width;
@@ -159,11 +181,11 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3): TH
   }
   const steps = 2600;
   const p = new THREE.Vector3();
-  const baseR = ((0.17 / R) / (Math.PI * 2)) * W2; // 길 반폭 0.17u → 픽셀
+  const baseR = ((0.17 / R) / (Math.PI * 2)) * W2;
   const passes = [
-    { rr: 1.8, a: 0.028 }, // 넓고 옅은 다짐
-    { rr: 1.0, a: 0.048 }, // 길의 몸통
-    { rr: 0.45, a: 0.055 }, // 발끝이 닿는 심
+    { rr: 1.8, a: 0.028 },
+    { rr: 1.0, a: 0.048 },
+    { rr: 0.45, a: 0.055 },
   ];
   for (let i = 0; i < steps; i += 1) {
     curve.getPointAt(i / steps, p);
@@ -195,21 +217,27 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3): TH
   return tex;
 }
 
-export function PlanetWorld() {
+export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: number; walkerIdx?: number }) {
   const { scene, camera, gl } = useThree();
-  // BUILD 191 판례: frame 1 무안개 컴파일 방지 — 렌더 시점 선주입
-  if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, 34);
+  if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, 40);
 
-  type Built = { planet: THREE.Group; curve: THREE.CatmullRomCurve3; arcLen: number };
+  const baseTheme = useMemo(() => {
+    const q = new URLSearchParams(window.location.search).get('theme');
+    const i = THEME_ORDER.indexOf((q ?? '') as (typeof THEME_ORDER)[number]);
+    return i >= 0 ? i : 0;
+  }, []);
+  const active = THEME_ORDER[(baseTheme + themeIdx) % THEME_ORDER.length];
+
+  type Built = { planet: THREE.Group; curve: THREE.CatmullRomCurve3; arcLen: number; crossings: { a: number; b: number }[] };
   const [built, setBuilt] = useState<Built | null>(null);
   useEffect(() => {
     let alive = true;
     void (async () => {
-      // ---------- 0. 테마 준비: 색맵 + 높이 함수 ----------
-      const theme = THEMES[PLANET_THEME];
+      const theme = THEMES[active];
       let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * DUNE;
-      let map: THREE.Texture;
-      let meshGround: THREE.Mesh | null = null; // meshworld: 메시 자체가 지형이다
+      let map: THREE.Texture | null = null;
+      let ready: THREE.Object3D | null = null; // meshworld/meshkeep가 준비한 지형
+
       if (theme.kind === 'meshworld') {
         const [gltf, colorTex] = await Promise.all([
           defaultLoader(theme.file),
@@ -222,11 +250,9 @@ export function PlanetWorld() {
         let src: THREE.Mesh | null = null;
         gltf.scene.updateMatrixWorld(true);
         gltf.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && !src) src = m; });
-        if (!src) throw new Error('meshworld: 메시 없음');
-        const srcMesh = src as THREE.Mesh;
+        const srcMesh = src as unknown as THREE.Mesh;
         const geo2 = (srcMesh.geometry as THREE.BufferGeometry).clone();
         geo2.applyMatrix4(srcMesh.matrixWorld);
-        // 중심·평균 반경 실측 → 정규화 + 굴곡 부스트 (헌법 1조: 실측하라)
         const pa = geo2.getAttribute('position');
         const ctr = new THREE.Vector3();
         for (let i = 0; i < pa.count; i += 1) ctr.add(new THREE.Vector3(pa.getX(i), pa.getY(i), pa.getZ(i)));
@@ -234,57 +260,75 @@ export function PlanetWorld() {
         let meanR = 0;
         for (let i = 0; i < pa.count; i += 1) meanR += Math.hypot(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
         meanR /= pa.count;
-        // 반경 그리드(128×64) — 패스가 지형을 따라가게 하는 높이 사전
-        const GW = 128;
-        const GH = 64;
-        const acc = new Float64Array(GW * GH);
-        const cnt = new Uint16Array(GW * GH);
         const dv = new THREE.Vector3();
+        const radii: { dir: THREE.Vector3; off: number }[] = [];
         for (let i = 0; i < pa.count; i += 1) {
           dv.set(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
           const r = dv.length();
-          const rb = 1 + (r / meanR - 1) * theme.boost; // 굴곡 과장
+          const rb = 1 + (r / meanR - 1) * theme.boost;
           dv.divideScalar(r);
-          pa.setXYZ(i, dv.x * rb * R, dv.y * rb * R, dv.z * rb * R); // 정점을 제자리에서 굽는다
-          const th = Math.acos(THREE.MathUtils.clamp(dv.y, -1, 1));
-          let u = Math.atan2(dv.z, -dv.x) / (Math.PI * 2);
-          if (u < 0) u += 1;
-          const gi = Math.min(GH - 1, Math.floor((th / Math.PI) * GH)) * GW + Math.min(GW - 1, Math.floor(u * GW));
-          acc[gi] += rb * R - R;
-          cnt[gi] += 1;
+          pa.setXYZ(i, dv.x * rb * R, dv.y * rb * R, dv.z * rb * R);
+          radii.push({ dir: dv.clone(), off: rb * R - R });
         }
-        const grid = new Float32Array(GW * GH);
-        for (let i = 0; i < grid.length; i += 1) grid[i] = cnt[i] ? acc[i] / cnt[i] : NaN;
-        for (let pass = 0; pass < 4; pass += 1) { // 빈 칸은 이웃 평균으로 메운다
-          for (let y = 0; y < GH; y += 1) for (let x = 0; x < GW; x += 1) {
-            const i = y * GW + x;
-            if (!Number.isNaN(grid[i])) continue;
-            let s2 = 0; let n2 = 0;
-            for (const [ddx, ddy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-              const j = Math.min(GH - 1, Math.max(0, y + ddy)) * GW + ((x + ddx + GW) % GW);
-              if (!Number.isNaN(grid[j])) { s2 += grid[j]; n2 += 1; }
-            }
-            if (n2) grid[i] = s2 / n2;
-          }
-        }
-        heightAt = (d) => {
-          const th = Math.acos(THREE.MathUtils.clamp(d.y, -1, 1));
-          let u = Math.atan2(d.z, -d.x) / (Math.PI * 2);
-          if (u < 0) u += 1;
-          const gx = Math.min(GW - 1, Math.floor(u * GW));
-          const gy = Math.min(GH - 1, Math.floor((th / Math.PI) * GH));
-          const v = grid[gy * GW + gx];
-          return Number.isNaN(v) ? 0 : v;
-        };
+        heightAt = gridFromRadii(radii);
         geo2.computeVertexNormals();
-        // BUILD 199.1: GLTF 로더가 원본(반지름 1)의 바운딩을 미리 박아둔다 — 정점을 R로
-        // 부풀린 뒤 재계산하지 않으면 프러스텀 컬링이 낡은 공으로 판정해, 카메라 각도에
-        // 따라 행성 전체가 사라진다. 재계산 + 행성은 세계 그 자체이므로 컬링 면제.
         geo2.computeBoundingSphere();
         geo2.computeBoundingBox();
-        meshGround = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 })));
-        meshGround.frustumCulled = false;
-        meshGround.receiveShadow = true;
+        const mesh = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 })));
+        mesh.frustumCulled = false;
+        mesh.receiveShadow = true;
+        ready = mesh;
+      } else if (theme.kind === 'meshkeep') {
+        // BUILD 204: 손님 행성 — 자기 재질을 그대로 입는다. 중심·평균반경 실측 후 R에 맞춰 앉힌다.
+        const gltf = await defaultLoader(theme.file);
+        const root = gltf.scene;
+        root.updateMatrixWorld(true);
+        const ctr = new THREE.Vector3();
+        let cnt = 0;
+        const v = new THREE.Vector3();
+        root.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          const pa = m.geometry.getAttribute('position');
+          for (let i = 0; i < pa.count; i += 4) { v.set(pa.getX(i), pa.getY(i), pa.getZ(i)).applyMatrix4(m.matrixWorld); ctr.add(v); cnt += 1; }
+        });
+        ctr.divideScalar(cnt);
+        let meanR = 0;
+        const radii: { dir: THREE.Vector3; off: number }[] = [];
+        root.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          const pa = m.geometry.getAttribute('position');
+          for (let i = 0; i < pa.count; i += 4) {
+            v.set(pa.getX(i), pa.getY(i), pa.getZ(i)).applyMatrix4(m.matrixWorld).sub(ctr);
+            meanR += v.length();
+          }
+        });
+        meanR /= cnt;
+        const sc = R / meanR;
+        root.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          m.frustumCulled = false;
+          m.receiveShadow = true;
+          m.castShadow = true;
+          (Array.isArray(m.material) ? m.material : [m.material]).forEach((mm) => {
+            const std = mm as THREE.MeshStandardMaterial;
+            if (std.isMeshStandardMaterial) applyRadialFog(std, 0.6);
+          });
+          const pa = m.geometry.getAttribute('position');
+          for (let i = 0; i < pa.count; i += 2) {
+            v.set(pa.getX(i), pa.getY(i), pa.getZ(i)).applyMatrix4(m.matrixWorld).sub(ctr);
+            const r = v.length();
+            radii.push({ dir: v.clone().divideScalar(r), off: (r - meanR) * sc });
+          }
+        });
+        heightAt = gridFromRadii(radii);
+        const wrap = new THREE.Group();
+        wrap.scale.setScalar(sc);
+        root.position.copy(ctr).negate();
+        wrap.add(root);
+        ready = wrap;
       } else if (theme.kind === 'maps') {
         const loader = new THREE.TextureLoader();
         map = await loader.loadAsync(theme.color);
@@ -300,7 +344,7 @@ export function PlanetWorld() {
 
       const planet = new THREE.Group();
 
-      // ---------- 1. 보이지 않는 길: 지형의 높낮이(크레이터·사구)를 그대로 따른다 ----------
+      // ---------- 보이지 않는 길: 지형의 높낮이를 그대로 따른다 ----------
       const N = 560;
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i < N; i += 1) {
@@ -308,22 +352,40 @@ export function PlanetWorld() {
         const phi = Math.PI * 2 * 4 * u;
         const theta = Math.PI / 2 + 0.62 * Math.sin(Math.PI * 2 * 3 * u + 0.7) + 0.21 * Math.sin(Math.PI * 2 * 7 * u + 2.1);
         const d = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
-        pts.push(d.multiplyScalar(R + heightAt(d) + 0.005)); // 지면 그 자체가 길이다
+        pts.push(d.multiplyScalar(R + heightAt(d) + 0.005));
       }
       const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
       curve.arcLengthDivisions = 1800;
       const arcLen = curve.getLength();
-      // BUILD 201: 길의 흔적을 색맵에 굽는다 — 리본 없이도 '아까 그 길'을 알아볼 수 있게
-      map = bakeTrailOntoMap(map, curve);
-      if (meshGround) {
-        const mm = meshGround.material as THREE.MeshStandardMaterial;
-        mm.map = map;
-        mm.needsUpdate = true;
+
+      // ---------- 교차로 사전: 3D로 가깝고 길로는 먼 두 지점 (호길이 좌표 쌍) ----------
+      const crossings: { a: number; b: number }[] = [];
+      {
+        const M2 = 700;
+        const cps = Array.from({ length: M2 }, (_, i) => curve.getPointAt(i / M2));
+        for (let i = 0; i < M2; i += 1) {
+          for (let j = i + 30; j < M2; j += 1) {
+            const gap = Math.min(j - i, M2 - (j - i));
+            if (gap < 30) continue;
+            if (cps[i].distanceToSquared(cps[j]) < 0.16) {
+              const a = (i / M2) * arcLen;
+              const b = (j / M2) * arcLen;
+              if (!crossings.some((c2) => Math.abs(c2.a - a) < 1.5 || Math.abs(c2.b - b) < 1.5)) crossings.push({ a, b });
+            }
+          }
+        }
       }
 
-      // ---------- 2. 행성 본체 — meshworld는 구운 메시 그대로, 나머지는 높이맵이 정점을 민다 ----------
-      if (meshGround) {
-        planet.add(meshGround);
+      if (theme.kind !== 'meshkeep' && map) {
+        map = bakeTrailOntoMap(map, curve);
+      }
+      if (ready) {
+        if (theme.kind === 'meshworld' && map) {
+          const mm = (ready as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          mm.map = map;
+          mm.needsUpdate = true;
+        }
+        planet.add(ready);
       } else {
         const geo = new THREE.SphereGeometry(R, 128, 96);
         const pos = geo.getAttribute('position');
@@ -336,18 +398,18 @@ export function PlanetWorld() {
         geo.computeVertexNormals();
         const ground = new THREE.Mesh(
           geo,
-          applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 })),
+          applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 })),
         );
         ground.receiveShadow = true;
         planet.add(ground);
       }
 
-      setBuilt({ planet, curve, arcLen });
+      setBuilt({ planet, curve, arcLen, crossings });
     })();
     return () => { alive = false; };
-  }, []);
+  }, [active]);
 
-  // ---------- 걷는 사람 ----------
+  // ---------- 걷는 사람 (walkerIdx 바뀌면 교체) ----------
   const holder = useMemo(() => {
     const h = new THREE.Group();
     h.position.y = 0.012;
@@ -357,9 +419,11 @@ export function PlanetWorld() {
   const rigRef = useRef<WalkerRig | null>(null);
   useEffect(() => {
     let alive = true;
-    void loadWalkerAsset(undefined, 'random').then(({ group, animations, clipSpeeds }) => {
+    rigRef.current = null;
+    holder.clear();
+    void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
-      group.traverse((o) => { // BUILD 200: 움푹한 곳에선 발목이 안개에 잠긴다
+      group.traverse((o) => {
         const m = o as THREE.Mesh;
         if (m.isMesh && (m.material as THREE.MeshStandardMaterial)?.isMeshStandardMaterial) {
           applyRadialFog(m.material as THREE.MeshStandardMaterial, 0.7);
@@ -370,13 +434,12 @@ export function PlanetWorld() {
         ?? createWalkerRig(group, animations, 0.72);
     }).catch(() => { /* 조용한 행성 */ });
     return () => { alive = false; };
-  }, [holder]);
+  }, [holder, walkerIdx]);
 
   useEffect(() => {
     ambience.apply({ kind: 'clear', wind: 0.28, rainAmount: 0, time: 'day', sea: 0, life: 0.5 });
   }, []);
 
-  // ---------- 시선: 드래그로 돌리고, 놓아두면 스스로 떠돈다 ----------
   const SHOTS = useMemo(() => [
     { p: new THREE.Vector3(0, 2.25, 5.6), look: new THREE.Vector3(0, 1.02, 0) },
     { p: new THREE.Vector3(3.4, 1.9, 4.3), look: new THREE.Vector3(0, 0.95, 0) },
@@ -387,14 +450,13 @@ export function PlanetWorld() {
   const cam = useRef({
     shot: 0, hold: 11,
     pos: new THREE.Vector3(0, 2.25, 5.6), look: new THREE.Vector3(0, 1.02, 0),
-    manualUntil: 0, // 이 시각까지는 사람의 손이 시선의 주인
+    manualUntil: 0,
     sph: new THREE.Spherical(), dragging: false, lastX: 0, lastY: 0,
   });
   useEffect(() => {
     const el = gl.domElement;
     const C = cam.current;
     const grab = () => {
-      // 손이 닿는 순간, 현재 카메라 자리를 구면 좌표로 이어받는다
       C.sph.setFromVector3(new THREE.Vector3().subVectors(camera.position, C.look));
       C.manualUntil = performance.now() + 9000;
     };
@@ -411,7 +473,7 @@ export function PlanetWorld() {
     const up = () => { C.dragging = false; };
     const wheel = (e: WheelEvent) => {
       grab();
-      C.sph.radius = THREE.MathUtils.clamp(C.sph.radius * (1 + Math.sign(e.deltaY) * 0.08), 2.4, 10);
+      C.sph.radius = THREE.MathUtils.clamp(C.sph.radius * (1 + Math.sign(e.deltaY) * 0.08), 2.4, 12);
       e.preventDefault();
     };
     el.addEventListener('pointerdown', down);
@@ -428,15 +490,43 @@ export function PlanetWorld() {
 
   const S = useRef(0);
   const firstFrame = useRef(true);
+  // BUILD 204: 교차로의 고민 — 닿으면 잠깐 서서(idle) 생각하다, 한쪽을 골라 걷는다
+  const ponder = useRef({ phase: 'walk' as 'walk' | 'ponder', timer: 0, jumpTo: -1, cooldown: 0 });
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
     v: new THREE.Vector3(),
   }), []);
   useFrame((state, rawDt) => {
-    if (!built) return; // 테마가 아직 오는 중
+    if (!built) return;
     const dt = Math.min(0.05, rawDt); // 헌법 3조
-    S.current += WALK * dt;
+    const P = ponder.current;
+    P.cooldown = Math.max(0, P.cooldown - dt);
+    let moving = true;
+    if (P.phase === 'ponder') {
+      moving = false;
+      P.timer -= dt;
+      if (P.timer <= 0) {
+        if (P.jumpTo >= 0) S.current = P.jumpTo;
+        P.phase = 'walk';
+        P.jumpTo = -1;
+        P.cooldown = 8;
+      }
+    } else {
+      S.current += WALK * dt;
+      if (P.cooldown <= 0) {
+        const sm = ((S.current % built.arcLen) + built.arcLen) % built.arcLen;
+        for (const c2 of built.crossings) {
+          const nearA = Math.abs(sm - c2.a) < 0.1;
+          const nearB = Math.abs(sm - c2.b) < 0.1;
+          if (!nearA && !nearB) continue;
+          P.phase = 'ponder';
+          P.timer = 1.1 + Math.random() * 1.1; // 고민하는 척
+          P.jumpTo = Math.random() < 0.5 ? -1 : (nearA ? c2.b + (sm - c2.a) : c2.a + (sm - c2.b)); // 반반: 가던 길 or 저 길
+          break;
+        }
+      }
+    }
     const t = ((S.current / built.arcLen) % 1 + 1) % 1;
     const { p, T, U, F: Fw, Z, M, Q, v } = tmp;
     built.curve.getPointAt(t, p);
@@ -451,22 +541,21 @@ export function PlanetWorld() {
       built.planet.quaternion.copy(Q);
       built.planet.position.y = -p.length();
     } else {
-      const k = Math.min(1, dt * 8);
+      const k = Math.min(1, dt * 6);
       built.planet.quaternion.slerp(Q, k);
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
-    rigRef.current?.update(dt, 0.5, true, state.clock.elapsedTime, WALK * dt);
-    PLANET_CENTER.copy(built.planet.position); // 방사 안개의 기준점이 행성을 따라간다
+    rigRef.current?.update(dt, 0.5, moving, state.clock.elapsedTime, moving ? WALK * dt : 0);
+    PLANET_CENTER.copy(built.planet.position);
 
     const C = cam.current;
     const manual = performance.now() < C.manualUntil;
     const e = state.clock.elapsedTime;
     if (manual) {
-      // 사람의 손 — 구면 좌표 그대로
       v.setFromSpherical(C.sph).add(C.look);
       camera.position.lerp(v, Math.min(1, dt * 10));
       camera.lookAt(C.look.x, C.look.y, C.look.z);
-      C.pos.copy(camera.position); // 놓는 순간 여기서부터 스르르 떠난다
+      C.pos.copy(camera.position);
     } else {
       C.hold -= dt;
       if (C.hold <= 0) {
@@ -491,7 +580,7 @@ export function PlanetWorld() {
   return (
     <>
       <color attach="background" args={[PALETTE.fog]} />
-      <fog attach="fog" args={[PALETTE.fog, 9, 34]} />
+      <fog attach="fog" args={[PALETTE.fog, 9, 40]} />
       <hemisphereLight args={['#b9d2d8', '#c8a97e', 0.55]} />
       <directionalLight
         color="#ffe7c2"
@@ -500,13 +589,13 @@ export function PlanetWorld() {
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
-        shadow-camera-left={-12}
-        shadow-camera-right={12}
-        shadow-camera-top={12}
-        shadow-camera-bottom={-12}
+        shadow-camera-left={-14}
+        shadow-camera-right={14}
+        shadow-camera-top={14}
+        shadow-camera-bottom={-14}
       />
       <directionalLight color="#9fc4c9" intensity={0.22} position={[-5, 3, -4]} />
-      {built && <primitive object={built.planet} />}
+      <primitive object={built ? built.planet : new THREE.Group()} />
       <primitive object={holder} />
     </>
   );
