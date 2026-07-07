@@ -5,7 +5,9 @@ import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader } from '../engi
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
-import type { PlanetSpec, PlanetMemory } from './planetSpec';
+import type { PlanetSpec, PlanetMemory, PlanetContact } from './planetSpec';
+import type { MutableRefObject } from 'react';
+import { createPropObject } from '../engine/props';
 
 // ---------- BUILD 207: 작은 행성 v7 — 스펙이 세계를 정한다 ----------
 // 에디터의 문법 이식: 세계의 모든 다이얼(테마·반지름·굴곡·안개·걸음·감김·요동·
@@ -18,6 +20,10 @@ const PLANET_CENTER = new THREE.Vector3(0, -12, 0);
 // 지형과 캐릭터가 같은 유니폼을 공유한다. (구판은 리터럴 굽기 — 캐릭터는 다이얼을 못 들었다.)
 // uRF = (bottom, top, strength). mul만 재질별 리터럴(정적).
 const RFOG = { v: new THREE.Vector3(11.9, 12.3, 0.8), color: new THREE.Color('#ffffff') };
+// BUILD 214: 낮밤 — 낮 하늘색(테마 안개색)과 밤 하늘색 사이를 태양 고도가 오간다
+const DAY_SKY = new THREE.Color('#ffffff');
+const NIGHT_SKY = new THREE.Color('#161d26');
+const SKY_BLEND = new THREE.Color('#ffffff');
 function applyRadialFog(mat: THREE.MeshStandardMaterial, mul = 1) {
   if (mat.userData.rfog) return mat;
   mat.userData.rfog = true;
@@ -214,9 +220,14 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
   return tex;
 }
 
-export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void }) {
+export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void; contactRef?: MutableRefObject<PlanetContact | null> }) {
   const { scene, camera, gl } = useThree();
-  if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.radius * 3.4);
+  if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
+  // BUILD 214: 시야 거리 다이얼 — 씬 안개 near/far 즉답 갱신
+  useEffect(() => {
+    const f = scene.fog as THREE.Fog | null;
+    if (f) { f.near = Math.max(4, (spec.viewDist ?? 41) * 0.22); f.far = Math.max(8, spec.viewDist ?? 41); }
+  }, [scene, spec.viewDist]);
 
   // 가벼운 다이얼은 ref로 실시간 반영 (재건축 없이)
   const specRef = useRef(spec);
@@ -233,6 +244,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
     const lv = Math.max(spec.fogLevel, 0.001);
     RFOG.v.set(R - lv * 0.25 - 0.02, R + lv, spec.fogLevel <= 0.01 ? 0 : spec.fogStrength);
     RFOG.color.set(PALETTE.fog);
+    DAY_SKY.set(PALETTE.fog);
   }, [spec.radius, spec.fogLevel, spec.fogStrength, spec.theme]);
 
   type Built = {
@@ -415,6 +427,43 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
     ambience.apply({ kind: 'clear', wind: 0.28, rainAmount: 0, time: 'day', sea: 0, life: 0.5 });
   }, []);
 
+  // BUILD 214: 표면 소품 — 본토 카탈로그(PROP_CATALOG) 통째 수입. dir×r 앵커로 행성에 못 박고
+  // up=dir 정렬 + yaw. 하늘 소품(구름·풍력)은 지표 위로 띄운다. 행성과 함께 구른다(planet 자식).
+  const propsKey = JSON.stringify(spec.props ?? []);
+  useEffect(() => {
+    if (!built) return undefined;
+    let alive = true;
+    const g = new THREE.Group();
+    g.name = 'placedProps';
+    built.planet.add(g);
+    const HOVER: Record<string, number> = { cloud: 2.4, 'cloud-dark': 2.7, windturbine: 1.7, moon: 3.2 };
+    const list = JSON.parse(propsKey) as PlanetSpec['props'];
+    void (async () => {
+      for (const pr of list) {
+        let seed = 7;
+        for (const ch of pr.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+        const obj = await createPropObject(pr.obj, seed || 7);
+        if (!alive || !obj) continue;
+        obj.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          mesh.castShadow = true;
+          (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+            .forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+        });
+        const dir = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
+        const anchor = new THREE.Group();
+        anchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        anchor.position.copy(dir).multiplyScalar(pr.r - 0.02 + (HOVER[pr.obj] ?? 0));
+        obj.rotation.y = pr.rotY;
+        obj.scale.setScalar(pr.scale);
+        anchor.add(obj);
+        if (alive) g.add(anchor);
+      }
+    })();
+    return () => { alive = false; built.planet.remove(g); };
+  }, [built, propsKey]);
+
   const SHOTS = useMemo(() => [
     { p: new THREE.Vector3(0, 2.25, 5.6), look: new THREE.Vector3(0, 1.02, 0) },
     { p: new THREE.Vector3(3.4, 1.9, 4.3), look: new THREE.Vector3(0, 0.95, 0) },
@@ -467,6 +516,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
   const firstFrame = useRef(true);
   const ang = useRef(Math.random() * Math.PI * 2);
   const spinAng = useRef(0); // BUILD 212: 조석고정 대비 추가 자전 누적각
+  const dayAng = useRef(0);  // BUILD 214: 태양 공전각 (낮밤)
+  const dirLightRef = useRef<THREE.DirectionalLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
   const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
@@ -537,6 +589,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
     }
     rigRef.current?.update(dt, 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * dt : 0);
     PLANET_CENTER.copy(built.planet.position);
+    if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
 
     // 하늘: 달의 공전(스펙 실시간) + 태양 자리
     ang.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period));
@@ -552,10 +605,24 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
     spinAng.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period)) * (((SP.moon.spin ?? 1)) - 1);
     built.moon.rotateY(spinAng.current);
     built.moonLight.intensity = SP.moon.light;
+    // BUILD 214: 태양 공전 — 행성을 공전시킬 수 없으니 태양을 돌린다 (Vase).
+    // 고도 대원 궤도: θ = 고도 + 누적 공전각. 지평선 아래로 지면 밤이 온다.
+    const per = SP.sun.period ?? 0;
+    if (per > 0) dayAng.current += dt * ((Math.PI * 2) / Math.max(20, per));
     const az = (SP.sun.az * Math.PI) / 180;
-    const el2 = (SP.sun.el * Math.PI) / 180;
-    v.set(Math.cos(el2) * Math.cos(az), Math.sin(el2), Math.cos(el2) * Math.sin(az));
+    const th = (SP.sun.el * Math.PI) / 180 + dayAng.current;
+    v.set(Math.cos(th) * Math.cos(az), Math.sin(th), Math.cos(th) * Math.sin(az));
     built.sun.position.copy(v).multiplyScalar(built.R * 6.5);
+    const dl = THREE.MathUtils.smoothstep(Math.sin(th), -0.12, 0.3); // 낮의 정도 (해가 지평선 아래로 조금 내려가야 완전한 밤)
+    if (dirLightRef.current) {
+      dirLightRef.current.position.copy(v).multiplyScalar(20);
+      dirLightRef.current.intensity = 1.35 * (0.05 + 0.95 * dl);
+    }
+    if (hemiRef.current) hemiRef.current.intensity = 0.55 * (0.32 + 0.68 * dl);
+    SKY_BLEND.copy(NIGHT_SKY).lerp(DAY_SKY, dl);
+    if (scene.background instanceof THREE.Color) scene.background.copy(SKY_BLEND);
+    if (scene.fog) scene.fog.color.copy(SKY_BLEND);
+    RFOG.color.copy(SKY_BLEND);
 
     const C = cam.current;
     const manual = performance.now() < C.manualUntil;
@@ -597,9 +664,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
   return (
     <>
       <color attach="background" args={[PALETTE.fog]} />
-      <fog attach="fog" args={[PALETTE.fog, 9, spec.radius * 3.4]} />
-      <hemisphereLight args={['#b9d2d8', '#c8a97e', 0.55]} />
+      <fog attach="fog" args={[PALETTE.fog, Math.max(4, (spec.viewDist ?? 41) * 0.22), Math.max(8, spec.viewDist ?? 41)]} />
+      <hemisphereLight ref={hemiRef} args={['#b9d2d8', '#c8a97e', 0.55]} />
       <directionalLight
+        ref={dirLightRef}
         color="#ffe7c2"
         intensity={1.35}
         position={sunDir}

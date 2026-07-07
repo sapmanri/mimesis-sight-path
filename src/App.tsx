@@ -4,7 +4,8 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { PlanetWorld } from './scene/PlanetWorld';
 import { walkerCount } from './engine/worldCore';
-import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory } from './scene/planetSpec';
+import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact } from './scene/planetSpec';
+import { PROP_CATALOG } from './engine/props';
 
 // ---------- BUILD 207: 행성 에디터 — 다이얼 한 줄 ----------
 function Dial({ label, value, min, max, step, onChange, fmt }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt?: (v: number) => string }) {
@@ -32,7 +33,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.0.6 · A CLEAR BLUE MARBLE · BUILD 213';
+const BUILD_LABEL = 'v1.1.0 · GARDENS, DUSK AND DISTANCE · BUILD 214';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -88,6 +89,27 @@ export default function App() {
     });
   };
   const [planetWalker, setPlanetWalker] = useState(-1);
+  // BUILD 214: 소품 심기 — 접점은 PlanetWorld가 매 프레임 보고한다
+  const planetContact = useRef<PlanetContact | null>(null);
+  const [propPick, setPropPick] = useState('tree');
+  const [propScale, setPropScale] = useState(1);
+  const plantProp = () => {
+    const c = planetContact.current;
+    if (!c) return;
+    // 발밑에서 좌우로 살짝 비켜 심는다 — 그녀가 밟고 지나가지 않게
+    const [dx, dy, dz] = c.dir;
+    const [tx, ty, tz] = c.tan;
+    let sx = dy * tz - dz * ty, sy = dz * tx - dx * tz, sz = dx * ty - dy * tx;
+    const sl = Math.hypot(sx, sy, sz) || 1;
+    const off = (Math.random() < 0.5 ? 1 : -1) * 0.62;
+    let px = dx * c.r + (sx / sl) * off, py = dy * c.r + (sy / sl) * off, pz = dz * c.r + (sz / sl) * off;
+    const r = Math.hypot(px, py, pz);
+    px /= r; py /= r; pz /= r;
+    updSpec((s) => ({
+      ...s,
+      props: [...(s.props ?? []), { id: `p${Date.now().toString(36)}${Math.floor(Math.random() * 99)}`, obj: propPick, dir: [px, py, pz] as [number, number, number], r, rotY: Math.random() * Math.PI * 2, scale: propScale }],
+    }));
+  };
   const [memCard, setMemCard] = useState<PlanetMemory | null>(null);
   const scenes = draft?.scenes ?? jejuScenes;
   const [spec] = useState<WorldSpec>(draft?.spec ?? JEJU_SPEC);
@@ -180,7 +202,7 @@ export default function App() {
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} />
+            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} contactRef={planetContact} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
@@ -223,6 +245,7 @@ export default function App() {
             <Dial label="굴곡" value={pSpec.relief} min={0} max={2.5} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, relief: v }))} />
             <Dial label="안개 수위" value={pSpec.fogLevel} min={0} max={1.2} step={0.02} onChange={(v) => updSpec((s) => ({ ...s, fogLevel: v }))} />
             <Dial label="안개 농도" value={pSpec.fogStrength} min={0} max={1} step={0.02} onChange={(v) => updSpec((s) => ({ ...s, fogStrength: v }))} />
+            <Dial label="시야 거리" value={pSpec.viewDist ?? 41} min={10} max={140} step={1} onChange={(v) => updSpec((s) => ({ ...s, viewDist: v }))} />
             <Dial label="걸음" value={pSpec.walkSpeed} min={0.25} max={1.4} step={0.01} onChange={(v) => updSpec((s) => ({ ...s, walkSpeed: v }))} />
             <Dial label="감김 (바퀴)" value={pSpec.wraps} min={2} max={7} step={1} onChange={(v) => updSpec((s) => ({ ...s, wraps: v }))} />
             <Dial label="길의 요동" value={pSpec.wobble} min={0.2} max={1.8} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, wobble: v }))} />
@@ -236,6 +259,29 @@ export default function App() {
             <Dial label="달 자전 (조석고정=1)" value={M.spin ?? 1} min={-3} max={3} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, spin: v } }))} />
             <Dial label="태양 방위 (°)" value={SN.az} min={0} max={360} step={2} onChange={(v) => updSpec((s) => ({ ...s, sun: { ...s.sun, az: v } }))} />
             <Dial label="태양 고도 (°)" value={SN.el} min={4} max={85} step={1} onChange={(v) => updSpec((s) => ({ ...s, sun: { ...s.sun, el: v } }))} />
+            <Dial label="낮밤 주기 (s · 0=늘 낮)" value={SN.period ?? 0} min={0} max={600} step={10} onChange={(v) => updSpec((s) => ({ ...s, sun: { ...s.sun, period: v } }))} />
+            <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 4px' }}>소품 — 표면에 심기</div>
+            <select value={propPick} onChange={(e) => setPropPick(e.target.value)}
+              style={{ width: '100%', background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 6, padding: 5, fontSize: 11 }}>
+              {PROP_CATALOG.map((p) => <option key={p.id} value={p.id}>[{p.cat}] {p.label}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '6px 0 8px' }}>
+              <span style={{ fontSize: 11 }}>크기</span>
+              <input type="number" value={propScale} step={0.1} min={0.2} max={6}
+                onChange={(e) => setPropScale(Number(e.target.value) || 1)}
+                style={{ width: 54, background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 6, padding: 4, fontSize: 11 }} />
+              <button type="button" onClick={plantProp} style={{
+                flex: 1, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+                border: '1px solid rgba(216,178,110,0.4)', background: 'rgba(216,178,110,0.14)', color: '#e8dcc2',
+              }}>🌱 발밑에 심기</button>
+            </div>
+            {(pSpec.props ?? []).length > 0 ? (pSpec.props ?? []).map((pr) => (
+              <div key={pr.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <span>{PROP_CATALOG.find((c) => c.id === pr.obj)?.label ?? pr.obj} · ×{pr.scale}</span>
+                <button type="button" onClick={() => updSpec((s) => ({ ...s, props: (s.props ?? []).filter((x) => x.id !== pr.id) }))}
+                  style={{ border: 'none', background: 'transparent', color: '#c97b6a', cursor: 'pointer', fontSize: 11 }}>삭제</button>
+              </div>
+            )) : <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 4 }}>그녀가 선 자리 곁에 심어집니다</div>}
             <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 4px', display: 'flex', justifyContent: 'space-between' }}>
               <span>기억 — 길 위의 멈춤</span>
               <button type="button" style={{ ...PANEL_BTN, flex: 'none', padding: '2px 10px' }}
