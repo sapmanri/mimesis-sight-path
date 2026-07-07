@@ -27,7 +27,7 @@ export type WalkerRig = {
   playInspect: (kind?: 'pickup' | 'sit') => void;
   stopInspect: () => void;
   /** BUILD 104: 마법 의자 자산 주입 (클립 리그 전용, 선택) */
-  setChairAsset?: (obj: THREE.Group, seatY: number) => void;
+  setChairAsset?: (obj: THREE.Group, seatY: number, seatCz?: number) => void;
   /** BUILD 136: 탈것 — 앉은 채(없으면 선 채) 이동한다. 로코모션 배제 */
   setRiding?: (on: boolean) => void;
   /** BUILD 138: 탑승 클립의 엉덩이 높이 — 바닥 양반다리 0.02, 의자 앉기 0.3, 서서 타면 0 */
@@ -230,7 +230,9 @@ export function createClipRig(
   // BUILD 104: 마법 의자 — 앉기 전에 샤라락 나타났다가, 일어나면 샤라락 사라진다.
   // 앉기 클립들은 애초에 '의자 높이'로 만들어졌다. 의자를 주는 것이 클립의 설계를 존중하는 길.
   let chairAsset: THREE.Group | null = null;
+  let chairFresh = false; // BUILD 190: 등장 프레임엔 스냅, 이후엔 부드럽게 추적
   let chairSeatY = 0.29;
+  let chairSeatCz = 0.037; // BUILD 190: 좌면 z중심 — Chair.glb 직파싱 실측값
   let chair: THREE.Group | null = null;
   let chairPhase: 'in' | 'hold' | 'out' | 'none' = 'none';
   let chairT = 0;
@@ -270,9 +272,10 @@ export function createClipRig(
   return {
     inspecting: () => gesture !== 'none',
     phase: () => 0, // 상하 흔들림은 클립 안에 있다 — 홀더 bob은 끈다
-    setChairAsset(obj: THREE.Group, seatY: number) {
+    setChairAsset(obj: THREE.Group, seatY: number, seatCz = 0.037) {
       chairAsset = obj;
       chairSeatY = seatY;
+      chairSeatCz = seatCz; // BUILD 190: 좌면 z중심 (의자 로컬, 실측)
     },
     // BUILD 136: 탈것 — 앉는 클립(Sit_Floor_Idle)이 있으면 앉아 타고, 없으면 서서 탄다
     setRiding(on: boolean) {
@@ -304,7 +307,8 @@ export function createClipRig(
           chair = chairAsset;
           root.parent.add(chair);
         }
-        chair.position.set(0, 0, 0.18); // BUILD 179: 실측 재보정 — 스샷 기준 좌면이 엉덩이보다 0.15 뒤였다
+        chair.position.set(0, 0, 0.05); // BUILD 190: 초기값일 뿐 — 아래 힙 추적이 매 프레임 좌면을 엉덩이 밑으로 데려간다
+        chairFresh = true;
         chair.rotation.set(0, 0, 0);
         chair.scale.setScalar(0.001);
         chair.visible = true;
@@ -383,6 +387,18 @@ export function createClipRig(
       if ((gesture === 'sit' || gesture === 'sitDown') && hipsBone && root.parent) {
         hipsBone.getWorldPosition(fw);
         root.parent.worldToLocal(fw);
+        // BUILD 190: 의자가 엉덩이를 따라간다 — 발 앵커가 몸을 되미는 동안에도 좌면 중심은 늘 힙 밑에.
+        // (상수 z 오프셋 3대(0.05→0.18→?)가 전부 실패한 이유: 앉기 클립·발 앵커 보정마다 힙의 최종 위치가 달라서)
+        if (chair && (chairPhase === 'in' || chairPhase === 'hold')) {
+          const cx = fw.x;
+          const cz = fw.z - chairSeatCz;
+          if (chairFresh) { chair.position.x = cx; chair.position.z = cz; chairFresh = false; }
+          else {
+            const kc = Math.min(1, dt * 6);
+            chair.position.x += (cx - chair.position.x) * kc;
+            chair.position.z += (cz - chair.position.z) * kc;
+          }
+        }
         const hipsRaw = fw.y + sitSink; // 침하를 걷어낸 원시 힙 높이 (부모 로컬, 지면=0)
         // 발 깊이 상한: 다리가 앞으로 뻗는 자세에서 발이 모래에 10cm 이상 잠기지 않게
         let footMin = 9;

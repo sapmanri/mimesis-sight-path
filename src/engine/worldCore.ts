@@ -298,6 +298,7 @@ export const ROAD_MATERIALS: Record<RoadMaterialId, { label: string; top?: strin
   train: { label: '열차 길', top: '#6e5a4d', edge: '#57493f' }, // BUILD 126: 길 자체가 열차다
 };
 
+export const kitHeight = (k: string) => MODELS[k]?.height ?? 1; // BUILD 190: 좌면 계산이 다이어트를 자동 추적하게 — 0.64 유령 재발 방지
 export const MODELS: Record<string, ModelSpec> = {
   suitcase: { file: 'Old_Suitcase.glb', height: 0.3, tint: '#7e937f', preRotateX: -Math.PI / 2 }, // BUILD 087: 여행용 캐리어 크기 (0.42는 길을 침범했다)
   cabin: { file: 'Snow_Cabin_iso.glb', height: 0.9, tint: '#ddd6c2', strip: 'areaLight,aiSkyDomeLight,camera,pCube10,Oak_Tree,nRigid' }, // BUILD 085: 디오라마 받침판(7.5유닛 pCube10)/나무/조명/카메라 제거 — 건물만

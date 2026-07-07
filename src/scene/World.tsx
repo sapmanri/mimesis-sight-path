@@ -2,7 +2,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { ObservationScene } from '../data/jeju';
-import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE, enforceFog, FOG_FIRST } from '../engine/worldCore';
+import { buildWorld, createWalkerFigure, loadWalkerAsset, loadKitModel, defaultLoader, makeCloudPuff, PALETTE, enforceFog, FOG_FIRST, kitHeight } from '../engine/worldCore';
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { JEJU_SPEC, type WorldSpec } from '../engine/worldSpec';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
@@ -710,11 +710,31 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   // 정지 포즈 정렬은 클립이 재생되면 어긋난다(믹사모 힙 기준선 차이).
   // 클립을 한 순간 돌린 뒤 몸의 월드 최저점을 실측해 발바닥을 기준면에 붙인다 — 주인공이 받던 수술을 모두에게.
   const groundNpc = (root: THREE.Group, mixer: THREE.AnimationMixer) => {
-    mixer.update(0.08);
-    root.updateMatrixWorld(true);
-    const base = root.getWorldPosition(new THREE.Vector3()).y;
-    const box = new THREE.Box3().setFromObject(root);
-    if (Number.isFinite(box.min.y)) root.position.y += base - box.min.y;
+    // BUILD 190: 부양 진범 2명 동시 검거 —
+    // ① Box3는 스킨드메시에서 바인드 포즈만 본다: 클립이 힙을 들어올려도 bbox는 모른다 → 발 뼈를 한 사이클 훑어 실측
+    // ② 보정을 루트 y에 얹으면, 매 프레임 y를 커브에 못박는 코드(패서·departures의 position.y = pt.y)가
+    //    다음 프레임에 그대로 덮어쓴다 → 보정은 루트가 아니라 속(자식)에 새긴다. 루트 y는 길이 소유한다.
+    const feet: THREE.Object3D[] = [];
+    root.traverse((o) => { if (/foot|toe/i.test(o.name)) feet.push(o); });
+    const v = new THREE.Vector3();
+    let minY = Infinity;
+    let soleOff = 0;
+    if (feet.length) {
+      soleOff = feet.some((f) => /toe/i.test(f.name)) ? 0.012 : 0.035; // 발목뼈→발바닥 (walkerRig와 동일 상수)
+      for (let i = 0; i < 14; i += 1) { // 걷기 한 사이클(~1.26s)의 최저점
+        mixer.update(0.09);
+        root.updateMatrixWorld(true);
+        for (const f of feet) { f.getWorldPosition(v); if (v.y < minY) minY = v.y; }
+      }
+    } else {
+      mixer.update(0.08);
+      root.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(root);
+      minY = box.min.y;
+    }
+    if (!Number.isFinite(minY)) return;
+    const lift = root.getWorldPosition(v).y - (minY - soleOff);
+    for (const c of root.children) c.position.y += lift;
   };
 
   // BUILD 166: 스치는 사람 — 무한길은 외로운 길이다. 가끔 반대편에서 누군가 걸어온다.
@@ -832,7 +852,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       // BUILD 104: 마법 의자 — 앉을 때 샤라락. 좌면은 정규화 높이의 47% 지점.
       loadKitModel('chair', defaultLoader).then((chairObj) => {
         if (!alive) return;
-        rigRef.current?.setChairAsset?.(chairObj, 0.64 * 0.47);
+        rigRef.current?.setChairAsset?.(chairObj, kitHeight('chair') * 0.50, 0.037); // BUILD 190: Chair.glb 직파싱 실측 — 좌면 y=0.50H, 좌면 z중심 +0.037(정규화)
       }).catch(() => { /* 의자가 없으면 조용히 땅에 앉는다 */ });
     }).catch(() => { /* 실패 시 프로시저럴 실루엣 유지 */ });
     return () => { alive = false; };
