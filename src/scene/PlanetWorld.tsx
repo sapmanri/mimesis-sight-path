@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader, makeCloudPuff, loadKitModel } from '../engine/worldCore';
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
+import { createPlanetSky } from './planetSky';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { planetSound } from '../audio/planetSound';
@@ -550,6 +551,19 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     h.rotation.y = Math.PI / 2;
     return h;
   }, []);
+  const skyRef = useRef<ReturnType<typeof createPlanetSky> | null>(null);
+  const lastRainAmt = useRef(-1);
+  useEffect(() => {
+    skyRef.current = createPlanetSky(scene, (g) => {
+      g.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+      });
+    });
+    return () => { skyRef.current?.dispose(); skyRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene]);
   const rigRef = useRef<WalkerRig | null>(null);
   useEffect(() => {
     let alive = true;
@@ -1007,6 +1021,19 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     }
     rigRef.current?.update(dt, MV.mode === 'run' ? 0.9 : 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * spdMul * dt : 0);
     PLANET_CENTER.copy(built.planet.position);
+    // BUILD 234: 하늘 — 자유 구름과 방사형 비·눈
+    if (skyRef.current) {
+      const propRainList: { key: string; dirLocal: THREE.Vector3; topR: number }[] = [];
+      for (const pr2 of SP.props ?? []) {
+        if (pr2.obj !== 'cloud-dark') continue;
+        propRainList.push({ key: pr2.id, dirLocal: new THREE.Vector3(pr2.dir[0], pr2.dir[1], pr2.dir[2]), topR: pr2.r + (pr2.lift ?? 0) + 2.45 });
+      }
+      const rainNear = skyRef.current.update(dt, el, built.planet, built.R, built.surfaceR,
+        { clouds: SP.clouds ?? 0, cloudFree: SP.cloudFree ?? 0.9, rainEvery: SP.rainEvery ?? 0, snowEvery: SP.snowEvery ?? 0 }, propRainList);
+      // 빗소리 히스테리시스 — 문턱을 넘을 때만 apply (본토 소리 문법)
+      const amt = rainNear > 0.55 ? 0.7 : rainNear > 0.22 ? 0.35 : 0;
+      if (amt !== lastRainAmt.current) { lastRainAmt.current = amt; ambience.apply({ rainAmount: amt }); }
+    }
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
     // BUILD 224: 반려의 걸음 — 그녀 뒤 0.6u를 목표로 부드럽게 따라온다 (행성 좌표로 계산, 월드로 환산)
     const PT = petRef.current;

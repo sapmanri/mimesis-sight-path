@@ -377,7 +377,11 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // BUILD 233: 232 철회 — 오프라인 베이크가 손·발·목이 뒤집힌 좀비를 낳았다 (Vase 목격).
   // 단일 방향 정렬(A)은 뼈 축 비틀림을 구속하지 못한다 — 기증자 전역 자세가 Hiker와 다르면 무너진다.
   // FK 수치검증(직립·접지)은 거꾸로 붙은 손발을 통과시킨다. 눈으로 보기 전엔 캐릭터를 내보내지 마라.
-  { file: 'Vroid01.glb', height: 0.95, tint: '#57534a', keepLook: true, retargetFrom: 'Hiker.glb', clipSpeeds: { walk: 1.165, run: 2.339 } },
+  // BUILD 234: Girl1 재건 2호 — 리타겟 없는 길. Vase가 OBJ로 믹사모 리깅해 받은 애니 FBX 속
+  // '믹사모가 직접 리깅한 몸'을 그대로 쓴다(클립과 골격이 한 몸 = 좀비 원천 봉쇄).
+  // 회색 점토는 UV 삼각형 대조(정확+센트로이드 폴백, 100.0% 매칭)로 Vroid01 재질 15종 복원.
+  // 클립 9종(Idle/Walking/Running/PickUp/Sitting/Yawn/춤3) 이름 병합, 루트모션 제거, 드리프트 실측.
+  { file: 'Girl1.glb', height: 0.95, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.013, run: 0.029 } },
   // BUILD 203: 차차 5인방 하차 — 이식 클립이 바인드 포즈 불일치로 누워 걷는 공포를 연출
   // (다리 뼈 rest 쿼터니언 [0.05,0.04,0.995,-0.07] = Mixamo 표준과 골격 자체가 다르다).
   // 파일·animFrom 규칙은 보존. 재입단 정도: Mixamo 자동 리깅 → Walking(With Skin) → 외길 어댑터.
