@@ -428,9 +428,14 @@ export function createClipRig(
         root.parent.getWorldPosition(pw);
         const ground = pw.y;
         // 사이클 최저점 추적: 즉시 하강, 완만 상승 — 가장 깊이 딛는 순간이 기준
-        const minNow = Math.min(ly, ry);
+        // BUILD 192: 부모 로컬에서 잰다 (헌법 1조). 월드 y로 기억하면 오르막에서 지면이
+        // rollingMin의 다리(0.12u/s)보다 빨리 올라가 err<0 → groundCorr가 +0.4 천장까지
+        // 몸을 들어올렸다. 특히 앉았다 일어나 목표를 따라잡느라 '뛰며' 오를 때
+        // (등반 속도 ≈ 2.1×경사 ≫ 0.12) 어김없이 비행했다. 로컬로 재면 경사는
+        // 홀더가 감당하고, 이 식에는 보폭의 출렁임만 남는다.
+        const minNow = Math.min(ly, ry) - ground;
         rollingMin = Math.min(minNow, (rollingMin === Infinity ? minNow : rollingMin) + 0.12 * dt);
-        const err = (rollingMin - sole) - ground;
+        const err = rollingMin - sole;
         groundCorr = THREE.MathUtils.lerp(groundCorr, THREE.MathUtils.clamp(groundCorr - err, -1.8, 0.4), Math.min(1, dt * 8));
 
         // 발자국: 발이 접지 대역(표면+2.5cm)으로 '진입'하는 순간, 이동 중일 때만
