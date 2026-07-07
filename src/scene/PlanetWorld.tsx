@@ -688,6 +688,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     pos: new THREE.Vector3(0, 2.25, 5.6), look: new THREE.Vector3(0, 1.02, 0),
     manualUntil: 0,
     sph: new THREE.Spherical(), dragging: false, lastX: 0, lastY: 0,
+    // BUILD 226: 시선의 카메라 — 가끔 물러나 지구본 전체를 바라본다. 인간극장의 시선.
+    gaze: false, nextGaze: 50 + Math.random() * 60, gz: 0,
   });
   useEffect(() => {
     const el = gl.domElement;
@@ -1001,8 +1003,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       // BUILD 221: 시야 거리 — 이펙트 타이밍에 맡기지 않고 매 프레임 직접 민다 (결정론)
       const fg = scene.fog as THREE.Fog;
       fg.color.copy(SKY_BLEND);
-      fg.near = Math.max(2.5, (SP.viewDist ?? 41) * 0.22);
-      fg.far = Math.max(6, SP.viewDist ?? 41);
+      // BUILD 226: 시선이 물러날 땐 안개도 물러난다 — 지구본이 안개공이 되지 않게
+      const gz = cam.current.gz;
+      const vd = Math.max(6, SP.viewDist ?? 41);
+      const vdFar = Math.max(vd, built.R * 8);
+      fg.near = Math.max(2.5, vd * 0.22) * (1 - gz) + vdFar * 0.35 * gz;
+      fg.far = vd * (1 - gz) + vdFar * gz;
     }
     RFOG.color.copy(SKY_BLEND);
     // BUILD 221: 깃발 폽 — 가까우면 땅에서 통, 멀어지면 쇽 (히스테리시스 1.6/2.2u)
@@ -1036,15 +1042,34 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     } else {
       C.hold -= dt;
       if (C.hold <= 0) {
-        let next = Math.floor(Math.random() * SHOTS.length);
-        if (next === C.shot) next = (next + 1) % SHOTS.length;
-        C.shot = next;
-        C.hold = 9 + Math.random() * 6;
+        if (!C.gaze && e >= C.nextGaze) {
+          // BUILD 226: 이번 컷은 물러난 시선 — 세계가 손바닥 위 물건으로 보이는 앵글
+          C.gaze = true;
+          C.hold = 9 + Math.random() * 5;
+          C.nextGaze = e + 70 + Math.random() * 80;
+        } else {
+          C.gaze = false;
+          let next = Math.floor(Math.random() * SHOTS.length);
+          if (next === C.shot) next = (next + 1) % SHOTS.length;
+          C.shot = next;
+          C.hold = 9 + Math.random() * 6;
+        }
       }
-      const tgt = SHOTS[C.shot];
+      C.gz += ((C.gaze ? 1 : 0) - C.gz) * Math.min(1, dt * 0.55);
       const kc = Math.min(1, dt * 0.65);
-      C.pos.lerp(tgt.p, kc);
-      C.look.lerp(tgt.look, kc);
+      if (C.gaze) {
+        const az2 = e * 0.025; // 아주 느리게 도는 관측 자리
+        const D = built.R * 2.9;
+        v.set(Math.cos(az2) * 0.82, 0.52, Math.sin(az2) * 0.82).normalize().multiplyScalar(D);
+        v.y += PLANET_CENTER.y + built.R * 0.15;
+        C.pos.lerp(v, Math.min(1, dt * 0.45)); // 물러날 땐 더 천천히
+        v.set(0, PLANET_CENTER.y + built.R * 0.1, 0);
+        C.look.lerp(v, kc);
+      } else {
+        const tgt = SHOTS[C.shot];
+        C.pos.lerp(tgt.p, kc);
+        C.look.lerp(tgt.look, kc);
+      }
       camera.position.set(
         C.pos.x + Math.sin(e * 0.11) * 0.14,
         C.pos.y + Math.sin(e * 0.07) * 0.06,

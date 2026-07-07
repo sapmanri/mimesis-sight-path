@@ -35,7 +35,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.6.1 · A BABY CLOUD FOR THE PET · BUILD 225';
+const BUILD_LABEL = 'v1.7.0 · A PASSPORT AND A GAZE · BUILD 226';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -103,10 +103,27 @@ export default function App() {
   // BUILD 222: 깃발 속삭임 — 멈추지 않고, 이름만 스친다
   const [flagWhisper, setFlagWhisper] = useState<string | null>(null);
   const whisperTimer = useRef<number | null>(null);
+  // BUILD 226: 여권 — 우연히 지난 곳들의 기록. 도장이 아니라 기억.
+  const PASSPORT_KEY = 'mimesis.planetPassport.v1';
+  const [passport, setPassport] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(PASSPORT_KEY);
+      if (!raw) return [];
+      const d = JSON.parse(raw) as { date: string; names: string[] };
+      return d.date === new Date().toDateString() ? d.names : [];
+    } catch { return []; }
+  });
+  const [passportOpen, setPassportOpen] = useState(false);
   const onFlagPop = (name: string) => {
     setFlagWhisper(name);
     if (whisperTimer.current) window.clearTimeout(whisperTimer.current);
     whisperTimer.current = window.setTimeout(() => setFlagWhisper(null), 3400);
+    setPassport((prev) => {
+      if (prev.includes(name)) return prev;
+      const next = [...prev, name];
+      try { localStorage.setItem(PASSPORT_KEY, JSON.stringify({ date: new Date().toDateString(), names: next })); } catch { /* 조용히 */ }
+      return next;
+    });
   };
   const placeAt = (e: React.PointerEvent) => {
     const hit = planetApi.current?.pick(e.clientX, e.clientY);
@@ -280,6 +297,25 @@ export default function App() {
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
+        {passportOpen && (
+          <div style={{
+            position: 'fixed', top: 76, right: planetEdit ? 318 : 18, width: 250, zIndex: 6,
+            padding: '14px 16px', borderRadius: 14, color: '#e8dcc2',
+            background: 'rgba(18,24,26,0.9)', border: '1px solid rgba(216,178,110,0.3)',
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+          }}>
+            <div style={{ fontSize: 12, color: '#d8b26e', letterSpacing: 2, marginBottom: 8 }}>여권 — 오늘의 우연</div>
+            {passport.length > 0 ? (
+              <>
+                <div style={{ fontSize: 12.5, lineHeight: 1.9 }}>{passport.join(' · ')}</div>
+                <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8 }}>오늘 그녀는 {passport.length}곳을 지났습니다</div>
+              </>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 아무 곳도 지나지 않았어요.<br />돌려두고, 하던 일을 하세요.</div>
+            )}
+            <div style={{ fontSize: 10.5, opacity: 0.4, marginTop: 10, textAlign: 'right' }}>오늘도 느리게 · slow days</div>
+          </div>
+        )}
         {flagWhisper && (
           <div key={flagWhisper + String(Date.now() % 7)} style={{
             position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 6,
@@ -317,7 +353,8 @@ export default function App() {
         <div style={{ position: 'fixed', top: 18, right: planetEdit ? 318 : 18, display: 'flex', gap: 10, zIndex: 6 }}>
           {([['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] }))],
             ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())],
-            [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v)]] as [string, () => void][]).map(([label, fn]) => (
+            [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v)],
+            ['🛂', () => setPassportOpen((v) => !v)]] as [string, () => void][]).map(([label, fn]) => (
             <button key={label} type="button" onClick={fn} style={{
               width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
               border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
