@@ -4,7 +4,7 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { PlanetWorld } from './scene/PlanetWorld';
 import { walkerCount } from './engine/worldCore';
-import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact } from './scene/planetSpec';
+import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact, type PlanetApi } from './scene/planetSpec';
 import { PROP_CATALOG } from './engine/props';
 
 // ---------- BUILD 207: 행성 에디터 — 다이얼 한 줄 ----------
@@ -33,7 +33,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.1.1 · FOG AT HER ANKLES · BUILD 215';
+const BUILD_LABEL = 'v1.2.0 · THE GLOBE TAKES SHAPE · BUILD 216';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -93,6 +93,69 @@ export default function App() {
   const planetContact = useRef<PlanetContact | null>(null);
   const [propPick, setPropPick] = useState('tree');
   const [propScale, setPropScale] = useState(1);
+  // BUILD 216: 찍어서 배치 + 선택·키보드 편집 — 에디터의 본분
+  const planetApi = useRef<PlanetApi | null>(null);
+  const [placeArm, setPlaceArm] = useState<null | { mode: 'new' } | { mode: 'move'; id: string }>(null);
+  const [propSel, setPropSel] = useState<string | null>(null);
+  const placeAt = (e: React.PointerEvent) => {
+    const hit = planetApi.current?.pick(e.clientX, e.clientY);
+    if (!hit || !placeArm) { setPlaceArm(null); return; }
+    if (placeArm.mode === 'new') {
+      const id = `p${Date.now().toString(36)}${Math.floor(Math.random() * 99)}`;
+      updSpec((s) => ({ ...s, props: [...(s.props ?? []), { id, obj: propPick, dir: hit.dir, r: hit.r, rotY: 0, scale: propScale, tilt: 0, lift: 0 }] }));
+      setPropSel(id);
+    } else {
+      const mid = placeArm.id;
+      updSpec((s) => ({ ...s, props: (s.props ?? []).map((x) => (x.id === mid ? { ...x, dir: hit.dir, r: hit.r } : x)) }));
+    }
+    setPlaceArm(null);
+  };
+  useEffect(() => {
+    if (!planetEdit) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setPlaceArm(null); return; }
+      if (!propSel) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      const big = e.shiftKey;
+      const upd = (fn: (p: PlanetSpec['props'][number]) => Partial<PlanetSpec['props'][number]>) =>
+        updSpec((s) => ({ ...s, props: (s.props ?? []).map((x) => (x.id === propSel ? { ...x, ...fn(x) } : x)) }));
+      const move = (du: number, dv: number) => upd((p) => {
+        const [dx, dy, dz] = p.dir;
+        // 접선 기저: e=cross(up0,dir), n=cross(dir,e) — 극점 근처는 x축 기준으로 회피
+        const up0 = Math.abs(dy) > 0.94 ? [1, 0, 0] : [0, 1, 0];
+        let ex = up0[1] * dz - up0[2] * dy, ey = up0[2] * dx - up0[0] * dz, ez = up0[0] * dy - up0[1] * dx;
+        const el = Math.hypot(ex, ey, ez) || 1; ex /= el; ey /= el; ez /= el;
+        const nx = dy * ez - dz * ey, ny = dz * ex - dx * ez, nz = dx * ey - dy * ex;
+        const st = big ? 0.3 : 0.08;
+        const px = dx * p.r + (ex * du + nx * dv) * st, py = dy * p.r + (ey * du + ny * dv) * st, pz = dz * p.r + (ez * du + nz * dv) * st;
+        const r0 = Math.hypot(px, py, pz);
+        return { dir: [px / r0, py / r0, pz / r0] as [number, number, number] };
+      });
+      switch (e.key) {
+        case 'ArrowLeft': e.preventDefault(); move(-1, 0); break;
+        case 'ArrowRight': e.preventDefault(); move(1, 0); break;
+        case 'ArrowUp': e.preventDefault(); move(0, 1); break;
+        case 'ArrowDown': e.preventDefault(); move(0, -1); break;
+        case 'PageUp': e.preventDefault(); upd((p) => ({ lift: +((p.lift ?? 0) + (big ? 0.12 : 0.04)).toFixed(3) })); break;
+        case 'PageDown': e.preventDefault(); upd((p) => ({ lift: +((p.lift ?? 0) - (big ? 0.12 : 0.04)).toFixed(3) })); break;
+        case 'r': case 'R': upd((p) => ({ rotY: p.rotY + ((big ? 30 : 10) * Math.PI) / 180 })); break;
+        case 'f': case 'F': upd((p) => ({ rotY: p.rotY - ((big ? 30 : 10) * Math.PI) / 180 })); break;
+        case 't': case 'T': upd((p) => ({ tilt: (p.tilt ?? 0) + (5 * Math.PI) / 180 })); break;
+        case 'g': case 'G': upd((p) => ({ tilt: (p.tilt ?? 0) - (5 * Math.PI) / 180 })); break;
+        case '+': case '=': upd((p) => ({ scale: +(p.scale * 1.08).toFixed(3) })); break;
+        case '-': case '_': upd((p) => ({ scale: +(p.scale / 1.08).toFixed(3) })); break;
+        case 'Delete': case 'Backspace':
+          e.preventDefault();
+          updSpec((s) => ({ ...s, props: (s.props ?? []).filter((x) => x.id !== propSel) }));
+          setPropSel(null);
+          break;
+        default: break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [planetEdit, propSel]);
   const plantProp = () => {
     const c = planetContact.current;
     if (!c) return;
@@ -202,10 +265,22 @@ export default function App() {
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} contactRef={planetContact} />
+            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} contactRef={planetContact} apiRef={planetApi} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
+        {placeArm && (
+          <div onPointerDown={placeAt} style={{
+            position: 'fixed', inset: 0, zIndex: 7, cursor: 'crosshair',
+            background: 'rgba(216,178,110,0.04)',
+          }}>
+            <div style={{
+              position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
+              padding: '7px 16px', borderRadius: 999, fontSize: 12, color: '#e8dcc2',
+              background: 'rgba(18,24,26,0.9)', border: '1px solid rgba(216,178,110,0.4)',
+            }}>{placeArm.mode === 'new' ? '표면을 찍으세요 — 그 자리에 심어집니다' : '표면을 찍으세요 — 그 자리로 옮깁니다'} (Esc 취소)</div>
+          </div>
+        )}
         {memCard && (
           <div style={{
             position: 'fixed', left: '50%', bottom: 84, transform: 'translateX(-50%)', maxWidth: 420,
@@ -273,15 +348,39 @@ export default function App() {
               <button type="button" onClick={plantProp} style={{
                 flex: 1, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
                 border: '1px solid rgba(216,178,110,0.4)', background: 'rgba(216,178,110,0.14)', color: '#e8dcc2',
-              }}>🌱 발밑에 심기</button>
+              }}>🌱 발밑에</button>
+              <button type="button" onClick={() => setPlaceArm({ mode: 'new' })} style={{
+                flex: 1.4, padding: '6px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+                border: '1px dashed rgba(216,178,110,0.55)', background: placeArm?.mode === 'new' ? 'rgba(216,178,110,0.3)' : 'rgba(216,178,110,0.1)', color: '#e8dcc2',
+              }}>⊕ 화면을 찍어 배치</button>
             </div>
             {(pSpec.props ?? []).length > 0 ? (pSpec.props ?? []).map((pr) => (
-              <div key={pr.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <span>{PROP_CATALOG.find((c) => c.id === pr.obj)?.label ?? pr.obj} · ×{pr.scale}</span>
-                <button type="button" onClick={() => updSpec((s) => ({ ...s, props: (s.props ?? []).filter((x) => x.id !== pr.id) }))}
-                  style={{ border: 'none', background: 'transparent', color: '#c97b6a', cursor: 'pointer', fontSize: 11 }}>삭제</button>
+              <div key={pr.id} onClick={() => setPropSel(propSel === pr.id ? null : pr.id)} style={{
+                fontSize: 11, padding: '4px 6px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
+                border: propSel === pr.id ? '1px solid rgba(216,178,110,0.6)' : '1px solid transparent',
+                background: propSel === pr.id ? 'rgba(216,178,110,0.12)' : 'transparent',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{PROP_CATALOG.find((c) => c.id === pr.obj)?.label ?? pr.obj} · ×{pr.scale}</span>
+                  <button type="button" onClick={(ev) => { ev.stopPropagation(); updSpec((s) => ({ ...s, props: (s.props ?? []).filter((x) => x.id !== pr.id) })); if (propSel === pr.id) setPropSel(null); }}
+                    style={{ border: 'none', background: 'transparent', color: '#c97b6a', cursor: 'pointer', fontSize: 11 }}>삭제</button>
+                </div>
+                {propSel === pr.id && (
+                  <div style={{ marginTop: 4 }}>
+                    <div style={{ opacity: 0.6, fontSize: 10.5, marginBottom: 4 }}>
+                      회전 {Math.round((pr.rotY * 180) / Math.PI) % 360}° · 기울임 {Math.round(((pr.tilt ?? 0) * 180) / Math.PI)}° · 높이 {(pr.lift ?? 0).toFixed(2)}
+                    </div>
+                    <button type="button" onClick={(ev) => { ev.stopPropagation(); setPlaceArm({ mode: 'move', id: pr.id }); }} style={{
+                      width: '100%', padding: '5px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11,
+                      border: '1px dashed rgba(216,178,110,0.55)', background: 'rgba(216,178,110,0.1)', color: '#e8dcc2',
+                    }}>⊕ 자리 다시 찍기</button>
+                  </div>
+                )}
               </div>
-            )) : <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 4 }}>그녀가 선 자리 곁에 심어집니다</div>}
+            )) : <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 4 }}>화면을 찍거나, 그녀 발밑에 심어보세요</div>}
+            <div style={{ fontSize: 10.5, opacity: 0.55, lineHeight: 1.7, margin: '6px 0 2px', padding: '6px 8px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 6 }}>
+              키보드로 조정 (목록에서 선택 후)<br />화살표 이동 · PgUp/Dn 높이 · R/F 회전 · T/G 기울임 · +/− 크기 · Shift 크게 · Del 삭제
+            </div>
             <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 4px', display: 'flex', justifyContent: 'space-between' }}>
               <span>기억 — 길 위의 멈춤</span>
               <button type="button" style={{ ...PANEL_BTN, flex: 'none', padding: '2px 10px' }}

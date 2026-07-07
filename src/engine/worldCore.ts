@@ -311,6 +311,7 @@ export const MODELS: Record<string, ModelSpec> = {
   // BUILD 110: 동물들 — 소만 걷는다(스킨+클립 5종 이식본). 나머지는 길가에 선 조각들.
   cow: { file: 'Cow.glb', height: 0.95, tint: '#c9c2b4', keepLook: true },
   dog: { file: 'Dog.glb', height: 0.34, tint: '#8a7a5f' },
+  rabbit: { file: 'Rabbit.glb', height: 0.32, tint: '#b9b3a8', keepLook: true }, // BUILD 216: 달에는 토끼가 산다 (Vase). Idle 클립 내장 — 로밍의 씨앗
   duck: { file: 'Duck.glb', height: 0.22, tint: '#d8d2bd' },
   chicky: { file: 'Chicky.glb', height: 0.17, tint: '#d9c98e' },
   horse: { file: 'horse.glb', height: 1.05, tint: '#7d6a52' },

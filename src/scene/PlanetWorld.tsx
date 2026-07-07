@@ -5,7 +5,7 @@ import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader } from '../engi
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
-import type { PlanetSpec, PlanetMemory, PlanetContact } from './planetSpec';
+import type { PlanetSpec, PlanetMemory, PlanetContact, PlanetApi, PlanetProp } from './planetSpec';
 import type { MutableRefObject } from 'react';
 import { createPropObject } from '../engine/props';
 
@@ -228,7 +228,7 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
   return tex;
 }
 
-export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void; contactRef?: MutableRefObject<PlanetContact | null> }) {
+export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
   const { scene, camera, gl } = useThree();
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
   // BUILD 214: 시야 거리 다이얼 — 씬 안개 near/far 즉답 갱신
@@ -443,23 +443,54 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef }: { sp
     ambience.apply({ kind: 'clear', wind: 0.28, rainAmount: 0, time: 'day', sea: 0, life: 0.5 });
   }, []);
 
-  // BUILD 214: 표면 소품 — 본토 카탈로그(PROP_CATALOG) 통째 수입. dir×r 앵커로 행성에 못 박고
-  // up=dir 정렬 + yaw. 하늘 소품(구름·풍력)은 지표 위로 띄운다. 행성과 함께 구른다(planet 자식).
+  // BUILD 216: 표면 소품 v2 — 증분 동기화. 키보드 편집이 초당 수십 번 스펙을 바꿔도
+  // 모델 재로드 없이 변환만 갱신한다. 앵커(up=dir) 안에 inner(yaw·tilt·scale)를 태우는 2단 구조.
   const propsKey = JSON.stringify(spec.props ?? []);
+  const propsRoot = useRef<THREE.Group | null>(null);
+  const propMap = useRef(new Map<string, { anchor: THREE.Group; obj: string }>());
   useEffect(() => {
     if (!built) return undefined;
-    let alive = true;
     const g = new THREE.Group();
     g.name = 'placedProps';
     built.planet.add(g);
+    propsRoot.current = g;
+    propMap.current.clear();
+    return () => { built.planet.remove(g); propsRoot.current = null; propMap.current.clear(); };
+  }, [built]);
+  useEffect(() => {
+    const g = propsRoot.current;
+    if (!g || !built) return;
     const HOVER: Record<string, number> = { cloud: 2.4, 'cloud-dark': 2.7, windturbine: 1.7, moon: 3.2 };
-    const list = JSON.parse(propsKey) as PlanetSpec['props'];
-    void (async () => {
-      for (const pr of list) {
-        let seed = 7;
-        for (const ch of pr.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
-        const obj = await createPropObject(pr.obj, seed || 7);
-        if (!alive || !obj) continue;
+    const UP = new THREE.Vector3(0, 1, 0);
+    const applyXform = (anchor: THREE.Group, pr: PlanetProp) => {
+      const dir = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
+      anchor.quaternion.setFromUnitVectors(UP, dir);
+      anchor.position.copy(dir).multiplyScalar(pr.r - 0.02 + (HOVER[pr.obj] ?? 0) + (pr.lift ?? 0));
+      const inner = anchor.children[0];
+      if (inner) {
+        inner.rotation.order = 'YXZ';
+        inner.rotation.set(pr.tilt ?? 0, pr.rotY, 0);
+        inner.scale.setScalar(pr.scale);
+      }
+    };
+    const list = JSON.parse(propsKey) as PlanetProp[];
+    const seen = new Set(list.map((x) => x.id));
+    for (const [id, rec] of propMap.current) {
+      if (!seen.has(id)) { g.remove(rec.anchor); propMap.current.delete(id); }
+    }
+    for (const pr of list) {
+      const rec = propMap.current.get(pr.id);
+      if (rec && rec.obj === pr.obj) { applyXform(rec.anchor, pr); continue; }
+      if (rec) { g.remove(rec.anchor); propMap.current.delete(pr.id); }
+      const anchor = new THREE.Group();
+      propMap.current.set(pr.id, { anchor, obj: pr.obj });
+      g.add(anchor);
+      applyXform(anchor, pr);
+      let seed = 7;
+      for (const ch of pr.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+      void createPropObject(pr.obj, seed || 7).then((obj) => {
+        const cur = propMap.current.get(pr.id);
+        if (!obj || !cur || cur.anchor !== anchor) return;
         obj.traverse((o) => {
           const mesh = o as THREE.Mesh;
           if (!mesh.isMesh) return;
@@ -467,18 +498,40 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef }: { sp
           (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
             .forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
         });
-        const dir = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
-        const anchor = new THREE.Group();
-        anchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-        anchor.position.copy(dir).multiplyScalar(pr.r - 0.02 + (HOVER[pr.obj] ?? 0));
-        obj.rotation.y = pr.rotY;
-        obj.scale.setScalar(pr.scale);
         anchor.add(obj);
-        if (alive) g.add(anchor);
-      }
-    })();
-    return () => { alive = false; built.planet.remove(g); };
+        applyXform(anchor, pr);
+      });
+    }
   }, [built, propsKey]);
+
+  // BUILD 216: pick — 화면을 찍으면 표면의 dir×r을 돌려준다 (배치·자리 다시 찍기의 눈)
+  useEffect(() => {
+    if (!apiRef) return undefined;
+    apiRef.current = {
+      pick: (cx: number, cy: number) => {
+        if (!built) return null;
+        const rect = gl.domElement.getBoundingClientRect();
+        const nd = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -(((cy - rect.top) / rect.height) * 2 - 1));
+        const rc = new THREE.Raycaster();
+        rc.setFromCamera(nd, camera);
+        const targets: THREE.Object3D[] = [];
+        built.planet.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          let a: THREE.Object3D | null = o;
+          while (a) { if (a.name === 'placedProps') return; a = a.parent; }
+          targets.push(o);
+        });
+        const hits = rc.intersectObjects(targets, false);
+        if (!hits.length) return null;
+        const local = built.planet.worldToLocal(hits[0].point.clone());
+        const r = local.length();
+        const d = local.normalize();
+        return { dir: [d.x, d.y, d.z] as [number, number, number], r };
+      },
+    };
+    return () => { if (apiRef) apiRef.current = null; };
+  }, [apiRef, built, camera, gl]);
 
   const SHOTS = useMemo(() => [
     { p: new THREE.Vector3(0, 2.25, 5.6), look: new THREE.Vector3(0, 1.02, 0) },

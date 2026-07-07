@@ -152,6 +152,7 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'rogue', label: '두건 나그네', cat: '사람' },
   { id: 'scavenger', label: '방랑자', cat: '사람' },
   // 동물 (BUILD 110) — 소는 로밍 가능, 나머지는 정적
+  { id: 'rabbit', label: '토끼', cat: '동물' }, // BUILD 216
   { id: 'cow', label: '젖소', cat: '동물' },
   { id: 'dog', label: '강아지', cat: '동물' },
   { id: 'duck', label: '오리', cat: '동물' },
@@ -468,7 +469,7 @@ export async function createPropObject(
       case 'scavenger': return await loadKitModel('scavenger', loadModel);
       // BUILD 110: 동물들
       case 'cow': case 'dog': case 'duck': case 'chicky': case 'horse':
-      case 'piggy': case 'bear': case 'deer': case 'boar': case 'wolf':
+      case 'piggy': case 'bear': case 'deer': case 'boar': case 'wolf': case 'rabbit':
         return await loadKitModel(objId, loadModel);
       case 'cowshed': return await loadKitModel('cowshed', loadModel);
       // BUILD 119: 겨울

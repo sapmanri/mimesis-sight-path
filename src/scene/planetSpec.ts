@@ -2,7 +2,9 @@
 // 이전 에디터의 문법을 행성으로: 세계는 스펙이 정하고, 에디터는 스펙을 매만진다.
 export type PlanetMemory = { title: string; text: string; t: number; stay: number };
 // BUILD 214: 표면 배치물 — 방향(단위벡터)·반경으로 행성 표면에 못 박는다
-export type PlanetProp = { id: string; obj: string; dir: [number, number, number]; r: number; rotY: number; scale: number };
+export type PlanetProp = { id: string; obj: string; dir: [number, number, number]; r: number; rotY: number; scale: number; tilt?: number; lift?: number };
+// BUILD 216: 에디터 ↔ 세계 명령선 — 화면 좌표로 표면을 찍는다
+export type PlanetApi = { pick: (clientX: number, clientY: number) => { dir: [number, number, number]; r: number } | null };
 // 에디터 '발밑에 심기'가 읽는 현재 접점 (매 프레임 갱신)
 export type PlanetContact = { dir: [number, number, number]; r: number; tan: [number, number, number] };
 export type PlanetSpec = {
