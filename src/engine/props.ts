@@ -153,6 +153,7 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'scavenger', label: '방랑자', cat: '사람' },
   // 동물 (BUILD 110) — 소는 로밍 가능, 나머지는 정적
   { id: 'rabbit', label: '토끼', cat: '동물' }, // BUILD 216
+  { id: 'flag', label: '국기 깃발 (폽)', cat: '지구본' }, // BUILD 221: 제목에 나라 이름을 적으면 그 국기가 된다
   { id: 'cow', label: '젖소', cat: '동물' },
   { id: 'dog', label: '강아지', cat: '동물' },
   { id: 'duck', label: '오리', cat: '동물' },

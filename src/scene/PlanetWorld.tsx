@@ -23,6 +23,95 @@ const RFOG = { v: new THREE.Vector3(11.9, 12.3, 0.8), color: new THREE.Color('#f
 // BUILD 215: 안개 기준면 — 명목 R이 아니라 '길의 평균 반경'(그녀가 딛는 높이)을 0점으로.
 // 지구는 바다가 낮아 길이 R 아래를 지난다 — R 기준이면 수위 0.02에 이미 무릎(실화).
 const RFOG_BASE = { r: 12 };
+// BUILD 221: 국기 화가 — 주요국은 손으로, 모르는 나라는 이니셜 페넌트로. '대강 귀엽게' (Vase)
+function drawFlag(name: string): HTMLCanvasElement {
+  const W = 192; const H = 128;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d')!;
+  const n = name.trim().toLowerCase();
+  const has = (...keys: string[]) => keys.some((k) => n.includes(k));
+  const vert = (...cols: string[]) => cols.forEach((c, i) => { g.fillStyle = c; g.fillRect(Math.floor(i * W / cols.length), 0, Math.ceil(W / cols.length) + 1, H); });
+  const horz = (...cols: string[]) => cols.forEach((c, i) => { g.fillStyle = c; g.fillRect(0, Math.floor(i * H / cols.length), W, Math.ceil(H / cols.length) + 1); });
+  const circle = (c: string, x: number, y: number, r: number) => { g.fillStyle = c; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
+  const star = (c: string, x: number, y: number, r: number, rot = -Math.PI / 2) => {
+    g.fillStyle = c; g.beginPath();
+    for (let i = 0; i < 10; i += 1) { const a = rot + (i * Math.PI) / 5; const rr = i % 2 ? r * 0.42 : r; if (i) g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else g.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+    g.closePath(); g.fill();
+  };
+  if (has('한국', '대한민국', 'korea')) {
+    g.fillStyle = '#f4f1e8'; g.fillRect(0, 0, W, H);
+    const cx = W / 2; const cy = H / 2; const r = 26;
+    g.fillStyle = '#c8402f'; g.beginPath(); g.arc(cx, cy, r, Math.PI, 0); g.fill();
+    g.fillStyle = '#2a4d8f'; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI); g.fill();
+    circle('#c8402f', cx - r / 2, cy, r / 2); circle('#2a4d8f', cx + r / 2, cy, r / 2);
+    g.fillStyle = '#2b2b2b';
+    const bar = (bx: number, by: number, a: number) => { g.save(); g.translate(bx, by); g.rotate(a); for (let i = -1; i <= 1; i += 1) g.fillRect(-16, i * 8 - 2.5, 32, 5); g.restore(); };
+    bar(30, 26, -Math.PI / 5); bar(W - 30, H - 26, -Math.PI / 5); bar(W - 30, 26, Math.PI / 5); bar(30, H - 26, Math.PI / 5);
+  } else if (has('일본', 'japan')) { g.fillStyle = '#f4f1e8'; g.fillRect(0, 0, W, H); circle('#c8402f', W / 2, H / 2, 30); }
+  else if (has('중국', 'china')) { g.fillStyle = '#c8402f'; g.fillRect(0, 0, W, H); star('#e8c14f', 42, 40, 20); [[80, 20], [94, 38], [94, 60], [80, 76]].forEach(([x, y]) => star('#e8c14f', x, y, 7)); }
+  else if (has('미국', 'usa', 'america', '미합중국')) {
+    for (let i = 0; i < 13; i += 1) { g.fillStyle = i % 2 ? '#f4f1e8' : '#b8433a'; g.fillRect(0, (i * H) / 13, W, H / 13 + 1); }
+    g.fillStyle = '#2a4d8f'; g.fillRect(0, 0, 80, 56);
+    for (let ry = 0; ry < 4; ry += 1) for (let rx = 0; rx < 5; rx += 1) circle('#f4f1e8', 10 + rx * 15 + (ry % 2) * 7, 8 + ry * 13, 2.6);
+  } else if (has('영국', 'uk', 'britain', 'england')) {
+    g.fillStyle = '#2a4d8f'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = '#f4f1e8'; g.lineWidth = 22; g.beginPath(); g.moveTo(0, 0); g.lineTo(W, H); g.moveTo(W, 0); g.lineTo(0, H); g.stroke();
+    g.strokeStyle = '#f4f1e8'; g.lineWidth = 34; g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, H); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
+    g.strokeStyle = '#c8402f'; g.lineWidth = 18; g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, H); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
+  }
+  else if (has('프랑스', 'france')) vert('#2a4d8f', '#f4f1e8', '#c8402f');
+  else if (has('이탈리아', 'italy')) vert('#4a7c4e', '#f4f1e8', '#c8402f');
+  else if (has('아일랜드', 'ireland')) vert('#4a7c4e', '#f4f1e8', '#d98e3f');
+  else if (has('벨기에', 'belgium')) vert('#2b2b2b', '#e8c14f', '#c8402f');
+  else if (has('멕시코', 'mexico')) { vert('#4a7c4e', '#f4f1e8', '#c8402f'); circle('#8a6f4d', W / 2, H / 2, 12); }
+  else if (has('독일', 'germany')) horz('#2b2b2b', '#c8402f', '#e8c14f');
+  else if (has('러시아', 'russia')) horz('#f4f1e8', '#2a4d8f', '#c8402f');
+  else if (has('네덜란드', 'netherlands', 'holland')) horz('#c8402f', '#f4f1e8', '#2a4d8f');
+  else if (has('오스트리아', 'austria')) horz('#c8402f', '#f4f1e8', '#c8402f');
+  else if (has('스페인', 'spain')) { g.fillStyle = '#e8c14f'; g.fillRect(0, 0, W, H); g.fillStyle = '#c8402f'; g.fillRect(0, 0, W, H / 4); g.fillRect(0, (3 * H) / 4, W, H / 4); }
+  else if (has('인도네시아', 'indonesia')) horz('#c8402f', '#f4f1e8');
+  else if (has('폴란드', 'poland')) horz('#f4f1e8', '#c8402f');
+  else if (has('태국', 'thailand')) { horz('#c8402f', '#f4f1e8', '#2a4d8f', '#f4f1e8', '#c8402f'); g.fillStyle = '#2a4d8f'; g.fillRect(0, (2 * H) / 5, W, H / 5); }
+  else if (has('인도', 'india')) { horz('#d98e3f', '#f4f1e8', '#4a7c4e'); circle('#2a4d8f', W / 2, H / 2, 12); circle('#f4f1e8', W / 2, H / 2, 9); circle('#2a4d8f', W / 2, H / 2, 2.5); }
+  else if (has('브라질', 'brazil')) { g.fillStyle = '#4a7c4e'; g.fillRect(0, 0, W, H); g.fillStyle = '#e8c14f'; g.beginPath(); g.moveTo(W / 2, 12); g.lineTo(W - 16, H / 2); g.lineTo(W / 2, H - 12); g.lineTo(16, H / 2); g.closePath(); g.fill(); circle('#2a4d8f', W / 2, H / 2, 20); }
+  else if (has('캐나다', 'canada')) { vert('#c8402f', '#f4f1e8', '#c8402f'); g.fillStyle = '#c8402f'; g.beginPath(); g.moveTo(W / 2, 30); g.lineTo(W / 2 + 16, 56); g.lineTo(W / 2 + 26, 50); g.lineTo(W / 2 + 18, 76); g.lineTo(W / 2 + 6, 70); g.lineTo(W / 2 + 6, 92); g.lineTo(W / 2 - 6, 92); g.lineTo(W / 2 - 6, 70); g.lineTo(W / 2 - 18, 76); g.lineTo(W / 2 - 26, 50); g.lineTo(W / 2 - 16, 56); g.closePath(); g.fill(); }
+  else if (has('호주', 'australia')) { g.fillStyle = '#2a4d8f'; g.fillRect(0, 0, W, H); star('#f4f1e8', 48, 88, 12); [[140, 24], [160, 44], [138, 66], [118, 46], [150, 92]].forEach(([x, y]) => star('#f4f1e8', x, y, 6)); }
+  else if (has('튀르키예', '터키', 'turkey')) { g.fillStyle = '#c8402f'; g.fillRect(0, 0, W, H); circle('#f4f1e8', 74, H / 2, 24); circle('#c8402f', 82, H / 2, 20); star('#f4f1e8', 116, H / 2, 10, 0); }
+  else if (has('베트남', 'vietnam')) { g.fillStyle = '#c8402f'; g.fillRect(0, 0, W, H); star('#e8c14f', W / 2, H / 2, 28); }
+  else if (has('스위스', 'switzerland')) { g.fillStyle = '#c8402f'; g.fillRect(0, 0, W, H); g.fillStyle = '#f4f1e8'; g.fillRect(W / 2 - 9, H / 2 - 30, 18, 60); g.fillRect(W / 2 - 30, H / 2 - 9, 60, 18); }
+  else if (has('스웨덴', 'sweden')) { g.fillStyle = '#2a4d8f'; g.fillRect(0, 0, W, H); g.fillStyle = '#e8c14f'; g.fillRect(58, 0, 20, H); g.fillRect(0, H / 2 - 10, W, 20); }
+  else if (has('노르웨이', 'norway')) { g.fillStyle = '#c8402f'; g.fillRect(0, 0, W, H); g.fillStyle = '#f4f1e8'; g.fillRect(54, 0, 28, H); g.fillRect(0, H / 2 - 14, W, 28); g.fillStyle = '#2a4d8f'; g.fillRect(60, 0, 16, H); g.fillRect(0, H / 2 - 8, W, 16); }
+  else if (has('덴마크', 'denmark')) { g.fillStyle = '#c8402f'; g.fillRect(0, 0, W, H); g.fillStyle = '#f4f1e8'; g.fillRect(58, 0, 20, H); g.fillRect(0, H / 2 - 10, W, 20); }
+  else if (has('핀란드', 'finland')) { g.fillStyle = '#f4f1e8'; g.fillRect(0, 0, W, H); g.fillStyle = '#2a4d8f'; g.fillRect(58, 0, 22, H); g.fillRect(0, H / 2 - 11, W, 22); }
+  else if (has('그리스', 'greece')) { for (let i = 0; i < 9; i += 1) { g.fillStyle = i % 2 ? '#f4f1e8' : '#2a4d8f'; g.fillRect(0, (i * H) / 9, W, H / 9 + 1); } g.fillStyle = '#2a4d8f'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#f4f1e8'; g.fillRect(28, 0, 9, 64); g.fillRect(0, 28, 64, 9); }
+  else if (has('아르헨티나', 'argentina')) { horz('#8fb8d8', '#f4f1e8', '#8fb8d8'); circle('#e8c14f', W / 2, H / 2, 10); }
+  else if (has('이집트', 'egypt')) { horz('#c8402f', '#f4f1e8', '#2b2b2b'); circle('#e8c14f', W / 2, H / 2, 9); }
+  else {
+    g.fillStyle = '#efe8d8'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#b0543f'; g.beginPath(); g.moveTo(0, 0); g.lineTo(64, 0); g.lineTo(0, 48); g.closePath(); g.fill();
+    g.fillStyle = '#3c3529'; g.font = 'bold 56px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText((name.trim()[0] ?? '?').toUpperCase(), W / 2 + 10, H / 2 + 4);
+  }
+  g.strokeStyle = 'rgba(60,53,41,0.35)'; g.lineWidth = 4; g.strokeRect(0, 0, W, H);
+  return cv;
+}
+
+// BUILD 221: 깃발 제작소 — 작은 장대 + 캔버스 국기 천. 폽의 몸.
+function makeFlag(country: string) {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.56, 6), new THREE.MeshStandardMaterial({ color: '#8a7a5f', roughness: 1 }));
+  pole.position.y = 0.28; pole.castShadow = true; g.add(pole);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshStandardMaterial({ color: '#d8b26e', roughness: 0.7 }));
+  knob.position.y = 0.585; g.add(knob);
+  const tex = new THREE.CanvasTexture(drawFlag(country));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.28), new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 1 }));
+  cloth.position.set(0.222, 0.43, 0); cloth.castShadow = true;
+  g.add(cloth);
+  return g;
+}
+const backOut = (t: number) => { const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+
 // BUILD 219: 배회자의 바람 — 세 사인의 합, 부드러운 마음의 흔들림
 const wanderNoise = (x: number) => Math.sin(x * 1.7) * 0.55 + Math.sin(x * 3.7 + 1.3) * 0.3 + Math.sin(x * 7.1 + 4.2) * 0.15;
 function updateRFogBand(fogLevel: number, fogStrength: number) {
@@ -450,7 +539,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
   // 모델 재로드 없이 변환만 갱신한다. 앵커(up=dir) 안에 inner(yaw·tilt·scale)를 태우는 2단 구조.
   const propsKey = JSON.stringify(spec.props ?? []);
   const propsRoot = useRef<THREE.Group | null>(null);
-  const propMap = useRef(new Map<string, { anchor: THREE.Group; obj: string }>());
+  const propMap = useRef(new Map<string, { anchor: THREE.Group; obj: string; title: string; flag?: { v: number; base: number; dir: [number, number, number] } }>());
   useEffect(() => {
     if (!built) return undefined;
     const g = new THREE.Group();
@@ -473,7 +562,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
       if (inner) {
         inner.rotation.order = 'YXZ';
         inner.rotation.set(pr.tilt ?? 0, pr.rotY, 0);
-        inner.scale.setScalar(pr.scale);
+        if (pr.obj !== 'flag') inner.scale.setScalar(pr.scale); // 깃발 스케일은 폽이 소유한다
       }
     };
     const list = JSON.parse(propsKey) as PlanetProp[];
@@ -481,26 +570,44 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
     for (const [id, rec] of propMap.current) {
       if (!seen.has(id)) { g.remove(rec.anchor); propMap.current.delete(id); }
     }
+    const dressUp = (obj: THREE.Object3D) => obj.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+        .forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+    });
     for (const pr of list) {
       const rec = propMap.current.get(pr.id);
-      if (rec && rec.obj === pr.obj) { applyXform(rec.anchor, pr); continue; }
+      const title = pr.title ?? '';
+      const sameLook = rec && rec.obj === pr.obj && (pr.obj !== 'flag' || rec.title === title);
+      if (rec && sameLook) {
+        rec.title = title;
+        if (rec.flag) { rec.flag.base = pr.scale; rec.flag.dir = pr.dir; }
+        applyXform(rec.anchor, pr);
+        continue;
+      }
       if (rec) { g.remove(rec.anchor); propMap.current.delete(pr.id); }
       const anchor = new THREE.Group();
-      propMap.current.set(pr.id, { anchor, obj: pr.obj });
+      const newRec: { anchor: THREE.Group; obj: string; title: string; flag?: { v: number; base: number; dir: [number, number, number] } } = { anchor, obj: pr.obj, title };
+      propMap.current.set(pr.id, newRec);
       g.add(anchor);
       applyXform(anchor, pr);
+      if (pr.obj === 'flag') {
+        // BUILD 221: 국기 깃발 — 제목이 나라 이름. 땅속에서 폽, 멀어지면 쇽.
+        const obj = makeFlag(title);
+        dressUp(obj);
+        obj.scale.setScalar(0.001);
+        anchor.add(obj);
+        newRec.flag = { v: 0, base: pr.scale, dir: pr.dir };
+        continue;
+      }
       let seed = 7;
       for (const ch of pr.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
       void createPropObject(pr.obj, seed || 7).then((obj) => {
         const cur = propMap.current.get(pr.id);
         if (!obj || !cur || cur.anchor !== anchor) return;
-        obj.traverse((o) => {
-          const mesh = o as THREE.Mesh;
-          if (!mesh.isMesh) return;
-          mesh.castShadow = true;
-          (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
-            .forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
-        });
+        dressUp(obj);
         anchor.add(obj);
         applyXform(anchor, pr);
       });
@@ -744,8 +851,30 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
     const moonMat2 = built.moon.material as THREE.MeshStandardMaterial;
     if (moonMat2.emissive) moonMat2.emissiveIntensity = 0.08 + 0.62 * (1 - dl);
     if (scene.background instanceof THREE.Color) scene.background.copy(SKY_BLEND);
-    if (scene.fog) scene.fog.color.copy(SKY_BLEND);
+    if (scene.fog) {
+      // BUILD 221: 시야 거리 — 이펙트 타이밍에 맡기지 않고 매 프레임 직접 민다 (결정론)
+      const fg = scene.fog as THREE.Fog;
+      fg.color.copy(SKY_BLEND);
+      fg.near = Math.max(2.5, (SP.viewDist ?? 41) * 0.22);
+      fg.far = Math.max(6, SP.viewDist ?? 41);
+    }
     RFOG.color.copy(SKY_BLEND);
+    // BUILD 221: 깃발 폽 — 가까우면 땅에서 통, 멀어지면 쇽 (히스테리시스 1.6/2.2u)
+    if (propMap.current.size) {
+      v.copy(p).normalize();
+      const rl = p.length();
+      for (const rec of propMap.current.values()) {
+        const fl = rec.flag;
+        if (!fl) continue;
+        const cosA = Math.min(1, Math.max(-1, v.x * fl.dir[0] + v.y * fl.dir[1] + v.z * fl.dir[2]));
+        const arc = Math.acos(cosA) * rl;
+        const target = fl.v > 0.5 ? (arc < 2.2 ? 1 : 0) : (arc < 1.6 ? 1 : 0);
+        fl.v = Math.min(1, Math.max(0, fl.v + (target > fl.v ? 1 : -1) * dt * 3.4));
+        const e = target === 1 ? backOut(fl.v) : fl.v * fl.v;
+        const inner = rec.anchor.children[0];
+        if (inner) inner.scale.setScalar(Math.max(0.001, fl.base * e));
+      }
+    }
 
     const C = cam.current;
     const manual = performance.now() < C.manualUntil;
