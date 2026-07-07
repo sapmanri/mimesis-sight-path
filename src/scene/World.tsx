@@ -567,7 +567,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   const campRest = useRef<null | { until: number; fire: THREE.Vector3 }>(null);
   const fireSync = useRef(0);
   const campfireProto = useRef<Promise<THREE.Group> | null>(null);
-  const WAY_POOL = ['suitcase', 'lamp', 'snowman', 'phonebooth'] as const; // BUILD 179: 돌 격리 실험 — 스트리밍 돌도 전면 철수
+  const WAY_POOL = ['suitcase', 'lamp', 'snowman', 'phonebooth', 'stone11', 'rock3'] as const; // BUILD 191: 돌 복귀 — 격리 해제 (진범은 frame 1 무안개 컴파일)
   const loadCampfire = () => {
     if (!campfireProto.current) {
       campfireProto.current = defaultLoader('CampfireSet.glb').then((gltf) => {

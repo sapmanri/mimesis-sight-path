@@ -267,7 +267,7 @@ type ModelSpec = {
 // BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
 // BUILD 179: 돌 격리 실험 (Vase 제안 — 바이섹션) — 전부 끄고 0을 확인한 뒤, 한 그룹씩 복귀시켜 범인을 특정한다.
 // glb: rockSpots(rock0/3/7·caveA/B) / pebbles: 잔자갈 인스턴서(lip·frag·peb) / (스트리밍 풀은 World.tsx WAY_POOL)
-export const ROCK_GROUPS = { glb: false, pebbles: false, bushes: false, grass: false }; // BUILD 182: 강철 풀(잔풀·가장자리풀)도 격리 — 원인 불명, 증거는 인계 문서에
+export const ROCK_GROUPS = { glb: true, pebbles: true, bushes: true, grass: true }; // BUILD 191: 격리 전면 해제 — 진범은 frame 1 무안개 컴파일이었다(fogfirst 판결). 스위치는 킬스위치로 존치
 
 // BUILD 189: 강철 풀 A/B 결정 실험 — 뷰어 쿼리 스위치 (인계 §5 30분 코스)
 //   ?grass=on   대조군: 격리를 무시하고 잔풀 풀잎을 기존 hfog 재질 그대로 켠다 (증상 재현용)
@@ -279,7 +279,7 @@ export const ROCK_GROUPS = { glb: false, pebbles: false, bushes: false, grass: f
 //     근접 8~12u 크리스프는 viewFogNear 때문에 무죄다. 판정은 반드시 원거리로만 할 것.
 const VIEW_QS = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search) : null;
 export const GRASS_MODE: 'off' | 'on' | 'bare' = VIEW_QS?.get('grass') === 'bare' ? 'bare' : VIEW_QS?.get('grass') === 'on' ? 'on' : 'off';
-export const FOG_FIRST = VIEW_QS?.get('fogfirst') === '1'; // BUILD 189: 시야안개 명령형 선주입 스위치 — frame 1 무안개 컴파일 가설(§5.7)의 정공법
+export const FOG_FIRST = VIEW_QS?.get('fogfirst') !== '0'; // BUILD 191: 상시 승격 — ?fogfirst=1&grass=on 라이브 판결로 frame 1 무안개 컴파일 확정. ?fogfirst=0은 법의학용 탈출구
 
 // BUILD 180: 셰이더 프로그램 논스 — 부검 결과, needsUpdate로도 재컴파일이 안 일어났다.
 // 같은 캐시 키의 프로그램이 살아 있으면 THREE는 onBeforeCompile을 다시 부르지 않는다 —
