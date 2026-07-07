@@ -262,6 +262,7 @@ type ModelSpec = {
   keepLook?: boolean;    // BUILD 085: 팔레트 미적용 — 원래 텍스처/색 보존 (워커 등 주인공급)
   texture?: string;      // BUILD 085: 수동 바인딩할 텍스처 파일명 (FBX 변환에서 누락된 경우)
   clipSpeeds?: { walk: number; run: number }; // BUILD 091: 클립 고유속도 (원척, u/s)
+  animFrom?: string;     // BUILD 202: 클립 기증자 GLB — 자기 클립이 없는 캐릭터는 걷기를 물려받는다
 };
 
 // BUILD 124: 길의 소재 목록. 색이 없으면(sand) 팔레트를 따른다 — 겨울 테마가 길을 눈길로 만들 수 있게.
@@ -369,6 +370,14 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // BUILD 158: 하이커 — 걷는 데 특화된 사람. 클립도 걷기 하나뿐, 그래서 이 세계의 적임자.
   // clipSpeeds.walk = 힙 트랙 실측 드리프트 5.13(원척)/1.0s. run은 같은 클립 두 배속 기준.
   { file: 'Hiker.glb', height: 0.95, tint: '#57534a', keepLook: true, texture: 'Hiker_texture.png', clipSpeeds: { walk: 5.13, run: 10.3 } },
+  // BUILD 202: 차차 5인방 — 팩의 recorded_clip은 쇼케이스 릴(걷기 사이클 없음, 발 뼈 FK 실측으로 판정).
+  // 걷기는 하이커에게 이식받는다(animFrom). 스킨은 팩의 T_Skin Neutral을 수동 바인딩.
+  // clipSpeeds = 5.13 × (자기 힙 rest / 하이커 3.189), 5인 개별 실측.
+  { file: 'Chacha01.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha01_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 1.147, run: 2.302 } },
+  { file: 'Chacha02.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha02_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 0.147, run: 0.295 } },
+  { file: 'Chacha03.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha03_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 1.155, run: 2.318 } },
+  { file: 'Chacha04.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha04_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 1.163, run: 2.335 } },
+  { file: 'Chacha05.glb', height: 0.92, tint: '#57534a', keepLook: true, texture: 'Chacha05_texture.png', animFrom: 'Hiker.glb', clipSpeeds: { walk: 0.149, run: 0.300 } },
 ];
 
 
@@ -571,6 +580,25 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
   // Walk = 원클립(루트모션 벗김) / Running = 같은 클립(발 물림은 timeScale이 맞춘다) / Idle = 첫 자세 미세 루프.
   // 걷기밖에 모르는 캐릭터에게 개성 클립은 없다 — 걷기가 곧 개성이다.
   let animations = gltf.animations;
+  // BUILD 202: 클립 이식 — 같은 mixamorig 골격이면 이름 바인딩으로 그대로 걷는다.
+  // 단 position 트랙은 기증자의 몸 치수 기준이므로, 힙 rest 높이 비율로 스케일해 옮긴다
+  // (실측: Hiker 3.189 vs Chacha 0.713 — 그대로 물리면 수혜자가 하늘로 솟는다).
+  if (spec.animFrom) {
+    const donor = await loadModel(spec.animFrom);
+    const hipsRestY = (scene: THREE.Object3D) => {
+      let y = 0;
+      scene.traverse((o) => { if (!y && /Hips$/.test(o.name)) y = Math.abs(o.position.y); });
+      return y || 1;
+    };
+    const ratio = hipsRestY(gltf.scene) / hipsRestY(donor.scene);
+    animations = donor.animations.map((clip) => {
+      const c2 = clip.clone();
+      c2.tracks.forEach((t) => {
+        if (/\.position$/.test(t.name)) for (let i = 0; i < t.values.length; i += 1) t.values[i] *= ratio;
+      });
+      return c2;
+    });
+  }
   const WALK_CAND = ['Walking_A', 'Walking', 'Walk'];
   if (spec.clipSpeeds && animations.length && !animations.some((a) => WALK_CAND.includes(a.name))) {
     const src = animations.find((a) => a.name.includes('mixamo.com'))
