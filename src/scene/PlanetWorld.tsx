@@ -389,7 +389,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
 
         // 하늘의 식구들 — 스펙과 함께 다시 태어난다
         const sky = new THREE.Group();
-        const moonMat = new THREE.MeshStandardMaterial({ color: '#c9c5bd', roughness: 1, metalness: 0 });
+        const moonMat = new THREE.MeshStandardMaterial({ color: '#c9c5bd', roughness: 1, metalness: 0, emissive: '#e8e4d8', emissiveIntensity: 0.08 }); // BUILD 218: 밤의 달 얼굴
         moonMat.fog = false;
         new THREE.TextureLoader().load('assets/planet/moon_color.jpg', (t) => {
           t.colorSpace = THREE.SRGBColorSpace;
@@ -689,6 +689,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory, contactRef, apiRef
     }
     if (hemiRef.current) hemiRef.current.intensity = 0.55 * (0.32 + 0.68 * dl);
     SKY_BLEND.copy(NIGHT_SKY).lerp(DAY_SKY, dl);
+    // BUILD 218: 밤이 깊을수록 달이 차오른다 — 과학은 태양 반사라지만 우리 달은 스스로 빛나기로 했다 (Vase)
+    const moonMat2 = built.moon.material as THREE.MeshStandardMaterial;
+    if (moonMat2.emissive) moonMat2.emissiveIntensity = 0.08 + 0.62 * (1 - dl);
     if (scene.background instanceof THREE.Color) scene.background.copy(SKY_BLEND);
     if (scene.fog) scene.fog.color.copy(SKY_BLEND);
     RFOG.color.copy(SKY_BLEND);
