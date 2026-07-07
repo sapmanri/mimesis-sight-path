@@ -596,14 +596,22 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
     // BUILD 206: 골격이 다른 캐릭터(VRoid J_Bip_*)에게 Mixamo 걷기를 리타겟한다.
     // SkeletonUtils.retargetClip이 rest 포즈 차이를 바인드 행렬로 보정 — 차차식 생이식과 다르다.
     // scale = 수혜자 힙 rest / 기증자 힙 rest (실측 0.724 / 3.189 = 0.227).
-    const { retargetClip } = await import('three/examples/jsm/utils/SkeletonUtils.js');
+    const { retargetClip, clone: skClone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
     const donor = await loadModel(spec.retargetFrom);
+    // BUILD 207: v2 — ① 골격이 가장 큰 스킨드메시를 고른다 (VRM은 Face/Hair가 먼저 잡힐 수 있다)
+    // ② source는 메시가 아니라 skeleton을 넘긴다: 믹사모 뼈는 메시의 형제라
+    //    메시 기준 updateMatrixWorld가 뼈에 닿지 않아 매 프레임 rest만 복사됐다(T포즈의 진범).
     const findSkinned = (root: THREE.Object3D) => {
       let sm: THREE.SkinnedMesh | null = null;
-      root.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh && !sm) sm = m; });
+      root.traverse((o) => {
+        const m = o as THREE.SkinnedMesh;
+        if (m.isSkinnedMesh && (!sm || m.skeleton.bones.length > sm.skeleton.bones.length)) sm = m;
+      });
       return sm;
     };
-    const src = findSkinned(donor.scene);
+    const donorScene = skClone(donor.scene); // 기증자 원본을 건드리지 않는다
+    donorScene.updateMatrixWorld(true);
+    const src = findSkinned(donorScene);
     const tgt = findSkinned(gltf.scene);
     if (src && tgt) {
       donor.scene.updateMatrixWorld(true);
@@ -613,6 +621,7 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
         sceneRoot.traverse((o) => { if (!y && /Hips$/.test(o.name)) y = Math.abs(o.position.y); });
         return y || 1;
       };
+      void donorScene; // shim 경유로만 쓰인다
       const VROID_TO_MIXAMO: Record<string, string> = {
         J_Bip_C_Hips: 'mixamorig:Hips', J_Bip_C_Spine: 'mixamorig:Spine', J_Bip_C_Chest: 'mixamorig:Spine1',
         J_Bip_C_UpperChest: 'mixamorig:Spine2', J_Bip_C_Neck: 'mixamorig:Neck', J_Bip_C_Head: 'mixamorig:Head',
@@ -623,9 +632,14 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
       };
       const srcClip = donor.animations.find((a) => /mixamo|walk/i.test(a.name)) ?? donor.animations[0];
       if (srcClip) {
-        const clip = retargetClip(tgt, src, srcClip, {
+        // 심(shim): 씬 루트에 skeleton을 접붙여 — 믹서 바인딩·getBoneByName·updateMatrixWorld
+        // 세 요구를 한 몸이 전부 충족한다. 메시를 넘기면 형제 뼈의 행렬이 갱신되지 않는다(T포즈 진범).
+        const shim = donorScene as THREE.Object3D & { skeleton: THREE.Skeleton };
+        shim.skeleton = (src as THREE.SkinnedMesh).skeleton;
+        const clip = retargetClip(tgt, shim as never, srcClip, {
           names: VROID_TO_MIXAMO,
           hip: 'mixamorig:Hips',
+          fps: 30,
           scale: hipsRestY(gltf.scene) / hipsRestY(donor.scene),
         } as never);
         animations = [clip];

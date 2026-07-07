@@ -4,6 +4,24 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { PlanetWorld } from './scene/PlanetWorld';
 import { walkerCount } from './engine/worldCore';
+import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory } from './scene/planetSpec';
+
+// ---------- BUILD 207: 행성 에디터 — 다이얼 한 줄 ----------
+function Dial({ label, value, min, max, step, onChange, fmt }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt?: (v: number) => string }) {
+  return (
+    <label style={{ display: 'block', margin: '7px 0', fontSize: 11, color: '#cfc9bb' }}>
+      <span style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span>{label}</span>
+        <span style={{ color: '#d8b26e' }}>{fmt ? fmt(value) : value}</span>
+      </span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: '100%' }} />
+    </label>
+  );
+}
+const PANEL_BTN: React.CSSProperties = {
+  flex: 1, padding: '6px 4px', fontSize: 11, borderRadius: 8, cursor: 'pointer',
+  border: '1px solid rgba(216,178,110,0.45)', background: 'rgba(216,178,110,0.12)', color: '#e8dcc2',
+};
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
 import { TouchTrail } from './components/TouchTrail';
@@ -14,7 +32,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.90.0 · THE RETARGET EXPERIMENT · BUILD 206';
+const BUILD_LABEL = 'v1.0.0 · THE PLANET EDITOR · BUILD 207';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -51,10 +69,26 @@ export default function App() {
     return null;
   });
   // BUILD 194: ?planet=1 — 작은 행성 전용 입구. 기존 세계와 코드가 섞이지 않는 별도 무대.
+  // BUILD 207: &edit=1 — 행성 에디터. &draft=1 — 에디터의 초안을 그대로 걷는다.
   const [planetMode] = useState(() => new URLSearchParams(window.location.search).has('planet'));
-  // BUILD 204: 에디터 맛보기 임시 버튼 — 🪐 행성 순환 / 🚶 캐릭터 교체
-  const [planetTheme, setPlanetTheme] = useState(0);
+  const [planetEdit] = useState(() => new URLSearchParams(window.location.search).has('edit'));
+  const [pSpec, setPSpec] = useState<PlanetSpec>(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.has('edit') || q.has('draft')) return loadPlanetDraft();
+    const s = { ...DEFAULT_PLANET_SPEC, memories: [] as PlanetMemory[] };
+    const th = q.get('theme');
+    if (th === 'earth' || th === 'luna' || th === 'moon' || th === 'desert') s.theme = th;
+    return s;
+  });
+  const updSpec = (mut: (s: PlanetSpec) => PlanetSpec) => {
+    setPSpec((prev) => {
+      const next = mut(prev);
+      savePlanetDraft(next);
+      return next;
+    });
+  };
   const [planetWalker, setPlanetWalker] = useState(-1);
+  const [memCard, setMemCard] = useState<PlanetMemory | null>(null);
   const scenes = draft?.scenes ?? jejuScenes;
   const [spec] = useState<WorldSpec>(draft?.spec ?? JEJU_SPEC);
   const lastMoveAt = useRef(0);
@@ -140,31 +174,113 @@ export default function App() {
   };
 
   if (planetMode) {
+    const M = pSpec.moon;
+    const SN = pSpec.sun;
     return (
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
-          {/* BUILD 194.1: .world-canvas는 .world-core-viewport 안에서만 화면을 채운다 — 래퍼 누락 핫픽스 */}
           <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-            <PlanetWorld themeIdx={planetTheme} walkerIdx={planetWalker} />
+            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} onMemory={setMemCard} />
           </Canvas>
         </div>
-        <div style={{ position: 'fixed', top: 18, right: 18, display: 'flex', gap: 10, zIndex: 6 }}>
-          {[['🪐', () => setPlanetTheme((i) => i + 1)], ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())]].map(([label, fn]) => (
-            <button
-              key={label as string}
-              type="button"
-              onClick={fn as () => void}
-              style={{
-                width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
-                border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
-                backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff',
-              }}
-            >
-              {label as string}
-            </button>
+        <div className="atmosphere-grain" aria-hidden="true" />
+        {memCard && (
+          <div style={{
+            position: 'fixed', left: '50%', bottom: 84, transform: 'translateX(-50%)', maxWidth: 420,
+            padding: '14px 20px', borderRadius: 14, background: 'rgba(248,244,234,0.92)', color: '#3c3529',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.25)', zIndex: 7, textAlign: 'center', backdropFilter: 'blur(6px)',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{memCard.title}</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{memCard.text}</div>
+          </div>
+        )}
+        <div style={{ position: 'fixed', top: 18, right: planetEdit ? 318 : 18, display: 'flex', gap: 10, zIndex: 6 }}>
+          {([['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] }))],
+            ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())]] as [string, () => void][]).map(([label, fn]) => (
+            <button key={label} type="button" onClick={fn} style={{
+              width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
+              border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
+              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff',
+            }}>{label}</button>
           ))}
         </div>
-        <div className="atmosphere-grain" aria-hidden="true" />
+        {planetEdit && (
+          <aside style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0, width: 300, zIndex: 8, overflowY: 'auto',
+            background: 'rgba(18,24,26,0.94)', borderLeft: '1px solid rgba(216,178,110,0.25)',
+            padding: '14px 14px 40px', color: '#cfc9bb', backdropFilter: 'blur(10px)',
+          }}>
+            <div style={{ fontSize: 13, color: '#d8b26e', letterSpacing: 2, marginBottom: 10 }}>작은 행성 에디터</div>
+            <label style={{ display: 'block', fontSize: 11, margin: '6px 0' }}>
+              테마
+              <select value={pSpec.theme} onChange={(e) => updSpec((s) => ({ ...s, theme: e.target.value as PlanetSpec['theme'] }))}
+                style={{ width: '100%', marginTop: 4, background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 6, padding: 5 }}>
+                <option value="earth">지구</option><option value="luna">달 (조각)</option>
+                <option value="moon">달 (높이맵)</option><option value="desert">사막</option>
+              </select>
+            </label>
+            <Dial label="반지름" value={pSpec.radius} min={5} max={22} step={0.5} onChange={(v) => updSpec((s) => ({ ...s, radius: v }))} />
+            <Dial label="굴곡" value={pSpec.relief} min={0} max={2.5} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, relief: v }))} />
+            <Dial label="안개 수위" value={pSpec.fogLevel} min={0} max={1.2} step={0.02} onChange={(v) => updSpec((s) => ({ ...s, fogLevel: v }))} />
+            <Dial label="안개 농도" value={pSpec.fogStrength} min={0} max={1} step={0.02} onChange={(v) => updSpec((s) => ({ ...s, fogStrength: v }))} />
+            <Dial label="걸음" value={pSpec.walkSpeed} min={0.25} max={1.4} step={0.01} onChange={(v) => updSpec((s) => ({ ...s, walkSpeed: v }))} />
+            <Dial label="감김 (바퀴)" value={pSpec.wraps} min={2} max={7} step={1} onChange={(v) => updSpec((s) => ({ ...s, wraps: v }))} />
+            <Dial label="길의 요동" value={pSpec.wobble} min={0.2} max={1.8} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, wobble: v }))} />
+            <Dial label="교차로 — 저 길을 고를 확률" value={pSpec.ponderChance} min={0} max={1} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, ponderChance: v }))} />
+            <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 2px' }}>하늘</div>
+            <Dial label="달 크기 (행성=1)" value={M.size} min={0.08} max={0.6} step={0.005} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, size: v } }))} />
+            <Dial label="달 거리" value={M.dist} min={16} max={70} step={1} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, dist: v } }))} />
+            <Dial label="달 공전 주기 (s)" value={M.period} min={30} max={480} step={5} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, period: v } }))} />
+            <Dial label="달 궤도 기울기 (°)" value={M.tilt} min={0} max={60} step={1} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, tilt: v } }))} />
+            <Dial label="달빛" value={M.light} min={0} max={8} step={0.1} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, light: v } }))} />
+            <Dial label="태양 방위 (°)" value={SN.az} min={0} max={360} step={2} onChange={(v) => updSpec((s) => ({ ...s, sun: { ...s.sun, az: v } }))} />
+            <Dial label="태양 고도 (°)" value={SN.el} min={4} max={85} step={1} onChange={(v) => updSpec((s) => ({ ...s, sun: { ...s.sun, el: v } }))} />
+            <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 4px', display: 'flex', justifyContent: 'space-between' }}>
+              <span>기억 — 길 위의 멈춤</span>
+              <button type="button" style={{ ...PANEL_BTN, flex: 'none', padding: '2px 10px' }}
+                onClick={() => updSpec((s) => ({ ...s, memories: [...s.memories, { title: '기억', text: '', t: Math.random(), stay: 4 }] }))}>+ 추가</button>
+            </div>
+            {pSpec.memories.map((m, i) => (
+              <div key={i} style={{ border: '1px solid #33403c', borderRadius: 8, padding: 8, margin: '6px 0' }}>
+                <input value={m.title} placeholder="제목" onChange={(e) => updSpec((s) => ({ ...s, memories: s.memories.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)) }))}
+                  style={{ width: '100%', background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 5, padding: 4, fontSize: 11 }} />
+                <textarea value={m.text} placeholder="문장" rows={2} onChange={(e) => updSpec((s) => ({ ...s, memories: s.memories.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)) }))}
+                  style={{ width: '100%', marginTop: 4, background: '#101617', color: '#e8dcc2', border: '1px solid #3a423f', borderRadius: 5, padding: 4, fontSize: 11, resize: 'vertical' }} />
+                <Dial label="자리 (길 위 0~1)" value={m.t} min={0} max={1} step={0.005} fmt={(v) => v.toFixed(3)}
+                  onChange={(v) => updSpec((s) => ({ ...s, memories: s.memories.map((x, j) => (j === i ? { ...x, t: v } : x)) }))} />
+                <Dial label="머무름 (s)" value={m.stay} min={1} max={12} step={0.5}
+                  onChange={(v) => updSpec((s) => ({ ...s, memories: s.memories.map((x, j) => (j === i ? { ...x, stay: v } : x)) }))} />
+                <button type="button" style={{ ...PANEL_BTN, width: '100%' }} onClick={() => updSpec((s) => ({ ...s, memories: s.memories.filter((_, j) => j !== i) }))}>삭제</button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
+              <button type="button" style={PANEL_BTN} onClick={() => {
+                const blob = new Blob([JSON.stringify(pSpec, null, 2)], { type: 'application/json' });
+                const a2 = document.createElement('a');
+                a2.href = URL.createObjectURL(blob);
+                a2.download = 'little-planet.world.json';
+                a2.click();
+              }}>내보내기</button>
+              <button type="button" style={PANEL_BTN} onClick={() => {
+                const inp = document.createElement('input');
+                inp.type = 'file';
+                inp.accept = '.json';
+                inp.onchange = () => {
+                  const f = inp.files?.[0];
+                  if (!f) return;
+                  void f.text().then((txt) => {
+                    try { const p = JSON.parse(txt) as PlanetSpec; updSpec(() => ({ ...DEFAULT_PLANET_SPEC, ...p, moon: { ...DEFAULT_PLANET_SPEC.moon, ...p.moon }, sun: { ...DEFAULT_PLANET_SPEC.sun, ...p.sun }, memories: p.memories ?? [] })); } catch { /* 무시 */ }
+                  });
+                };
+                inp.click();
+              }}>불러오기</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <button type="button" style={PANEL_BTN} onClick={() => window.open('/?planet=1&draft=1', '_blank')}>뷰어로 보기</button>
+              <button type="button" style={PANEL_BTN} onClick={() => updSpec(() => ({ ...DEFAULT_PLANET_SPEC, memories: [] }))}>초기화</button>
+            </div>
+          </aside>
+        )}
         <div className="build-badge">{BUILD_LABEL}</div>
       </main>
     );

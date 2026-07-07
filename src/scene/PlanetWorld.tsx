@@ -5,21 +5,16 @@ import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader } from '../engi
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
+import type { PlanetSpec, PlanetMemory } from './planetSpec';
 
-// ---------- BUILD 204: 작은 행성 v6 — 고민하는 교차로, 더 큰 별, 손님 행성 ----------
-// · R 8→12: 전체가 한눈에 예상되지 않는 크기 (다음 행성은 아예 작게도 — Vase)
-// · luna 굴곡 부스트 2.2→1.25: 오르내림이 튀지 않게
-// · 교차로: 자기 길이 스스로와 만나는 곳에서 잠깐 멈춰 고민하다, 한쪽을 골라 걷는다
-// · 임시 버튼(App): 🪐 행성 순환 / 🚶 캐릭터 교체 — 에디터의 맛보기
-// · meshkeep: 자기 재질을 그대로 입는 손님 행성 (Planet3)
+// ---------- BUILD 207: 작은 행성 v7 — 스펙이 세계를 정한다 ----------
+// 에디터의 문법 이식: 세계의 모든 다이얼(테마·반지름·굴곡·안개·걸음·감김·요동·
+// 교차 고민·달 궤도·태양 방향·기억 목록)이 PlanetSpec 하나에 산다.
+// 무거운 것(지형·길)만 재건축하고, 가벼운 것(걸음·달 궤도·기억)은 ref로 실시간 반영.
 
-const R = 12;
-const WALK = 0.58;
-const DUNE = 0.14;
+const PLANET_CENTER = new THREE.Vector3(0, -12, 0);
 
-const PLANET_CENTER = new THREE.Vector3(0, -R, 0);
-const RFOG = { top: R + 0.04, bottom: R - 0.30, strength: 0.8 };
-function applyRadialFog(mat: THREE.MeshStandardMaterial, strength = RFOG.strength) {
+function applyRadialFog(mat: THREE.MeshStandardMaterial, band: { top: number; bottom: number }, strength: number) {
   if (mat.userData.rfog) return mat;
   mat.userData.rfog = true;
   const hex = parseInt(PALETTE.fog.slice(1), 16);
@@ -34,10 +29,10 @@ function applyRadialFog(mat: THREE.MeshStandardMaterial, strength = RFOG.strengt
       .replace('#include <common>', '#include <common>\nvarying vec3 vRFw;\nuniform vec3 uPlanetC;')
       .replace(
         '#include <fog_fragment>',
-        `#include <fog_fragment>\nfloat rfd = distance(vRFw, uPlanetC);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(RFOG.bottom)}, ${glsl(RFOG.top)}, rfd)) * ${glsl(strength)});`,
+        `#include <fog_fragment>\nfloat rfd = distance(vRFw, uPlanetC);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(band.bottom)}, ${glsl(band.top)}, rfd)) * ${glsl(strength)});`,
       );
   };
-  mat.customProgramCacheKey = () => `rfog|${RFOG.top.toFixed(3)}|${RFOG.bottom.toFixed(3)}|${strength.toFixed(3)}|${PALETTE.fog}`;
+  mat.customProgramCacheKey = () => `rfog|${band.top.toFixed(3)}|${band.bottom.toFixed(3)}|${strength.toFixed(3)}|${PALETTE.fog}`;
   return mat;
 }
 
@@ -85,14 +80,11 @@ function makeDesertTexture() {
 }
 
 const THEMES = {
-  // BUILD 205: 지구 — 색(Earth.jpg)·높이(Bump.jpg)·구름(Clouds.png), 실사 소스의 maps 테마
   earth: { kind: 'maps' as const, color: 'assets/planet/earth_color.jpg', height: 'assets/planet/earth_height.png', amp: 0.12, clouds: 'assets/planet/earth_clouds.png' },
   luna: { kind: 'meshworld' as const, file: 'LunaMesh.glb', color: 'assets/planet/moon_color.jpg', boost: 1.25 },
   moon: { kind: 'maps' as const, color: 'assets/planet/moon_color.jpg', height: 'assets/planet/moon_height.png', amp: 0.3 },
   desert: { kind: 'procedural' as const },
-  // rocky(Planet3)는 이상 입주로 하차 — Vase 재가. 에셋은 창고에 보존.
 };
-const THEME_ORDER = ['earth', 'luna', 'moon', 'desert'] as const;
 
 async function loadHeightSampler(url: string) {
   const img = await new Promise<HTMLImageElement>((res, rej) => {
@@ -127,7 +119,6 @@ async function loadHeightSampler(url: string) {
   };
 }
 
-// 정점 무리 → 등장방형 반경 그리드 (빈 칸은 이웃 평균으로)
 function gridFromRadii(entries: { dir: THREE.Vector3; off: number }[]) {
   const GW = 128;
   const GH = 64;
@@ -166,7 +157,7 @@ function gridFromRadii(entries: { dir: THREE.Vector3; off: number }[]) {
   };
 }
 
-function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3): THREE.Texture {
+function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: number): THREE.Texture {
   const img = map.image as HTMLImageElement | { data: Uint8ClampedArray; width: number; height: number };
   const W2 = img.width;
   const H2 = img.height;
@@ -219,162 +210,181 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3): TH
   return tex;
 }
 
-export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: number; walkerIdx?: number }) {
+export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSpec; walkerIdx?: number; onMemory?: (m: PlanetMemory | null) => void }) {
   const { scene, camera, gl } = useThree();
-  if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, 40);
+  if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.radius * 3.4);
 
-  const baseTheme = useMemo(() => {
-    const q = new URLSearchParams(window.location.search).get('theme');
-    const i = THEME_ORDER.indexOf((q ?? '') as (typeof THEME_ORDER)[number]);
-    return i >= 0 ? i : 0;
-  }, []);
-  const active = THEME_ORDER[(baseTheme + themeIdx) % THEME_ORDER.length];
+  // 가벼운 다이얼은 ref로 실시간 반영 (재건축 없이)
+  const specRef = useRef(spec);
+  specRef.current = spec;
+  const onMemRef = useRef(onMemory);
+  onMemRef.current = onMemory;
 
-  type Built = { planet: THREE.Group; curve: THREE.CatmullRomCurve3; arcLen: number; crossings: { a: number; b: number }[] };
+  // 무거운 다이얼만 재건축을 부른다
+  const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.fogLevel, spec.fogStrength, spec.moon.size]);
+
+  type Built = {
+    planet: THREE.Group; curve: THREE.CatmullRomCurve3; arcLen: number;
+    crossings: { a: number; b: number }[]; R: number;
+    moon: THREE.Mesh; moonLight: THREE.PointLight; sun: THREE.Mesh; sky: THREE.Group;
+  };
   const [built, setBuilt] = useState<Built | null>(null);
   useEffect(() => {
     let alive = true;
-    void (async () => {
-      const theme = THEMES[active];
-      let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * DUNE;
-      let map: THREE.Texture | null = null;
-      let ready: THREE.Object3D | null = null; // meshworld/meshkeep가 준비한 지형
-      let cloudsTex: THREE.Texture | null = null; // BUILD 205: 지구의 구름 껍질
+    const timer = setTimeout(() => {
+      void (async () => {
+        const s0 = JSON.parse(buildKey) as [PlanetSpec['theme'], number, number, number, number, number, number, number];
+        const [themeName, R, relief, wraps, wobble, fogLevel, fogStrength, moonSize] = s0;
+        const theme = THEMES[themeName];
+        const band = { top: R + 0.04, bottom: R - fogLevel };
+        let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * 0.14 * relief;
+        let map: THREE.Texture | null = null;
+        let ready: THREE.Object3D | null = null;
+        let cloudsTex: THREE.Texture | null = null;
 
-      if (theme.kind === 'meshworld') {
-        const [gltf, colorTex] = await Promise.all([
-          defaultLoader(theme.file),
-          new THREE.TextureLoader().loadAsync(theme.color),
-        ]);
-        colorTex.colorSpace = THREE.SRGBColorSpace;
-        colorTex.wrapS = THREE.RepeatWrapping;
-        colorTex.anisotropy = 4;
-        map = colorTex;
-        let src: THREE.Mesh | null = null;
-        gltf.scene.updateMatrixWorld(true);
-        gltf.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && !src) src = m; });
-        const srcMesh = src as unknown as THREE.Mesh;
-        const geo2 = (srcMesh.geometry as THREE.BufferGeometry).clone();
-        geo2.applyMatrix4(srcMesh.matrixWorld);
-        const pa = geo2.getAttribute('position');
-        const ctr = new THREE.Vector3();
-        for (let i = 0; i < pa.count; i += 1) ctr.add(new THREE.Vector3(pa.getX(i), pa.getY(i), pa.getZ(i)));
-        ctr.divideScalar(pa.count);
-        let meanR = 0;
-        for (let i = 0; i < pa.count; i += 1) meanR += Math.hypot(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
-        meanR /= pa.count;
-        const dv = new THREE.Vector3();
-        const radii: { dir: THREE.Vector3; off: number }[] = [];
-        for (let i = 0; i < pa.count; i += 1) {
-          dv.set(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
-          const r = dv.length();
-          const rb = 1 + (r / meanR - 1) * theme.boost;
-          dv.divideScalar(r);
-          pa.setXYZ(i, dv.x * rb * R, dv.y * rb * R, dv.z * rb * R);
-          radii.push({ dir: dv.clone(), off: rb * R - R });
+        if (theme.kind === 'meshworld') {
+          const [gltf, colorTex] = await Promise.all([
+            defaultLoader(theme.file),
+            new THREE.TextureLoader().loadAsync(theme.color),
+          ]);
+          colorTex.colorSpace = THREE.SRGBColorSpace;
+          colorTex.wrapS = THREE.RepeatWrapping;
+          colorTex.anisotropy = 4;
+          map = colorTex;
+          let src: THREE.Mesh | null = null;
+          gltf.scene.updateMatrixWorld(true);
+          gltf.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && !src) src = m; });
+          const srcMesh = src as unknown as THREE.Mesh;
+          const geo2 = (srcMesh.geometry as THREE.BufferGeometry).clone();
+          geo2.applyMatrix4(srcMesh.matrixWorld);
+          const pa = geo2.getAttribute('position');
+          const ctr = new THREE.Vector3();
+          for (let i = 0; i < pa.count; i += 1) ctr.add(new THREE.Vector3(pa.getX(i), pa.getY(i), pa.getZ(i)));
+          ctr.divideScalar(pa.count);
+          let meanR = 0;
+          for (let i = 0; i < pa.count; i += 1) meanR += Math.hypot(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
+          meanR /= pa.count;
+          const dv = new THREE.Vector3();
+          const radii: { dir: THREE.Vector3; off: number }[] = [];
+          const boost = theme.boost * relief;
+          for (let i = 0; i < pa.count; i += 1) {
+            dv.set(pa.getX(i) - ctr.x, pa.getY(i) - ctr.y, pa.getZ(i) - ctr.z);
+            const r = dv.length();
+            const rb = 1 + (r / meanR - 1) * boost;
+            dv.divideScalar(r);
+            pa.setXYZ(i, dv.x * rb * R, dv.y * rb * R, dv.z * rb * R);
+            radii.push({ dir: dv.clone(), off: rb * R - R });
+          }
+          heightAt = gridFromRadii(radii);
+          geo2.computeVertexNormals();
+          geo2.computeBoundingSphere();
+          geo2.computeBoundingBox();
+          const mesh = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), band, fogStrength * 0.62));
+          mesh.frustumCulled = false;
+          mesh.receiveShadow = true;
+          ready = mesh;
+        } else if (theme.kind === 'maps') {
+          const loader = new THREE.TextureLoader();
+          map = await loader.loadAsync(theme.color);
+          map.colorSpace = THREE.SRGBColorSpace;
+          map.wrapS = THREE.RepeatWrapping;
+          map.anisotropy = 4;
+          const sample = await loadHeightSampler(theme.height);
+          heightAt = (d) => sample(d) * theme.amp * relief;
+          if ('clouds' in theme && theme.clouds) {
+            cloudsTex = await loader.loadAsync(theme.clouds);
+            cloudsTex.colorSpace = THREE.SRGBColorSpace;
+            cloudsTex.wrapS = THREE.RepeatWrapping;
+          }
+        } else {
+          map = makeDesertTexture();
         }
-        heightAt = gridFromRadii(radii);
-        geo2.computeVertexNormals();
-        geo2.computeBoundingSphere();
-        geo2.computeBoundingBox();
-        const mesh = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 })));
-        mesh.frustumCulled = false;
-        mesh.receiveShadow = true;
-        ready = mesh;
-      } else if (theme.kind === 'maps') {
-        const loader = new THREE.TextureLoader();
-        map = await loader.loadAsync(theme.color);
-        map.colorSpace = THREE.SRGBColorSpace;
-        map.wrapS = THREE.RepeatWrapping;
-        map.anisotropy = 4;
-        const sample = await loadHeightSampler(theme.height);
-        heightAt = (d) => sample(d) * theme.amp;
-        if ('clouds' in theme && theme.clouds) {
-          cloudsTex = await loader.loadAsync(theme.clouds);
-          cloudsTex.colorSpace = THREE.SRGBColorSpace;
-          cloudsTex.wrapS = THREE.RepeatWrapping;
+        if (!alive) return;
+
+        const planet = new THREE.Group();
+        const N = 560;
+        const pts: THREE.Vector3[] = [];
+        for (let i = 0; i < N; i += 1) {
+          const u = i / N;
+          const phi = Math.PI * 2 * wraps * u;
+          const theta = Math.PI / 2 + wobble * 0.62 * Math.sin(Math.PI * 2 * 3 * u + 0.7) + wobble * 0.21 * Math.sin(Math.PI * 2 * 7 * u + 2.1);
+          const d = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
+          pts.push(d.multiplyScalar(R + heightAt(d) + 0.005));
         }
-      } else {
-        map = makeDesertTexture();
-      }
-      if (!alive) return;
+        const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
+        curve.arcLengthDivisions = 1800;
+        const arcLen = curve.getLength();
 
-      const planet = new THREE.Group();
-
-      // ---------- 보이지 않는 길: 지형의 높낮이를 그대로 따른다 ----------
-      const N = 560;
-      const pts: THREE.Vector3[] = [];
-      for (let i = 0; i < N; i += 1) {
-        const u = i / N;
-        const phi = Math.PI * 2 * 4 * u;
-        const theta = Math.PI / 2 + 0.62 * Math.sin(Math.PI * 2 * 3 * u + 0.7) + 0.21 * Math.sin(Math.PI * 2 * 7 * u + 2.1);
-        const d = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
-        pts.push(d.multiplyScalar(R + heightAt(d) + 0.005));
-      }
-      const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
-      curve.arcLengthDivisions = 1800;
-      const arcLen = curve.getLength();
-
-      // ---------- 교차로 사전: 3D로 가깝고 길로는 먼 두 지점 (호길이 좌표 쌍) ----------
-      const crossings: { a: number; b: number }[] = [];
-      {
-        const M2 = 700;
-        const cps = Array.from({ length: M2 }, (_, i) => curve.getPointAt(i / M2));
-        for (let i = 0; i < M2; i += 1) {
-          for (let j = i + 30; j < M2; j += 1) {
-            const gap = Math.min(j - i, M2 - (j - i));
-            if (gap < 30) continue;
-            if (cps[i].distanceToSquared(cps[j]) < 0.16) {
-              const a = (i / M2) * arcLen;
-              const b = (j / M2) * arcLen;
-              if (!crossings.some((c2) => Math.abs(c2.a - a) < 1.5 || Math.abs(c2.b - b) < 1.5)) crossings.push({ a, b });
+        const crossings: { a: number; b: number }[] = [];
+        {
+          const M2 = 700;
+          const cps = Array.from({ length: M2 }, (_, i) => curve.getPointAt(i / M2));
+          for (let i = 0; i < M2; i += 1) {
+            for (let j = i + 30; j < M2; j += 1) {
+              const gap = Math.min(j - i, M2 - (j - i));
+              if (gap < 30) continue;
+              if (cps[i].distanceToSquared(cps[j]) < 0.16) {
+                const a = (i / M2) * arcLen;
+                const b = (j / M2) * arcLen;
+                if (!crossings.some((c2) => Math.abs(c2.a - a) < 1.5 || Math.abs(c2.b - b) < 1.5)) crossings.push({ a, b });
+              }
             }
           }
         }
-      }
 
-      if (map) {
-        map = bakeTrailOntoMap(map, curve);
-      }
-      if (ready) {
-        if (theme.kind === 'meshworld' && map) {
+        if (map) map = bakeTrailOntoMap(map, curve, R);
+        if (ready) {
           const mm = (ready as THREE.Mesh).material as THREE.MeshStandardMaterial;
-          mm.map = map;
-          mm.needsUpdate = true;
+          if (map) { mm.map = map; mm.needsUpdate = true; }
+          planet.add(ready);
+        } else {
+          const geo = new THREE.SphereGeometry(R, 128, 96);
+          const pos = geo.getAttribute('position');
+          const vd = new THREE.Vector3();
+          for (let i = 0; i < pos.count; i += 1) {
+            vd.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
+            const r2 = R + heightAt(vd);
+            pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
+          }
+          geo.computeVertexNormals();
+          const ground = new THREE.Mesh(geo, applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 }), band, fogStrength));
+          ground.receiveShadow = true;
+          planet.add(ground);
+          if (cloudsTex) {
+            const shell = new THREE.Mesh(
+              new THREE.SphereGeometry(R * 1.018, 64, 48),
+              new THREE.MeshStandardMaterial({ map: cloudsTex, transparent: true, opacity: 0.9, depthWrite: false, roughness: 1 }),
+            );
+            shell.name = 'cloudShell';
+            planet.add(shell);
+          }
         }
-        planet.add(ready);
-      } else {
-        const geo = new THREE.SphereGeometry(R, 128, 96);
-        const pos = geo.getAttribute('position');
-        const vd = new THREE.Vector3();
-        for (let i = 0; i < pos.count; i += 1) {
-          vd.set(pos.getX(i), pos.getY(i), pos.getZ(i)).normalize();
-          const r2 = R + heightAt(vd);
-          pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
-        }
-        geo.computeVertexNormals();
-        const ground = new THREE.Mesh(
-          geo,
-          applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 })),
-        );
-        ground.receiveShadow = true;
-        planet.add(ground);
-        if (cloudsTex) { // BUILD 205: 천천히 흐르는 구름 껍질 — 지구가 지구다워진다
-          const shell = new THREE.Mesh(
-            new THREE.SphereGeometry(R * 1.018, 64, 48),
-            new THREE.MeshStandardMaterial({ map: cloudsTex, transparent: true, opacity: 0.9, depthWrite: false, roughness: 1 }),
-          );
-          shell.name = 'cloudShell';
-          planet.add(shell);
-        }
-      }
 
-      setBuilt({ planet, curve, arcLen, crossings });
-    })();
-    return () => { alive = false; };
-  }, [active]);
+        // 하늘의 식구들 — 스펙과 함께 다시 태어난다
+        const sky = new THREE.Group();
+        const moonMat = new THREE.MeshStandardMaterial({ color: '#c9c5bd', roughness: 1, metalness: 0 });
+        moonMat.fog = false;
+        new THREE.TextureLoader().load('assets/planet/moon_color.jpg', (t) => {
+          t.colorSpace = THREE.SRGBColorSpace;
+          moonMat.map = t;
+          moonMat.color.set('#ffffff');
+          moonMat.needsUpdate = true;
+        });
+        const moon = new THREE.Mesh(new THREE.SphereGeometry(Math.max(0.2, moonSize * R), 48, 32), moonMat);
+        const moonLight = new THREE.PointLight('#cfd8e0', 2.2, 0, 0.6);
+        moon.add(moonLight);
+        sky.add(moon);
+        const sunMat = new THREE.MeshBasicMaterial({ color: '#ffedc8' });
+        sunMat.fog = false;
+        const sun = new THREE.Mesh(new THREE.SphereGeometry(R * 0.21, 24, 16), sunMat);
+        sky.add(sun);
 
-  // ---------- 걷는 사람 (walkerIdx 바뀌면 교체) ----------
+        setBuilt({ planet, curve, arcLen, crossings, R, moon, moonLight, sun, sky });
+      })();
+    }, 300);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [buildKey]);
+
   const holder = useMemo(() => {
     const h = new THREE.Group();
     h.position.y = 0.012;
@@ -388,12 +398,6 @@ export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: numbe
     holder.clear();
     void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
-      group.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.isMesh && (m.material as THREE.MeshStandardMaterial)?.isMeshStandardMaterial) {
-          applyRadialFog(m.material as THREE.MeshStandardMaterial, 0.7);
-        }
-      });
       holder.add(group);
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, 0.72);
@@ -453,35 +457,10 @@ export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: numbe
     };
   }, [gl, camera]);
 
-  // ---------- BUILD 205: 하늘의 식구들 — 실비율 달(0.273R), 태양, 달 반사광 ----------
-  // 달/지구 반지름비 0.2727은 실측 천문값. 달은 행성 중심을 34u 반경·15° 기울기로 돌고,
-  // 조석 고정(늘 같은 면), 태양(디렉셔널)을 받아 궤도 위치 따라 '위상'이 실제로 변한다.
-  // 천체는 안개를 모른다(fog:false — 별의 헌법). 달 반사광은 은은한 PointLight로 동행.
-  const celestial = useMemo(() => {
-    const group = new THREE.Group();
-    const moonMat = new THREE.MeshStandardMaterial({ color: '#c9c5bd', roughness: 1, metalness: 0 });
-    moonMat.fog = false;
-    new THREE.TextureLoader().load('assets/planet/moon_color.jpg', (t) => {
-      t.colorSpace = THREE.SRGBColorSpace;
-      moonMat.map = t;
-      moonMat.color.set('#ffffff');
-      moonMat.needsUpdate = true;
-    });
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(R * 0.273, 48, 32), moonMat);
-    const moonLight = new THREE.PointLight('#cfd8e0', 2.2, 0, 0.6); // 달빛의 되비침
-    moon.add(moonLight);
-    group.add(moon);
-    const sunMat = new THREE.MeshBasicMaterial({ color: '#ffedc8' });
-    sunMat.fog = false;
-    const sun = new THREE.Mesh(new THREE.SphereGeometry(2.6, 24, 16), sunMat);
-    sun.position.set(6, 11, 5).normalize().multiplyScalar(78); // 디렉셔널 광원과 같은 방향 — 빛의 근원이 보인다
-    group.add(sun);
-    return { group, moon, ang: Math.random() * Math.PI * 2 };
-  }, []);
   const S = useRef(0);
   const firstFrame = useRef(true);
-  // BUILD 204: 교차로의 고민 — 닿으면 잠깐 서서(idle) 생각하다, 한쪽을 골라 걷는다
-  const ponder = useRef({ phase: 'walk' as 'walk' | 'ponder', timer: 0, jumpTo: -1, cooldown: 0 });
+  const ang = useRef(Math.random() * Math.PI * 2);
+  const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
@@ -490,29 +469,43 @@ export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: numbe
   useFrame((state, rawDt) => {
     if (!built) return;
     const dt = Math.min(0.05, rawDt); // 헌법 3조
-    const P = ponder.current;
+    const SP = specRef.current;
+    const P = walk.current;
     P.cooldown = Math.max(0, P.cooldown - dt);
+    P.memCooldown = Math.max(0, P.memCooldown - dt);
     let moving = true;
-    if (P.phase === 'ponder') {
+    if (P.phase !== 'walk') {
       moving = false;
       P.timer -= dt;
       if (P.timer <= 0) {
-        if (P.jumpTo >= 0) S.current = P.jumpTo;
+        if (P.phase === 'memory') { onMemRef.current?.(null); P.memCooldown = 6; }
+        if (P.phase === 'ponder' && P.jumpTo >= 0) S.current = P.jumpTo;
         P.phase = 'walk';
         P.jumpTo = -1;
         P.cooldown = 8;
       }
     } else {
-      S.current += WALK * dt;
-      if (P.cooldown <= 0) {
-        const sm = ((S.current % built.arcLen) + built.arcLen) % built.arcLen;
+      S.current += SP.walkSpeed * dt;
+      const sm = ((S.current % built.arcLen) + built.arcLen) % built.arcLen;
+      // 기억이 먼저 — 그 자리에 서서 문장을 읽는다
+      if (P.memCooldown <= 0) {
+        for (const m of SP.memories) {
+          if (Math.abs(sm - m.t * built.arcLen) < 0.1) {
+            P.phase = 'memory';
+            P.timer = Math.max(1, m.stay);
+            onMemRef.current?.(m);
+            break;
+          }
+        }
+      }
+      if (P.phase === 'walk' && P.cooldown <= 0) {
         for (const c2 of built.crossings) {
           const nearA = Math.abs(sm - c2.a) < 0.1;
           const nearB = Math.abs(sm - c2.b) < 0.1;
           if (!nearA && !nearB) continue;
           P.phase = 'ponder';
-          P.timer = 1.1 + Math.random() * 1.1; // 고민하는 척
-          P.jumpTo = Math.random() < 0.5 ? -1 : (nearA ? c2.b + (sm - c2.a) : c2.a + (sm - c2.b)); // 반반: 가던 길 or 저 길
+          P.timer = 1.1 + Math.random() * 1.1;
+          P.jumpTo = Math.random() < SP.ponderChance ? (nearA ? c2.b + (sm - c2.a) : c2.a + (sm - c2.b)) : -1;
           break;
         }
       }
@@ -535,18 +528,24 @@ export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: numbe
       built.planet.quaternion.slerp(Q, k);
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
-    rigRef.current?.update(dt, 0.5, moving, state.clock.elapsedTime, moving ? WALK * dt : 0);
+    rigRef.current?.update(dt, 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * dt : 0);
     PLANET_CENTER.copy(built.planet.position);
-    // 달의 공전 — 지평선 너머로 뜨고 진다
-    celestial.ang += dt * ((Math.PI * 2) / 150);
-    const inc = 0.26; // 15° 기울기
-    celestial.moon.position.set(
-      Math.cos(celestial.ang) * 34,
-      PLANET_CENTER.y + Math.sin(celestial.ang) * Math.sin(inc) * 34,
-      Math.sin(celestial.ang) * Math.cos(inc) * 34,
+
+    // 하늘: 달의 공전(스펙 실시간) + 태양 자리
+    ang.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period));
+    const inc = (SP.moon.tilt * Math.PI) / 180;
+    built.moon.position.set(
+      Math.cos(ang.current) * SP.moon.dist,
+      PLANET_CENTER.y + Math.sin(ang.current) * Math.sin(inc) * SP.moon.dist,
+      Math.sin(ang.current) * Math.cos(inc) * SP.moon.dist,
     );
-    celestial.moon.lookAt(0, PLANET_CENTER.y, 0); // 조석 고정 — 늘 같은 얼굴
-    built.planet.getObjectByName('cloudShell')?.rotateY(dt * 0.004); // 구름은 저 혼자 흐른다
+    built.moon.lookAt(0, PLANET_CENTER.y, 0);
+    built.moonLight.intensity = SP.moon.light;
+    const az = (SP.sun.az * Math.PI) / 180;
+    const el2 = (SP.sun.el * Math.PI) / 180;
+    v.set(Math.cos(el2) * Math.cos(az), Math.sin(el2), Math.cos(el2) * Math.sin(az));
+    built.sun.position.copy(v).multiplyScalar(built.R * 6.5);
+    built.planet.getObjectByName('cloudShell')?.rotateY(dt * 0.004);
 
     const C = cam.current;
     const manual = performance.now() < C.manualUntil;
@@ -577,15 +576,23 @@ export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: numbe
     }
   });
 
+  const sunAz = (spec.sun.az * Math.PI) / 180;
+  const sunEl = (spec.sun.el * Math.PI) / 180;
+  const sunDir: [number, number, number] = [
+    Math.cos(sunEl) * Math.cos(sunAz) * 20,
+    Math.sin(sunEl) * 20,
+    Math.cos(sunEl) * Math.sin(sunAz) * 20,
+  ];
+
   return (
     <>
       <color attach="background" args={[PALETTE.fog]} />
-      <fog attach="fog" args={[PALETTE.fog, 9, 40]} />
+      <fog attach="fog" args={[PALETTE.fog, 9, spec.radius * 3.4]} />
       <hemisphereLight args={['#b9d2d8', '#c8a97e', 0.55]} />
       <directionalLight
         color="#ffe7c2"
         intensity={1.35}
-        position={[6, 11, 5]}
+        position={sunDir}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -595,8 +602,8 @@ export function PlanetWorld({ themeIdx = 0, walkerIdx = -1 }: { themeIdx?: numbe
         shadow-camera-bottom={-14}
       />
       <directionalLight color="#9fc4c9" intensity={0.22} position={[-5, 3, -4]} />
-      <primitive object={built ? built.planet : new THREE.Group()} />
-      <primitive object={celestial.group} />
+      {built && <primitive object={built.planet} />}
+      {built && <primitive object={built.sky} />}
       <primitive object={holder} />
     </>
   );
