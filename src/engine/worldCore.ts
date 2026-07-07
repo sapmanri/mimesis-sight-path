@@ -593,11 +593,14 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
   // 단 position 트랙은 기증자의 몸 치수 기준이므로, 힙 rest 높이 비율로 스케일해 옮긴다
   // (실측: Hiker 3.189 vs Chacha 0.713 — 그대로 물리면 수혜자가 하늘로 솟는다).
   if (spec.retargetFrom) {
-    // BUILD 209: VRoid 리타겟 — three-vrm의 loadMixamoAnimation 공식 수제 구현.
-    // retargetClip은 8옵션 전수 실측에서 전패(눕거나 4.9m 거인). 이 공식은 벤치 판정:
-    // 직립 0.87 / 발z진폭 0.98 / flip180로 전방(+Z) 정렬 — 서서, 앞을 보고, 걷는다.
-    //   q' = parentRestWorld × q_local(t) × inv(restWorld),  힙 위치 = 힙 rest 비율 스케일
-    // 뼈 이름은 로더가 정제한 런타임 이름(mixamorigHips — 콜론 없음)이 진실이다.
+    // BUILD 210: VRoid 리타겟 v2 — "rest 방향 정렬 월드 복사" (좀비 팔 종결).
+    // 진범: Hiker rest는 T포즈가 아니라 팔 내린 A포즈(상완 y=-0.93), VRoid는 정통 T포즈(±X).
+    // rest로부터의 델타를 옮기는 모든 수식(v4~v7)은 하이커의 작은 팔 델타를 T포즈에 얹어 좀비/허수아비가 됐다.
+    // 처방: 뼈마다 rest 월드 방향을 잇는 정렬 A를 만들어 절대 월드 방향 자체를 복사한다.
+    //   q_world_tgt(t) = worldQ_src(t) × inv(restW_src) × A,  A = setFromUnitVectors(dir_tgt_rest, dir_src_rest)
+    //   로컬 분해: q_local = inv(q_world(최근접 매핑 조상, t)) × q_world(뼈, t),  힙만 yFlip 선곱
+    // 벤치 실측(합격증): 직립 0.994 / 손-힙 0.117(정답지 0.131) / 발진폭 0.534(기하예측 0.52) / 팔걸이 0.904=정답지.
+    // 기증자 월드쿼트는 FK 실측(AnimationMixer 30fps 샘플링) — 트랙 로컬값을 직접 믿지 않는다.
     const { clone: skClone } = await import('three/examples/jsm/utils/SkeletonUtils.js');
     const donor = await loadModel(spec.retargetFrom);
     const donorRest = skClone(donor.scene);
@@ -619,39 +622,90 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
     const hipScale = hipsRestY(gltf.scene) / hipsRestY(donorRest);
     const srcClip = donor.animations.find((a) => /mixamo|walk/i.test(a.name)) ?? donor.animations[0];
     if (srcClip) {
-      const tracks: THREE.KeyframeTrack[] = [];
-      const restInv = new THREE.Quaternion();
-      const parentRest = new THREE.Quaternion();
-      const q = new THREE.Quaternion();
-      const yFlip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
-      for (const tr of srcClip.tracks) {
-        const dot = tr.name.lastIndexOf('.');
-        const nodeName = tr.name.slice(0, dot);
-        const prop = tr.name.slice(dot + 1);
-        const vname = MIX2VROID[nodeName];
-        if (!vname) continue;
-        const node = donorRest.getObjectByName(nodeName);
-        if (!node || !node.parent) continue;
-        if (prop === 'quaternion') {
-          node.getWorldQuaternion(restInv).invert();
-          node.parent.getWorldQuaternion(parentRest);
-          const vals = new Float32Array(tr.values.length);
-          for (let i = 0; i < tr.times.length; i += 1) {
-            q.fromArray(tr.values, i * 4);
-            q.premultiply(parentRest).multiply(restInv);
-            if (vname === 'J_Bip_C_Hips') q.premultiply(yFlip); // 전방(+Z) 정렬
-            q.toArray(vals, i * 4);
-          }
-          tracks.push(new THREE.QuaternionKeyframeTrack(`${vname}.quaternion`, Array.from(tr.times), Array.from(vals)));
-        } else if (prop === 'position' && vname === 'J_Bip_C_Hips') {
-          const vals = new Float32Array(tr.values.length);
-          for (let i = 0; i < tr.values.length; i += 3) {
-            vals[i] = -tr.values[i] * hipScale;
-            vals[i + 1] = tr.values[i + 1] * hipScale;
-            vals[i + 2] = -tr.values[i + 2] * hipScale;
-          }
-          tracks.push(new THREE.VectorKeyframeTrack(`${vname}.position`, Array.from(tr.times), Array.from(vals)));
+      const MIXBONES = Object.keys(MIX2VROID);
+      // 체인 방향(뼈→주 자식). 말단(Head/Hand/ToeBase)은 부모→뼈로 들어오는 방향.
+      const CHAIN_CHILD: Record<string, string> = {
+        mixamorigHips: 'mixamorigSpine', mixamorigSpine: 'mixamorigSpine1', mixamorigSpine1: 'mixamorigSpine2',
+        mixamorigSpine2: 'mixamorigNeck', mixamorigNeck: 'mixamorigHead',
+        mixamorigLeftShoulder: 'mixamorigLeftArm', mixamorigLeftArm: 'mixamorigLeftForeArm', mixamorigLeftForeArm: 'mixamorigLeftHand',
+        mixamorigRightShoulder: 'mixamorigRightArm', mixamorigRightArm: 'mixamorigRightForeArm', mixamorigRightForeArm: 'mixamorigRightHand',
+        mixamorigLeftUpLeg: 'mixamorigLeftLeg', mixamorigLeftLeg: 'mixamorigLeftFoot', mixamorigLeftFoot: 'mixamorigLeftToeBase',
+        mixamorigRightUpLeg: 'mixamorigRightLeg', mixamorigRightLeg: 'mixamorigRightFoot', mixamorigRightFoot: 'mixamorigRightToeBase',
+      };
+      const wpos = (o: THREE.Object3D) => new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
+      const restDirOf = (root: THREE.Object3D, isDonor: boolean, mn: string) => {
+        const nm = isDonor ? mn : MIX2VROID[mn];
+        const o = root.getObjectByName(nm);
+        if (!o) return null;
+        const cm = CHAIN_CHILD[mn];
+        const co = cm ? root.getObjectByName(isDonor ? cm : MIX2VROID[cm]) : null;
+        const d = co ? wpos(co).sub(wpos(o)) : wpos(o).sub(wpos(o.parent as THREE.Object3D));
+        return d.lengthSq() > 1e-10 ? d.normalize() : null;
+      };
+      // rest 정렬 A + rest 월드쿼트 (둘 다 애니 전 rest에서)
+      const ALIGN: Record<string, THREE.Quaternion> = {};
+      const restWInv: Record<string, THREE.Quaternion> = {};
+      for (const mn of MIXBONES) {
+        const ds = restDirOf(donorRest, true, mn);
+        const dt = restDirOf(gltf.scene, false, mn);
+        const o = donorRest.getObjectByName(mn);
+        if (!ds || !dt || !o) continue;
+        ALIGN[mn] = new THREE.Quaternion().setFromUnitVectors(dt, ds);
+        restWInv[mn] = o.getWorldQuaternion(new THREE.Quaternion()).invert();
+      }
+      // 타깃(VRoid) 최근접 매핑 조상 — 로컬 분해용
+      const V2MIX: Record<string, string> = {};
+      for (const [a, b] of Object.entries(MIX2VROID)) V2MIX[b] = a;
+      const mappedParent: Record<string, string | null> = {};
+      for (const vn of Object.values(MIX2VROID)) {
+        let p = gltf.scene.getObjectByName(vn)?.parent ?? null;
+        while (p && !V2MIX[p.name]) p = p.parent;
+        mappedParent[vn] = p ? p.name : null;
+      }
+      // 기증자 FK 샘플링 (30fps 그리드 — Idle subclip 프레임 규격 유지)
+      const fps = 30;
+      const N = Math.max(2, Math.round(srcClip.duration * fps));
+      const mixer = new THREE.AnimationMixer(donorRest);
+      mixer.clipAction(srcClip).play();
+      const worldQ: Record<string, THREE.Quaternion[]> = Object.fromEntries(MIXBONES.map((n) => [n, []]));
+      const hipPos: THREE.Vector3[] = [];
+      const times: number[] = [];
+      for (let i = 0; i < N; i += 1) {
+        const t = Math.min(i / fps, srcClip.duration * 0.999);
+        times.push(t);
+        mixer.setTime(t);
+        donorRest.updateMatrixWorld(true);
+        for (const mn of MIXBONES) {
+          const o = donorRest.getObjectByName(mn);
+          if (o && restWInv[mn]) worldQ[mn].push(o.getWorldQuaternion(new THREE.Quaternion()));
         }
+        const hip = donorRest.getObjectByName('mixamorigHips');
+        if (hip) hipPos.push(wpos(hip));
+      }
+      const yFlip = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+      // q_world_tgt(t) = yFlip × worldQ_src(t) × inv(restW_src) × A  (yFlip은 로컬 분해에서 힙에만 남는다)
+      const qwAt = (mn: string, f: number) => yFlip.clone().multiply(worldQ[mn][f]).multiply(restWInv[mn]).multiply(ALIGN[mn]);
+      const tracks: THREE.KeyframeTrack[] = [];
+      for (const [mn, vn] of Object.entries(MIX2VROID)) {
+        if (!restWInv[mn] || worldQ[mn].length !== N) continue;
+        const pvn = mappedParent[vn];
+        const pmn = pvn ? V2MIX[pvn] : null;
+        const vals = new Float32Array(N * 4);
+        for (let f = 0; f < N; f += 1) {
+          const qw = qwAt(mn, f);
+          const local = pmn && restWInv[pmn] ? qwAt(pmn, f).invert().multiply(qw) : qw;
+          local.toArray(vals, f * 4);
+        }
+        tracks.push(new THREE.QuaternionKeyframeTrack(`${vn}.quaternion`, times.slice(), Array.from(vals)));
+      }
+      if (hipPos.length === N) {
+        const pvals = new Float32Array(N * 3);
+        for (let f = 0; f < N; f += 1) {
+          pvals[f * 3] = -hipPos[f].x * hipScale; // yFlip = x,z 반전
+          pvals[f * 3 + 1] = hipPos[f].y * hipScale;
+          pvals[f * 3 + 2] = -hipPos[f].z * hipScale;
+        }
+        tracks.push(new THREE.VectorKeyframeTrack('J_Bip_C_Hips.position', times.slice(), Array.from(pvals)));
       }
       if (tracks.length) animations = [new THREE.AnimationClip(srcClip.name, srcClip.duration, tracks)];
     }
