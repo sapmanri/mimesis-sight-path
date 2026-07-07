@@ -138,6 +138,63 @@ function makeDesertTexture() {
   return tex;
 }
 
+// ---------- BUILD 201: 밟혀 다져진 길 — 패스 궤적을 텍스처에 직접 굽는다 ----------
+// 리본도 오브젝트도 아니다. 누군가 오래 걸어 모래가 다져진 '흔적'을 색맵 위에
+// 세 겹의 붓질(넓고 옅게 → 좁고 짙게 → 발끝만)로 새긴다. 위도에 따른 등장방형
+// 가로 늘어짐(1/sinθ)은 타원으로 보정, 경도 이음매는 양쪽에 겹쳐 그린다.
+function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3): THREE.Texture {
+  const img = map.image as HTMLImageElement | { data: Uint8ClampedArray; width: number; height: number };
+  const W2 = img.width;
+  const H2 = img.height;
+  const cnv = document.createElement('canvas');
+  cnv.width = W2;
+  cnv.height = H2;
+  const ctx = cnv.getContext('2d')!;
+  if (img instanceof HTMLImageElement) {
+    ctx.drawImage(img, 0, 0);
+  } else {
+    const id = ctx.createImageData(W2, H2);
+    id.data.set(img.data);
+    ctx.putImageData(id, 0, 0);
+  }
+  const steps = 2600;
+  const p = new THREE.Vector3();
+  const baseR = ((0.17 / R) / (Math.PI * 2)) * W2; // 길 반폭 0.17u → 픽셀
+  const passes = [
+    { rr: 1.8, a: 0.028 }, // 넓고 옅은 다짐
+    { rr: 1.0, a: 0.048 }, // 길의 몸통
+    { rr: 0.45, a: 0.055 }, // 발끝이 닿는 심
+  ];
+  for (let i = 0; i < steps; i += 1) {
+    curve.getPointAt(i / steps, p);
+    p.normalize();
+    const th = Math.acos(THREE.MathUtils.clamp(p.y, -1, 1));
+    let u = Math.atan2(p.z, -p.x) / (Math.PI * 2);
+    if (u < 0) u += 1;
+    const x = u * W2;
+    const y = (th / Math.PI) * H2;
+    const stretch = 1 / Math.max(0.25, Math.sin(th));
+    for (const ps of passes) {
+      ctx.fillStyle = `rgba(76, 72, 66, ${ps.a})`;
+      const draw = (cx: number) => {
+        ctx.beginPath();
+        ctx.ellipse(cx, y, baseR * ps.rr * stretch, baseR * ps.rr, 0, 0, Math.PI * 2);
+        ctx.fill();
+      };
+      draw(x);
+      const margin = baseR * 2.2 * stretch;
+      if (x < margin) draw(x + W2);
+      if (x > W2 - margin) draw(x - W2);
+    }
+  }
+  const tex = new THREE.CanvasTexture(cnv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  tex.flipY = true;
+  return tex;
+}
+
 export function PlanetWorld() {
   const { scene, camera, gl } = useThree();
   // BUILD 191 판례: frame 1 무안개 컴파일 방지 — 렌더 시점 선주입
@@ -256,6 +313,13 @@ export function PlanetWorld() {
       const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
       curve.arcLengthDivisions = 1800;
       const arcLen = curve.getLength();
+      // BUILD 201: 길의 흔적을 색맵에 굽는다 — 리본 없이도 '아까 그 길'을 알아볼 수 있게
+      map = bakeTrailOntoMap(map, curve);
+      if (meshGround) {
+        const mm = meshGround.material as THREE.MeshStandardMaterial;
+        mm.map = map;
+        mm.needsUpdate = true;
+      }
 
       // ---------- 2. 행성 본체 — meshworld는 구운 메시 그대로, 나머지는 높이맵이 정점을 민다 ----------
       if (meshGround) {
