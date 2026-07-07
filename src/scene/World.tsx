@@ -790,7 +790,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
       if (new URLSearchParams(window.location.search).get('toon') === '1') {
         applyToonShading(group, { steps: 3, softness: 0.15 });
         enforceFog(group); // 교체된 툰 머티리얼에 높이 안개 — 반드시 아웃라인보다 먼저 (BUILD 185 교훈)
-        addInkOutline(group, { thickness: 0.014, color: 0x2b2118, irregularity: 0.4 });
+        addInkOutline(group, { thickness: 0.006, color: 0x2b2118, irregularity: 0.4 });
       }
       // BUILD 091: 보행 클립이 있으면 클립 리그 (미끄러짐 최종 해법: 속도-배속 동기).
       // 없으면 BUILD 085 절차 보행으로 폴백 (스캐빈저 등).

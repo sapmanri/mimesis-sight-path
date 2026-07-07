@@ -119,7 +119,7 @@ export function applyToonShading(root: THREE.Object3D, options: ToonOptions = {}
 // ---------------------------------------------------------------------------
 
 interface OutlineOptions {
-  /** 월드 단위 대비 상대 두께. 캐릭터 0.010~0.015, 소품 0.006~0.010 권장 */
+  /** 화면 비례 두께 (NDC). 0.006 ≈ 세로 800px에서 약 2.4px 선. 거리·모델 스케일과 무관 */
   thickness?: number;
   /** 순검정(0x000000) 대신 잉크 브라운 권장 */
   color?: number;
@@ -128,7 +128,7 @@ interface OutlineOptions {
 }
 
 export function addInkOutline(root: THREE.Object3D, options: OutlineOptions = {}): void {
-  const { thickness = 0.012, color = 0x2b2118, irregularity = 0.4 } = options;
+  const { thickness = 0.006, color = 0x2b2118, irregularity = 0.4 } = options;
   const shells: THREE.Object3D[] = OUTLINE_SHELLS.get(root) ?? [];
 
   root.traverse((child) => {
@@ -143,27 +143,29 @@ export function addInkOutline(root: THREE.Object3D, options: OutlineOptions = {}
     // hfog 멱등 플래그를 미리 세워 이 재질을 건드리지 못하게 잠근다 — 두께 셰이더 사수.
     outlineMat.userData.hfog = true;
 
-    // 버텍스 셰이더에서 노멀 방향으로 밀어내되, 위치 기반 노이즈로 두께를 흔든다
+    // 클립 공간에서 화면 비례 두께로 민다 — 모델/뼈 스케일 무관 (BUILD 185 괴물 사건의 해법).
+    // 만년필처럼 거리와 상관없이 선 굵기가 일정하다. vn.xy를 정규화하지 않아
+    // 카메라를 정면으로 보는 면(실루엣 내부)은 자연히 밀리지 않는다.
     outlineMat.onBeforeCompile = (shader) => {
-      shader.uniforms.uThickness = { value: thickness };
+      shader.uniforms.uNdc = { value: thickness };
       shader.uniforms.uIrregularity = { value: irregularity };
 
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
           `#include <common>
-           uniform float uThickness;
+           uniform float uNdc;
            uniform float uIrregularity;
            float inkNoise(vec3 p) {
              return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
            }`
         )
         .replace(
-          '#include <begin_vertex>',
-          `#include <begin_vertex>
-           float n = inkNoise(floor(position * 40.0)) - 0.5;
-           float t = uThickness * (1.0 + n * uIrregularity);
-           transformed += normalize(normal) * t; // objectNormal 금지: BasicMaterial엔 normal 청크가 없다 (BUILD 183 교훈)`
+          '#include <project_vertex>',
+          `#include <project_vertex>
+           vec3 vn = normalMatrix * normalize(normal);
+           float n = inkNoise(floor(normalize(position) * 40.0)) - 0.5;
+           gl_Position.xy += vn.xy * uNdc * (1.0 + n * uIrregularity) * gl_Position.w;`
         );
     };
 
