@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
+import { PlanetWorld } from './scene/PlanetWorld';
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
 import { TouchTrail } from './components/TouchTrail';
@@ -12,7 +13,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v0.78.0 · NEW TENANTS · BUILD 193';
+const BUILD_LABEL = 'v0.79.0 · LE PETIT MONDE · BUILD 194';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -48,6 +49,8 @@ export default function App() {
     } catch { /* 기본 세계로 */ }
     return null;
   });
+  // BUILD 194: ?planet=1 — 작은 행성 전용 입구. 기존 세계와 코드가 섞이지 않는 별도 무대.
+  const [planetMode] = useState(() => new URLSearchParams(window.location.search).has('planet'));
   const scenes = draft?.scenes ?? jejuScenes;
   const [spec] = useState<WorldSpec>(draft?.spec ?? JEJU_SPEC);
   const lastMoveAt = useRef(0);
@@ -132,6 +135,17 @@ export default function App() {
     setActiveIndex(index);
   };
 
+  if (planetMode) {
+    return (
+      <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
+        <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
+          <PlanetWorld />
+        </Canvas>
+        <div className="atmosphere-grain" aria-hidden="true" />
+        <div className="build-badge">{BUILD_LABEL}</div>
+      </main>
+    );
+  }
   return (
     <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
       <header className="topbar road-only-topbar">
