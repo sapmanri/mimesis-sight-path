@@ -422,6 +422,39 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         }
         if (!alive) return;
 
+        // BUILD 227: 걷는 땅과 보이는 땅은 같은 격자에서 나와야 한다.
+        // 지형 구는 정점 128×96을 heightAt으로 밀어 올리고 그 사이는 직선 보간 —
+        // 걷기 높이를 텍스처 직샘플로 재면 굴곡이 클수록 그녀가 '수학의 산' 위에 뜬다(부양 4범).
+        // 처방: 같은 정점 격자(three 구면 공식 그대로: x=-cosφ·sinθ)의 반경을 굽고 쌍선형 보간.
+        const GSW = 128; const GSH = 96;
+        let surfaceRFn: (d: THREE.Vector3) => number;
+        if (theme.kind === 'meshworld') {
+          surfaceRFn = (d) => R + heightAt(d); // gridFromRadii — 이미 정점 실측 기반
+        } else {
+          const rGrid = new Float32Array((GSW + 1) * (GSH + 1));
+          const gd = new THREE.Vector3();
+          for (let iy = 0; iy <= GSH; iy += 1) {
+            const th2 = (iy / GSH) * Math.PI;
+            for (let ix = 0; ix <= GSW; ix += 1) {
+              const ph2 = (ix / GSW) * Math.PI * 2;
+              gd.set(-Math.cos(ph2) * Math.sin(th2), Math.cos(th2), Math.sin(ph2) * Math.sin(th2));
+              rGrid[iy * (GSW + 1) + ix] = R + heightAt(gd);
+            }
+          }
+          surfaceRFn = (d) => {
+            const th2 = Math.acos(THREE.MathUtils.clamp(d.y, -1, 1));
+            let ph2 = Math.atan2(d.z, -d.x);
+            if (ph2 < 0) ph2 += Math.PI * 2;
+            const fx = (ph2 / (Math.PI * 2)) * GSW;
+            const fy = (th2 / Math.PI) * GSH;
+            const x0 = Math.min(GSW - 1, Math.floor(fx)); const y0 = Math.min(GSH - 1, Math.floor(fy));
+            const tx = fx - x0; const ty = fy - y0;
+            const g00 = rGrid[y0 * (GSW + 1) + x0]; const g10 = rGrid[y0 * (GSW + 1) + x0 + 1];
+            const g01 = rGrid[(y0 + 1) * (GSW + 1) + x0]; const g11 = rGrid[(y0 + 1) * (GSW + 1) + x0 + 1];
+            return (g00 * (1 - tx) + g10 * tx) * (1 - ty) + (g01 * (1 - tx) + g11 * tx) * ty;
+          };
+        }
+
         const planet = new THREE.Group();
         const N = 560;
         const pts: THREE.Vector3[] = [];
@@ -430,7 +463,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           const phi = Math.PI * 2 * wraps * u;
           const theta = Math.PI / 2 + wobble * 0.62 * Math.sin(Math.PI * 2 * 3 * u + 0.7) + wobble * 0.21 * Math.sin(Math.PI * 2 * 7 * u + 2.1);
           const d = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
-          pts.push(d.multiplyScalar(R + heightAt(d) + 0.005));
+          pts.push(d.multiplyScalar(surfaceRFn(d) + 0.005));
         }
         const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
         curve.arcLengthDivisions = 1800;
@@ -502,7 +535,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         const sun = new THREE.Mesh(new THREE.SphereGeometry(R * 0.21, 24, 16), sunMat);
         sky.add(sun);
 
-        setBuilt({ planet, curve, arcLen, crossings, R, moon, moonLight, sun, sky, surfaceR: (d) => R + heightAt(d) });
+        setBuilt({ planet, curve, arcLen, crossings, R, moon, moonLight, sun, sky, surfaceR: surfaceRFn });
       })();
     }, 300);
     return () => { alive = false; clearTimeout(timer); };
@@ -735,7 +768,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   // BUILD 224: 걷다, 뛰다, 날다 — 이동 상태기. 주기는 스펙 슬라이더가 정하고 나머지는 지가 알아서.
-  const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
+  const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, rideStart: 0, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
   const walkerGroupRef = useRef<THREE.Group | null>(null);
   const petRef = useRef<{ pet: LoadedPet; d: THREE.Vector3; last: THREE.Vector3; cur: THREE.AnimationAction | null; t1: THREE.Vector3; t2: THREE.Vector3; q1: THREE.Quaternion } | null>(null);
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
@@ -765,6 +798,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     if (!pausedRef.current && MV.mode === 'walk' && P.phase === 'walk') {
       if (rideEvery > 0 && el >= MV.nextRide) {
         MV.mode = 'ride';
+        MV.rideStart = el;
         MV.until = el + 12 + Math.random() * 10;
         rigRef.current?.setRiding?.(true);
         MV.mountKind = Math.random() < 0.35 ? 'broom' : 'cloud';
@@ -797,6 +831,14 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     if (MV.mode === 'run' && el >= MV.until) {
       MV.mode = 'walk';
       MV.nextRun = el + runEvery * (0.7 + Math.random() * 0.6);
+    }
+    // BUILD 227: 투명 빗자루 보험 — 마운트가 2초 내 안 오면 구름으로 갈아탄다
+    if (MV.mode === 'ride' && !MV.mount && el > MV.rideStart + 2) {
+      const c = makeCloudPuff(() => Math.random(), 1.1);
+      c.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
+      holder.add(c);
+      MV.mount = c;
+      MV.mountKind = 'cloud';
     }
     const liftTarget = MV.mode === 'ride' && el < MV.until ? 1.15 : 0;
     MV.lift += (liftTarget - MV.lift) * Math.min(1, dt * 1.7);
