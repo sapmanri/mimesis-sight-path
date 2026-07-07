@@ -622,13 +622,16 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
         return y || 1;
       };
       void donorScene; // shim 경유로만 쓰인다
+      // BUILD 208: 뼈 이름에 콜론이 없다 — GLTFLoader가 로딩 시 노드명을 정제해
+      // 'mixamorig:Hips'가 'mixamorigHips'가 된다. 원본 JSON을 믿지 말고 런타임 이름을 믿어라.
+      // (T포즈 진범 — 매핑 전패로 트랙 0개였다. node 벤치에서 실측 검거.)
       const VROID_TO_MIXAMO: Record<string, string> = {
-        J_Bip_C_Hips: 'mixamorig:Hips', J_Bip_C_Spine: 'mixamorig:Spine', J_Bip_C_Chest: 'mixamorig:Spine1',
-        J_Bip_C_UpperChest: 'mixamorig:Spine2', J_Bip_C_Neck: 'mixamorig:Neck', J_Bip_C_Head: 'mixamorig:Head',
-        J_Bip_L_Shoulder: 'mixamorig:LeftShoulder', J_Bip_L_UpperArm: 'mixamorig:LeftArm', J_Bip_L_LowerArm: 'mixamorig:LeftForeArm', J_Bip_L_Hand: 'mixamorig:LeftHand',
-        J_Bip_R_Shoulder: 'mixamorig:RightShoulder', J_Bip_R_UpperArm: 'mixamorig:RightArm', J_Bip_R_LowerArm: 'mixamorig:RightForeArm', J_Bip_R_Hand: 'mixamorig:RightHand',
-        J_Bip_L_UpperLeg: 'mixamorig:LeftUpLeg', J_Bip_L_LowerLeg: 'mixamorig:LeftLeg', J_Bip_L_Foot: 'mixamorig:LeftFoot', J_Bip_L_ToeBase: 'mixamorig:LeftToeBase',
-        J_Bip_R_UpperLeg: 'mixamorig:RightUpLeg', J_Bip_R_LowerLeg: 'mixamorig:RightLeg', J_Bip_R_Foot: 'mixamorig:RightFoot', J_Bip_R_ToeBase: 'mixamorig:RightToeBase',
+        J_Bip_C_Hips: 'mixamorigHips', J_Bip_C_Spine: 'mixamorigSpine', J_Bip_C_Chest: 'mixamorigSpine1',
+        J_Bip_C_UpperChest: 'mixamorigSpine2', J_Bip_C_Neck: 'mixamorigNeck', J_Bip_C_Head: 'mixamorigHead',
+        J_Bip_L_Shoulder: 'mixamorigLeftShoulder', J_Bip_L_UpperArm: 'mixamorigLeftArm', J_Bip_L_LowerArm: 'mixamorigLeftForeArm', J_Bip_L_Hand: 'mixamorigLeftHand',
+        J_Bip_R_Shoulder: 'mixamorigRightShoulder', J_Bip_R_UpperArm: 'mixamorigRightArm', J_Bip_R_LowerArm: 'mixamorigRightForeArm', J_Bip_R_Hand: 'mixamorigRightHand',
+        J_Bip_L_UpperLeg: 'mixamorigLeftUpLeg', J_Bip_L_LowerLeg: 'mixamorigLeftLeg', J_Bip_L_Foot: 'mixamorigLeftFoot', J_Bip_L_ToeBase: 'mixamorigLeftToeBase',
+        J_Bip_R_UpperLeg: 'mixamorigRightUpLeg', J_Bip_R_LowerLeg: 'mixamorigRightLeg', J_Bip_R_Foot: 'mixamorigRightFoot', J_Bip_R_ToeBase: 'mixamorigRightToeBase',
       };
       const srcClip = donor.animations.find((a) => /mixamo|walk/i.test(a.name)) ?? donor.animations[0];
       if (srcClip) {
@@ -638,10 +641,11 @@ export async function loadWalkerAsset(loadModel: ModelLoader = defaultLoader, ch
         shim.skeleton = (src as THREE.SkinnedMesh).skeleton;
         const clip = retargetClip(tgt, shim as never, srcClip, {
           names: VROID_TO_MIXAMO,
-          hip: 'mixamorig:Hips',
+          hip: 'mixamorigHips',
           fps: 30,
           scale: hipsRestY(gltf.scene) / hipsRestY(donor.scene),
         } as never);
+        for (const tr of clip.tracks) tr.name = tr.name.replace(/^\.bones\[(.+?)\]/, '$1'); // 스켈레톤 경로 → 노드명 경로
         animations = [clip];
       }
     }
