@@ -252,7 +252,6 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
         let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * 0.14 * relief;
         let map: THREE.Texture | null = null;
         let ready: THREE.Object3D | null = null;
-        let cloudsTex: THREE.Texture | null = null;
 
         if (theme.kind === 'meshworld') {
           const [gltf, colorTex] = await Promise.all([
@@ -303,11 +302,6 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
           map.anisotropy = 4;
           const sample = await loadHeightSampler(theme.height);
           heightAt = (d) => sample(d) * theme.amp * relief;
-          if ('clouds' in theme && theme.clouds) {
-            cloudsTex = await loader.loadAsync(theme.clouds);
-            cloudsTex.colorSpace = THREE.SRGBColorSpace;
-            cloudsTex.wrapS = THREE.RepeatWrapping;
-          }
         } else {
           map = makeDesertTexture();
         }
@@ -362,14 +356,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
           const ground = new THREE.Mesh(geo, applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 })));
           ground.receiveShadow = true;
           planet.add(ground);
-          if (cloudsTex) {
-            const shell = new THREE.Mesh(
-              new THREE.SphereGeometry(R * 1.018, 64, 48),
-              new THREE.MeshStandardMaterial({ map: cloudsTex, transparent: true, opacity: 0.9, depthWrite: false, roughness: 1 }),
-            );
-            shell.name = 'cloudShell';
-            planet.add(shell);
-          }
+          // BUILD 213: 구운 구름 껍질(cloudShell) 퇴역 — 자리는 비워둔다. 진짜 움직이는 구름이 올 때까지.
         }
 
         // 하늘의 식구들 — 스펙과 함께 다시 태어난다
@@ -569,7 +556,6 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
     const el2 = (SP.sun.el * Math.PI) / 180;
     v.set(Math.cos(el2) * Math.cos(az), Math.sin(el2), Math.cos(el2) * Math.sin(az));
     built.sun.position.copy(v).multiplyScalar(built.R * 6.5);
-    built.planet.getObjectByName('cloudShell')?.rotateY(dt * 0.004);
 
     const C = cam.current;
     const manual = performance.now() < C.manualUntil;
