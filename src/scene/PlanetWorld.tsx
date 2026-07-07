@@ -14,25 +14,29 @@ import type { PlanetSpec, PlanetMemory } from './planetSpec';
 
 const PLANET_CENTER = new THREE.Vector3(0, -12, 0);
 
-function applyRadialFog(mat: THREE.MeshStandardMaterial, band: { top: number; bottom: number }, strength: number) {
+// BUILD 212: 방사 안개 v2 — 값은 유니폼에 산다. 밴드·농도 다이얼이 재건축 없이 즉답하고,
+// 지형과 캐릭터가 같은 유니폼을 공유한다. (구판은 리터럴 굽기 — 캐릭터는 다이얼을 못 들었다.)
+// uRF = (bottom, top, strength). mul만 재질별 리터럴(정적).
+const RFOG = { v: new THREE.Vector3(11.9, 12.3, 0.8), color: new THREE.Color('#ffffff') };
+function applyRadialFog(mat: THREE.MeshStandardMaterial, mul = 1) {
   if (mat.userData.rfog) return mat;
   mat.userData.rfog = true;
-  const hex = parseInt(PALETTE.fog.slice(1), 16);
-  const c = { r: ((hex >> 16) & 255) / 255, g: ((hex >> 8) & 255) / 255, b: (hex & 255) / 255 };
-  const glsl = (n: number) => n.toFixed(4);
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uPlanetC = { value: PLANET_CENTER };
+    shader.uniforms.uRF = { value: RFOG.v };
+    shader.uniforms.uRFc = { value: RFOG.color };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vRFw;')
       .replace('#include <fog_vertex>', '#include <fog_vertex>\nvRFw = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vRFw;\nuniform vec3 uPlanetC;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vRFw;\nuniform vec3 uPlanetC;\nuniform vec3 uRF;\nuniform vec3 uRFc;')
       .replace(
         '#include <fog_fragment>',
-        `#include <fog_fragment>\nfloat rfd = distance(vRFw, uPlanetC);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(${glsl(c.r)}, ${glsl(c.g)}, ${glsl(c.b)}), (1.0 - smoothstep(${glsl(band.bottom)}, ${glsl(band.top)}, rfd)) * ${glsl(strength)});`,
+        `#include <fog_fragment>\nfloat rfd = distance(vRFw, uPlanetC);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, uRFc, clamp((1.0 - smoothstep(uRF.x, uRF.y, rfd)) * uRF.z * ${mul.toFixed(4)}, 0.0, 1.0));`,
       );
   };
-  mat.customProgramCacheKey = () => `rfog|${band.top.toFixed(3)}|${band.bottom.toFixed(3)}|${strength.toFixed(3)}|${PALETTE.fog}`;
+  mat.customProgramCacheKey = () => `rfog2|${mul.toFixed(4)}`;
+  mat.needsUpdate = true;
   return mat;
 }
 
@@ -221,7 +225,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
   onMemRef.current = onMemory;
 
   // 무거운 다이얼만 재건축을 부른다
-  const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.fogLevel, spec.fogStrength, spec.moon.size]);
+  const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.moon.size]);
+
+  // BUILD 212: 안개 다이얼은 유니폼 직행 — 재건축 없는 즉답 (지형·캐릭터 공유)
+  useEffect(() => {
+    const R = spec.radius;
+    const lv = Math.max(spec.fogLevel, 0.001);
+    RFOG.v.set(R - lv * 0.25 - 0.02, R + lv, spec.fogLevel <= 0.01 ? 0 : spec.fogStrength);
+    RFOG.color.set(PALETTE.fog);
+  }, [spec.radius, spec.fogLevel, spec.fogStrength, spec.theme]);
 
   type Built = {
     planet: THREE.Group; curve: THREE.CatmullRomCurve3; arcLen: number;
@@ -233,15 +245,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
     let alive = true;
     const timer = setTimeout(() => {
       void (async () => {
-        const s0 = JSON.parse(buildKey) as [PlanetSpec['theme'], number, number, number, number, number, number, number];
-        const [themeName, R, relief, wraps, wobble, fogLevel, fogStrength, moonSize] = s0;
+        const s0 = JSON.parse(buildKey) as [PlanetSpec['theme'], number, number, number, number, number];
+        const [themeName, R, relief, wraps, wobble, moonSize] = s0;
         const theme = THEMES[themeName];
-        // BUILD 211: 안개는 하늘로 — 수위 = 지표 위 안개 천장 높이.
-        // (구판은 top=R+0.04 고정에 bottom=R-fogLevel — 올릴수록 행성 중심으로 자라는 지하수였다.)
-        // 지표(rfd=R)에서 짙고(≈0.8×농도) top에서 소멸, 골짜기·크레이터엔 물처럼 고인다. 0 = 무안개.
-        const lv = Math.max(fogLevel, 0.001);
-        const band = { top: R + lv, bottom: R - lv * 0.25 - 0.02 };
-        const fogStrength2 = fogLevel <= 0.01 ? 0 : fogStrength;
+        // 안개(211에서 수위 방향 반전, 212에서 유니폼화)는 위의 RFOG 이펙트가 관리한다.
         let heightAt: (d: THREE.Vector3) => number = (d) => hills(d) * 0.14 * relief;
         let map: THREE.Texture | null = null;
         let ready: THREE.Object3D | null = null;
@@ -284,7 +291,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
           geo2.computeVertexNormals();
           geo2.computeBoundingSphere();
           geo2.computeBoundingBox();
-          const mesh = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), band, fogStrength2 * 0.62));
+          const mesh = new THREE.Mesh(geo2, applyRadialFog(new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 }), 0.62));
           mesh.frustumCulled = false;
           mesh.receiveShadow = true;
           ready = mesh;
@@ -352,7 +359,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
             pos.setXYZ(i, vd.x * r2, vd.y * r2, vd.z * r2);
           }
           geo.computeVertexNormals();
-          const ground = new THREE.Mesh(geo, applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 }), band, fogStrength2));
+          const ground = new THREE.Mesh(geo, applyRadialFog(new THREE.MeshStandardMaterial({ map: map!, roughness: 1, metalness: 0 })));
           ground.receiveShadow = true;
           planet.add(ground);
           if (cloudsTex) {
@@ -404,6 +411,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
     void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
       holder.add(group);
+      // BUILD 212: 캐릭터도 안개에 잠긴다 — 본토 hfog를 행성 rfog로 갈아입힘
+      group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+          .forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+      });
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, 0.72);
     }).catch(() => { /* 조용한 행성 */ });
@@ -465,6 +479,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
   const S = useRef(0);
   const firstFrame = useRef(true);
   const ang = useRef(Math.random() * Math.PI * 2);
+  const spinAng = useRef(0); // BUILD 212: 조석고정 대비 추가 자전 누적각
   const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
@@ -545,6 +560,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, onMemory }: { spec: PlanetSp
       Math.sin(ang.current) * Math.cos(inc) * SP.moon.dist,
     );
     built.moon.lookAt(0, PLANET_CENTER.y, 0);
+    // BUILD 212: 달 자전 다이얼 — lookAt이 만드는 조석고정(=1) 위에 (spin−1)×공전각속도를 얹는다.
+    // 1=늘 같은 얼굴(현재), 0=관성 정지처럼 보임, 음수=역자전.
+    spinAng.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period)) * (((SP.moon.spin ?? 1)) - 1);
+    built.moon.rotateY(spinAng.current);
     built.moonLight.intensity = SP.moon.light;
     const az = (SP.sun.az * Math.PI) / 180;
     const el2 = (SP.sun.el * Math.PI) / 180;

@@ -32,7 +32,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.0.4 · FOG RISES, NOT SINKS · BUILD 211';
+const BUILD_LABEL = 'v1.0.5 · SHE SINKS INTO THE FOG · BUILD 212';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -233,6 +233,7 @@ export default function App() {
             <Dial label="달 공전 주기 (s)" value={M.period} min={30} max={480} step={5} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, period: v } }))} />
             <Dial label="달 궤도 기울기 (°)" value={M.tilt} min={0} max={60} step={1} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, tilt: v } }))} />
             <Dial label="달빛" value={M.light} min={0} max={8} step={0.1} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, light: v } }))} />
+            <Dial label="달 자전 (조석고정=1)" value={M.spin ?? 1} min={-3} max={3} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, spin: v } }))} />
             <Dial label="태양 방위 (°)" value={SN.az} min={0} max={360} step={2} onChange={(v) => updSpec((s) => ({ ...s, sun: { ...s.sun, az: v } }))} />
             <Dial label="태양 고도 (°)" value={SN.el} min={4} max={85} step={1} onChange={(v) => updSpec((s) => ({ ...s, sun: { ...s.sun, el: v } }))} />
             <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 4px', display: 'flex', justifyContent: 'space-between' }}>

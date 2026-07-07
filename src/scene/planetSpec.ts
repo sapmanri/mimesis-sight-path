@@ -11,7 +11,7 @@ export type PlanetSpec = {
   wraps: number;       // 길이 행성을 감는 바퀴
   wobble: number;      // 위도 요동 배율
   ponderChance: number;// 교차로에서 저 길을 고를 확률
-  moon: { size: number; dist: number; period: number; tilt: number; light: number };
+  moon: { size: number; dist: number; period: number; tilt: number; light: number; spin: number };
   sun: { az: number; el: number }; // 방위·고도 (deg)
   memories: PlanetMemory[];
 };
@@ -26,7 +26,7 @@ export const DEFAULT_PLANET_SPEC: PlanetSpec = {
   wraps: 4,
   wobble: 1.0,
   ponderChance: 0.5,
-  moon: { size: 0.273, dist: 34, period: 150, tilt: 15, light: 2.2 },
+  moon: { size: 0.273, dist: 34, period: 150, tilt: 15, light: 2.2, spin: 1 },
   sun: { az: 40, el: 52 },
   memories: [],
 };
