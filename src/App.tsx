@@ -402,7 +402,7 @@ export default function App() {
             </label>
             <div style={{ fontSize: 12, color: '#d8b26e', margin: '12px 0 2px' }}>하늘</div>
             <Dial label="구름 — 하늘의 흰 구름 수" value={pSpec.clouds ?? 5} min={0} max={12} step={1} onChange={(v) => updSpec((s) => ({ ...s, clouds: v }))} />
-            <Dial label="구름의 자유 — 0=지형처럼, 1=달처럼" value={pSpec.cloudFree ?? 0.9} min={0} max={1} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, cloudFree: v }))} />
+            <Dial label="구름의 자유 — 0=지형처럼, 1=달처럼" value={pSpec.cloudFree ?? 0.1} min={0} max={1} step={0.05} onChange={(v) => updSpec((s) => ({ ...s, cloudFree: v }))} />
             <Dial label="비 주기 (s · 0=안 옴)" value={pSpec.rainEvery ?? 0} min={0} max={300} step={5} onChange={(v) => updSpec((s) => ({ ...s, rainEvery: v }))} />
             <Dial label="눈 주기 (s · 0=안 옴)" value={pSpec.snowEvery ?? 0} min={0} max={300} step={5} onChange={(v) => updSpec((s) => ({ ...s, snowEvery: v }))} />
             <Dial label="달 크기 (행성=1)" value={M.size} min={0.08} max={0.6} step={0.005} onChange={(v) => updSpec((s) => ({ ...s, moon: { ...s.moon, size: v } }))} />

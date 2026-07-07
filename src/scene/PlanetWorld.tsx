@@ -1029,7 +1029,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         propRainList.push({ key: pr2.id, dirLocal: new THREE.Vector3(pr2.dir[0], pr2.dir[1], pr2.dir[2]), topR: pr2.r + (pr2.lift ?? 0) + 2.45 });
       }
       const rainNear = skyRef.current.update(dt, el, built.planet, built.R, built.surfaceR,
-        { clouds: SP.clouds ?? 0, cloudFree: SP.cloudFree ?? 0.9, rainEvery: SP.rainEvery ?? 0, snowEvery: SP.snowEvery ?? 0 }, propRainList);
+        { clouds: SP.clouds ?? 0, cloudFree: SP.cloudFree ?? 0.1, rainEvery: SP.rainEvery ?? 0, snowEvery: SP.snowEvery ?? 0 }, propRainList);
       // 빗소리 히스테리시스 — 문턱을 넘을 때만 apply (본토 소리 문법)
       const amt = rainNear > 0.55 ? 0.7 : rainNear > 0.22 ? 0.35 : 0;
       if (amt !== lastRainAmt.current) { lastRainAmt.current = amt; ambience.apply({ rainAmount: amt }); }

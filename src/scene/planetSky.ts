@@ -175,7 +175,7 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
       if (!prevQInit) { prevQ.copy(planet.quaternion); prevQInit = true; }
       tmpQ.copy(planet.quaternion).multiply(tmpQ2.copy(prevQ).invert()); // dq (월드)
       prevQ.copy(planet.quaternion);
-      const drag = THREE.MathUtils.clamp(1 - (spec.cloudFree ?? 0.9), 0, 1);
+      const drag = THREE.MathUtils.clamp(1 - (spec.cloudFree ?? 0.1), 0, 1);
       const dq = tmpQ2.copy(ID_Q).slerp(tmpQ, drag);
 
       // ── 흰 구름 정원 관리
@@ -217,12 +217,24 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
         c.g.position.set(center.x + c.d.x * cloudR, center.y + c.d.y * cloudR, center.z + c.d.z * cloudR);
         c.g.rotation.y += c.spin * dt;
         // 페이즈
+        // BUILD 235: 지평선 너머로 흘러간 흰 구름은 조용히 앞하늘로 다시 태어난다 — 하늘이 비지 않게
+        if (c.kind === 'white' && c.phase === 'live' && Math.acos(THREE.MathUtils.clamp(c.d.y, -1, 1)) > 1.85) { c.phase = 'out'; c.t = 0; c.life = -1; }
         let k = 1;
         if (c.phase === 'in') { k = Math.min(1, c.t / 2.2); if (k >= 1) { c.phase = 'live'; c.t = 0; } }
         else if (c.phase === 'live' && c.t >= c.life) { c.phase = 'out'; c.t = 0; }
         else if (c.phase === 'out') {
           k = Math.max(0, 1 - c.t / 2.6);
-          if (k <= 0) { killCloud(c); continue; }
+          if (k <= 0) {
+            if (c.kind === 'white' && c.life === -1) {
+              // 재활용 — 앞하늘 고리(15°~55°)에서 다시
+              const th = 0.26 + rnd() * 0.7;
+              const az = rnd() * Math.PI * 2;
+              c.d.set(Math.sin(th) * Math.cos(az), Math.cos(th), Math.sin(th) * Math.sin(az));
+              c.altMul = 0.17 + rnd() * 0.16;
+              c.phase = 'in'; c.t = 0; c.life = Infinity;
+            } else { killCloud(c); }
+            continue;
+          }
         }
         const pop = c.phase === 'in' ? k * (1 + 0.14 * Math.sin(k * Math.PI)) : k; // 폽(backOut의 사촌)
         c.g.scale.setScalar(Math.max(0.001, pop));

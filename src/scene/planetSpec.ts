@@ -44,7 +44,7 @@ export const DEFAULT_PLANET_SPEC: PlanetSpec = {
   ponderChance: 0.5,
   roam: false,
   clouds: 5,
-  cloudFree: 0.9,
+  cloudFree: 0.1, // BUILD 235: 구름은 그 좌표 위에 거의 고정 — 0.9는 호위무사를 낳았다
   rainEvery: 0,
   snowEvery: 0,
   runEvery: 45,
@@ -70,6 +70,7 @@ export function loadPlanetDraft(): PlanetSpec {
       sun: { ...DEFAULT_PLANET_SPEC.sun, ...(p.sun ?? {}) },
       memories: Array.isArray(p.memories) ? p.memories : [],
       props: Array.isArray(p.props) ? p.props : [],
+      cloudFree: p.cloudFree === 0.9 ? 0.1 : p.cloudFree, // BUILD 235 이행: 234의 잘못된 기본값 교정
     };
   } catch {
     return { ...DEFAULT_PLANET_SPEC, memories: [], props: [] };
