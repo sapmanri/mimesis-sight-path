@@ -35,7 +35,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.7.3 · THE MAINLAND WAY, VERBATIM · BUILD 229';
+const BUILD_LABEL = 'v1.8.0 · THE RIG OWNS ITS GROUND · BUILD 230';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

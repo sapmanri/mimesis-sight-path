@@ -552,11 +552,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     let alive = true;
     rigRef.current = null;
     // BUILD 228: clear()는 펫·탈것까지 쓸어버렸다 — 이전 워커만 표적 제거
-    if (walkerGroupRef.current) { holder.remove(walkerGroupRef.current); walkerGroupRef.current = null; }
+    if (walkerGroupRef.current) { liftGroup.remove(walkerGroupRef.current); walkerGroupRef.current = null; }
+    if (!liftGroup.parent) holder.add(liftGroup);
     void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
-      holder.add(group);
-      group.updateMatrixWorld(true); // BUILD 228: 릭의 침하(rollingMin)가 쓰레기 행렬을 기억하지 않게 — 교체 침하 사건
+      liftGroup.add(group);
+      holder.updateMatrixWorld(true); // BUILD 228/230: 릭의 침하(rollingMin)가 쓰레기 행렬을 기억하지 않게 — 교체 침하 사건
       walkerGroupRef.current = group; // BUILD 224: 탈것 리프트가 이 그룹을 든다
       // BUILD 212: 캐릭터도 안개에 잠긴다 — 본토 hfog를 행성 rfog로 갈아입힘
       group.traverse((o) => {
@@ -585,7 +586,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           .forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
       });
       holder.add(pet.group);
-      petRef.current = { pet, d: new THREE.Vector3(), last: new THREE.Vector3(), cur: null, t1: new THREE.Vector3(), t2: new THREE.Vector3(), q1: new THREE.Quaternion() };
+      petRef.current = { pet, d: new THREE.Vector3(), goal: new THREE.Vector3(), mode: 'idle', timer: 1, running: false, cur: null, t1: new THREE.Vector3(), t2: new THREE.Vector3(), q1: new THREE.Quaternion() };
       pet.idle?.play();
       petRef.current.cur = pet.idle;
     });
@@ -772,7 +773,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   // BUILD 224: 걷다, 뛰다, 날다 — 이동 상태기. 주기는 스펙 슬라이더가 정하고 나머지는 지가 알아서.
   const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, rideStart: 0, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
   const walkerGroupRef = useRef<THREE.Group | null>(null);
-  const petRef = useRef<{ pet: LoadedPet; d: THREE.Vector3; last: THREE.Vector3; cur: THREE.AnimationAction | null; t1: THREE.Vector3; t2: THREE.Vector3; q1: THREE.Quaternion } | null>(null);
+  // BUILD 230: 부양의 진범 — 리프트가 릭 소유의 루트 y(침하 시스템의 자리)를 매 프레임 덮어썼다.
+  // 릭의 침하는 기억 기반이라 밟히면 발이 클립 여유고만큼 영구히 뜬다. 리프트는 별도 부모로 분리.
+  const liftGroup = useMemo(() => new THREE.Group(), []);
+  const petRef = useRef<{ pet: LoadedPet; d: THREE.Vector3; goal: THREE.Vector3; mode: 'idle' | 'wander' | 'chase' | 'trick'; timer: number; running: boolean; cur: THREE.AnimationAction | null; t1: THREE.Vector3; t2: THREE.Vector3; q1: THREE.Quaternion } | null>(null);
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
   const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
@@ -862,7 +866,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       MV.nextRun = Math.max(MV.nextRun, el + 8);
     }
     const spdMul = MV.mode === 'ride' ? 2.6 : MV.mode === 'run' ? 2.3 : 1;
-    if (walkerGroupRef.current) walkerGroupRef.current.position.y = MV.lift;
+    liftGroup.position.y = MV.lift; // BUILD 230: 릭의 땅은 릭이 소유한다
     // BUILD 228: 좌석은 본토 실측 문법 — rideSeat()이 있으면 골반 아래, 없으면 발밑
     const seatH = rigRef.current?.rideSeat?.() ?? 0;
     const mountY = MV.lift + seatH - (seatH > 0 ? (MV.mountKind === 'broom' ? 0.10 : 0.14) : (MV.mountKind === 'broom' ? 0.10 : 0.09));
@@ -994,45 +998,94 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       PT.pet.group.rotation.set(0, 0, 0);
       const wantR = PT.pet.sit ?? PT.pet.idle;
       if (wantR && wantR !== PT.cur) { PT.cur?.fadeOut(0.25); wantR.reset().fadeIn(0.25).play(); PT.cur = wantR; }
-      PT.last.copy(PT.pet.group.position);
       PT.pet.mixer.update(dt);
     } else if (PT) {
+      // BUILD 230: 본토 펫 AI(BUILD 141/144/154/157) 구면 이식 — 얘는 자유가 있는 애다.
+      // 어슬렁(50%)·곁으로(28%)·재롱·멍때림, 리드줄 1.8u 추격, 7u 순간이동 보험,
+      // 속도 0.5/1.35, 뛰기 히스테리시스(1.3 시작 → 0.6까지 유지), 목표 도달 0.1u.
       const r0 = p.length();
-      PT.t1.crossVectors(U, T).normalize(); // 옆 축
-      PT.q1.setFromAxisAngle(PT.t1, 0.62 / Math.max(1, r0)); // 뒤로 (전진의 역방향 회전)
-      PT.t2.copy(U).applyQuaternion(PT.q1).normalize();
-      if (PT.d.lengthSq() < 0.5) PT.d.copy(PT.t2);
-      PT.d.lerp(PT.t2, Math.min(1, dt * (2.0 + spdMul))).normalize();
-      const wp = PT.t2.copy(PT.d).multiplyScalar(built.surfaceR(PT.d) + 0.005);
-      built.planet.localToWorld(wp);
-      const vel = PT.t1.copy(wp).sub(PT.last);
-      PT.pet.group.position.copy(wp);
-      PT.last.copy(wp);
-      // BUILD 229: 미끄러짐의 진범 — 이 세계에선 펫도 월드에선 거의 정지해 있고 행성이 구른다.
-      // 걸음 판정은 월드 속도가 아니라 '지면 상대속도'로: 그녀의 전진(+Z) + 수렴 성분.
-      const fwdV = moving ? SP.walkSpeed * spdMul : 0;
-      const rvx = dt > 0 ? vel.x / dt : 0;
-      const rvz = (dt > 0 ? vel.z / dt : 0) + fwdV;
-      const pvRel = Math.hypot(rvx, rvz);
-      // 본토 petPlay 원문(BUILD 141/144): walk ?? idle 폴백, 0.35 페이드, 자연 재생 속도
+      if (PT.d.lengthSq() < 0.5) {
+        PT.t1.crossVectors(U, T).normalize();
+        PT.d.copy(U).applyQuaternion(PT.q1.setFromAxisAngle(PT.t1, 0.5 / r0)).normalize();
+        PT.goal.copy(PT.d);
+      }
+      const arcTo = (a: THREE.Vector3, b: THREE.Vector3) => Math.acos(THREE.MathUtils.clamp(a.dot(b), -1, 1)) * r0;
+      const dW = arcTo(PT.d, U);
+      // 순간이동 보험 (본토 BUILD 157): 리드줄 너머로 날아갔으면 곁으로
+      if (dW > 7) {
+        PT.t1.crossVectors(U, T).normalize();
+        PT.d.copy(U).applyQuaternion(PT.q1.setFromAxisAngle(PT.t1, 0.5 / r0)).normalize();
+        PT.mode = 'idle'; PT.goal.copy(PT.d); PT.timer = 0.8;
+      }
+      PT.timer -= dt;
+      // 리드줄에 물려도 하던 동작은 끝낸다 (본토 BUILD 144)
+      if (dW > 1.8 && PT.mode !== 'chase' && PT.mode !== 'trick') { PT.mode = 'chase'; PT.goal.copy(U); PT.timer = 1.2; }
+      if (PT.timer <= 0) {
+        PT.timer = 2 + Math.random() * 3;
+        const rr0 = Math.random();
+        if (dW > 1.4) { PT.mode = 'chase'; PT.goal.copy(U); PT.timer = 1.2; }
+        else if (rr0 < 0.5) { // 어슬렁 — 걷는 사람 근처 아무 데나 (0.35~1.2u)
+          PT.mode = 'wander';
+          const a2 = Math.random() * Math.PI * 2;
+          const rr = 0.35 + Math.random() * 0.85;
+          PT.t1.crossVectors(U, T).normalize();          // 옆 축
+          PT.t2.crossVectors(T, PT.t1).normalize();      // 보조 축 (≈U 아님, 접선 기저용)
+          const ax = PT.t2.copy(PT.t1).multiplyScalar(Math.cos(a2)).addScaledVector(T, Math.sin(a2)).normalize();
+          PT.goal.copy(U).applyQuaternion(PT.q1.setFromAxisAngle(ax, rr / r0)).normalize();
+        } else if (rr0 < 0.78) { // 곁으로 — 뒤 0.45u
+          PT.t1.crossVectors(U, T).normalize();
+          PT.goal.copy(U).applyQuaternion(PT.q1.setFromAxisAngle(PT.t1, 0.45 / r0)).normalize();
+          PT.mode = 'chase';
+        } else if (PT.pet.tricks.length) { // 재롱 한 번
+          PT.mode = 'trick';
+          const t0a = PT.pet.tricks[Math.floor(Math.random() * PT.pet.tricks.length)];
+          t0a.reset().fadeIn(0.3).play();
+          PT.cur?.fadeOut(0.3);
+          PT.cur = t0a;
+          PT.timer = (t0a.getClip().duration ?? 1.5) + 0.35;
+        } else { PT.mode = 'idle'; }
+      }
       const petPlay = (a: THREE.AnimationAction | null) => {
         if (!a || PT.cur === a) return;
         a.reset().fadeIn(0.35).play();
         PT.cur?.fadeOut(0.35);
         PT.cur = a;
       };
-      if (!moving || pvRel < 0.06) petPlay(PT.pet.idle);
-      else petPlay(pvRel > 0.85 ? (PT.pet.run ?? PT.pet.walk) : (PT.pet.walk ?? PT.pet.idle));
-      if (PT.cur) PT.cur.timeScale = 1;
-      // 본토 요 스무딩(dt*7) — 지면 상대 진행 방향을 본다
-      PT.pet.group.up.set(0, 1, 0);
-      if (pvRel > 0.06) {
-        const wantYaw = Math.atan2(rvx, rvz);
-        let dy2 = wantYaw - PT.pet.group.rotation.y;
-        while (dy2 > Math.PI) dy2 -= Math.PI * 2;
-        while (dy2 < -Math.PI) dy2 += Math.PI * 2;
-        PT.pet.group.rotation.y += dy2 * Math.min(1, dt * 7);
+      let yawFrom: THREE.Vector3 | null = null;
+      if (PT.mode !== 'trick') {
+        const gd = arcTo(PT.d, PT.goal);
+        if (gd > 0.1) {
+          // 뛰기 히스테리시스 (본토 BUILD 144)
+          PT.running = PT.mode === 'chase' && (PT.running ? dW > 0.6 : dW > 1.3);
+          const spd = PT.running ? 1.35 : 0.5;
+          const step = Math.min(gd, spd * dt) / r0;
+          PT.t1.crossVectors(PT.d, PT.goal).normalize();
+          if (PT.t1.lengthSq() > 0.5) {
+            PT.t2.copy(PT.d); // 이동 전 방향 (요 계산용)
+            PT.d.applyQuaternion(PT.q1.setFromAxisAngle(PT.t1, step)).normalize();
+            yawFrom = PT.t2;
+          }
+          petPlay(PT.running ? (PT.pet.run ?? PT.pet.walk) : (PT.pet.walk ?? PT.pet.idle));
+        } else {
+          petPlay(PT.pet.idle);
+        }
       }
+      const wp = PT.t2.copy(PT.d).multiplyScalar(built.surfaceR(PT.d) + 0.005);
+      built.planet.localToWorld(wp);
+      PT.pet.group.position.copy(wp);
+      PT.pet.group.up.set(0, 1, 0);
+      if (yawFrom) {
+        // 요: 지면 상대 이동 방향 = 로컬 이동 델타를 행성 회전으로 월드에 사상 (본토 스무딩 dt*7)
+        PT.t1.copy(PT.d).sub(yawFrom).applyQuaternion(built.planet.quaternion);
+        if (PT.t1.lengthSq() > 1e-10) {
+          const wantYaw = Math.atan2(PT.t1.x, PT.t1.z);
+          let dy2 = wantYaw - PT.pet.group.rotation.y;
+          while (dy2 > Math.PI) dy2 -= Math.PI * 2;
+          while (dy2 < -Math.PI) dy2 += Math.PI * 2;
+          PT.pet.group.rotation.y += dy2 * Math.min(1, dt * 7);
+        }
+      }
+      if (PT.cur && PT.cur !== PT.pet.idle && PT.mode !== 'trick') PT.cur.timeScale = 1;
       PT.pet.mixer.update(dt);
     }
 
