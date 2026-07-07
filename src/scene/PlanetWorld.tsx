@@ -551,10 +551,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   useEffect(() => {
     let alive = true;
     rigRef.current = null;
-    holder.clear();
+    // BUILD 228: clear()는 펫·탈것까지 쓸어버렸다 — 이전 워커만 표적 제거
+    if (walkerGroupRef.current) { holder.remove(walkerGroupRef.current); walkerGroupRef.current = null; }
     void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
       holder.add(group);
+      group.updateMatrixWorld(true); // BUILD 228: 릭의 침하(rollingMin)가 쓰레기 행렬을 기억하지 않게 — 교체 침하 사건
       walkerGroupRef.current = group; // BUILD 224: 탈것 리프트가 이 그룹을 든다
       // BUILD 212: 캐릭터도 안개에 잠긴다 — 본토 hfog를 행성 rfog로 갈아입힘
       group.traverse((o) => {
@@ -803,13 +805,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         rigRef.current?.setRiding?.(true);
         MV.mountKind = Math.random() < 0.35 ? 'broom' : 'cloud';
         if (MV.mountKind === 'cloud') {
-          const c = makeCloudPuff(() => Math.random(), 1.1);
+          const c = makeCloudPuff(() => Math.random(), 0.13); // 본토 정답 (BUILD 137)
           c.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
           holder.add(c);
           MV.mount = c;
           if (petRef.current) {
             // BUILD 225: 본토 판례(BUILD 141) — 펫에겐 아기구름을 내어준다
-            const bc = makeCloudPuff(() => Math.random(), 0.52);
+            const bc = makeCloudPuff(() => Math.random(), 0.075); // 본토 아기 구름 정답
             bc.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
             holder.add(bc);
             MV.babyMount = bc;
@@ -818,9 +820,16 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           void loadKitModel('broom', defaultLoader).then((g2) => {
             if (moveState.current.mode !== 'ride' || moveState.current.mount) { return; }
             g2.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
-            g2.rotation.y = Math.PI / 2;
-            holder.add(g2);
-            moveState.current.mount = g2;
+            // 본토 BUILD 145: 장축은 원래 +Z(자루 앞) — 비틀지 않는다. 코만 살짝 들고 자루 중심 정렬.
+            g2.rotation.x = -0.09;
+            g2.updateMatrixWorld(true);
+            const bb = new THREE.Box3().setFromObject(g2);
+            const bcm = bb.getCenter(new THREE.Vector3());
+            g2.position.x -= bcm.x; g2.position.z -= bcm.z; g2.position.y -= bcm.y;
+            const wrap = new THREE.Group();
+            wrap.add(g2);
+            holder.add(wrap);
+            moveState.current.mount = wrap;
           });
         }
       } else if (runEvery > 0 && el >= MV.nextRun) {
@@ -834,7 +843,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     }
     // BUILD 227: 투명 빗자루 보험 — 마운트가 2초 내 안 오면 구름으로 갈아탄다
     if (MV.mode === 'ride' && !MV.mount && el > MV.rideStart + 2) {
-      const c = makeCloudPuff(() => Math.random(), 1.1);
+      const c = makeCloudPuff(() => Math.random(), 0.13); // 본토 정답 (BUILD 137)
       c.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
       holder.add(c);
       MV.mount = c;
@@ -852,12 +861,17 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     }
     const spdMul = MV.mode === 'ride' ? 2.6 : MV.mode === 'run' ? 2.3 : 1;
     if (walkerGroupRef.current) walkerGroupRef.current.position.y = MV.lift;
+    // BUILD 228: 좌석은 본토 실측 문법 — rideSeat()이 있으면 골반 아래, 없으면 발밑
+    const seatH = rigRef.current?.rideSeat?.() ?? 0;
+    const mountY = MV.lift + seatH - (seatH > 0 ? (MV.mountKind === 'broom' ? 0.10 : 0.14) : (MV.mountKind === 'broom' ? 0.10 : 0.09));
     if (MV.mount) {
-      MV.mount.position.y = MV.lift - (MV.mountKind === 'broom' ? 0.1 : 0.3) + (MV.lift > 0.2 ? Math.sin(el * 2.1) * 0.045 : 0);
+      MV.mount.position.set(Math.sin(el * 0.53 + 1) * 0.02, mountY + Math.sin(el * 1.3) * 0.012, Math.cos(el * 0.61) * 0.02);
+      if (MV.mountKind === 'cloud') MV.mount.rotation.y += dt * 0.12;
+      else { MV.mount.rotation.z = Math.sin(el * 1.1) * 0.05; MV.mount.rotation.x = Math.sin(el * 0.8 + 1) * 0.04; } // 파도를 타듯 (본토 BUILD 144)
     }
     if (MV.babyMount) {
-      // 아기구름 — 본체 곁 0.46u, 살짝 다른 박자로 둥실 (본토 BUILD 141의 호흡)
-      MV.babyMount.position.set(0.46 + Math.sin(el * 0.4) * 0.05, MV.lift - 0.32 + Math.sin(el * 1.1 + 3) * 0.035, -0.08);
+      // 아기구름 — 오른쪽 옆 0.42u, 살짝 다른 박자로 둥실 (본토 BUILD 141의 호흡)
+      MV.babyMount.position.set(0.42 + Math.sin(el * 0.4) * 0.06, mountY - 0.02 + Math.sin(el * 1.1 + 3) * 0.035, 0);
       MV.babyMount.rotation.y += dt * 0.2;
     }
     if (pausedRef.current) moving = false;
@@ -970,9 +984,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const PT = petRef.current;
     if (PT && MV.lift > 0.08) {
       // BUILD 225: 탈것 위에선 함께 탄다 — 빗자루면 뒤 솔방석, 구름이면 아기구름 위
-      if (MV.mountKind === 'broom') PT.t1.set(0, MV.lift - 0.02, -0.36);
-      else if (MV.babyMount) PT.t1.set(MV.babyMount.position.x, MV.babyMount.position.y + 0.05, MV.babyMount.position.z);
-      else PT.t1.set(0.46, MV.lift - 0.27, -0.08);
+      if (MV.mountKind === 'broom' && MV.mount) PT.t1.set(0, MV.mount.position.y + 0.08, -0.36);
+      else if (MV.babyMount) PT.t1.set(MV.babyMount.position.x, MV.babyMount.position.y + 0.045, MV.babyMount.position.z);
+      else PT.t1.set(0.42, MV.lift - 0.1, 0);
       PT.pet.group.position.lerp(PT.t1, Math.min(1, dt * 3.2));
       PT.pet.group.up.set(0, 1, 0);
       PT.pet.group.rotation.set(0, 0, 0);
