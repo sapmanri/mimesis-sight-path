@@ -33,15 +33,15 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
   root.renderOrder = -10;
   scene.add(root);
 
-  // 세 겹 — 카메라를 중심으로 하는 아주 큰 껍질(무한처럼). 반경이 클수록 카메라 궤도이동에도
-  // 시차가 0에 가까워 별이 '박혀' 있다 (BUILD 240의 '지구 따라 도는 별' 원인 = 반경 부족).
-  const far = starField(420, 6000, 1.1, '#eaf0ff', 0.9);
-  const mid = starField(150, 5200, 1.8, '#dfe8ff', 0.95);
-  const near = starField(36, 4400, 3.0, '#ffffff', 1.0);
+  // 세 겹 — 카메라 far(기본 2000) 안에 둔다. BUILD 240의 6000 반경은 far plane 밖이라 통째로
+  // 잘려 별이 사라졌다(Vase). 시차는 카메라 상쇄(root가 카메라를 따라감)로 이미 0에 가깝다.
+  const far = starField(420, 1850, 1.1, '#eaf0ff', 0.9);
+  const mid = starField(150, 1650, 1.8, '#dfe8ff', 0.95);
+  const near = starField(36, 1450, 3.0, '#ffffff', 1.0);
   root.add(far.pts, mid.pts, near.pts);
 
   // 은하수 — 옅은 띠
-  const milky = starField(260, 5800, 1.0, '#c8d4f0', 0.5, 0.14);
+  const milky = starField(260, 1780, 1.0, '#c8d4f0', 0.5, 0.14);
   milky.pts.rotation.z = 0.5;
   milky.pts.rotation.x = 0.3;
   root.add(milky.pts);
@@ -87,9 +87,9 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
             // 하늘 위쪽 한 점에서 대각선으로
             const az = Math.random() * Math.PI * 2;
             const el0 = 0.5 + Math.random() * 0.8;
-            shootFrom.set(Math.cos(az) * Math.cos(el0), Math.sin(el0), Math.sin(az) * Math.cos(el0)).multiplyScalar(5000);
+            shootFrom.set(Math.cos(az) * Math.cos(el0), Math.sin(el0), Math.sin(az) * Math.cos(el0)).multiplyScalar(1600);
             tv.set(Math.random() - 0.5, -0.4 - Math.random() * 0.3, Math.random() - 0.5).normalize();
-            shootTo.copy(shootFrom).addScaledVector(tv, 900);
+            shootTo.copy(shootFrom).addScaledVector(tv, 320);
           }
         } else {
           shootT += dt;
