@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
-import { PlanetWorld } from './scene/PlanetWorld';
+import { PlanetWorld, flagIsKnownCountry } from './scene/PlanetWorld';
 import { walkerCount } from './engine/worldCore';
 import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact, type PlanetApi } from './scene/planetSpec';
 import { PROP_CATALOG } from './engine/props';
@@ -82,7 +82,7 @@ export default function App() {
   const [pSpec, setPSpec] = useState<PlanetSpec>(() => {
     const q = new URLSearchParams(window.location.search);
     if (q.has('edit') || q.has('draft')) return loadPlanetDraft();
-    const s = { ...DEFAULT_PLANET_SPEC, memories: [] as PlanetMemory[] };
+    const s = { ...DEFAULT_PLANET_SPEC, memories: [] as PlanetMemory[], walker: 0 }; // BUILD 253: 방문자 기본 캐릭터 0(랜덤 금지, KV 도착 전까지)
     const th = q.get('theme');
     if (th === 'earth' || th === 'luna' || th === 'moon' || th === 'desert') s.theme = th;
     return s;
@@ -108,6 +108,7 @@ export default function App() {
         setPSpec({
           ...DEFAULT_PLANET_SPEC,
           ...live,
+          walker: typeof live.walker === 'number' ? live.walker : 0, // BUILD 253: 발행에 walker 없으면 0 고정(랜덤 금지)
           moon: { ...DEFAULT_PLANET_SPEC.moon, ...(live.moon ?? {}) },
           sun: { ...DEFAULT_PLANET_SPEC.sun, ...(live.sun ?? {}) },
           memories: Array.isArray(live.memories) ? live.memories : [],
@@ -160,7 +161,9 @@ export default function App() {
       const raw = localStorage.getItem(PASSPORT_KEY);
       if (!raw) return [];
       const d = JSON.parse(raw) as { date: string; names: string[] };
-      return d.date === new Date().toDateString() ? d.names : [];
+      // BUILD 253: 예전에 새어 들어간 이니셜(ㅎ·호·훗)을 로드 시 걸러낸다 — 진짜 나라만 남긴다
+      const clean = (d.date === new Date().toDateString() ? d.names : []).filter((n) => flagIsKnownCountry(n));
+      return clean;
     } catch { return []; }
   });
   const [passportOpen, setPassportOpen] = useState(false);
@@ -254,7 +257,8 @@ export default function App() {
     });
   };
   const onFlagPop = (name: string) => {
-    if (!name || !name.trim()) return; // BUILD 238: 이름 없는 깃발(이니셜 페넌트)은 여권에 남기지 않는다 — 'ㅎ·호·흣'의 정체
+    if (!name || !name.trim()) return; // BUILD 238: 이름 없는 깃발(이니셜 페넌트)은 여권에 남기지 않는다
+    if (!flagIsKnownCountry(name)) return; // BUILD 253: 진짜 나라만 여권에 — 'ㅎ·호·훗' 이중 방어
     setFlagWhisper(name);
     if (whisperTimer.current) window.clearTimeout(whisperTimer.current);
     whisperTimer.current = window.setTimeout(() => setFlagWhisper(null), 3400);

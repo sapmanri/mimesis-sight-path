@@ -844,13 +844,20 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           return gl.domElement.toDataURL('image/jpeg', 0.6);
         } catch { return null; }
       },
-      // BUILD 252: 대형 이벤트 시연 — 에디터에서 즉시 확인 (헌법 6조)
+      // BUILD 253: 대형 이벤트 시연 — 카메라가 보는 앞쪽 하늘에 확실히 띄운다
       demoComet: () => {
-        const az = Math.random() * Math.PI * 2;
-        const el = 0.5 + Math.random() * 0.4;
-        cometRef.current?.triggerMajor(az, el, 9, 20);
+        // 카메라가 향하는 방향의 방위각을 구해 그쪽 하늘로
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        const az = Math.atan2(dir.z, dir.x);
+        const el = 0.55;
+        // eslint-disable-next-line no-console
+        console.log('[demo] comet trigger, cometRef=', !!cometRef.current, 'az=', az.toFixed(2));
+        cometRef.current?.triggerMajor(az, el, 9, 22);
       },
       demoShower: () => {
+        // eslint-disable-next-line no-console
+        console.log('[demo] shower trigger, starRef=', !!starRef.current);
         starRef.current?.triggerShower(60); // 시연은 60초 (실제는 20분)
       },
       pick: (cx: number, cy: number) => {
