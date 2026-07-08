@@ -19,6 +19,7 @@ import { planetSound } from '../audio/planetSound';
 import type { PlanetSpec, PlanetMemory, PlanetContact, PlanetApi, PlanetProp } from './planetSpec';
 import type { MutableRefObject } from 'react';
 import { createPropObject } from '../engine/props';
+import { loadHandLanternAsset } from '../engine/props';
 
 // ---------- BUILD 207: 작은 행성 v7 — 스펙이 세계를 정한다 ----------
 // 에디터의 문법 이식: 세계의 모든 다이얼(테마·반지름·굴곡·안개·걸음·감김·요동·
@@ -644,6 +645,25 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       if (!alive) return;
       const moonR = built.moon.geometry.boundingSphere?.radius ?? 1;
       rabbitAI.current = createMoonRabbit(built.moon, moonR, group, animations);
+      // BUILD 258: 달토끼도 랜덤으로 랜턴을 든다 (달의 밤을 밝히며 로밍)
+      if (Math.random() < 0.5) {
+        let hand: THREE.Object3D | null = null;
+        group.traverse((n) => { if ((n as THREE.Bone).isBone && /(RightHand|LeftHand|hand|paw)$/i.test(n.name) && !hand) hand = n; });
+        if (hand) {
+          const h = hand as THREE.Object3D;
+          group.updateMatrixWorld(true);
+          const ws = new THREE.Vector3(); h.getWorldScale(ws);
+          const wrapper = new THREE.Group();
+          wrapper.scale.setScalar(1 / Math.max(ws.x, 1e-6));
+          h.add(wrapper);
+          rabbitLanternRef.current = wrapper;
+          void loadHandLanternAsset().then((lantern) => {
+            if (!alive) return;
+            lantern.position.y = -0.14;
+            wrapper.add(lantern);
+          }).catch(() => {});
+        }
+      }
     }).catch(() => {});
     // BUILD 236: 갈매기 — 해안이 있는 세계에만
     void loadKitModel('seagull', defaultLoader).then((proto) => {
@@ -716,6 +736,28 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       });
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, 0.72);
+      // BUILD 258: 밤 랜턴 — 본토 방식(손 뼈 진자 매달기)을 행성 캐릭터에 이식. 랜덤으로 이 산책자가 든다.
+      if (lanternOnRef.current) {
+        let hand: THREE.Object3D | null = null;
+        group.traverse((n) => { if ((n as THREE.Bone).isBone && /RightHand$/i.test(n.name) && !hand) hand = n; });
+        if (!hand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name) && !hand) hand = n; });
+        if (!hand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /hand/i.test(n.name) && !hand) hand = n; });
+        if (hand) {
+          const h = hand as THREE.Object3D;
+          group.updateMatrixWorld(true);
+          const ws = new THREE.Vector3(); h.getWorldScale(ws);
+          const wrapper = new THREE.Group();
+          wrapper.scale.setScalar(1 / Math.max(ws.x, 1e-6));
+          wrapper.visible = false; // 밤에만 켠다 (프레임 루프에서 dl로 제어)
+          h.add(wrapper);
+          lanternRef.current = wrapper;
+          void loadHandLanternAsset().then((lantern) => {
+            if (!alive) return;
+            lantern.position.y = -0.17;
+            wrapper.add(lantern);
+          }).catch(() => { /* 랜턴 없으면 조용히 */ });
+        }
+      }
     }).catch(() => { /* 조용한 행성 */ });
     return () => { alive = false; };
   }, [holder, walkerIdx]);
@@ -947,6 +989,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   // BUILD 224: 걷다, 뛰다, 날다 — 이동 상태기. 주기는 스펙 슬라이더가 정하고 나머지는 지가 알아서.
   const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, rideStart: 0, rideStartS: 0, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
   const walkerGroupRef = useRef<THREE.Group | null>(null);
+  const lanternRef = useRef<THREE.Group | null>(null); // BUILD 258: 캐릭터 손 랜턴 (밤 랜덤)
+  const lanternOnRef = useRef<boolean>(Math.random() < 0.5); // 이 산책자가 랜턴을 드는가 (랜덤)
+  const rabbitLanternRef = useRef<THREE.Group | null>(null); // 달토끼 랜턴
   const hipsPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 140): 골반 뼈
   const footPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 142): 발 뼈
   // BUILD 230: 부양의 진범 — 리프트가 릭 소유의 루트 y(침하 시스템의 자리)를 매 프레임 덮어썼다.
@@ -1345,6 +1390,25 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
     if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; emit('nightfall'); ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
     else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; emit('daybreak'); ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
+    // BUILD 258: 밤이면 손 랜턴을 켠다 + 중력 정렬(뼈가 어떻게 돌아도 등불은 아래를 안다)
+    if (lanternRef.current) {
+      const isNight = dl < 0.35;
+      lanternRef.current.visible = isNight;
+      if (isNight && lanternRef.current.parent) {
+        const q = new THREE.Quaternion();
+        lanternRef.current.parent.getWorldQuaternion(q);
+        lanternRef.current.quaternion.copy(q.invert());
+      }
+    }
+    if (rabbitLanternRef.current) {
+      const isNight = dl < 0.35;
+      rabbitLanternRef.current.visible = isNight;
+      if (isNight && rabbitLanternRef.current.parent) {
+        const q = new THREE.Quaternion();
+        rabbitLanternRef.current.parent.getWorldQuaternion(q);
+        rabbitLanternRef.current.quaternion.copy(q.invert());
+      }
+    }
     // BUILD 241: 걸음 이정표 — 1km마다 (S는 걸음거리, ×10을 m로 친다 → 100u=1km)
     {
       const km = Math.floor((S.current * 10) / 1000);
