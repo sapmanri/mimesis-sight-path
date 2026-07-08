@@ -10,6 +10,7 @@ import { createMoonRabbit } from './moonRabbit';
 import { createStarSky } from './starSky';
 import { createPlanetVehicles } from './planetVehicles';
 import { createComet } from './comet';
+import { worldTime, phaseAngle, eventCycle } from './skyClock';
 import { makeBubble, updateBubble, type Bubble } from './speech';
 import type { PlanetEvent, PlanetEventKind } from './planetEvents';
 import { footsteps } from './footsteps';
@@ -920,7 +921,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
 
   const S = useRef(0);
   const firstFrame = useRef(true);
-  const ang = useRef(Math.random() * Math.PI * 2);
+  const ang = useRef(0); // BUILD 246: 달 공전각 — 이제 worldTime()이 매 프레임 결정 (Math.random 제거)
   const spinAng = useRef(0); // BUILD 212: 조석고정 대비 추가 자전 누적각
   const dayAng = useRef(0);  // BUILD 214: 태양 공전각 (낮밤)
   const earState = useRef<'day' | 'night'>('day'); // BUILD 223: 귀의 낮밤 (히스테리시스)
@@ -1294,8 +1295,11 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       PT.pet.mixer.update(dt);
     }
 
+    // BUILD 246: 하늘 시계 — 누적(+=dt)을 절대시각(worldTime)으로 대체.
+    // 접속 시점과 무관하게 모두가 같은 순간 같은 하늘을 본다. (세계 동기, 카메라만 각자)
+    const WT = worldTime();
     // 하늘: 달의 공전(스펙 실시간) + 태양 자리
-    ang.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period));
+    ang.current = phaseAngle(WT, Math.max(10, SP.moon.period));
     const inc = (SP.moon.tilt * Math.PI) / 180;
     built.moon.position.set(
       Math.cos(ang.current) * SP.moon.dist,
@@ -1305,7 +1309,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     built.moon.lookAt(0, PLANET_CENTER.y, 0);
     // BUILD 212: 달 자전 다이얼 — lookAt이 만드는 조석고정(=1) 위에 (spin−1)×공전각속도를 얹는다.
     // 1=늘 같은 얼굴(현재), 0=관성 정지처럼 보임, 음수=역자전.
-    spinAng.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period)) * (((SP.moon.spin ?? 1)) - 1);
+    spinAng.current = phaseAngle(WT, Math.max(10, SP.moon.period)) * (((SP.moon.spin ?? 1)) - 1);
     built.moon.rotateY(spinAng.current);
     MOON_SUN.copy(built.sun.position).sub(built.moon.position).normalize(); // BUILD 236: 위상은 기하가 정한다
     if (rabbitAI.current) rabbitAI.current.update(dt);
@@ -1313,7 +1317,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // BUILD 214: 태양 공전 — 행성을 공전시킬 수 없으니 태양을 돌린다 (Vase).
     // 고도 대원 궤도: θ = 고도 + 누적 공전각. 지평선 아래로 지면 밤이 온다.
     const per = SP.sun.period ?? 0;
-    if (per > 0) dayAng.current += dt * ((Math.PI * 2) / Math.max(20, per));
+    dayAng.current = per > 0 ? phaseAngle(WT, Math.max(20, per)) : 0;
     const az = (SP.sun.az * Math.PI) / 180;
     const th = (SP.sun.el * Math.PI) / 180 + dayAng.current;
     v.set(Math.cos(th) * Math.cos(az), Math.sin(th), Math.cos(th) * Math.sin(az));
