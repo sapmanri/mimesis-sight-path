@@ -13,18 +13,40 @@ export function createComet(scene: THREE.Scene, camera: THREE.Camera, proto: THR
   const root = new THREE.Group();
   scene.add(root);
 
-  // 혜성 핵 (모델)
+  // BUILD 255: 부드러운 원형 글로우 텍스처 — 각진 네모(PointsMaterial 기본)를 둥근 빛으로.
+  function glowTexture(): THREE.Texture {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.25, 'rgba(224,236,255,0.9)');
+    grad.addColorStop(0.55, 'rgba(180,205,255,0.4)');
+    grad.addColorStop(1, 'rgba(160,190,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+  const glowTex = glowTexture();
+
+  // 혜성 핵 (모델) — 뒤에 밝은 글로우 스프라이트를 겹쳐 진짜 '빛나는 머리'로
   const core = proto.clone();
   core.scale.setScalar(0.001);
   root.add(core);
+  const headMat = new THREE.SpriteMaterial({ map: glowTex, color: '#eaf2ff', transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+  const head = new THREE.Sprite(headMat);
+  head.renderOrder = -7;
+  root.add(head);
 
-  // 빛 꼬리 — 점 스프라이트 여러 개로 그라데이션
-  const TAIL = 40;
+  // 빛 꼬리 — 둥근 글로우 점들로 부드러운 그라데이션 (additive로 빛처럼 쌓인다)
+  const TAIL = 60;
   const tailGeo = new THREE.BufferGeometry();
   tailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TAIL * 3), 3));
   const tailAlpha = new Float32Array(TAIL);
   tailGeo.setAttribute('aAlpha', new THREE.BufferAttribute(tailAlpha, 1));
-  const tailMat = new THREE.PointsMaterial({ color: '#dCE8ff', size: 14, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
+  const tailMat = new THREE.PointsMaterial({ map: glowTex, color: '#cfe0ff', size: 55, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
   const tail = new THREE.Points(tailGeo, tailMat);
   tail.frustumCulled = false;
   tail.renderOrder = -8;
@@ -72,16 +94,23 @@ export function createComet(scene: THREE.Scene, camera: THREE.Camera, proto: THR
     core.position.copy(pos);
     core.scale.setScalar(scale * (0.6 + 0.4 * glow));
     core.rotation.x = WT * 0.5; core.rotation.y = WT * 0.7;
-    const segs = 22;
+    // 밝은 머리 글로우 — 핵을 감싸는 빛 (크기는 scale에 비례, 화면에서 확실히 큰 빛덩이)
+    head.position.copy(pos);
+    head.scale.setScalar(scale * 9 * (0.7 + 0.3 * glow));
+    headMat.opacity = glow * alpha;
+    // 꼬리 — 머리 뒤로 촘촘히 이어지는 빛의 자취. u 앞쪽으로 짧게(머리 근처), 뒤로 길게 페이드.
+    const tailLen = 0.32; // 궤도 길이의 32%가 꼬리
     for (let i = 0; i < TAIL; i += 1) {
-      const back = (i / TAIL) * (majorDur / segs);
-      const pu = Math.max(0, u - back * 4);
+      const f = i / TAIL;                 // 0=머리 근처, 1=꼬리 끝
+      const pu = Math.max(0, u - f * tailLen);
       const p = a.clone().lerp(b, pu);
       (tailGeo.getAttribute('position').array as Float32Array).set([p.x, p.y, p.z], i * 3);
-      (tailGeo.getAttribute('aAlpha').array as Float32Array)[i] = (1 - i / TAIL);
+      (tailGeo.getAttribute('aAlpha').array as Float32Array)[i] = (1 - f) * (1 - f); // 뒤로 갈수록 급히 옅게
     }
     (tailGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-    tailMat.opacity = 0.8 * glow * alpha;
+    // 꼬리 점 크기도 스케일 비례 (거리감쇠라 실제 화면에서 커진다)
+    tailMat.size = scale * 2.4;
+    tailMat.opacity = 0.9 * glow * alpha;
   }
 
   return {
@@ -104,17 +133,17 @@ export function createComet(scene: THREE.Scene, camera: THREE.Camera, proto: THR
           return;
         }
         majorStart = -1; // 끝나면 해제
-        core.scale.setScalar(0.001); tailMat.opacity = 0;
+        core.scale.setScalar(0.001); tailMat.opacity = 0; headMat.opacity = 0;
       }
       // 2) 배경 혜성 — 밤에만 실현. 낮이면 숨긴다.
       if (night <= 0.6) {
-        if (core.scale.x > 0.01) { core.scale.setScalar(0.001); tailMat.opacity = 0; }
+        if (core.scale.x > 0.01) { core.scale.setScalar(0.001); tailMat.opacity = 0; headMat.opacity = 0; }
         return;
       }
       const ev = eventCycle(WT, COMET_PERIOD, COMET_SALT);
       const st = ev.active(COMET_DUR);
       if (!st.on) {
-        if (core.scale.x > 0.01) { core.scale.setScalar(0.001); tailMat.opacity = 0; trail.length = 0; }
+        if (core.scale.x > 0.01) { core.scale.setScalar(0.001); tailMat.opacity = 0; headMat.opacity = 0; trail.length = 0; }
         return;
       }
       if (ev.cycle !== lastCycle) {
@@ -125,6 +154,6 @@ export function createComet(scene: THREE.Scene, camera: THREE.Camera, proto: THR
       }
       renderComet(st.u, from, to, coreScale, WT, night);
     },
-    dispose() { tailGeo.dispose(); tailMat.dispose(); scene.remove(root); },
+    dispose() { tailGeo.dispose(); tailMat.dispose(); headMat.dispose(); glowTex.dispose(); scene.remove(root); },
   };
 }

@@ -50,18 +50,34 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
   milky.pts.rotation.x = 0.3;
   root.add(milky.pts);
 
-  // 별똥별 — 밝은 꼬리 (선분 여러 겹으로 그라데이션 꼬리)
+  // BUILD 255: 별똥별 머리 글로우 텍스처 — 각진 점을 둥근 빛으로 (선은 WebGL이 linewidth 무시해 안 보였다)
+  function glowTexture(): THREE.Texture {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.3, 'rgba(240,246,255,0.85)');
+    grad.addColorStop(0.6, 'rgba(200,220,255,0.35)');
+    grad.addColorStop(1, 'rgba(200,220,255,0)');
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(c); tex.needsUpdate = true; return tex;
+  }
+  const shootGlow = glowTexture();
+
+  // 별똥별 — 밝은 꼬리 (여러 점의 글로우 궤적으로. 선은 두께가 안 먹어 점으로 그린다)
+  const SEG = 14; // 꼬리를 이루는 점 개수
   const shootGeo = new THREE.BufferGeometry();
-  shootGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-  const shootMat = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, fog: false, linewidth: 2 });
-  const shoot = new THREE.Line(shootGeo, shootMat);
+  shootGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SEG * 3), 3));
+  const shootMat = new THREE.PointsMaterial({ map: shootGlow, color: '#eaf2ff', size: 26, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+  const shoot = new THREE.Points(shootGeo, shootMat);
   shoot.frustumCulled = false;
   shoot.renderOrder = -9;
   root.add(shoot);
-  // 머리의 밝은 점
+  // 머리의 밝은 점 — 큰 글로우
   const headGeo = new THREE.BufferGeometry();
   headGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
-  const headMat = new THREE.PointsMaterial({ color: '#ffffff', size: 5, sizeAttenuation: false, transparent: true, opacity: 0, fog: false });
+  const headMat = new THREE.PointsMaterial({ map: shootGlow, color: '#ffffff', size: 55, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
   const shootHead = new THREE.Points(headGeo, headMat);
   shootHead.frustumCulled = false;
   shootHead.renderOrder = -8;
@@ -113,18 +129,23 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
           }
           const k = st.u;
           const head = shootFrom.clone().lerp(shootTo, k);
-          const tail = shootFrom.clone().lerp(shootTo, Math.max(0, k - 0.32));
+          // 꼬리를 SEG개 글로우 점으로 (머리에서 뒤로 이어지는 빛의 자취)
           const arr = shootGeo.getAttribute('position') as THREE.BufferAttribute;
-          (arr.array as Float32Array).set([tail.x, tail.y, tail.z, head.x, head.y, head.z]);
+          const tailSpan = 0.34; // 궤적의 34%가 꼬리
+          for (let i = 0; i < SEG; i += 1) {
+            const f = i / SEG;
+            const pk = Math.max(0, k - f * tailSpan);
+            const p = shootFrom.clone().lerp(shootTo, pk);
+            (arr.array as Float32Array).set([p.x, p.y, p.z], i * 3);
+          }
           arr.needsUpdate = true;
           const harr = headGeo.getAttribute('position') as THREE.BufferAttribute;
           (harr.array as Float32Array).set([head.x, head.y, head.z]);
           harr.needsUpdate = true;
-          // 유성우 땐 밤이 아니어도(낮) 보이도록 최소 밝기 보장 + 머리 크게
+          // 유성우 땐 밤이 아니어도(낮) 보이도록 최소 밝기 보장
           const vis = Math.max(night, showering ? 0.95 : 0);
-          headMat.size = showering ? 9 : 5;
           const glow = Math.sin(k * Math.PI) * vis;
-          shootMat.opacity = glow;
+          shootMat.opacity = 0.75 * glow;
           headMat.opacity = glow;
         } else {
           shootMat.opacity = 0; headMat.opacity = 0;
@@ -133,7 +154,7 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
     },
     dispose() {
       for (const L of [far, mid, near, milky]) { L.pts.geometry.dispose(); L.mat.dispose(); }
-      shootGeo.dispose(); shootMat.dispose(); headGeo.dispose(); headMat.dispose();
+      shootGeo.dispose(); shootMat.dispose(); headGeo.dispose(); headMat.dispose(); shootGlow.dispose();
       scene.remove(root);
     },
   };
