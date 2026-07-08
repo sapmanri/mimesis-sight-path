@@ -680,6 +680,31 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       if (!alive) return;
       cometRef.current = createComet(scene, camera, cometProto, () => { emit('comet'); speak('✨', 0.8); });
     }).catch(() => {});
+    // BUILD 260: 텐트 눈확인용 — 에디터에서만, 캐릭터 앞쪽 지표에 하나 고정 배치 (캠프셋 만들기 전 미감 판정)
+    const planetEdit = new URLSearchParams(window.location.search).has('edit');
+    if (planetEdit) {
+      void loadKitModel('tent', defaultLoader).then((tentProto) => {
+        if (!alive) return;
+        tentProto.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+        });
+        // 캐릭터 시작점 근처 방향에 배치 (경로 시작 t=0 지점 옆)
+        const p0 = built.curve.getPoint(0.0);
+        const dir = p0.clone().normalize();
+        const r = built.surfaceR(dir);
+        tentProto.position.copy(dir).multiplyScalar(r);
+        // 지표 법선으로 세우기 (up=dir)
+        const up = dir.clone();
+        const ref = Math.abs(up.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+        const fwd = new THREE.Vector3().crossVectors(ref, up).normalize();
+        const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
+        const m = new THREE.Matrix4().makeBasis(right, up, fwd.clone().multiplyScalar(-1));
+        tentProto.quaternion.setFromRotationMatrix(m);
+        built.planet.add(tentProto);
+      }).catch(() => {});
+    }
     void loadKitModel('planetPlane', defaultLoader).then((planeProto) => {
       if (!alive) return;
       planeProto.traverse((o) => {

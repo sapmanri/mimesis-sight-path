@@ -132,6 +132,7 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'grass', label: '풀 다발', cat: '자연' },
   // 구조물
   { id: 'cabin', label: '오두막', cat: '구조물' },
+  { id: 'tent', label: '텐트 (캠프)', cat: '구조물' }, // BUILD 260: Vase 업로드 — 캠프셋용
   { id: 'lighthouse', label: '등대', cat: '구조물' },
   { id: 'door', label: '초록 대문', cat: '구조물' },
   { id: 'wall-stone', label: '돌담 조각', cat: '구조물' },
@@ -439,6 +440,7 @@ export async function createPropObject(
       case 'tree': return makeTree(rnd);
       case 'grass': return makeGrass(rnd);
       case 'cabin': return await loadKitModel('cabin', loadModel);
+      case 'tent': return await loadKitModel('tent', loadModel);
       case 'lighthouse': return await loadKitModel('lighthouse', loadModel);
       case 'door': return KITS['door-kit'](rnd);
       case 'plane': return await loadKitModel('airplane', loadModel);
