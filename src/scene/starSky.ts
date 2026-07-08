@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { worldTime, eventCycle } from './skyClock';
 
 const SHOOT_PERIOD = 7;   // 약 7초 주기대 (밤에 자주)
-const SHOOT_DUR = 1.15;
+const SHOOT_DUR = 2.3; // BUILD 256: 속도 절반 (1.15→2.3) — 너무 빨라 안 보이던 것
 const SHOOT_SALT = 33;
 
 type Layer = { pts: THREE.Points; mat: THREE.PointsMaterial; baseOpacity: number; drift: number };
