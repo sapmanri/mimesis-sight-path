@@ -322,6 +322,9 @@ export const MODELS: Record<string, ModelSpec> = {
   // BUILD 267: 별 — 스타일라이즈 키즈팩(Vase 구매). Mixamo 골격이라 우리 rig에 딱.
   // 클립: Idle/Walking/Running/Sitting(앉기!)/Talking 병합. 별리 세계관 주인공 후보 2호.
   byeol: { file: 'Byeol.glb', height: 0.9, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.9, run: 1.6 } },
+  // BUILD 274: 별이 — Vase가 Mixamo로 몸+애니 함께 뽑음(한 몸=좀비/눕기 없음, Hips 회전 [0,0,0,1]).
+  // 클립 7종: Idle/Walking/Running/Sitting/SitTalk/PickUp/Dance. 별리 세계관 주인공.
+  byeoli: { file: 'Byeoli.glb', height: 0.9, tint: '#ffffff', keepLook: true, clipSpeeds: { walk: 0.9, run: 1.6 } },
   // BUILD 269: 주인공 — Vase가 고른 그 애 (키즈팩 다른 캐릭터). Mixamo 65관절, 애니 6종.
   // Idle/Walking/Running/Sitting(앉기)/Jump/Talking. 별리 세계관 대표. "얘한테 다 맞춘다."
   hero: { file: 'Hero.glb', height: 0.92, tint: '#ffffff', keepLook: true, clipSpeeds: { walk: 0.9, run: 1.6 } },
@@ -395,6 +398,7 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // 회색 점토는 UV 삼각형 대조(정확+센트로이드 폴백, 100.0% 매칭)로 Vroid01 재질 15종 복원.
   // 클립 9종(Idle/Walking/Running/PickUp/Sitting/Yawn/춤3) 이름 병합, 루트모션 제거, 드리프트 실측.
   { file: 'Girl1.glb', height: 0.95, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.013, run: 0.029 } },
+  MODELS.byeoli, // BUILD 274: 별이 — Mixamo 몸+애니 한 몸. 배지로 확인 후 대표 승격.
   // BUILD 266: 여행자(Traveler.glb) 로스터에서 제외 — Rigify 골격이 우리 rig(Mixamo)와 불화.
   // 걷기 안 붙고 잔발 뛰기만, 앉기 클립 없음. 파일은 보존(나중에 리타겟 시 복귀 가능).
   // BUILD 269: 별(byeol)도 로스터 제외 — 몸이 접혀 눕는 좀비(clip 병합이 rest 포즈와 불화).
