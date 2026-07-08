@@ -389,7 +389,8 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // 회색 점토는 UV 삼각형 대조(정확+센트로이드 폴백, 100.0% 매칭)로 Vroid01 재질 15종 복원.
   // 클립 9종(Idle/Walking/Running/PickUp/Sitting/Yawn/춤3) 이름 병합, 루트모션 제거, 드리프트 실측.
   { file: 'Girl1.glb', height: 0.95, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.013, run: 0.029 } },
-  MODELS.traveler, // BUILD 265: 행성 여행자 — 별리 주인공 후보. Rigify 골격(자체 리깅). 에디터 🚶로 확인 후 좀비 아니면 대표로 승격.
+  // BUILD 266: 여행자(Traveler.glb) 로스터에서 제외 — Rigify 골격이 우리 rig(Mixamo)와 불화.
+  // 걷기 안 붙고 잔발 뛰기만, 앉기 클립 없음. 파일은 보존(나중에 리타겟 시 복귀 가능).
   // BUILD 203: 차차 5인방 하차 — 이식 클립이 바인드 포즈 불일치로 누워 걷는 공포를 연출
   // (다리 뼈 rest 쿼터니언 [0.05,0.04,0.995,-0.07] = Mixamo 표준과 골격 자체가 다르다).
   // 파일·animFrom 규칙은 보존. 재입단 정도: Mixamo 자동 리깅 → Walking(With Skin) → 외길 어댑터.
