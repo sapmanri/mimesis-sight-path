@@ -94,6 +94,52 @@ export default function App() {
       return next;
     });
   };
+  // BUILD 248: 방문자는 '세상에 나간 행성'(KV live)을 읽는다. 에디터/드래프트는 제외(각자 놀이터).
+  // 도착 전까지 DEFAULT로 렌더하다가, 응답이 오면 조용히 교체한다.
+  useEffect(() => {
+    if (!planetMode) return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.has('edit') || q.has('draft')) return; // 놀이터 모드는 KV 안 읽음
+    let alive = true;
+    fetch('/api/planet')
+      .then((r) => (r.status === 200 ? r.json() : null))
+      .then((live) => {
+        if (!alive || !live) return;
+        setPSpec({
+          ...DEFAULT_PLANET_SPEC,
+          ...live,
+          moon: { ...DEFAULT_PLANET_SPEC.moon, ...(live.moon ?? {}) },
+          sun: { ...DEFAULT_PLANET_SPEC.sun, ...(live.sun ?? {}) },
+          memories: Array.isArray(live.memories) ? live.memories : [],
+          props: Array.isArray(live.props) ? live.props : [],
+        });
+      })
+      .catch(() => { /* KV 없거나 실패 → DEFAULT 유지 */ });
+    return () => { alive = false; };
+  }, [planetMode]);
+  // BUILD 248: 세상에 반영 — 현재 드래프트를 KV live 슬롯으로 발행. 발행 키는 한 번만 물어보고 세션에 기억.
+  const [pubState, setPubState] = useState<'idle' | 'busy' | 'ok' | 'err'>('idle');
+  const publishLive = async () => {
+    let key = sessionStorage.getItem('mimesis.publishKey') || '';
+    if (!key) {
+      key = window.prompt('발행 키를 입력하세요 (세상에 반영)') || '';
+      if (!key) return;
+      sessionStorage.setItem('mimesis.publishKey', key);
+    }
+    setPubState('busy');
+    try {
+      const r = await fetch('/api/planet', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
+        body: JSON.stringify(pSpec),
+      });
+      if (r.ok) { setPubState('ok'); setTimeout(() => setPubState('idle'), 2500); }
+      else {
+        if (r.status === 401) sessionStorage.removeItem('mimesis.publishKey'); // 틀린 키는 잊는다
+        setPubState('err'); setTimeout(() => setPubState('idle'), 3000);
+      }
+    } catch { setPubState('err'); setTimeout(() => setPubState('idle'), 3000); }
+  };
   const [planetWalker, setPlanetWalker] = useState(-1);
   const [planetPaused, setPlanetPaused] = useState(false); // BUILD 224: 찍기의 평화
   // BUILD 214: 소품 심기 — 접점은 PlanetWorld가 매 프레임 보고한다
@@ -646,6 +692,15 @@ export default function App() {
                 };
                 inp.click();
               }}>불러오기</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+              <button type="button" style={{
+                ...PANEL_BTN, width: '100%', fontWeight: 700,
+                background: pubState === 'ok' ? '#355743' : pubState === 'err' ? '#7a3b3b' : '#2e4a3a',
+                color: '#eaf0e8', opacity: pubState === 'busy' ? 0.6 : 1,
+              }} disabled={pubState === 'busy'} onClick={publishLive}>
+                {pubState === 'busy' ? '반영 중…' : pubState === 'ok' ? '🌍 세상에 나갔어요 ✓' : pubState === 'err' ? '실패 — 다시' : '🌍 세상에 반영'}
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <button type="button" style={PANEL_BTN} onClick={() => window.open('/?planet=1&draft=1', '_blank')}>뷰어로 보기</button>
