@@ -854,12 +854,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         const el = Math.asin(THREE.MathUtils.clamp(dir.y, -0.3, 0.6)); // 카메라 실제 고도 따라감
         // eslint-disable-next-line no-console
         console.log('[demo] comet trigger, cometRef=', !!cometRef.current, 'az=', az.toFixed(2), 'el=', el.toFixed(2));
-        cometRef.current?.triggerMajor(az, el, 9, 26);
+        cometRef.current?.triggerMajor(az, el, 18, 26); // BUILD 257: 속도 절반 (9→18초)
       },
       demoShower: () => {
         // eslint-disable-next-line no-console
         console.log('[demo] shower trigger, starRef=', !!starRef.current);
-        starRef.current?.triggerShower(60); // 시연은 60초 (실제는 20분)
+        starRef.current?.triggerShower(10); // BUILD 257: 시연 10초, 극단적으로 크게
       },
       pick: (cx: number, cy: number) => {
         if (!built) return null;
