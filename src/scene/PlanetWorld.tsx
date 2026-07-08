@@ -8,6 +8,7 @@ import { createPlanetSky } from './planetSky';
 import { createPlanetGulls } from './planetGulls';
 import { createMoonRabbit } from './moonRabbit';
 import { createStarSky } from './starSky';
+import type { PlanetEvent, PlanetEventKind } from './planetEvents';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { planetSound } from '../audio/planetSound';
@@ -346,7 +347,7 @@ const MNT_V = new THREE.Vector3(); // BUILD 231: 탈것 뼈 실측용 스크래�
 const MOON_SUN = new THREE.Vector3(0, 1, 0); // BUILD 236: 달→태양 방향 (위상 셰이더 공유 참조)
 const PET_V = new THREE.Vector3(); // BUILD 231: 펫 위치 환산용 — PT.t2를 쓰면 yawFrom(=PT.t2 별칭)이 덮여 요가 죽는다
 
-export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
+export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, onEvent, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; onEvent?: (e: PlanetEvent) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
   const { scene, camera, gl } = useThree();
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
   // BUILD 214: 시야 거리 다이얼 — 씬 안개 near/far 즉답 갱신
@@ -362,6 +363,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   onMemRef.current = onMemory;
   const onFlagRef = useRef(onFlag);
   onFlagRef.current = onFlag;
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+  const rainInAt = useRef(0);
+  const lastKm = useRef(0);
+  const lastPhase = useRef('');
+  const gullSeen = useRef(false);
+  const emit = (kind: PlanetEventKind, data?: PlanetEvent['data']) => onEventRef.current?.({ kind, data, t: performance.now() });
 
   // 무거운 다이얼만 재건축을 부른다
   const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.moon.size, spec.roam ? 1 : 0]);
@@ -586,7 +594,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   }, []);
   const starRef = useRef<ReturnType<typeof createStarSky> | null>(null);
   useEffect(() => {
-    starRef.current = createStarSky(scene, camera);
+    starRef.current = createStarSky(scene, camera, () => emit('shooting_star'));
     return () => { starRef.current?.dispose(); starRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, camera]);
@@ -784,6 +792,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   useEffect(() => {
     if (!apiRef) return undefined;
     apiRef.current = {
+      capture: () => {
+        try {
+          gl.render(scene, camera); // 캡처 직전 한 프레임 강제 (preserveDrawingBuffer 보장)
+          return gl.domElement.toDataURL('image/jpeg', 0.6);
+        } catch { return null; }
+      },
       pick: (cx: number, cy: number) => {
         if (!built) return null;
         const rect = gl.domElement.getBoundingClientRect();
@@ -868,7 +882,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   // BUILD 224: 걷다, 뛰다, 날다 — 이동 상태기. 주기는 스펙 슬라이더가 정하고 나머지는 지가 알아서.
-  const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, rideStart: 0, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
+  const moveState = useRef({ mode: 'walk' as 'walk' | 'run' | 'ride', until: 0, nextRun: -1, nextRide: -1, rideStart: 0, rideStartS: 0, lift: 0, mount: null as THREE.Group | null, babyMount: null as THREE.Group | null, mountKind: '' });
   const walkerGroupRef = useRef<THREE.Group | null>(null);
   const hipsPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 140): 골반 뼈
   const footPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 142): 발 뼈
@@ -906,9 +920,11 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       } else if (rideEvery > 0 && el >= MV.nextRide) {
         MV.mode = 'ride';
         MV.rideStart = el;
+        MV.rideStartS = S.current;
         MV.until = el + 12 + Math.random() * 10;
         rigRef.current?.setRiding?.(true);
         MV.mountKind = Math.random() < 0.35 ? 'broom' : 'cloud';
+        emit('ride_start', { kind: MV.mountKind });
         if (MV.mountKind === 'cloud') {
           const c = makeCloudPuff(() => Math.random(), 0.13); // 본토 정답 (BUILD 137)
           c.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
@@ -957,6 +973,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const liftTarget = MV.mode === 'ride' && el < MV.until ? 1.15 : 0;
     MV.lift += (liftTarget - MV.lift) * Math.min(1, dt * 1.7);
     if (MV.mode === 'ride' && el >= MV.until && MV.lift < 0.04) {
+      const meters = Math.round(Math.abs(S.current - (MV.rideStartS ?? S.current)) * 10);
+      emit('ride_end', { kind: MV.mountKind, meters });
       MV.mode = 'walk';
       rigRef.current?.setRiding?.(false);
       if (MV.mount) { holder.remove(MV.mount); MV.mount = null; }
@@ -1105,10 +1123,18 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         { clouds: SP.clouds ?? 0, cloudFree: SP.cloudFree ?? 0.1, cloudOpacity: SP.cloudOpacity ?? 1, rainEvery: SP.rainEvery ?? 0, snowEvery: SP.snowEvery ?? 0 }, propRainList);
       // 빗소리 히스테리시스 — 문턱을 넘을 때만 apply (본토 소리 문법)
       const amt = rainNear > 0.55 ? 0.7 : rainNear > 0.22 ? 0.35 : 0;
-      if (amt !== lastRainAmt.current) { lastRainAmt.current = amt; ambience.apply({ rainAmount: amt }); }
+      if (amt !== lastRainAmt.current) {
+        if (amt > 0 && lastRainAmt.current <= 0) { emit('rain_in'); rainInAt.current = el; }
+        if (amt <= 0 && lastRainAmt.current > 0) emit('rain_out', { seconds: Math.round(el - rainInAt.current) });
+        lastRainAmt.current = amt; ambience.apply({ rainAmount: amt });
+      }
     }
     // BUILD 236: 갈매기 — 걷는 아이 앞하늘 해안에서
-    gullsRef.current?.update(dt, el, U, dlRef.current);
+    {
+      const gullArc = gullsRef.current?.update(dt, el, U, dlRef.current) ?? Infinity;
+      if (gullArc < 6 && !gullSeen.current) { gullSeen.current = true; emit('gull'); }
+      if (gullArc > 12) gullSeen.current = false;
+    }
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
     // BUILD 224: 반려의 걸음 — 그녀 뒤 0.6u를 목표로 부드럽게 따라온다 (행성 좌표로 계산, 월드로 환산)
     const PT = petRef.current;
@@ -1241,10 +1267,21 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     built.sun.position.copy(v).multiplyScalar(built.R * 6.5);
     const dl = THREE.MathUtils.smoothstep(Math.sin(th), -0.12, 0.3); // 낮의 정도 (해가 지평선 아래로 조금 내려가야 완전한 밤)
     dlRef.current = dl;
-    if (starRef.current) starRef.current.update(dt, el, dl, built.planet.quaternion);
+    if (starRef.current) starRef.current.update(dt, el, dl);
     // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
-    if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
-    else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
+    if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; emit('nightfall'); ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
+    else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; emit('daybreak'); ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
+    // BUILD 241: 걸음 이정표 — 1km마다 (S는 걸음거리, ×10을 m로 친다 → 100u=1km)
+    {
+      const km = Math.floor((S.current * 10) / 1000);
+      if (km > lastKm.current) { lastKm.current = km; emit('distance', { km }); }
+    }
+    // BUILD 241: 달 위상 전이 — MOON_SUN·법선으로 그믐/상현/보름/하현 구간
+    {
+      const dot = MOON_SUN.dot(built.moon.position.clone().sub(PLANET_CENTER).normalize());
+      const ph = dot < -0.5 ? 'full' : dot > 0.5 ? 'new' : (spinAng.current % (Math.PI * 2)) < Math.PI ? 'waxing' : 'waning';
+      if (ph !== lastPhase.current) { lastPhase.current = ph; emit('moon_phase', { phase: ph }); }
+    }
     if (dirLightRef.current) {
       dirLightRef.current.position.copy(v).multiplyScalar(20);
       dirLightRef.current.intensity = 1.35 * (0.05 + 0.95 * dl);
@@ -1290,7 +1327,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         const arc = Math.acos(cosA) * rl;
         const target = fl.v > 0.5 ? (arc < 2.2 ? 1 : 0) : (arc < 1.6 ? 1 : 0);
         // BUILD 222: 폽의 순간 — 속삭임 한 줄. "아, 저기가 그리스구나."
-        if (target === 1 && fl.v <= 0.001) { if (rec.title && flagIsKnownCountry(rec.title)) onFlagRef.current?.(rec.title); planetSound.pop(true); } // BUILD 223: 통— / BUILD 238: 진짜 나라만 여권에
+        if (target === 1 && fl.v <= 0.001) { if (rec.title && flagIsKnownCountry(rec.title)) { onFlagRef.current?.(rec.title); emit('flag', { country: rec.title }); } planetSound.pop(true); } // BUILD 223: 통— / BUILD 238: 진짜 나라만 여권에
         if (target === 0 && fl.v >= 0.999) planetSound.pop(false); // 쇽
         fl.v = Math.min(1, Math.max(0, fl.v + (target > fl.v ? 1 : -1) * dt * 3.4));
         const e = target === 1 ? backOut(fl.v) : fl.v * fl.v;

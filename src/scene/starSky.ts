@@ -28,19 +28,20 @@ function starField(n: number, radius: number, size: number, color: string, opaci
   return { pts, mat, baseOpacity: opacity, drift: 0 };
 }
 
-export function createStarSky(scene: THREE.Scene, camera: THREE.Camera) {
+export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?: () => void) {
   const root = new THREE.Group();
   root.renderOrder = -10;
   scene.add(root);
 
-  // 세 겹 — 카메라를 중심으로 하는 큰 껍질(무한처럼)
-  const far = starField(420, 900, 1.1, '#eaf0ff', 0.9);   // 원경: 작고 촘촘
-  const mid = starField(150, 700, 1.8, '#dfe8ff', 0.95);  // 중경
-  const near = starField(36, 520, 3.0, '#ffffff', 1.0);   // 근경: 크고 밝게
+  // 세 겹 — 카메라를 중심으로 하는 아주 큰 껍질(무한처럼). 반경이 클수록 카메라 궤도이동에도
+  // 시차가 0에 가까워 별이 '박혀' 있다 (BUILD 240의 '지구 따라 도는 별' 원인 = 반경 부족).
+  const far = starField(420, 6000, 1.1, '#eaf0ff', 0.9);
+  const mid = starField(150, 5200, 1.8, '#dfe8ff', 0.95);
+  const near = starField(36, 4400, 3.0, '#ffffff', 1.0);
   root.add(far.pts, mid.pts, near.pts);
 
-  // 은하수 — 옅은 띠 (기울인 큰 고리의 점들)
-  const milky = starField(260, 850, 1.0, '#c8d4f0', 0.5, 0.14); // spreadY 낮춰 띠로
+  // 은하수 — 옅은 띠
+  const milky = starField(260, 5800, 1.0, '#c8d4f0', 0.5, 0.14);
   milky.pts.rotation.z = 0.5;
   milky.pts.rotation.x = 0.3;
   root.add(milky.pts);
@@ -58,11 +59,10 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera) {
   const shootFrom = new THREE.Vector3();
   const shootTo = new THREE.Vector3();
 
-  const midQuat = new THREE.Quaternion();
   const tv = new THREE.Vector3();
 
   return {
-    update(dt: number, el: number, dl: number, planetQuat: THREE.Quaternion) {
+    update(dt: number, el: number, dl: number) {
       // 별은 카메라를 따라다닌다(무한 배경) — 위치만, 회전은 각 레이어가 소유
       root.position.copy(camera.position);
       const night = 1 - THREE.MathUtils.smoothstep(dl, 0.15, 0.55); // 밤일수록 1
@@ -71,9 +71,8 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera) {
       near.mat.opacity = near.baseOpacity * night;
       milky.mat.opacity = milky.baseOpacity * night;
 
-      // 시차: 중경만 행성 회전을 아주 조금 따라온다 (원경=고정, 근경=고정)
-      midQuat.slerp(planetQuat, 0.04);
-      mid.pts.quaternion.copy(midQuat);
+      // 시차 깊이는 이제 반경 차이가 만든다(원경이 더 멀어 더 안 움직인다). 회전 추종은 없앤다 —
+      // 무한 배경은 행성도 카메라도 따르지 않고 그냥 박혀 있다.
       // 근경 별 반짝임 (느린 깜빡)
       near.mat.opacity *= 0.75 + 0.25 * Math.sin(el * 1.3);
 
@@ -84,12 +83,13 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera) {
           if (shootNext <= 0) {
             shootT = 0;
             shootNext = 12 + Math.random() * 28;
+            onShoot?.();
             // 하늘 위쪽 한 점에서 대각선으로
             const az = Math.random() * Math.PI * 2;
             const el0 = 0.5 + Math.random() * 0.8;
-            shootFrom.set(Math.cos(az) * Math.cos(el0), Math.sin(el0), Math.sin(az) * Math.cos(el0)).multiplyScalar(600);
+            shootFrom.set(Math.cos(az) * Math.cos(el0), Math.sin(el0), Math.sin(az) * Math.cos(el0)).multiplyScalar(5000);
             tv.set(Math.random() - 0.5, -0.4 - Math.random() * 0.3, Math.random() - 0.5).normalize();
-            shootTo.copy(shootFrom).addScaledVector(tv, 120);
+            shootTo.copy(shootFrom).addScaledVector(tv, 900);
           }
         } else {
           shootT += dt;

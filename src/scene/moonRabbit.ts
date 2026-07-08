@@ -12,10 +12,24 @@ export function createMoonRabbit(
   group: THREE.Group,
   animations: THREE.AnimationClip[],
 ) {
-  // 토끼를 달 로컬 크기에 맞춘다: 달 반경의 ~11% 높이 (우화적으로 또렷하게)
+  // 토끼를 달 로컬 크기에 맞춘다: 달 반경의 ~14% 높이 (우화적으로 또렷하게)
   const bodyH = 0.22; // assemble에서 잰 로컬 높이
   const targetH = moonR * 0.14;
   group.scale.setScalar(targetH / bodyH);
+  // BUILD 242: 달의 토끼는 지면 안개에서 자유롭다 — keepLook이 박은 heightFog가
+  // 달 높이(월드 y 큼)에서 토끼를 뿌옇게 뭉갰다(Vase 목격). 셰이더를 걷어내고 안개 면제.
+  group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => {
+      const std = m as THREE.MeshStandardMaterial;
+      std.onBeforeCompile = () => {};
+      std.fog = false;
+      std.userData.hfog = false;
+      std.customProgramCacheKey = () => 'moonRabbit-nofog';
+      std.needsUpdate = true;
+    });
+  });
   moon.add(group);
 
   const mixer = new THREE.AnimationMixer(group);

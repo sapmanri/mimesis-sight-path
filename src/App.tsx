@@ -31,6 +31,10 @@ import { footsteps } from './scene/footsteps';
 import { ambience } from './audio/ambience';
 import { planetSound } from './audio/planetSound';
 import { compileScenes } from './engine/blueprint';
+import { eventToEntry, type TimelineEntry } from './planet/timeline';
+import { ACHIEVEMENTS, evaluateAchievements } from './planet/achievements';
+import { makeComments, makeLikes, type FeedComment } from './planet/thread';
+import type { PlanetEvent } from './scene/planetEvents';
 import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
@@ -114,6 +118,58 @@ export default function App() {
     } catch { return []; }
   });
   const [passportOpen, setPassportOpen] = useState(false);
+  const TIMELINE_KEY = 'mimesis.planetTimeline.v1';
+  const [timeline, setTimeline] = useState<TimelineEntry[]>(() => {
+    try { const raw = localStorage.getItem(TIMELINE_KEY); if (raw) { const p = JSON.parse(raw); if (p.date === new Date().toDateString() && Array.isArray(p.items)) return p.items; } } catch { /* 조용히 */ }
+    return [];
+  });
+  const lastEntryKind = useRef<{ kind: string; t: number }>({ kind: '', t: 0 });
+  const FEED_KEY = 'mimesis.planetFeed.v1';
+  type FeedPost = { id: string; achId: string; icon: string; title: string; text: string; img: string | null; likes: number; comments: FeedComment[]; t: number };
+  const [feed, setFeed] = useState<FeedPost[]>(() => {
+    try { const raw = localStorage.getItem(FEED_KEY); if (raw) { const p = JSON.parse(raw); if (p.date === new Date().toDateString() && Array.isArray(p.items)) return p.items; } } catch { /* 조용히 */ }
+    return [];
+  });
+  const [threadOpen, setThreadOpen] = useState(false);
+  const earnedIds = useRef<Set<string>>(new Set());
+  useEffect(() => { feed.forEach((p) => earnedIds.current.add(p.achId)); }, []); // 초기 복원
+  // 타임라인이 바뀔 때마다 성과 판정 → 새 성과면 스크린샷 + 피드 포스트
+  useEffect(() => {
+    if (!timeline.length) return;
+    const nowEarned = evaluateAchievements(timeline);
+    const fresh = [...nowEarned].filter((id) => !earnedIds.current.has(id));
+    if (!fresh.length) return;
+    // 캡처는 다음 프레임 이후에 — api·canvas가 준비되고 한 프레임 그려진 뒤라야 그림이 담긴다
+    const timer = setTimeout(() => {
+      for (const id of fresh) {
+        if (earnedIds.current.has(id)) continue;
+        earnedIds.current.add(id);
+        const ach = ACHIEVEMENTS.find((a) => a.id === id);
+        if (!ach) continue;
+        const img = planetApi.current?.capture() ?? null;
+        const post: FeedPost = { id: `${id}-${Date.now()}`, achId: id, icon: ach.icon, title: ach.title, text: ach.earnedText, img, likes: makeLikes(), comments: makeComments(id, 2 + Math.floor(Math.random() * 2)), t: Date.now() };
+        setFeed((prev) => {
+          const next = [post, ...prev].slice(0, 60);
+          try { localStorage.setItem(FEED_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
+          return next;
+        });
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [timeline]);
+  const onPlanetEvent = (e: PlanetEvent) => {
+    const entry = eventToEntry(e);
+    if (!entry) return;
+    // 같은 종류 연타 방지 (밤낮·비 등): 8초 내 같은 kind는 무시
+    const L = lastEntryKind.current;
+    if (L.kind === entry.kind && e.t - L.t < 8000) return;
+    lastEntryKind.current = { kind: entry.kind, t: e.t };
+    setTimeline((prev) => {
+      const next = [entry, ...prev].slice(0, 200);
+      try { localStorage.setItem(TIMELINE_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
+      return next;
+    });
+  };
   const onFlagPop = (name: string) => {
     if (!name || !name.trim()) return; // BUILD 238: 이름 없는 깃발(이니셜 페넌트)은 여권에 남기지 않는다 — 'ㅎ·호·흣'의 정체
     setFlagWhisper(name);
@@ -293,8 +349,8 @@ export default function App() {
     return (
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
-          <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows>
-            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} paused={planetPaused} onMemory={setMemCard} onFlag={onFlagPop} contactRef={planetContact} apiRef={planetApi} />
+          <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows gl={{ preserveDrawingBuffer: true }}>
+            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} paused={planetPaused} onMemory={setMemCard} onFlag={onFlagPop} onEvent={onPlanetEvent} contactRef={planetContact} apiRef={planetApi} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
@@ -306,19 +362,73 @@ export default function App() {
             backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
           }}>
             <div style={{ fontSize: 12, color: '#d8b26e', letterSpacing: 2, marginBottom: 8 }}>여권 — 오늘의 우연</div>
-            {passport.length > 0 ? (
-              <>
-                <div style={{ fontSize: 12.5, lineHeight: 1.9 }}>{passport.join(' · ')}</div>
-                <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>오늘 그녀는 {passport.length}곳을 지났습니다</span>
-                  <button type="button" onClick={() => { setPassport([]); try { localStorage.removeItem(PASSPORT_KEY); } catch { /* 조용히 */ } }}
-                    style={{ background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '2px 8px', fontSize: 10.5, cursor: 'pointer' }}>비우기</button>
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 아무 곳도 지나지 않았어요.<br />돌려두고, 하던 일을 하세요.</div>
+            {passport.length > 0 && (
+              <div style={{ fontSize: 12.5, lineHeight: 1.9, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid rgba(216,178,110,0.15)' }}>{passport.join(' · ')}</div>
             )}
+            {timeline.length > 0 ? (
+              <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {timeline.map((it) => (
+                  <div key={it.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12.5, lineHeight: 1.5 }}>
+                    <span style={{ fontSize: 14, flexShrink: 0 }}>{it.icon}</span>
+                    <span>{it.text}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 아무 일도 일어나지 않았어요.<br />돌려두고, 하던 일을 하세요.</div>
+            )}
+            <div style={{ fontSize: 11, opacity: 0.55, marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>오늘 {timeline.length}가지 일이 있었습니다</span>
+              <button type="button" onClick={() => { setPassport([]); setTimeline([]); try { localStorage.removeItem(PASSPORT_KEY); localStorage.removeItem(TIMELINE_KEY); } catch { /* 조용히 */ } }}
+                style={{ background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '2px 8px', fontSize: 10.5, cursor: 'pointer' }}>비우기</button>
+            </div>
             <div style={{ fontSize: 10.5, opacity: 0.4, marginTop: 10, textAlign: 'right' }}>오늘도 느리게 · slow days</div>
+          </div>
+        )}
+        {threadOpen && (
+          <div style={{
+            position: 'fixed', top: 76, right: planetEdit ? 318 : 18, width: 300, maxHeight: '78vh', zIndex: 7, overflowY: 'auto',
+            padding: '14px 14px', borderRadius: 16, color: '#e8dcc2',
+            background: 'rgba(16,20,24,0.94)', border: '1px solid rgba(216,178,110,0.3)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: '#d8b26e', letterSpacing: 1 }}>기록 · @she_walks_slow</span>
+              <span style={{ fontSize: 11, opacity: 0.5 }}>{feed.length}개의 순간</span>
+            </div>
+            {feed.length === 0 ? (
+              <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 남긴 기록이 없어요.<br />걷다 보면 하나씩 쌓입니다.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {feed.map((post) => (
+                  <div key={post.id} style={{ borderBottom: '1px solid rgba(216,178,110,0.14)', paddingBottom: 12 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 20 }}>{post.icon}</span>
+                      <div style={{ lineHeight: 1.2 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#e8dcc2' }}>{post.title}</div>
+                        <div style={{ fontSize: 11, opacity: 0.55 }}>@she_walks_slow</div>
+                      </div>
+                    </div>
+                    {post.img && <img src={post.img} alt="" style={{ width: '100%', borderRadius: 10, marginBottom: 6, display: 'block' }} />}
+                    <div style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 6 }}>{post.text}</div>
+                    <div style={{ fontSize: 11.5, opacity: 0.6, marginBottom: 6 }}>♥ {post.likes}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {post.comments.map((c, i) => (
+                        <div key={i} style={{ fontSize: 11.5, lineHeight: 1.4 }}>
+                          <span style={{ marginRight: 5 }}>{c.persona.avatar}</span>
+                          <span style={{ color: '#d8b26e' }}>{c.persona.name}</span>
+                          <span style={{ opacity: 0.85 }}> {c.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {feed.length > 0 && (
+              <button type="button" onClick={() => { setFeed([]); earnedIds.current.clear(); try { localStorage.removeItem(FEED_KEY); } catch { /* 조용히 */ } }}
+                style={{ marginTop: 10, background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '3px 10px', fontSize: 10.5, cursor: 'pointer' }}>기록 비우기</button>
+            )}
           </div>
         )}
         {flagWhisper && (
@@ -359,7 +469,8 @@ export default function App() {
           {([['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] }))],
             ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())],
             [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v)],
-            ['🛂', () => setPassportOpen((v) => !v)]] as [string, () => void][]).map(([label, fn]) => (
+            ['🛂', () => setPassportOpen((v) => !v)],
+            ['📖', () => setThreadOpen((v) => !v)]] as [string, () => void][]).map(([label, fn]) => (
             <button key={label} type="button" onClick={fn} style={{
               width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
               border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
