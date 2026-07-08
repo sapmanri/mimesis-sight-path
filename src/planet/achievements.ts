@@ -19,6 +19,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'globetrotter', icon: '🗺', title: '세계의 산책자', desc: '다섯 나라를 지났다', earnedText: '지도 위 다섯 곳에 발자국을 남겼다' },
   { id: 'gull_friend', icon: '🕊', title: '해안의 친구', desc: '갈매기를 만났다', earnedText: '파도가 부른 자리에서 갈매기와 나란히 걸었다' },
   { id: 'night_owl', icon: '🌙', title: '밤을 걷는 이', desc: '밤을 세 번 맞았다', earnedText: '세 번의 밤을 온전히 걸어서 지났다' },
+  { id: 'sky_watcher', icon: '✈️', title: '하늘을 올려다본 사람', desc: '비행기를 다섯 번 봤다', earnedText: '지나가는 비행기를 다섯 번 눈으로 좇았다' },
+  { id: 'harbor_soul', icon: '⛵', title: '항구의 마음', desc: '배를 다섯 번 봤다', earnedText: '수평선을 지나는 배를 다섯 번 배웅했다' },
 ];
 
 // 타임라인 전체를 보고 '지금 달성된' 성과 id들을 판정
@@ -30,6 +32,8 @@ export function evaluateAchievements(timeline: TimelineEntry[]): Set<string> {
   if (count('shooting_star') >= 3) earned.add('shooting3');
   if (count('gull') >= 1) earned.add('gull_friend');
   if (count('nightfall') >= 3) earned.add('night_owl');
+  if (count('plane') >= 5) earned.add('sky_watcher');
+  if (count('ship') >= 5) earned.add('harbor_soul');
   // 걸음: distance 이정표의 최대 km
   const maxKm = timeline.filter((e) => e.kind === 'distance').reduce((m, e) => {
     const km = Number(/(\d+)km/.exec(e.text)?.[1] ?? 0);

@@ -12,6 +12,8 @@ export const PERSONAS: Persona[] = [
   { handle: '@film_grain_', name: '필름입자', avatar: '🎞' },
   { handle: '@midnight_tea', name: '자정의홍차', avatar: '🫖' },
   { handle: '@paper_boat_', name: '종이배', avatar: '🛶' },
+  { handle: '@cloud_runway', name: '구름활주로', avatar: '🛫' },
+  { handle: '@tide_letters', name: '밀물의편지', avatar: '🌊' },
 ];
 
 // 성과 종류별 댓글 풀 — 페르소나 말투를 섞어 쓴다
@@ -24,6 +26,8 @@ const COMMENT_POOL: Record<string, string[]> = {
   globetrotter: ['세계 지도에 발도장 다섯 개', '다음은 어느 나라예요?', '작은 행성에서 세계일주 🗺'],
   gull_friend: ['끼룩— 소리가 여기까지 들려요', '갈매기랑 나란히 걷다니 멋져요', '바다 냄새가 날 것 같아요 🕊'],
   night_owl: ['세 번의 밤을 걸었군요', '밤을 무서워하지 않는 사람', '어둠 속에서도 걷는 걸 멈추지 않았네요 🌙'],
+  sky_watcher: ['비행기 소리 들리면 꼭 올려다보게 되죠', '저 위엔 누가 타고 있을까요', '하늘길도 길이니까요 ✈️'],
+  harbor_soul: ['떠나는 배를 보면 마음이 이상해져요', '수평선 너머가 궁금하네요', '무사히 닿기를 ⛵'],
 };
 
 const GENERIC = ['좋다…', '오늘도 느리게 🌿', '이 장면 저장했어요', '부럽습니다', '평화롭네요', '잘 지내고 계시죠?'];

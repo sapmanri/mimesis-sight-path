@@ -46,16 +46,24 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
   milky.pts.rotation.x = 0.3;
   root.add(milky.pts);
 
-  // 별똥별 — 한 줄기 선분
+  // 별똥별 — 밝은 꼬리 (선분 여러 겹으로 그라데이션 꼬리)
   const shootGeo = new THREE.BufferGeometry();
   shootGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
-  const shootMat = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, fog: false });
+  const shootMat = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, fog: false, linewidth: 2 });
   const shoot = new THREE.Line(shootGeo, shootMat);
   shoot.frustumCulled = false;
   shoot.renderOrder = -9;
   root.add(shoot);
+  // 머리의 밝은 점
+  const headGeo = new THREE.BufferGeometry();
+  headGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+  const headMat = new THREE.PointsMaterial({ color: '#ffffff', size: 5, sizeAttenuation: false, transparent: true, opacity: 0, fog: false });
+  const shootHead = new THREE.Points(headGeo, headMat);
+  shootHead.frustumCulled = false;
+  shootHead.renderOrder = -8;
+  root.add(shootHead);
   let shootT = -1;
-  let shootNext = 8 + Math.random() * 20;
+  let shootNext = 3 + Math.random() * 6; // BUILD 244: 훨씬 자주 — 3~9초에 한 번 (스레드 감)
   const shootFrom = new THREE.Vector3();
   const shootTo = new THREE.Vector3();
 
@@ -82,35 +90,38 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
           shootNext -= dt;
           if (shootNext <= 0) {
             shootT = 0;
-            shootNext = 12 + Math.random() * 28;
+            shootNext = 4 + Math.random() * 9;
             onShoot?.();
-            // 하늘 위쪽 한 점에서 대각선으로
             const az = Math.random() * Math.PI * 2;
-            const el0 = 0.5 + Math.random() * 0.8;
+            const el0 = 0.35 + Math.random() * 0.85;
             shootFrom.set(Math.cos(az) * Math.cos(el0), Math.sin(el0), Math.sin(az) * Math.cos(el0)).multiplyScalar(1600);
-            tv.set(Math.random() - 0.5, -0.4 - Math.random() * 0.3, Math.random() - 0.5).normalize();
-            shootTo.copy(shootFrom).addScaledVector(tv, 320);
+            tv.set(Math.random() - 0.5, -0.5 - Math.random() * 0.3, Math.random() - 0.5).normalize();
+            shootTo.copy(shootFrom).addScaledVector(tv, 520);
           }
         } else {
           shootT += dt;
-          const dur = 0.9;
+          const dur = 1.15;
           const k = shootT / dur;
-          if (k >= 1) { shootT = -1; shootMat.opacity = 0; }
+          if (k >= 1) { shootT = -1; shootMat.opacity = 0; headMat.opacity = 0; }
           else {
-            // 꼬리가 그어지며 스러진다
             const head = shootFrom.clone().lerp(shootTo, k);
-            const tail = shootFrom.clone().lerp(shootTo, Math.max(0, k - 0.18));
+            const tail = shootFrom.clone().lerp(shootTo, Math.max(0, k - 0.32));
             const arr = shootGeo.getAttribute('position') as THREE.BufferAttribute;
             (arr.array as Float32Array).set([tail.x, tail.y, tail.z, head.x, head.y, head.z]);
             arr.needsUpdate = true;
-            shootMat.opacity = Math.sin(k * Math.PI) * night;
+            const harr = headGeo.getAttribute('position') as THREE.BufferAttribute;
+            (harr.array as Float32Array).set([head.x, head.y, head.z]);
+            harr.needsUpdate = true;
+            const glow = Math.sin(k * Math.PI) * night;
+            shootMat.opacity = glow;
+            headMat.opacity = glow;
           }
         }
-      } else if (shootT >= 0) { shootT = -1; shootMat.opacity = 0; }
+      } else if (shootT >= 0) { shootT = -1; shootMat.opacity = 0; headMat.opacity = 0; }
     },
     dispose() {
       for (const L of [far, mid, near, milky]) { L.pts.geometry.dispose(); L.mat.dispose(); }
-      shootGeo.dispose(); shootMat.dispose();
+      shootGeo.dispose(); shootMat.dispose(); headGeo.dispose(); headMat.dispose();
       scene.remove(root);
     },
   };

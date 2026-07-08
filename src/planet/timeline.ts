@@ -33,6 +33,10 @@ export function eventToEntry(e: PlanetEvent): TimelineEntry | null {
       return { id, icon: '🌆', text: '밤이 내렸다', t: e.t, kind: e.kind };
     case 'daybreak':
       return { id, icon: '🌅', text: '날이 밝았다', t: e.t, kind: e.kind };
+    case 'plane':
+      return { id, icon: '✈️', text: '비행기 한 대가 하늘을 가로질렀다', t: e.t, kind: e.kind };
+    case 'ship':
+      return { id, icon: '⛵', text: '배 한 척이 수평선을 지났다', t: e.t, kind: e.kind };
     case 'shooting_star':
       return { id, icon: '🌠', text: '별똥별이 스쳤다', t: e.t, kind: e.kind };
     default:

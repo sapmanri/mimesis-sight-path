@@ -12,6 +12,8 @@ export type PlanetEventKind =
   | 'distance'    // 걸음 이정표 (data: km)
   | 'nightfall'   // 밤이 내렸다
   | 'daybreak'    // 날이 밝았다
+  | 'plane'       // 비행기가 하늘을 갈랐다
+  | 'ship'        // 배가 수평선을 지났다
   | 'shooting_star'; // 별똥별을 봤다
 
 export type PlanetEvent = {

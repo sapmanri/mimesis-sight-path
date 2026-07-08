@@ -8,6 +8,7 @@ import { createPlanetSky } from './planetSky';
 import { createPlanetGulls } from './planetGulls';
 import { createMoonRabbit } from './moonRabbit';
 import { createStarSky } from './starSky';
+import { createPlanetVehicles } from './planetVehicles';
 import type { PlanetEvent, PlanetEventKind } from './planetEvents';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
@@ -613,6 +614,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   }, [scene]);
   const rabbitAI = useRef<ReturnType<typeof createMoonRabbit> | null>(null);
   const gullsRef = useRef<ReturnType<typeof createPlanetGulls> | null>(null);
+  const vehiclesRef = useRef<ReturnType<typeof createPlanetVehicles> | null>(null);
   const dlRef = useRef(1);
   useEffect(() => {
     if (!built) return undefined;
@@ -633,12 +635,27 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       });
       gullsRef.current = createPlanetGulls(built.planet, built.R, built.surfaceR, proto, () => ambience.gullCry());
     }).catch(() => {});
+    // BUILD 244: 탈것 — 육지 비행기 + 바다 배 (Vase). 비행기 proto 로드 후 모듈 생성.
+    void loadKitModel('planetPlane', defaultLoader).then((planeProto) => {
+      if (!alive) return;
+      planeProto.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+      });
+      vehiclesRef.current = createPlanetVehicles(built.planet, built.R, built.surfaceR, planeProto, (kind) => emit(kind));
+    }).catch(() => {
+      // proto 실패해도 배는 저폴리로 — proto 없이 생성
+      if (alive) vehiclesRef.current = createPlanetVehicles(built.planet, built.R, built.surfaceR, null, (kind) => emit(kind));
+    });
     return () => {
       alive = false;
       rabbitAI.current?.dispose();
       rabbitAI.current = null;
       gullsRef.current?.dispose();
       gullsRef.current = null;
+      vehiclesRef.current?.dispose();
+      vehiclesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [built]);
@@ -1135,6 +1152,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       if (gullArc < 6 && !gullSeen.current) { gullSeen.current = true; emit('gull'); }
       if (gullArc > 12) gullSeen.current = false;
     }
+    vehiclesRef.current?.update(dt, el, { planeEvery: SP.planeEvery ?? 0, shipEvery: SP.shipEvery ?? 0 }, dlRef.current);
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
     // BUILD 224: 반려의 걸음 — 그녀 뒤 0.6u를 목표로 부드럽게 따라온다 (행성 좌표로 계산, 월드로 환산)
     const PT = petRef.current;

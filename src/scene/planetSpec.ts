@@ -23,6 +23,8 @@ export type PlanetSpec = {
   cloudOpacity?: number; // BUILD 237: 흰 구름 반투명도 (기본 1)
   rainEvery?: number;  // BUILD 234: 비 주기(s) — 0=안 옴, 주기마다 먹구름이 태어나 비를 데려온다
   snowEvery?: number;  // BUILD 234: 눈 주기(s)
+  planeEvery?: number; // BUILD 244: 비행기 출현 주기(s) — 0=없음
+  shipEvery?: number;  // BUILD 244: 배 출현 주기(s) — 0=없음
   runEvery: number;    // BUILD 224: 뛰기 주기 (s, 0=안 뜀) — 평균 이 간격으로 한바탕 달린다
   rideEvery: number;   // BUILD 224: 탈것 주기 (s, 0=안 탐) — 구름/빗자루에 올라 한 바퀴
   pet: string;         // BUILD 224: 반려 ('none' | PET_ROSTER id)
@@ -49,6 +51,8 @@ export const DEFAULT_PLANET_SPEC: PlanetSpec = {
   cloudOpacity: 1,
   rainEvery: 0,
   snowEvery: 0,
+  planeEvery: 40,
+  shipEvery: 30,
   runEvery: 45,
   rideEvery: 120,
   pet: 'none',
