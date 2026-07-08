@@ -56,12 +56,14 @@ export function createComet(scene: THREE.Scene, camera: THREE.Camera, proto: THR
     coreScale = 5 + rng() * 4; // 별똥별보다 훨씬 큰 핵
   }
 
-  // 대형 혜성 궤도 세팅 (지정 방위/고도 중심으로 하늘을 크게 가로지른다)
+  // 대형 혜성 궤도 세팅 (지정 방위/고도를 중심으로, 화면 정중앙을 가로지른다)
   function setupMajorOrbit(az: number, el: number) {
-    from2.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)).multiplyScalar(R);
-    const az2 = az + Math.PI * 0.85;
-    const el1 = Math.max(0.2, el - 0.25);
-    to2.set(Math.cos(az2) * Math.cos(el1), Math.sin(el1), Math.sin(az2) * Math.cos(el1)).multiplyScalar(R);
+    // 중심(카메라 정면) 양옆으로 벌려 궤도 양끝을 잡는다 → 화면 한가운데를 지난다
+    const spread = Math.PI * 0.42;
+    const azA = az - spread, azB = az + spread;
+    const elA = el + 0.22, elB = el - 0.12;
+    from2.set(Math.cos(azA) * Math.cos(elA), Math.sin(elA), Math.sin(azA) * Math.cos(elA)).multiplyScalar(R);
+    to2.set(Math.cos(azB) * Math.cos(elB), Math.sin(elB), Math.sin(azB) * Math.cos(elB)).multiplyScalar(R);
   }
 
   function renderComet(u: number, a: THREE.Vector3, b: THREE.Vector3, scale: number, WT: number, alpha: number) {

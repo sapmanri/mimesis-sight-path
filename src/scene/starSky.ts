@@ -120,8 +120,9 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
           const harr = headGeo.getAttribute('position') as THREE.BufferAttribute;
           (harr.array as Float32Array).set([head.x, head.y, head.z]);
           harr.needsUpdate = true;
-          // 유성우 땐 밤이 아니어도(낮) 보이도록 최소 밝기 보장
-          const vis = Math.max(night, showering ? 0.85 : 0);
+          // 유성우 땐 밤이 아니어도(낮) 보이도록 최소 밝기 보장 + 머리 크게
+          const vis = Math.max(night, showering ? 0.95 : 0);
+          headMat.size = showering ? 9 : 5;
           const glow = Math.sin(k * Math.PI) * vis;
           shootMat.opacity = glow;
           headMat.opacity = glow;

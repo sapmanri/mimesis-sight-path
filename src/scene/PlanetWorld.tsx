@@ -844,16 +844,17 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           return gl.domElement.toDataURL('image/jpeg', 0.6);
         } catch { return null; }
       },
-      // BUILD 253: 대형 이벤트 시연 — 카메라가 보는 앞쪽 하늘에 확실히 띄운다
+      // BUILD 254: 대형 이벤트 시연 — 카메라가 실제 보는 곳 정중앙에 크게 띄운다.
+      // (이전엔 하늘 높이 el로 띄워 카메라가 지면을 볼 때 화면 밖이었다)
       demoComet: () => {
-        // 카메라가 향하는 방향의 방위각을 구해 그쪽 하늘로
         const dir = new THREE.Vector3();
         camera.getWorldDirection(dir);
+        // 카메라 정면 방향 자체를 궤도 중심으로 — 화면 한가운데를 가로지른다
         const az = Math.atan2(dir.z, dir.x);
-        const el = 0.55;
+        const el = Math.asin(THREE.MathUtils.clamp(dir.y, -0.3, 0.6)); // 카메라 실제 고도 따라감
         // eslint-disable-next-line no-console
-        console.log('[demo] comet trigger, cometRef=', !!cometRef.current, 'az=', az.toFixed(2));
-        cometRef.current?.triggerMajor(az, el, 9, 22);
+        console.log('[demo] comet trigger, cometRef=', !!cometRef.current, 'az=', az.toFixed(2), 'el=', el.toFixed(2));
+        cometRef.current?.triggerMajor(az, el, 9, 26);
       },
       demoShower: () => {
         // eslint-disable-next-line no-console
