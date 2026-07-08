@@ -42,34 +42,43 @@ export function createFootDust(parent: THREE.Object3D) {
   const SAND = new THREE.Color('#c9b48f');
   const MIST = new THREE.Color('#dfe7ee');
 
+  // BUILD 275: 양발 딛기 감지 — 각 발 높이를 추적, 내려가다 바닥 닿는 순간 그 자리에 뿌린다
+  const footPrevY = [Infinity, Infinity];
+  const footPrevDown = [false, false];
+
+  function emitAt(pos: THREE.Vector3, up: THREE.Vector3, water: boolean) {
+    const i = cursor; cursor = (cursor + 1) % N;
+    p[i].copy(pos);
+    const side = tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.015);
+    vel[i].copy(up).multiplyScalar(water ? 0.05 : 0.08).add(side);
+    life[i] = water ? 1.0 : 0.65;
+  }
+
   return {
-    // foot: 발 위치(parent 로컬로 넘어옴), up: 지표 법선(parent 로컬), water, moving
-    update(dt: number, foot: THREE.Vector3 | null, up: THREE.Vector3, water: boolean, moving: boolean) {
-      if (foot && moving) {
-        const rate = water ? 0.35 : 0.6;
-        if (Math.random() < rate) {
-          const i = cursor; cursor = (cursor + 1) % N;
-          p[i].copy(foot); // 이미 parent 로컬 좌표 — 지형에 박혀 함께 돈다
-          const side = tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.02);
-          vel[i].copy(up).multiplyScalar(water ? 0.06 : 0.09).add(side);
-          life[i] = water ? 1.1 : 0.7;
+    // feet: [왼발pos, 오른발pos] (parent 로컬), up: 지표 법선, water, moving
+    updateFeet(dt: number, feet: (THREE.Vector3 | null)[], up: THREE.Vector3, water: boolean, moving: boolean) {
+      if (moving) {
+        for (let f = 0; f < 2; f += 1) {
+          const foot = feet[f];
+          if (!foot) continue;
+          const y = foot.length();
+          const goingDown = y < footPrevY[f] - 0.0005;
+          if (footPrevDown[f] && !goingDown) emitAt(foot, up, water); // 최저점=딛음
+          footPrevDown[f] = goingDown;
+          footPrevY[f] = y;
         }
       }
       mat.color.lerp(water ? MIST : SAND, Math.min(1, dt * 4));
       let maxLife = 0;
       for (let i = 0; i < N; i += 1) {
-        if (life[i] > 0) {
-          life[i] -= dt;
-          p[i].addScaledVector(vel[i], dt);
-          vel[i].multiplyScalar(0.94);
-        }
+        if (life[i] > 0) { life[i] -= dt; p[i].addScaledVector(vel[i], dt); vel[i].multiplyScalar(0.93); }
         (geo.getAttribute('position').array as Float32Array).set([p[i].x, p[i].y, p[i].z], i * 3);
         maxLife = Math.max(maxLife, life[i]);
       }
       (geo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-      const targetOp = maxLife > 0 ? (water ? 0.18 : 0.3) : 0;
+      const targetOp = maxLife > 0 ? (water ? 0.2 : 0.32) : 0;
       mat.opacity += (targetOp - mat.opacity) * Math.min(1, dt * 6);
-      mat.size = water ? 0.08 : 0.05;
+      mat.size = water ? 0.08 : 0.055;
     },
     dispose() { geo.dispose(); mat.dispose(); tex.dispose(); parent.remove(pts); },
   };
