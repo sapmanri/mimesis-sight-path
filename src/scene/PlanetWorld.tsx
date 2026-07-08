@@ -763,6 +763,39 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     return () => { alive = false; };
   }, [holder, walkerIdx]);
 
+  // BUILD 263: 캠프 프로토 로드 — 모닥불(CampfireSet) + 텐트. 소환 때 clone해서 쓴다.
+  useEffect(() => {
+    if (!built) return undefined;
+    let alive = true;
+    const normalize = (root: THREE.Group, targetH: number) => {
+      const box = new THREE.Box3().setFromObject(root);
+      const size = box.getSize(new THREE.Vector3());
+      const sc = targetH / Math.max(1e-6, size.y);
+      root.scale.setScalar(sc);
+      box.setFromObject(root);
+      root.position.y -= box.min.y; // 바닥 접지
+      const c = box.getCenter(new THREE.Vector3());
+      root.position.x -= c.x; root.position.z -= c.z;
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+      });
+    };
+    campProtoRef.current = { fire: null, tent: null };
+    void defaultLoader('CampfireSet.glb').then((gltf) => {
+      if (!alive) return;
+      const root = gltf.scene as THREE.Group;
+      normalize(root, 0.32); // 캐릭터(≈0.95)보다 작게
+      if (campProtoRef.current) campProtoRef.current.fire = root;
+    }).catch(() => {});
+    void loadKitModel('tent', defaultLoader).then((tent) => {
+      if (!alive) return;
+      normalize(tent, 0.7); // 사람이 들어갈 만한 크기
+      if (campProtoRef.current) campProtoRef.current.tent = tent;
+    }).catch(() => {});
+    return () => { alive = false; campProtoRef.current = null; };
+  }, [built]);
+
   // BUILD 224: 반려 — 그녀 뒤를 종종종 따라오는 작은 식구
   useEffect(() => {
     const def = PET_ROSTER.find((x) => x.id === spec.pet);
@@ -1001,7 +1034,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const petRef = useRef<{ pet: LoadedPet; d: THREE.Vector3; goal: THREE.Vector3; mode: 'idle' | 'wander' | 'chase' | 'trick'; timer: number; running: boolean; cur: THREE.AnimationAction | null; t1: THREE.Vector3; t2: THREE.Vector3; q1: THREE.Quaternion } | null>(null);
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
-  const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0 });
+  const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory' | 'camp', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0, campCooldown: 20 });
+  // BUILD 263: 캠핑 쉼 — 가끔 멈춰 캠프(모닥불+텐트)를 소환하고 앉거나 서서 쉰다
+  const campSetRef = useRef<{ group: THREE.Group; born: number; life: number } | null>(null);
+  const campProtoRef = useRef<{ fire: THREE.Group | null; tent: THREE.Group | null } | null>(null);
   const roamRef = useRef<{ d: THREE.Vector3; T: THREE.Vector3 } | null>(null); // BUILD 219: 배회자의 현재 방향·진행
   useEffect(() => { roamRef.current = null; }, [built, spec.roam]);
   const tmp = useMemo(() => ({
@@ -1009,6 +1045,54 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
     v: new THREE.Vector3(),
   }), []);
+  // BUILD 263: 캠프 소환/해제 — 캐릭터 옆에 모닥불+텐트를 폽하고, 시간 지나면 접는다
+  const spawnCamp = () => {
+    if (!built || campSetRef.current || !campProtoRef.current) return;
+    const proto = campProtoRef.current;
+    if (!proto.fire && !proto.tent) return;
+    const grp = new THREE.Group();
+    // 캐릭터 현재 위치(월드) → 행성 로컬 방향
+    const wp = new THREE.Vector3();
+    holder.getWorldPosition(wp);
+    const dir = built.planet.worldToLocal(wp.clone()).normalize();
+    const r = built.surfaceR(dir);
+    // 지표 법선으로 세우는 기저
+    const up = dir.clone();
+    const ref = Math.abs(up.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const tan = new THREE.Vector3().crossVectors(ref, up).normalize();
+    const bit = new THREE.Vector3().crossVectors(up, tan).normalize();
+    // 모닥불은 캐릭터 앞쪽 살짝, 텐트는 옆쪽에
+    const place = (obj: THREE.Group, offT: number, offB: number) => {
+      const o = obj.clone();
+      const pos = dir.clone().multiplyScalar(r).addScaledVector(tan, offT).addScaledVector(bit, offB);
+      const pd = pos.clone().normalize();
+      o.position.copy(pd).multiplyScalar(built.surfaceR(pd));
+      const oUp = pd.clone();
+      const oFwd = new THREE.Vector3().crossVectors(ref, oUp).normalize();
+      const oRight = new THREE.Vector3().crossVectors(oFwd, oUp).normalize();
+      o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(oRight, oUp, oFwd.clone().multiplyScalar(-1)));
+      o.userData.baseScale = o.scale.x; // 폽 보간용 목표 스케일
+      o.scale.multiplyScalar(0.01); // 폽 in 시작 (작게 → 커짐)
+      grp.add(o);
+      return o;
+    };
+    if (proto.fire) place(proto.fire, 0.15, 0.0);
+    if (proto.tent) place(proto.tent, -0.1, 0.28);
+    built.planet.add(grp);
+    campSetRef.current = { group: grp, born: state0Clock(), life: 0 };
+  };
+  const despawnCamp = () => {
+    const cs = campSetRef.current;
+    if (!cs || !built) return;
+    built.planet.remove(cs.group);
+    cs.group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) { mesh.geometry?.dispose?.(); }
+    });
+    campSetRef.current = null;
+  };
+  const state0Clock = () => performance.now() / 1000;
+
   useFrame((state, rawDt) => {
     if (!built) return;
     const dt = Math.min(0.05, rawDt); // 헌법 3조
@@ -1124,6 +1208,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       P.timer -= dt;
       if (P.timer <= 0) {
         if (P.phase === 'memory') { onMemRef.current?.(null); P.memCooldown = 6; }
+        if (P.phase === 'camp') { rigRef.current?.stopInspect(); despawnCamp(); } // BUILD 263: 일어나서 캠프 접기
         if (P.phase === 'ponder' && SP.roam && roamRef.current) {
           // 멈춰 섰다 일어나면 마음이 바뀐다 — 크게 한 번 튼다
           const turn = (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 1.8);
@@ -1137,6 +1222,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     } else if (SP.roam) {
       // BUILD 219: 지구본 모드 — 기억 정차도 교차로 고민도 없다. 가끔 그냥 멈춰 설 뿐 (평균 ~14s)
       if (MV.mode === 'walk' && P.cooldown <= 0 && Math.random() < dt * 0.07) { P.phase = 'ponder'; P.timer = 1.2 + Math.random() * 2.2; P.jumpTo = -1; }
+      // BUILD 263: 캠핑 쉼 — 아주 가끔(평균 ~2분) 캠프를 차리고 오래 쉰다. 탈것 안 탔을 때만.
+      P.campCooldown -= dt;
+      if (MV.mode === 'walk' && P.phase === 'walk' && P.campCooldown <= 0 && campProtoRef.current && Math.random() < dt * 0.06) {
+        P.phase = 'camp';
+        P.timer = 16 + Math.random() * 12; // 16~28초 머문다
+        P.campCooldown = 90 + Math.random() * 60; // 다음 캠프까지 최소 90초
+        spawnCamp();
+        rigRef.current?.playInspect('sit'); // 앉기 클립 있으면 앉고, 없으면 서있음
+      }
     } else {
       S.current += SP.walkSpeed * spdMul * dt;
       const sm = ((S.current % built.arcLen) + built.arcLen) % built.arcLen;
@@ -1391,6 +1485,20 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
     if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; emit('nightfall'); ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
     else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; emit('daybreak'); ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
+    // BUILD 263: 캠프 폽 애니메이션 — 소환 직후 통 커지고, 머무는 시간 끝물엔 쏙 접힌다
+    if (campSetRef.current) {
+      const cs = campSetRef.current;
+      cs.life += dt;
+      const remain = P.phase === 'camp' ? P.timer : 0;
+      let s = 1;
+      if (cs.life < 0.5) s = cs.life / 0.5;
+      else if (remain < 0.5) s = Math.max(0, remain / 0.5);
+      const ease = s * s * (3 - 2 * s);
+      cs.group.children.forEach((o) => {
+        const base = (o.userData.baseScale as number) ?? 1;
+        o.scale.setScalar(base * Math.max(0.0001, ease));
+      });
+    }
     // BUILD 258: 밤이면 손 랜턴을 켠다 + 중력 정렬(뼈가 어떻게 돌아도 등불은 아래를 안다)
     if (lanternRef.current) {
       const isNight = dl < 0.35;
