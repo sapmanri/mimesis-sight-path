@@ -532,11 +532,17 @@ export default function App() {
           </div>
         )}
         <div style={{ position: 'fixed', top: 18, right: planetEdit ? 318 : 18, display: 'flex', gap: 10, zIndex: 6 }}>
-          {([['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] }))],
-            ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())],
-            [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v)],
+          {(([
+            // 에디터 전용 — 세계를 바꾸거나 동기를 깨는 도구는 방문자에게 숨긴다 (BUILD 249)
+            ...(planetEdit ? [
+              ['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] }))],
+              ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())],
+              [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v)],
+            ] as [string, () => void][] : []),
+            // 방문자도 함께 — 세계를 바꾸지 않는 '구경' 도구
             ['🛂', () => setPassportOpen((v) => !v)],
-            ['📖', () => setThreadOpen((v) => !v)]] as [string, () => void][]).map(([label, fn]) => (
+            ['📖', () => setThreadOpen((v) => !v)],
+          ]) as [string, () => void][]).map(([label, fn]) => (
             <button key={label} type="button" onClick={fn} style={{
               width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
               border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
