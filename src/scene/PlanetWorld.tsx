@@ -844,6 +844,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           return gl.domElement.toDataURL('image/jpeg', 0.6);
         } catch { return null; }
       },
+      // BUILD 252: 대형 이벤트 시연 — 에디터에서 즉시 확인 (헌법 6조)
+      demoComet: () => {
+        const az = Math.random() * Math.PI * 2;
+        const el = 0.5 + Math.random() * 0.4;
+        cometRef.current?.triggerMajor(az, el, 9, 20);
+      },
+      demoShower: () => {
+        starRef.current?.triggerShower(60); // 시연은 60초 (실제는 20분)
+      },
       pick: (cx: number, cy: number) => {
         if (!built) return null;
         const rect = gl.domElement.getBoundingClientRect();

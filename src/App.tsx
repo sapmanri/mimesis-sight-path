@@ -734,6 +734,13 @@ export default function App() {
                 inp.click();
               }}>불러오기</button>
             </div>
+            <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(216,178,110,0.15)' }}>
+              <div style={{ fontSize: 11, color: '#d8b26e', letterSpacing: 1, marginBottom: 6 }}>대형 이벤트 시연 — 지금 즉시 확인</div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button type="button" style={{ ...PANEL_BTN, flex: 1 }} onClick={() => planetApi.current?.demoComet?.()}>☄️ 혜성</button>
+                <button type="button" style={{ ...PANEL_BTN, flex: 1 }} onClick={() => planetApi.current?.demoShower?.()}>☄️☄️ 유성우</button>
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
               <button type="button" style={{
                 ...PANEL_BTN, width: '100%', fontWeight: 700,

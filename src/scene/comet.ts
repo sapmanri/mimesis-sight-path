@@ -37,6 +37,13 @@ export function createComet(scene: THREE.Scene, camera: THREE.Camera, proto: THR
   const trail: THREE.Vector3[] = [];
   let lastCycle = -1;      // 어떤 사이클을 이미 onPass 알렸는지 (중복 방지)
   let coreScale = 1;
+  // BUILD 252: 대형 혜성 — 예고된 큰 사건. 배경 혜성과 별개로, 밤낮 무관·크게.
+  // major.until > now면 활성. u는 0→1. from2/to2는 대형 전용 궤도.
+  const from2 = new THREE.Vector3();
+  const to2 = new THREE.Vector3();
+  let majorStart = -1;   // 발동 시각(초, worldTime 기준)
+  let majorDur = 8;
+  let majorScale = 18;
 
   // 특정 사이클의 궤도를 결정론적으로 세팅 (모두 동일)
   function setupOrbit(rng: () => number) {
@@ -49,47 +56,72 @@ export function createComet(scene: THREE.Scene, camera: THREE.Camera, proto: THR
     coreScale = 5 + rng() * 4; // 별똥별보다 훨씬 큰 핵
   }
 
+  // 대형 혜성 궤도 세팅 (지정 방위/고도 중심으로 하늘을 크게 가로지른다)
+  function setupMajorOrbit(az: number, el: number) {
+    from2.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)).multiplyScalar(R);
+    const az2 = az + Math.PI * 0.85;
+    const el1 = Math.max(0.2, el - 0.25);
+    to2.set(Math.cos(az2) * Math.cos(el1), Math.sin(el1), Math.sin(az2) * Math.cos(el1)).multiplyScalar(R);
+  }
+
+  function renderComet(u: number, a: THREE.Vector3, b: THREE.Vector3, scale: number, WT: number, alpha: number) {
+    const glow = Math.sin(Math.min(1, u) * Math.PI);
+    pos.copy(a).lerp(b, u);
+    core.position.copy(pos);
+    core.scale.setScalar(scale * (0.6 + 0.4 * glow));
+    core.rotation.x = WT * 0.5; core.rotation.y = WT * 0.7;
+    const segs = 22;
+    for (let i = 0; i < TAIL; i += 1) {
+      const back = (i / TAIL) * (majorDur / segs);
+      const pu = Math.max(0, u - back * 4);
+      const p = a.clone().lerp(b, pu);
+      (tailGeo.getAttribute('position').array as Float32Array).set([p.x, p.y, p.z], i * 3);
+      (tailGeo.getAttribute('aAlpha').array as Float32Array)[i] = (1 - i / TAIL);
+    }
+    (tailGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    tailMat.opacity = 0.8 * glow * alpha;
+  }
+
   return {
+    // 대형 혜성 발동 — durSec 동안, 지정 궤도로 크게. 밤낮 무관.
+    triggerMajor(az: number, el: number, durSec = 8, scale = 18) {
+      majorStart = worldTime();
+      majorDur = durSec;
+      majorScale = scale;
+      setupMajorOrbit(az, el);
+      onPass();
+    },
     update(_dt: number, night: number) {
       root.position.copy(camera.position);
-      // 밤에만 실현. 낮이면 숨긴다.
+      const WT = worldTime();
+      // 1) 대형 혜성이 활성이면 그걸 우선 그린다 (밤낮 무관, 크게)
+      if (majorStart >= 0) {
+        const s = WT - majorStart;
+        if (s >= 0 && s <= majorDur) {
+          renderComet(s / majorDur, from2, to2, majorScale, WT, 1);
+          return;
+        }
+        majorStart = -1; // 끝나면 해제
+        core.scale.setScalar(0.001); tailMat.opacity = 0;
+      }
+      // 2) 배경 혜성 — 밤에만 실현. 낮이면 숨긴다.
       if (night <= 0.6) {
         if (core.scale.x > 0.01) { core.scale.setScalar(0.001); tailMat.opacity = 0; }
         return;
       }
-      const WT = worldTime();
       const ev = eventCycle(WT, COMET_PERIOD, COMET_SALT);
       const st = ev.active(COMET_DUR);
       if (!st.on) {
         if (core.scale.x > 0.01) { core.scale.setScalar(0.001); tailMat.opacity = 0; trail.length = 0; }
         return;
       }
-      // 이 사이클을 처음 보는 순간 → 궤도 세팅 + 말풍선 1회
       if (ev.cycle !== lastCycle) {
         lastCycle = ev.cycle;
         trail.length = 0;
         setupOrbit(ev.rng);
         onPass();
       }
-      const u = st.u;
-      const glow = Math.sin(Math.min(1, u) * Math.PI); // 등장·퇴장 페이드
-      pos.copy(from).lerp(to, u);
-      core.position.copy(pos);
-      core.scale.setScalar(coreScale * (0.6 + 0.4 * glow));
-      core.rotation.x = WT * 0.5; core.rotation.y = WT * 0.7; // 자전도 절대시각 기반(동기)
-      // 꼬리: 지나온 자취를 기록 (u로부터 역산 — 프레임레이트 무관)
-      const segs = 22;
-      for (let i = 0; i < TAIL; i += 1) {
-        const back = (i / TAIL) * (COMET_DUR / segs); // u 기준 뒤로 조금씩
-        const pu = Math.max(0, u - back * 4);
-        const p = from.clone().lerp(to, pu);
-        const arr = tailGeo.getAttribute('position') as THREE.BufferAttribute;
-        (arr.array as Float32Array).set([p.x, p.y, p.z], i * 3);
-        const aa = tailGeo.getAttribute('aAlpha') as THREE.BufferAttribute;
-        (aa.array as Float32Array)[i] = (1 - i / TAIL);
-      }
-      (tailGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-      tailMat.opacity = 0.7 * glow * night;
+      renderComet(st.u, from, to, coreScale, WT, night);
     },
     dispose() { tailGeo.dispose(); tailMat.dispose(); scene.remove(root); },
   };

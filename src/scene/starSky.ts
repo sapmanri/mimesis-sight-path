@@ -69,10 +69,14 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
   let shootCycle = -1; // 어떤 사이클의 궤도를 세팅했는지
   const shootFrom = new THREE.Vector3();
   const shootTo = new THREE.Vector3();
+  // BUILD 252: 유성우 — 예고된 큰 사건. 이 기간엔 별똥별 주기를 확 줄여 쏟아지게.
+  let showerUntil = -1; // worldTime 기준 종료 시각(초). >now면 유성우 중.
 
   const tv = new THREE.Vector3();
 
   return {
+    // BUILD 252: 유성우 발동 — durSec 동안 별똥별이 쏟아진다 (밤낮 무관).
+    triggerShower(durSec = 1200) { showerUntil = worldTime() + durSec; },
     update(dt: number, el: number, dl: number) {
       // 별은 카메라를 따라다닌다(무한 배경) — 위치만, 회전은 각 레이어가 소유
       root.position.copy(camera.position);
@@ -88,9 +92,13 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
       near.mat.opacity *= 0.75 + 0.25 * Math.sin(el * 1.3);
 
       // 별똥별 — 밤에만. BUILD 246: 하늘 시계로 결정론화(모두 같은 순간 같은 궤도).
-      if (night > 0.6) {
-        const WT = worldTime();
-        const ev = eventCycle(WT, SHOOT_PERIOD, SHOOT_SALT);
+      // BUILD 252: 유성우 중엔 주기를 확 줄여 쏟아진다 (밤낮 무관).
+      const WTnow = worldTime();
+      const showering = showerUntil > WTnow;
+      if (night > 0.6 || showering) {
+        const period = showering ? 1.4 : SHOOT_PERIOD;
+        const salt = showering ? SHOOT_SALT + 1 : SHOOT_SALT; // 유성우는 다른 궤도 계열
+        const ev = eventCycle(WTnow, period, salt);
         const st = ev.active(SHOOT_DUR);
         if (st.on) {
           // 이 사이클을 처음 보면 궤도 세팅 + onShoot 1회
@@ -112,7 +120,9 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
           const harr = headGeo.getAttribute('position') as THREE.BufferAttribute;
           (harr.array as Float32Array).set([head.x, head.y, head.z]);
           harr.needsUpdate = true;
-          const glow = Math.sin(k * Math.PI) * night;
+          // 유성우 땐 밤이 아니어도(낮) 보이도록 최소 밝기 보장
+          const vis = Math.max(night, showering ? 0.85 : 0);
+          const glow = Math.sin(k * Math.PI) * vis;
           shootMat.opacity = glow;
           headMat.opacity = glow;
         } else {

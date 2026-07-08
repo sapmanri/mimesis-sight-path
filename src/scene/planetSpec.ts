@@ -4,7 +4,7 @@ export type PlanetMemory = { title: string; text: string; t: number; stay: numbe
 // BUILD 214: 표면 배치물 — 방향(단위벡터)·반경으로 행성 표면에 못 박는다
 export type PlanetProp = { id: string; obj: string; dir: [number, number, number]; r: number; rotY: number; scale: number; tilt?: number; lift?: number; title?: string; text?: string }; // title/text가 있으면 근처에서 폽 — 우연의 이벤트
 // BUILD 216: 에디터 ↔ 세계 명령선 — 화면 좌표로 표면을 찍는다
-export type PlanetApi = { pick: (clientX: number, clientY: number) => { dir: [number, number, number]; r: number } | null; capture: () => string | null };
+export type PlanetApi = { pick: (clientX: number, clientY: number) => { dir: [number, number, number]; r: number } | null; capture: () => string | null; demoComet?: () => void; demoShower?: () => void };
 // 에디터 '발밑에 심기'가 읽는 현재 접점 (매 프레임 갱신)
 export type PlanetContact = { dir: [number, number, number]; r: number; tan: [number, number, number] };
 export type PlanetSpec = {
