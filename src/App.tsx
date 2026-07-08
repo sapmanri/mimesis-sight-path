@@ -39,7 +39,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.8.8 · A TENT TO REST · BUILD 260';
+const BUILD_LABEL = 'v1.8.9 · CLEAN THE GHOST · BUILD 261';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -81,7 +81,16 @@ export default function App() {
   const [planetEdit] = useState(() => new URLSearchParams(window.location.search).has('edit'));
   const [pSpec, setPSpec] = useState<PlanetSpec>(() => {
     const q = new URLSearchParams(window.location.search);
-    if (q.has('edit') || q.has('draft')) return loadPlanetDraft();
+    if (q.has('edit') || q.has('draft')) {
+      const draft = loadPlanetDraft();
+      // BUILD 261: 유령 소품 청소 — ?cleartent=1 이면 드래프트에서 텐트 제거 (목록에서 안 지워지는 것 강제 정리)
+      if (q.has('cleartent')) {
+        const cleaned = { ...draft, props: (draft.props ?? []).filter((p) => p.obj !== 'tent') };
+        savePlanetDraft(cleaned);
+        return cleaned;
+      }
+      return draft;
+    }
     const s = { ...DEFAULT_PLANET_SPEC, memories: [] as PlanetMemory[], walker: 0 }; // BUILD 253: 방문자 기본 캐릭터 0(랜덤 금지, KV 도착 전까지)
     const th = q.get('theme');
     if (th === 'earth' || th === 'luna' || th === 'moon' || th === 'desert') s.theme = th;
