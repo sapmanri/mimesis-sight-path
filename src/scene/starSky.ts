@@ -2,6 +2,11 @@
 // 동화책 시차: 원경은 카메라에 붙박이(무한), 중경은 행성 회전을 아주 조금 따라오고,
 // 근경은 크고 밝게 반짝인다. 전부 밤(dl<1)에만 스민다.
 import * as THREE from 'three';
+import { worldTime, eventCycle } from './skyClock';
+
+const SHOOT_PERIOD = 7;   // 약 7초 주기대 (밤에 자주)
+const SHOOT_DUR = 1.15;
+const SHOOT_SALT = 33;
 
 type Layer = { pts: THREE.Points; mat: THREE.PointsMaterial; baseOpacity: number; drift: number };
 
@@ -61,8 +66,7 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
   shootHead.frustumCulled = false;
   shootHead.renderOrder = -8;
   root.add(shootHead);
-  let shootT = -1;
-  let shootNext = 3 + Math.random() * 6; // BUILD 244: 훨씬 자주 — 3~9초에 한 번 (스레드 감)
+  let shootCycle = -1; // 어떤 사이클의 궤도를 세팅했는지
   const shootFrom = new THREE.Vector3();
   const shootTo = new THREE.Vector3();
 
@@ -83,40 +87,38 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
       // 근경 별 반짝임 (느린 깜빡)
       near.mat.opacity *= 0.75 + 0.25 * Math.sin(el * 1.3);
 
-      // 별똥별 — 밤에만
+      // 별똥별 — 밤에만. BUILD 246: 하늘 시계로 결정론화(모두 같은 순간 같은 궤도).
       if (night > 0.6) {
-        if (shootT < 0) {
-          shootNext -= dt;
-          if (shootNext <= 0) {
-            shootT = 0;
-            shootNext = 4 + Math.random() * 9;
+        const WT = worldTime();
+        const ev = eventCycle(WT, SHOOT_PERIOD, SHOOT_SALT);
+        const st = ev.active(SHOOT_DUR);
+        if (st.on) {
+          // 이 사이클을 처음 보면 궤도 세팅 + onShoot 1회
+          if (ev.cycle !== shootCycle) {
+            shootCycle = ev.cycle;
             onShoot?.();
-            const az = Math.random() * Math.PI * 2;
-            const el0 = 0.35 + Math.random() * 0.85;
+            const az = ev.rng() * Math.PI * 2;
+            const el0 = 0.35 + ev.rng() * 0.85;
             shootFrom.set(Math.cos(az) * Math.cos(el0), Math.sin(el0), Math.sin(az) * Math.cos(el0)).multiplyScalar(1600);
-            tv.set(Math.random() - 0.5, -0.5 - Math.random() * 0.3, Math.random() - 0.5).normalize();
+            tv.set(ev.rng() - 0.5, -0.5 - ev.rng() * 0.3, ev.rng() - 0.5).normalize();
             shootTo.copy(shootFrom).addScaledVector(tv, 520);
           }
+          const k = st.u;
+          const head = shootFrom.clone().lerp(shootTo, k);
+          const tail = shootFrom.clone().lerp(shootTo, Math.max(0, k - 0.32));
+          const arr = shootGeo.getAttribute('position') as THREE.BufferAttribute;
+          (arr.array as Float32Array).set([tail.x, tail.y, tail.z, head.x, head.y, head.z]);
+          arr.needsUpdate = true;
+          const harr = headGeo.getAttribute('position') as THREE.BufferAttribute;
+          (harr.array as Float32Array).set([head.x, head.y, head.z]);
+          harr.needsUpdate = true;
+          const glow = Math.sin(k * Math.PI) * night;
+          shootMat.opacity = glow;
+          headMat.opacity = glow;
         } else {
-          shootT += dt;
-          const dur = 1.15;
-          const k = shootT / dur;
-          if (k >= 1) { shootT = -1; shootMat.opacity = 0; headMat.opacity = 0; }
-          else {
-            const head = shootFrom.clone().lerp(shootTo, k);
-            const tail = shootFrom.clone().lerp(shootTo, Math.max(0, k - 0.32));
-            const arr = shootGeo.getAttribute('position') as THREE.BufferAttribute;
-            (arr.array as Float32Array).set([tail.x, tail.y, tail.z, head.x, head.y, head.z]);
-            arr.needsUpdate = true;
-            const harr = headGeo.getAttribute('position') as THREE.BufferAttribute;
-            (harr.array as Float32Array).set([head.x, head.y, head.z]);
-            harr.needsUpdate = true;
-            const glow = Math.sin(k * Math.PI) * night;
-            shootMat.opacity = glow;
-            headMat.opacity = glow;
-          }
+          shootMat.opacity = 0; headMat.opacity = 0;
         }
-      } else if (shootT >= 0) { shootT = -1; shootMat.opacity = 0; headMat.opacity = 0; }
+      } else if (shootMat.opacity > 0) { shootMat.opacity = 0; headMat.opacity = 0; }
     },
     dispose() {
       for (const L of [far, mid, near, milky]) { L.pts.geometry.dispose(); L.mat.dispose(); }
