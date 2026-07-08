@@ -8,6 +8,7 @@ import { createPlanetSky } from './planetSky';
 import { createPlanetGulls } from './planetGulls';
 import { createMoonRabbit } from './moonRabbit';
 import { createStarSky } from './starSky';
+import { createFootDust } from './footDust';
 import { createPlanetVehicles } from './planetVehicles';
 import { createComet } from './comet';
 import { worldTime, phaseAngle, eventCycle } from './skyClock';
@@ -349,6 +350,9 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
 }
 
 const MNT_V = new THREE.Vector3(); // BUILD 231: 탈것 뼈 실측용 스크래치
+const FOOT_WP = new THREE.Vector3(); // BUILD 264: 발 월드위치
+const FOOT_UP = new THREE.Vector3(); // BUILD 264: 발밑 지표 법선(월드)
+const FOOT_WATER = { value: false }; // BUILD 264: 발밑 물 판정
 const MOON_SUN = new THREE.Vector3(0, 1, 0); // BUILD 236: 달→태양 방향 (위상 셰이더 공유 참조)
 const PET_V = new THREE.Vector3(); // BUILD 231: 펫 위치 환산용 — PT.t2를 쓰면 yawFrom(=PT.t2 별칭)이 덮여 요가 죽는다
 
@@ -609,6 +613,11 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     return () => { starRef.current?.dispose(); starRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene, camera]);
+  const footDustRef = useRef<ReturnType<typeof createFootDust> | null>(null);
+  useEffect(() => {
+    footDustRef.current = createFootDust(scene);
+    return () => { footDustRef.current?.dispose(); footDustRef.current = null; };
+  }, [scene]);
   const skyRef = useRef<ReturnType<typeof createPlanetSky> | null>(null);
   const lastRainAmt = useRef(-1);
   useEffect(() => {
@@ -1485,6 +1494,21 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
     if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; emit('nightfall'); ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
     else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; emit('daybreak'); ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
+    // BUILD 264: 발밑 효과 — 걸을 때 발에서 살짝. 땅=모래먼지, 물=안개.
+    if (footDustRef.current) {
+      let foot: THREE.Vector3 | null = null;
+      if (footPRef.current && moving && MV.mode !== 'ride') {
+        footPRef.current.getWorldPosition(FOOT_WP);
+        foot = FOOT_WP;
+        const fLocal = built.planet.worldToLocal(FOOT_WP.clone()).normalize();
+        FOOT_UP.copy(fLocal).applyQuaternion(built.planet.quaternion).normalize();
+        FOOT_WATER.value = built.surfaceR(fLocal) < built.R - 0.008;
+      } else {
+        FOOT_UP.set(0, 1, 0);
+        FOOT_WATER.value = false;
+      }
+      footDustRef.current.update(dt, foot, FOOT_UP, FOOT_WATER.value, !!foot);
+    }
     // BUILD 263: 캠프 폽 애니메이션 — 소환 직후 통 커지고, 머무는 시간 끝물엔 쏙 접힌다
     if (campSetRef.current) {
       const cs = campSetRef.current;
