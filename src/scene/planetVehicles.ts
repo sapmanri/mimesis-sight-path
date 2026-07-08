@@ -159,14 +159,13 @@ export function createPlanetVehicles(
         const r = groundR + 0.01 + alt;
         v.group.position.copy(tv).multiplyScalar(r);
 
-        // 자세: 위(+Y)를 지표 법선 tv에, 정면(-Z)을 진행 tangent에
-        const up = tv;
-        const fwd = tangent.clone();
-        const right = new THREE.Vector3().crossVectors(up, fwd).normalize();
-        const fwd2 = new THREE.Vector3().crossVectors(right, up).normalize();
-        const m = new THREE.Matrix4().makeBasis(right, up, fwd2.negate());
+        // 자세: 위(+Y)를 지표 법선에, 정면(-Z)을 진행 tangent에 (BUILD 259: basis 순서 교정 — 삐딱 사건)
+        const up = tv.clone().normalize();
+        const fwd = tangent.clone().addScaledVector(up, -tangent.dot(up)).normalize(); // tangent를 접평면에 투영
+        const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
+        const m = new THREE.Matrix4().makeBasis(right, up, fwd.clone().multiplyScalar(-1));
         v.group.quaternion.setFromRotationMatrix(m);
-        if (v.kind === 'ship') { v.group.rotation.z += Math.sin(el * 1.3 + i) * 0.03; } // 물결에 흔들
+        if (v.kind === 'ship') { v.group.rotateZ(Math.sin(el * 1.3 + i) * 0.03); } // 물결에 흔들 (자세 위에 덧댐)
 
         // 폽 스케일 (in/out): 나타나고 사라질 때 통—/쇽
         let pop = 1;
