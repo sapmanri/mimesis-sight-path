@@ -39,7 +39,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v1.9.6 · BIGGER FIRE · BUILD 268';
+const BUILD_LABEL = 'v1.9.7 · THE ONE WHO WALKS · BUILD 269';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

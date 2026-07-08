@@ -351,6 +351,7 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
 
 const MNT_V = new THREE.Vector3(); // BUILD 231: 탈것 뼈 실측용 스크래치
 const FOOT_WP = new THREE.Vector3(); // BUILD 264: 발 월드위치
+const FOOT_LOCAL = new THREE.Vector3(); // BUILD 269: 발 planet-로컬 위치
 const FOOT_UP = new THREE.Vector3(); // BUILD 264: 발밑 지표 법선(월드)
 const FOOT_WATER = { value: false }; // BUILD 264: 발밑 물 판정
 const MOON_SUN = new THREE.Vector3(0, 1, 0); // BUILD 236: 달→태양 방향 (위상 셰이더 공유 참조)
@@ -615,9 +616,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   }, [scene, camera]);
   const footDustRef = useRef<ReturnType<typeof createFootDust> | null>(null);
   useEffect(() => {
-    footDustRef.current = createFootDust(scene);
+    if (!built) return undefined;
+    footDustRef.current = createFootDust(built.planet); // BUILD 269: planet에 붙여 지형과 함께 돌게
     return () => { footDustRef.current?.dispose(); footDustRef.current = null; };
-  }, [scene]);
+  }, [built]);
   const skyRef = useRef<ReturnType<typeof createPlanetSky> | null>(null);
   const lastRainAmt = useRef(-1);
   useEffect(() => {
@@ -1494,15 +1496,17 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
     if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; emit('nightfall'); ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
     else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; emit('daybreak'); ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
-    // BUILD 264: 발밑 효과 — 걸을 때 발에서 살짝. 땅=모래먼지, 물=안개.
+    // BUILD 264/269: 발밑 효과 — 걸을 때 발에서 살짝. 밟은 자리에 남는다(planet 로컬).
     if (footDustRef.current) {
       let foot: THREE.Vector3 | null = null;
       if (footPRef.current && moving && MV.mode !== 'ride') {
         footPRef.current.getWorldPosition(FOOT_WP);
-        foot = FOOT_WP;
-        const fLocal = built.planet.worldToLocal(FOOT_WP.clone()).normalize();
-        FOOT_UP.copy(fLocal).applyQuaternion(built.planet.quaternion).normalize();
-        FOOT_WATER.value = built.surfaceR(fLocal) < built.R - 0.008;
+        // planet 로컬 좌표로 변환 — 입자가 지형에 박혀 함께 돈다(따라다니지 않음)
+        FOOT_LOCAL.copy(FOOT_WP); built.planet.worldToLocal(FOOT_LOCAL);
+        foot = FOOT_LOCAL;
+        const fDir = FOOT_WP.clone(); built.planet.worldToLocal(fDir); fDir.normalize();
+        FOOT_UP.copy(fDir); // planet 로컬 up (법선)
+        FOOT_WATER.value = built.surfaceR(fDir) < built.R - 0.008;
       } else {
         FOOT_UP.set(0, 1, 0);
         FOOT_WATER.value = false;
