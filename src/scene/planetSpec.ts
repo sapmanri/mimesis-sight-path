@@ -28,6 +28,7 @@ export type PlanetSpec = {
   runEvery: number;    // BUILD 224: 뛰기 주기 (s, 0=안 뜀) — 평균 이 간격으로 한바탕 달린다
   rideEvery: number;   // BUILD 224: 탈것 주기 (s, 0=안 탐) — 구름/빗자루에 올라 한 바퀴
   pet: string;         // BUILD 224: 반려 ('none' | PET_ROSTER id)
+  walker?: number;     // BUILD 251: 산책자 캐릭터 인덱스 (발행 시 고정 — 방문자 전원이 같은 아이를 본다). undefined/-1 = 랜덤
   moon: { size: number; dist: number; period: number; tilt: number; light: number; spin: number };
   sun: { az: number; el: number; period: number }; // 방위·고도 (deg), 공전 주기 (s · 0=고정 정오)
   viewDist: number;    // 시야 거리 (씬 안개 far, u)

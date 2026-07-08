@@ -140,7 +140,7 @@ export default function App() {
       }
     } catch { setPubState('err'); setTimeout(() => setPubState('idle'), 3000); }
   };
-  const [planetWalker, setPlanetWalker] = useState(-1);
+  const planetWalker = pSpec.walker ?? -1; // BUILD 251: 산책자는 스펙이 정한다 (발행 시 고정)
   const [planetPaused, setPlanetPaused] = useState(false); // BUILD 224: 찍기의 평화
   // BUILD 214: 소품 심기 — 접점은 PlanetWorld가 매 프레임 보고한다
   const planetContact = useRef<PlanetContact | null>(null);
@@ -177,6 +177,9 @@ export default function App() {
     return [];
   });
   const [threadOpen, setThreadOpen] = useState(false);
+  // BUILD 251: 안 읽음 빨간점 — 각 클라이언트 로컬 저장(사람마다 읽은 상태가 다르다)
+  const [threadSeenT, setThreadSeenT] = useState<number>(() => { try { return Number(localStorage.getItem('mimesis.threadSeenT')) || 0; } catch { return 0; } });
+  const [passportSeenN, setPassportSeenN] = useState<number>(() => { try { return Number(localStorage.getItem('mimesis.passportSeenN')) || 0; } catch { return 0; } });
   const [threadMuted, setThreadMuted] = useState<boolean>(() => { try { return localStorage.getItem('mimesis.threadMuted') === '1'; } catch { return false; } });
   const threadMutedRef = useRef(threadMuted);
   threadMutedRef.current = threadMuted;
@@ -562,19 +565,24 @@ export default function App() {
           {(([
             // 에디터 전용 — 세계를 바꾸거나 동기를 깨는 도구는 방문자에게 숨긴다 (BUILD 249)
             ...(planetEdit ? [
-              ['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] }))],
-              ['🚶', () => setPlanetWalker((i) => (i + 1) % walkerCount())],
-              [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v)],
-            ] as [string, () => void][] : []),
-            // 방문자도 함께 — 세계를 바꾸지 않는 '구경' 도구
-            ['🛂', () => setPassportOpen((v) => !v)],
-            ['📖', () => setThreadOpen((v) => !v)],
-          ]) as [string, () => void][]).map(([label, fn]) => (
+              ['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] })), false],
+              ['🚶', () => updSpec((s) => ({ ...s, walker: (((s.walker ?? -1) + 2) % (walkerCount() + 1)) - 1 })), false],
+              [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v), false],
+            ] as [string, () => void, boolean][] : []),
+            // 방문자도 함께 — 세계를 바꾸지 않는 '구경' 도구. 세 번째 = 안 읽음 빨간점.
+            ['🛂', () => { setPassportOpen((v) => !v); setPassportSeenN(passport.length); try { localStorage.setItem('mimesis.passportSeenN', String(passport.length)); } catch { /* 조용히 */ } }, passport.length > passportSeenN],
+            ['📖', () => { setThreadOpen((v) => !v); const t = feed[0]?.t ?? 0; setThreadSeenT(t); try { localStorage.setItem('mimesis.threadSeenT', String(t)); } catch { /* 조용히 */ } }, (feed[0]?.t ?? 0) > threadSeenT],
+          ]) as [string, () => void, boolean][]).map(([label, fn, dot]) => (
             <button key={label} type="button" onClick={fn} style={{
-              width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer',
+              width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer', position: 'relative',
               border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
               backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff',
-            }}>{label}</button>
+            }}>{label}
+              {dot && (<span style={{
+                position: 'absolute', top: 4, right: 4, width: 10, height: 10, borderRadius: 999,
+                background: '#e5484d', border: '1.5px solid rgba(18,24,26,0.6)',
+              }} />)}
+            </button>
           ))}
         </div>
         {planetEdit && (
