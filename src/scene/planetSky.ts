@@ -28,6 +28,7 @@ type SkyCloud = {
   spin: number;
   spinAng: number;
   kind: 'white' | 'rain' | 'snow';
+  baseOpacity: number;   // BUILD 237: 흰 구름 반투명도 (다이얼 연동)
   phase: Phase;
   t: number;             // 페이즈 시계
   life: number;          // live 지속(초)
@@ -127,10 +128,26 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
   let seedI = 20260708;
   const rnd = () => { seedI = (seedI * 1664525 + 1013904223) >>> 0; return seedI / 4294967296; };
 
-  function spawnCloud(kind: SkyCloud['kind'], R: number): SkyCloud {
-    const size = kind === 'white' ? 0.45 + rnd() * 0.5 : 0.7 + rnd() * 0.6;
+  function spawnCloud(kind: SkyCloud['kind'], R: number, opacity: number): SkyCloud {
+    // BUILD 237: 흰 구름은 반지름에 비례한다 (기준 R=12). 먹구름은 비의 규모라 절대값 유지.
+    const rScale = kind === 'white' ? R / 12 : 1;
+    const size = (kind === 'white' ? 0.45 + rnd() * 0.5 : 0.7 + rnd() * 0.6) * rScale;
     const g = makeCloudPuff(rnd, size, kind === 'white' ? '#e9eef0' : '#59626e');
     dress(g);
+    if (kind === 'white' && opacity < 0.999) {
+      // makeCloudPuff은 재질 하나를 모든 조각이 공유한다 — 한 번만 클론해 이 구름 전체에 다시 물린다
+      let shared: THREE.MeshStandardMaterial | null = null;
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        if (!shared) {
+          shared = (m.material as THREE.Material).clone() as THREE.MeshStandardMaterial;
+          shared.transparent = true;
+          shared.depthWrite = false;
+        }
+        m.material = shared;
+      });
+    }
     g.scale.setScalar(0.001);
     root.add(g);
     // 절반은 보이는 하늘(월드 +Y 근처)에서 태어난다 — 나머지는 지구 어딘가에
@@ -151,6 +168,7 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
       spin: (rnd() - 0.5) * 0.08,
       spinAng: rnd() * Math.PI * 2,
       kind,
+      baseOpacity: kind === 'white' ? opacity : 1,
       phase: 'in',
       t: 0,
       life: kind === 'white' ? Infinity : 22 + rnd() * 28,
@@ -172,7 +190,7 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
     update(
       dt: number, el: number,
       planet: THREE.Group, R: number, surfaceR: (d: THREE.Vector3) => number,
-      spec: { clouds: number; cloudFree: number; rainEvery: number; snowEvery: number },
+      spec: { clouds: number; cloudFree: number; cloudOpacity: number; rainEvery: number; snowEvery: number },
       props: { key: string; dirLocal: THREE.Vector3; topR: number }[],
     ): number {
       const center = planet.position;
@@ -185,9 +203,21 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
 
       // ── 흰 구름 정원 관리
       const want = Math.max(0, Math.round(spec.clouds ?? 0));
+      const cOpac = THREE.MathUtils.clamp(spec.cloudOpacity ?? 1, 0.1, 1);
       const whites = clouds.filter((c) => c.kind === 'white');
-      for (let i = whites.length; i < want; i += 1) spawnCloud('white', R);
+      for (let i = whites.length; i < want; i += 1) spawnCloud('white', R, cOpac);
       for (let i = whites.length - 1; i >= want; i -= 1) if (whites[i].phase !== 'out') { whites[i].phase = 'out'; whites[i].t = 0; }
+      // BUILD 237: 다이얼을 돌리면 살아있는 흰 구름도 따라 바뀐다
+      for (const w of whites) if (w.baseOpacity !== cOpac) {
+        w.baseOpacity = cOpac;
+        let shared: THREE.MeshStandardMaterial | null = null;
+        w.g.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (!m.isMesh) return;
+          if (!shared) { shared = ((m.material as THREE.Material).clone() as THREE.MeshStandardMaterial); shared.transparent = cOpac < 0.999; shared.depthWrite = !(cOpac < 0.999); }
+          m.material = shared;
+        });
+      }
 
       // ── 먹구름 스폰 시계 (본토 상태기 문법)
       const rainEvery = spec.rainEvery ?? 0;
@@ -195,11 +225,11 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
       const darks = clouds.filter((c) => c.kind !== 'white').length;
       if (rainEvery > 0) {
         if (nextRain < 0) nextRain = el + 4 + rnd() * rainEvery * 0.5;
-        if (el >= nextRain) { if (darks < 4) spawnCloud('rain', R); nextRain = el + rainEvery * (0.7 + rnd() * 0.6); }
+        if (el >= nextRain) { if (darks < 4) spawnCloud('rain', R, 1); nextRain = el + rainEvery * (0.7 + rnd() * 0.6); }
       } else nextRain = -1;
       if (snowEvery > 0) {
         if (nextSnow < 0) nextSnow = el + 7 + rnd() * snowEvery * 0.5;
-        if (el >= nextSnow) { if (darks < 4) spawnCloud('snow', R); nextSnow = el + snowEvery * (0.7 + rnd() * 0.6); }
+        if (el >= nextSnow) { if (darks < 4) spawnCloud('snow', R, 1); nextSnow = el + snowEvery * (0.7 + rnd() * 0.6); }
       } else nextSnow = -1;
 
       // ── 구름 갱신
@@ -247,6 +277,9 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
         }
         const pop = c.phase === 'in' ? k * (1 + 0.14 * Math.sin(k * Math.PI)) : k; // 폽(backOut의 사촌)
         c.g.scale.setScalar(Math.max(0.001, pop));
+        if (c.kind === 'white' && c.baseOpacity < 0.999) {
+          c.g.traverse((o) => { const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined; if (m && m.transparent) m.opacity = c.baseOpacity * k; });
+        }
         // 강수
         if (c.precip) {
           c.precip.mat.opacity = c.precip.baseOpacity * k;

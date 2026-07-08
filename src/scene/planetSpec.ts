@@ -20,6 +20,7 @@ export type PlanetSpec = {
   roam: boolean;       // BUILD 219: 지구본 모드 — 길 없이 마음대로 배회
   clouds?: number;     // BUILD 234: 하늘의 흰 구름 수 (자유 구름)
   cloudFree?: number;  // BUILD 234: 구름의 자유 — 0=지형처럼 붙박이, 1=달처럼 독립 (기본 0.9)
+  cloudOpacity?: number; // BUILD 237: 흰 구름 반투명도 (기본 1)
   rainEvery?: number;  // BUILD 234: 비 주기(s) — 0=안 옴, 주기마다 먹구름이 태어나 비를 데려온다
   snowEvery?: number;  // BUILD 234: 눈 주기(s)
   runEvery: number;    // BUILD 224: 뛰기 주기 (s, 0=안 뜀) — 평균 이 간격으로 한바탕 달린다
@@ -45,6 +46,7 @@ export const DEFAULT_PLANET_SPEC: PlanetSpec = {
   roam: false,
   clouds: 5,
   cloudFree: 0.1, // BUILD 235: 구름은 그 좌표 위에 거의 고정 — 0.9는 호위무사를 낳았다
+  cloudOpacity: 1,
   rainEvery: 0,
   snowEvery: 0,
   runEvery: 45,
