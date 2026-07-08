@@ -1087,7 +1087,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       grp.add(o);
       return o;
     };
-    if (proto.fire) place(proto.fire, 0.3, -0.15); // BUILD 268: 모닥불 한쪽
+    if (proto.fire) {
+      const fire = place(proto.fire, 0.3, -0.15); // BUILD 271: 모닥불 한쪽
+      // 본토 교훈: 발광 ≠ 광원 — 불빛을 따로 데려온다 (모닥불 위 따뜻한 주황)
+      const light = new THREE.PointLight('#ff9a4e', 1.4, 4.5, 1.6);
+      light.position.set(0, 0.35, 0);
+      fire.add(light);
+    }
     if (proto.tent) place(proto.tent, -0.35, 0.35); // 텐트는 반대쪽 멀리 — 겹침 방지
     built.planet.add(grp);
     campSetRef.current = { group: grp, born: state0Clock(), life: 0 };
