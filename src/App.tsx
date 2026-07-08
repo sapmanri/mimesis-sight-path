@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { PlanetWorld, flagIsKnownCountry } from './scene/PlanetWorld';
-import { walkerCount } from './engine/worldCore';
+import { walkerCount, WALKER_ROSTER } from './engine/worldCore';
 import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact, type PlanetApi } from './scene/planetSpec';
 import { PROP_CATALOG } from './engine/props';
 import { PET_ROSTER } from './engine/pets';
@@ -39,7 +39,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.0.0 · HERO BENCHED · BUILD 272';
+const BUILD_LABEL = 'v2.0.1 · NAME YOUR WALKER · BUILD 273';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -598,6 +598,18 @@ export default function App() {
             </button>
           ))}
         </div>
+        {planetEdit && (
+          <div style={{
+            position: 'fixed', top: 70, right: 318, zIndex: 6,
+            background: 'rgba(18,24,26,0.75)', color: '#d8b26e', fontSize: 11.5,
+            padding: '4px 10px', borderRadius: 8, letterSpacing: 0.5,
+            border: '1px solid rgba(216,178,110,0.3)', backdropFilter: 'blur(8px)',
+            fontFamily: 'monospace', maxWidth: 260, textAlign: 'right',
+          }}>
+            {/* BUILD 273: 현재 캐릭터 파일명·인덱스 — Vase가 정확히 짚어줄 수 있게 */}
+            🚶 idx {planetWalker}{planetWalker < 0 ? ' (랜덤)' : ` · ${WALKER_ROSTER[planetWalker]?.file ?? '?'}`}
+          </div>
+        )}
         {planetEdit && (
           <aside style={{
             position: 'fixed', top: 0, right: 0, bottom: 0, width: 300, zIndex: 8, overflowY: 'auto',
