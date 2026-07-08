@@ -181,10 +181,28 @@ export default function App() {
   const threadMutedRef = useRef(threadMuted);
   threadMutedRef.current = threadMuted;
   const earnedIds = useRef<Set<string>>(new Set());
+  // BUILD 250: 공용 스레드 — 삽만리(에디터/드래프트)만 글을 쓰고, 방문자는 KV 공용 피드를 읽는다.
+  const isSapmanri = useRef<boolean>((() => {
+    const q = new URLSearchParams(window.location.search);
+    return q.has('edit') || q.has('draft');
+  })()).current;
+  // 방문자: 공용 스레드를 읽어온다 (10초마다 새로고침 — 삽만리가 새 글 올리면 곧 보인다)
+  useEffect(() => {
+    if (!planetMode || isSapmanri) return; // 삽만리는 자기 로컬 피드를 쓰고 KV에도 발행(아래)
+    let alive = true;
+    const load = () => fetch('/api/feed')
+      .then((r) => r.ok ? r.json() : [])
+      .then((list: FeedPost[]) => { if (alive && Array.isArray(list)) setFeed(list); })
+      .catch(() => { /* 조용히 */ });
+    load();
+    const iv = window.setInterval(load, 10000);
+    return () => { alive = false; window.clearInterval(iv); };
+  }, [planetMode, isSapmanri]);
   useEffect(() => { feed.forEach((p) => earnedIds.current.add(p.achId)); }, []); // 초기 복원
   // 타임라인이 바뀔 때마다 성과 판정 → 새 성과면 스크린샷 + 피드 포스트
   useEffect(() => {
     if (!timeline.length) return;
+    if (!isSapmanri) return; // BUILD 250: 방문자 산책은 공용 피드를 오염시키지 않는다 — 읽기만
     const nowEarned = evaluateAchievements(timeline);
     const fresh = [...nowEarned].filter((id) => !earnedIds.current.has(id));
     if (!fresh.length) return;
@@ -206,6 +224,15 @@ export default function App() {
           try { localStorage.setItem(FEED_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
           return next;
         });
+        // BUILD 250: 삽만리가 남긴 관찰을 공용 스레드로도 발행 (방문자 전원이 본다)
+        const key = sessionStorage.getItem('mimesis.publishKey');
+        if (key) {
+          fetch('/api/feed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
+            body: JSON.stringify({ title: post.title, text: post.text, img: post.img, icon: post.icon, likes: post.likes, comments: post.comments }),
+          }).catch(() => { /* 발행 실패는 조용히 — 로컬엔 이미 남았다 */ });
+        }
       }
     }, 120);
     return () => clearTimeout(timer);
@@ -491,9 +518,9 @@ export default function App() {
                 ))}
               </div>
             )}
-            {feed.length > 0 && (
+            {isSapmanri && feed.length > 0 && (
               <button type="button" onClick={() => { setFeed([]); earnedIds.current.clear(); try { localStorage.removeItem(FEED_KEY); } catch { /* 조용히 */ } }}
-                style={{ marginTop: 10, background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '3px 10px', fontSize: 10.5, cursor: 'pointer' }}>기록 비우기</button>
+                style={{ marginTop: 10, background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '3px 10px', fontSize: 10.5, cursor: 'pointer' }}>기록 비우기 (로컬)</button>
             )}
           </div>
         )}
