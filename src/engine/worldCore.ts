@@ -367,7 +367,6 @@ export const MODELS: Record<string, ModelSpec> = {
 // 여덟 아이가 번갈아 이 길을 걷는다. 로드마다 한 명이 뽑힌다 — 오늘의 걷는 사람.
 // BUILD 098: Kid2 복권 — 열한 명이 걷는다
 export const WALKER_ROSTER: ModelSpec[] = [
-  MODELS.hero, // BUILD 270: 주인공 — 골격 보존 재병합(joints[0]=Hips). 맨 앞=기본.
   MODELS.walker, // LittleBoy (BUILD 092)
   { file: 'Kid1.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid1_texture.png', clipSpeeds: { walk: 0.007, run: 0.023 } },
   { file: 'Kid3.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid3_texture.png', clipSpeeds: { walk: 0.007, run: 0.013 } },
