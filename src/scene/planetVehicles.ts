@@ -42,7 +42,7 @@ function makeBoat(): THREE.Group {
   const sail = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.14), sailMat);
   sail.position.set(0.0, 0.14, 0); sail.rotation.y = Math.PI / 2;
   g.add(hull, bow, mast, sail);
-  g.scale.setScalar(1.8); // 배 가시성
+  g.scale.setScalar(3.2); // 배 가시성 (BUILD 245 확대)
   return g;
 }
 
@@ -73,26 +73,30 @@ export function createPlanetVehicles(
   let nextShip = -1;
   const seedRnd = (() => { let s = 424242; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; })();
 
-  const randDirWhere = (test: (d: THREE.Vector3) => boolean): THREE.Vector3 | null => {
-    for (let k = 0; k < 40; k += 1) {
+  const randDirWhere = (test: (d: THREE.Vector3) => boolean, near?: THREE.Vector3): THREE.Vector3 | null => {
+    for (let k = 0; k < 50; k += 1) {
       const u = seedRnd() * 2 - 1;
       const th = seedRnd() * Math.PI * 2;
       const r = Math.sqrt(1 - u * u);
       tv.set(Math.cos(th) * r, u, Math.sin(th) * r);
+      // near가 주어지면 그 반구(걷는 아이 시야) 안쪽 우선
+      if (near && tv.dot(near) < 0.15) continue;
       if (test(tv)) return tv.clone();
     }
+    // near 조건이 너무 빡세면 완화해서 재시도
+    if (near) return randDirWhere(test);
     return null;
   };
 
-  function spawn(kind: Kind) {
+  function spawn(kind: Kind, near?: THREE.Vector3) {
     const test = kind === 'ship' ? isSea : isLand;
-    const from = randDirWhere(test);
+    const from = randDirWhere(test, near);
     if (!from) return;
-    // 도착: 같은 종류의 다른 지점, 너무 가깝지 않게
+    // 도착: 같은 종류의 다른 지점, 너무 가깝지 않게 (시야 안쪽 우선)
     let to: THREE.Vector3 | null = null;
     for (let k = 0; k < 30; k += 1) {
-      const cand = randDirWhere(test);
-      if (cand && cand.angleTo(from) > 0.6) { to = cand; break; }
+      const cand = randDirWhere(test, near);
+      if (cand && cand.angleTo(from) > 0.4 && cand.angleTo(from) < 1.6) { to = cand; break; } // 시야 안에서 왔다가 시야 안에서 사라진다
     }
     if (!to) return;
     const axis = new THREE.Vector3().crossVectors(from, to).normalize();
@@ -119,17 +123,17 @@ export function createPlanetVehicles(
   }
 
   return {
-    update(dt: number, el: number, spec: { planeEvery: number; shipEvery: number }, dl: number) {
+    update(dt: number, el: number, spec: { planeEvery: number; shipEvery: number }, dl: number, walkerDir?: THREE.Vector3) {
       const planeEvery = spec.planeEvery ?? 0;
       const shipEvery = spec.shipEvery ?? 0;
       // 스폰 시계
       if (planeEvery > 0 && planeProto) {
         if (nextPlane < 0) nextPlane = el + 3 + seedRnd() * planeEvery * 0.5;
-        if (el >= nextPlane) { if (vehicles.filter((v) => v.kind === 'plane').length < 3) spawn('plane'); nextPlane = el + planeEvery * (0.7 + seedRnd() * 0.6); }
+        if (el >= nextPlane) { if (vehicles.filter((v) => v.kind === 'plane').length < 3) spawn('plane', walkerDir); nextPlane = el + planeEvery * (0.7 + seedRnd() * 0.6); }
       } else nextPlane = -1;
       if (shipEvery > 0 && hasSea) {
         if (nextShip < 0) nextShip = el + 5 + seedRnd() * shipEvery * 0.5;
-        if (el >= nextShip) { if (vehicles.filter((v) => v.kind === 'ship').length < 4) spawn('ship'); nextShip = el + shipEvery * (0.7 + seedRnd() * 0.6); }
+        if (el >= nextShip) { if (vehicles.filter((v) => v.kind === 'ship').length < 4) spawn('ship', walkerDir); nextShip = el + shipEvery * (0.7 + seedRnd() * 0.6); }
       } else nextShip = -1;
 
       for (let i = vehicles.length - 1; i >= 0; i -= 1) {

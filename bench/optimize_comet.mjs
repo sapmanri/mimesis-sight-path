@@ -1,0 +1,10 @@
+import { NodeIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { weld, dedup, prune, join } from '@gltf-transform/functions';
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+const d = await io.read('/tmp/comet.glb');
+await d.transform(dedup(), weld(), join(), prune());
+const r = d.getRoot();
+const before = r.listMeshes().reduce((s,m)=>s+m.listPrimitives().reduce((t,p)=>t+p.getAttribute('POSITION').getCount(),0),0);
+await io.write('/home/claude/mimesis-sight-path/public/assets/models/Comet.glb', d);
+console.log('메시', r.listMeshes().length, '정점', before);

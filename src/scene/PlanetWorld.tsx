@@ -9,6 +9,8 @@ import { createPlanetGulls } from './planetGulls';
 import { createMoonRabbit } from './moonRabbit';
 import { createStarSky } from './starSky';
 import { createPlanetVehicles } from './planetVehicles';
+import { createComet } from './comet';
+import { makeBubble, updateBubble, type Bubble } from './speech';
 import type { PlanetEvent, PlanetEventKind } from './planetEvents';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
@@ -370,7 +372,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const lastKm = useRef(0);
   const lastPhase = useRef('');
   const gullSeen = useRef(false);
-  const emit = (kind: PlanetEventKind, data?: PlanetEvent['data']) => onEventRef.current?.({ kind, data, t: performance.now() });
+  const emit = (kind: PlanetEventKind, data?: PlanetEvent['data']) => {
+    onEventRef.current?.({ kind, data, t: performance.now() });
+    // BUILD 245: 재미난 이벤트엔 가끔 머리 위 말풍선 (매번은 수다스럽다)
+    const BUBBLE: Partial<Record<PlanetEventKind, string>> = { flag: '🚩', shooting_star: '🌠', plane: '✈️', ship: '⛵', gull: '🕊', moon_phase: '🌙', ride_start: '☁️' };
+    const ic = BUBBLE[kind];
+    if (ic && Math.random() < 0.35) speak(ic, 0.9 + Math.random() * 0.3);
+  };
 
   // 무거운 다이얼만 재건축을 부른다
   const buildKey = JSON.stringify([spec.theme, spec.radius, spec.relief, spec.wraps, spec.wobble, spec.moon.size, spec.roam ? 1 : 0]);
@@ -615,6 +623,17 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const rabbitAI = useRef<ReturnType<typeof createMoonRabbit> | null>(null);
   const gullsRef = useRef<ReturnType<typeof createPlanetGulls> | null>(null);
   const vehiclesRef = useRef<ReturnType<typeof createPlanetVehicles> | null>(null);
+  const cometRef = useRef<ReturnType<typeof createComet> | null>(null);
+  const bubbleRoot = useMemo(() => new THREE.Group(), []);
+  const bubbles = useRef<Bubble[]>([]);
+  const speak = (icon: string, pitch = 1) => {
+    const target = holder; // 걷는 아이 홀더 위에
+    if (bubbles.current.length >= 2) return;
+    const b = makeBubble(target, 1.15, icon);
+    bubbles.current.push(b);
+    bubbleRoot.add(b.sprite);
+    ambience.mumble?.(pitch);
+  };
   const dlRef = useRef(1);
   useEffect(() => {
     if (!built) return undefined;
@@ -636,6 +655,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       gullsRef.current = createPlanetGulls(built.planet, built.R, built.surfaceR, proto, () => ambience.gullCry());
     }).catch(() => {});
     // BUILD 244: 탈것 — 육지 비행기 + 바다 배 (Vase). 비행기 proto 로드 후 모듈 생성.
+    void loadKitModel('comet', defaultLoader).then((cometProto) => {
+      if (!alive) return;
+      cometRef.current = createComet(scene, camera, cometProto, () => { emit('comet'); speak('✨', 0.8); });
+    }).catch(() => {});
     void loadKitModel('planetPlane', defaultLoader).then((planeProto) => {
       if (!alive) return;
       planeProto.traverse((o) => {
@@ -656,6 +679,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       gullsRef.current = null;
       vehiclesRef.current?.dispose();
       vehiclesRef.current = null;
+      cometRef.current?.dispose();
+      cometRef.current = null;
+      bubbles.current.forEach((b) => bubbleRoot.remove(b.sprite));
+      bubbles.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [built]);
@@ -666,6 +693,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // BUILD 228: clear()는 펫·탈것까지 쓸어버렸다 — 이전 워커만 표적 제거
     if (walkerGroupRef.current) { liftGroup.remove(walkerGroupRef.current); walkerGroupRef.current = null; }
     if (!liftGroup.parent) holder.add(liftGroup);
+    if (!bubbleRoot.parent) scene.add(bubbleRoot);
     void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
       liftGroup.add(group);
@@ -1152,7 +1180,14 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       if (gullArc < 6 && !gullSeen.current) { gullSeen.current = true; emit('gull'); }
       if (gullArc > 12) gullSeen.current = false;
     }
-    vehiclesRef.current?.update(dt, el, { planeEvery: SP.planeEvery ?? 0, shipEvery: SP.shipEvery ?? 0 }, dlRef.current);
+    vehiclesRef.current?.update(dt, el, { planeEvery: SP.planeEvery ?? 0, shipEvery: SP.shipEvery ?? 0 }, dlRef.current, U);
+    // BUILD 245: 혜성 (밤에 드물게) + 말풍선 갱신
+    if (cometRef.current) cometRef.current.update(dt, 1 - THREE.MathUtils.smoothstep(dlRef.current, 0.15, 0.55));
+    if (bubbles.current.length) {
+      for (let i = bubbles.current.length - 1; i >= 0; i -= 1) {
+        if (!updateBubble(bubbles.current[i], dt)) { bubbleRoot.remove(bubbles.current[i].sprite); bubbles.current.splice(i, 1); }
+      }
+    }
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
     // BUILD 224: 반려의 걸음 — 그녀 뒤 0.6u를 목표로 부드럽게 따라온다 (행성 좌표로 계산, 월드로 환산)
     const PT = petRef.current;

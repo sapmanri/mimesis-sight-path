@@ -14,6 +14,7 @@ export type PlanetEventKind =
   | 'daybreak'    // 날이 밝았다
   | 'plane'       // 비행기가 하늘을 갈랐다
   | 'ship'        // 배가 수평선을 지났다
+  | 'comet'       // 혜성이 스쳤다 (특별)
   | 'shooting_star'; // 별똥별을 봤다
 
 export type PlanetEvent = {

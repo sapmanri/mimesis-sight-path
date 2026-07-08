@@ -313,7 +313,8 @@ export const MODELS: Record<string, ModelSpec> = {
   dog: { file: 'Dog.glb', height: 0.34, tint: '#8a7a5f' },
   rabbit: { file: 'Rabbit.glb', height: 0.32, tint: '#b9b3a8', keepLook: true }, // BUILD 216: 달에는 토끼가 산다 (Vase). Idle 클립 내장 — 로밍의 씨앗
   rabbitRoam: { file: 'RabbitRoam.glb', height: 0.32, tint: '#b9b3a8', keepLook: true }, // BUILD 239: 로밍 토끼 — Walk/Run/Jump/Eat/Wave/Idle 6클립 (Vase 재업로드)
-  planetPlane: { file: 'Airplane.glb', height: 0.9, tint: '#e4e7ea', keepLook: true, fitMaxDim: true }, // BUILD 244: 육지를 가로지르는 비행기 (Vase 업로드 Avioncito)
+  planetPlane: { file: 'Airplane.glb', height: 1.8, tint: '#e4e7ea', keepLook: true, fitMaxDim: true }, // BUILD 245: 육지 비행기 — 크게 (Vase: 안 보임)
+  comet: { file: 'Comet.glb', height: 1, tint: '#cfd8e8', keepLook: true, fitMaxDim: true }, // BUILD 245: 헬리 혜성 (Vase) — 밤에 스치는 특별 이벤트
   duck: { file: 'Duck.glb', height: 0.22, tint: '#d8d2bd' },
   chicky: { file: 'Chicky.glb', height: 0.17, tint: '#d9c98e' },
   horse: { file: 'horse.glb', height: 1.05, tint: '#7d6a52' },

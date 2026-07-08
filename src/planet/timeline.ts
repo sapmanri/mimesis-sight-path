@@ -39,6 +39,8 @@ export function eventToEntry(e: PlanetEvent): TimelineEntry | null {
       return { id, icon: '⛵', text: '배 한 척이 수평선을 지났다', t: e.t, kind: e.kind };
     case 'shooting_star':
       return { id, icon: '🌠', text: '별똥별이 스쳤다', t: e.t, kind: e.kind };
+    case 'comet':
+      return { id, icon: '☄️', text: '혜성이 긴 꼬리를 끌며 지나갔다', t: e.t, kind: e.kind };
     default:
       return null;
   }

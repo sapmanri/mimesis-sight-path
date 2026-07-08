@@ -33,15 +33,14 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
   root.renderOrder = -10;
   scene.add(root);
 
-  // 세 겹 — 카메라 far(기본 2000) 안에 둔다. BUILD 240의 6000 반경은 far plane 밖이라 통째로
-  // 잘려 별이 사라졌다(Vase). 시차는 카메라 상쇄(root가 카메라를 따라감)로 이미 0에 가깝다.
-  const far = starField(420, 1850, 1.1, '#eaf0ff', 0.9);
-  const mid = starField(150, 1650, 1.8, '#dfe8ff', 0.95);
-  const near = starField(36, 1450, 3.0, '#ffffff', 1.0);
+  // 세 겹 — 카메라 far(기본 2000) 안에 둔다. 개수 늘리고 크기 키워 '총총'하게 (Vase: 눈꼽만 보임).
+  const far = starField(1100, 1850, 2.2, '#eaf0ff', 0.95);
+  const mid = starField(420, 1650, 3.2, '#dfe8ff', 1.0);
+  const near = starField(90, 1450, 5.0, '#ffffff', 1.0);
   root.add(far.pts, mid.pts, near.pts);
 
   // 은하수 — 옅은 띠
-  const milky = starField(260, 1780, 1.0, '#c8d4f0', 0.5, 0.14);
+  const milky = starField(600, 1780, 1.8, '#c8d4f0', 0.55, 0.14);
   milky.pts.rotation.z = 0.5;
   milky.pts.rotation.x = 0.3;
   root.add(milky.pts);

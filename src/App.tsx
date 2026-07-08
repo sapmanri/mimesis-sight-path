@@ -131,6 +131,9 @@ export default function App() {
     return [];
   });
   const [threadOpen, setThreadOpen] = useState(false);
+  const [threadMuted, setThreadMuted] = useState<boolean>(() => { try { return localStorage.getItem('mimesis.threadMuted') === '1'; } catch { return false; } });
+  const threadMutedRef = useRef(threadMuted);
+  threadMutedRef.current = threadMuted;
   const earnedIds = useRef<Set<string>>(new Set());
   useEffect(() => { feed.forEach((p) => earnedIds.current.add(p.achId)); }, []); // 초기 복원
   // 타임라인이 바뀔 때마다 성과 판정 → 새 성과면 스크린샷 + 피드 포스트
@@ -148,6 +151,10 @@ export default function App() {
         if (!ach) continue;
         const img = planetApi.current?.capture() ?? null;
         const post: FeedPost = { id: `${id}-${Date.now()}`, achId: id, icon: ach.icon, title: ach.title, text: ach.earnedText, img, likes: makeLikes(), comments: makeComments(id, 2 + Math.floor(Math.random() * 2)), t: Date.now() };
+        if (!threadMuted) {
+          planetSound.shutter(); // 찰칵 — 사진 올린다
+          post.comments.forEach((_, ci) => window.setTimeout(() => { if (!threadMutedRef.current) planetSound.comment(); }, 700 + ci * 550)); // 댓글이 하나씩 달린다
+        }
         setFeed((prev) => {
           const next = [post, ...prev].slice(0, 60);
           try { localStorage.setItem(FEED_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
@@ -394,7 +401,11 @@ export default function App() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontSize: 13, color: '#d8b26e', letterSpacing: 1 }}>기록 · @she_walks_slow</span>
-              <span style={{ fontSize: 11, opacity: 0.5 }}>{feed.length}개의 순간</span>
+              <button type="button" onClick={() => { const v = !threadMuted; setThreadMuted(v); try { localStorage.setItem('mimesis.threadMuted', v ? '1' : '0'); } catch { /* 조용히 */ } }}
+                title={threadMuted ? '스레드 알람 켜기' : '스레드 알람 끄기'}
+                style={{ background: 'none', border: '1px solid rgba(216,178,110,0.3)', color: '#d8b26e', borderRadius: 8, padding: '3px 9px', fontSize: 11, cursor: 'pointer' }}>
+                {threadMuted ? '🔕 알람 꺼짐' : '🔔 알람 켜짐'}
+              </button>
             </div>
             {feed.length === 0 ? (
               <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 남긴 기록이 없어요.<br />걷다 보면 하나씩 쌓입니다.</div>
@@ -409,7 +420,16 @@ export default function App() {
                         <div style={{ fontSize: 11, opacity: 0.55 }}>@she_walks_slow</div>
                       </div>
                     </div>
-                    {post.img && <img src={post.img} alt="" style={{ width: '100%', borderRadius: 10, marginBottom: 6, display: 'block' }} />}
+                    {post.img && (
+                      <div style={{ position: 'relative', marginBottom: 6 }}>
+                        <img src={post.img} alt="" style={{ width: '100%', borderRadius: 10, display: 'block' }} />
+                        <button type="button" title="사진 저장"
+                          onClick={() => { const a = document.createElement('a'); a.href = post.img!; a.download = `sapmanri_${post.achId}_${post.t}.jpg`; a.click(); }}
+                          style={{ position: 'absolute', right: 8, bottom: 8, background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: 8, padding: '4px 9px', fontSize: 11, cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+                          ⬇ 저장
+                        </button>
+                      </div>
+                    )}
                     <div style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 6 }}>{post.text}</div>
                     <div style={{ fontSize: 11.5, opacity: 0.6, marginBottom: 6 }}>♥ {post.likes}</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

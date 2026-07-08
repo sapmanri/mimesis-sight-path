@@ -57,6 +57,22 @@ function createPlanetSound() {
     },
 
     /** 깃발의 폽(위로 통) / 쇽(아래로 슝) */
+    /** BUILD 245: 찰칵 — 스레드에 사진 올릴 때 (짧은 셔터) */
+    shutter() {
+      installGestureUnlock();
+      if (!ensure() || !ctx || muted) return;
+      const t0 = ctx.currentTime;
+      tone(2600, null, t0, 0.025, 0.05, 0, 'square', 1400);       // 찰-
+      window.setTimeout(() => { if (ctx) tone(1800, null, ctx.currentTime, 0.03, 0.045, 0, 'square', 900); }, 40); // -칵
+    },
+    /** BUILD 245: 댓글 알림 — 물방울 같은 짧은 팝 */
+    comment() {
+      installGestureUnlock();
+      if (!ensure() || !ctx || muted) return;
+      const t0 = ctx.currentTime;
+      tone(880, null, t0, 0.12, 0.03, rnd(-0.2, 0.2), 'sine', 1320);
+    },
+
     pop(up: boolean) {
       installGestureUnlock();
       if (!ensure() || !ctx || muted) return;
