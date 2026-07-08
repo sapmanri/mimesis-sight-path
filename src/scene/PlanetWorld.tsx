@@ -794,12 +794,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     void defaultLoader('CampfireSet.glb').then((gltf) => {
       if (!alive) return;
       const root = gltf.scene as THREE.Group;
-      normalize(root, 0.32); // 캐릭터(≈0.95)보다 작게
+      normalize(root, 0.55); // BUILD 268: 모닥불 키움 (0.32→0.55, 본토 화덕 0.5 기준에 맞춤)
       if (campProtoRef.current) campProtoRef.current.fire = root;
     }).catch(() => {});
     void loadKitModel('tent', defaultLoader).then((tent) => {
       if (!alive) return;
-      normalize(tent, 0.7); // 사람이 들어갈 만한 크기
+      normalize(tent, 0.75); // 사람이 들어갈 만한 크기
       if (campProtoRef.current) campProtoRef.current.tent = tent;
     }).catch(() => {});
     return () => { alive = false; campProtoRef.current = null; };
@@ -1085,8 +1085,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       grp.add(o);
       return o;
     };
-    if (proto.fire) place(proto.fire, 0.15, 0.0);
-    if (proto.tent) place(proto.tent, -0.1, 0.28);
+    if (proto.fire) place(proto.fire, 0.3, -0.15); // BUILD 268: 모닥불 한쪽
+    if (proto.tent) place(proto.tent, -0.35, 0.35); // 텐트는 반대쪽 멀리 — 겹침 방지
     built.planet.add(grp);
     campSetRef.current = { group: grp, born: state0Clock(), life: 0 };
   };
