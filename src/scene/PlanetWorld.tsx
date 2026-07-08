@@ -1,10 +1,11 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader, makeCloudPuff, loadKitModel } from '../engine/worldCore';
+import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader, makeCloudPuff, loadKitModel, loadKitModelWithClips } from '../engine/worldCore';
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createPlanetSky } from './planetSky';
+import { createPlanetGulls } from './planetGulls';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { planetSound } from '../audio/planetSound';
@@ -323,6 +324,7 @@ function bakeTrailOntoMap(map: THREE.Texture, curve: THREE.CatmullRomCurve3, R: 
 }
 
 const MNT_V = new THREE.Vector3(); // BUILD 231: 탈것 뼈 실측용 스크래치
+const MOON_SUN = new THREE.Vector3(0, 1, 0); // BUILD 236: 달→태양 방향 (위상 셰이더 공유 참조)
 const PET_V = new THREE.Vector3(); // BUILD 231: 펫 위치 환산용 — PT.t2를 쓰면 yawFrom(=PT.t2 별칭)이 덮여 요가 죽는다
 
 export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
@@ -524,6 +526,18 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         const sky = new THREE.Group();
         const moonMat = new THREE.MeshStandardMaterial({ color: '#c9c5bd', roughness: 1, metalness: 0, emissive: '#e8e4d8', emissiveIntensity: 0.08 }); // BUILD 218: 밤의 달 얼굴
         moonMat.fog = false;
+        // BUILD 236: 달의 위상 — 태양-달 기하에서 저절로. 달이 태양 쪽이면 그믐, 반대면 보름.
+        // 어두운 쪽도 6%는 남긴다(지구조) — 스스로 빛나기로 한 달(BUILD 218)의 예의.
+        moonMat.onBeforeCompile = (shader) => {
+          shader.uniforms.uMoonSun = { value: MOON_SUN };
+          shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', '#include <common>\nvarying vec3 vMoonN;')
+            .replace('#include <defaultnormal_vertex>', '#include <defaultnormal_vertex>\nvMoonN = normalize(mat3(modelMatrix) * objectNormal);');
+          shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', '#include <common>\nvarying vec3 vMoonN;\nuniform vec3 uMoonSun;')
+            .replace('#include <fog_fragment>', '#include <fog_fragment>\nfloat mph = smoothstep(-0.06, 0.32, dot(normalize(vMoonN), uMoonSun));\ngl_FragColor.rgb *= mix(0.06, 1.0, mph);');
+        };
+        moonMat.customProgramCacheKey = () => 'moonphase1';
         new THREE.TextureLoader().load('assets/planet/moon_color.jpg', (t) => {
           t.colorSpace = THREE.SRGBColorSpace;
           moonMat.map = t;
@@ -564,6 +578,46 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     return () => { skyRef.current?.dispose(); skyRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene]);
+  const rabbitMix = useRef<THREE.AnimationMixer | null>(null);
+  const gullsRef = useRef<ReturnType<typeof createPlanetGulls> | null>(null);
+  const dlRef = useRef(1);
+  useEffect(() => {
+    if (!built) return undefined;
+    let alive = true;
+    // BUILD 236: 달에는 토끼가 산다 (BUILD 216의 약속 이행) — 지구를 보는 면에, 우화의 크기로
+    void loadKitModelWithClips('rabbit', defaultLoader).then(({ group, animations }) => {
+      if (!alive) return;
+      const moonR = built.moon.geometry.boundingSphere?.radius ?? 1;
+      const sc = (moonR * 0.5) / 0.32;
+      group.scale.setScalar(sc);
+      group.position.set(0, 0, moonR * 0.97);
+      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1));
+      group.rotateY(0.5); // 살짝 비껴 앉는다
+      built.moon.add(group);
+      const idle = animations.find((a) => /idle/i.test(a.name));
+      if (idle) {
+        rabbitMix.current = new THREE.AnimationMixer(group);
+        rabbitMix.current.clipAction(idle).play();
+      }
+    }).catch(() => {});
+    // BUILD 236: 갈매기 — 해안이 있는 세계에만
+    void loadKitModel('seagull', defaultLoader).then((proto) => {
+      if (!alive) return;
+      proto.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+      });
+      gullsRef.current = createPlanetGulls(built.planet, built.R, built.surfaceR, proto, () => ambience.gullCry());
+    }).catch(() => {});
+    return () => {
+      alive = false;
+      rabbitMix.current = null;
+      gullsRef.current?.dispose();
+      gullsRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [built]);
   const rigRef = useRef<WalkerRig | null>(null);
   useEffect(() => {
     let alive = true;
@@ -1034,6 +1088,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       const amt = rainNear > 0.55 ? 0.7 : rainNear > 0.22 ? 0.35 : 0;
       if (amt !== lastRainAmt.current) { lastRainAmt.current = amt; ambience.apply({ rainAmount: amt }); }
     }
+    // BUILD 236: 갈매기 — 걷는 아이 앞하늘 해안에서
+    gullsRef.current?.update(dt, el, U, dlRef.current);
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
     // BUILD 224: 반려의 걸음 — 그녀 뒤 0.6u를 목표로 부드럽게 따라온다 (행성 좌표로 계산, 월드로 환산)
     const PT = petRef.current;
@@ -1153,6 +1209,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // 1=늘 같은 얼굴(현재), 0=관성 정지처럼 보임, 음수=역자전.
     spinAng.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period)) * (((SP.moon.spin ?? 1)) - 1);
     built.moon.rotateY(spinAng.current);
+    MOON_SUN.copy(built.sun.position).sub(built.moon.position).normalize(); // BUILD 236: 위상은 기하가 정한다
+    if (rabbitMix.current) rabbitMix.current.update(dt);
     built.moonLight.intensity = SP.moon.light;
     // BUILD 214: 태양 공전 — 행성을 공전시킬 수 없으니 태양을 돌린다 (Vase).
     // 고도 대원 궤도: θ = 고도 + 누적 공전각. 지평선 아래로 지면 밤이 온다.
@@ -1163,6 +1221,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     v.set(Math.cos(th) * Math.cos(az), Math.sin(th), Math.cos(th) * Math.sin(az));
     built.sun.position.copy(v).multiplyScalar(built.R * 6.5);
     const dl = THREE.MathUtils.smoothstep(Math.sin(th), -0.12, 0.3); // 낮의 정도 (해가 지평선 아래로 조금 내려가야 완전한 밤)
+    dlRef.current = dl;
     // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
     if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
     else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }

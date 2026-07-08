@@ -26,6 +26,7 @@ type SkyCloud = {
   windRate: number;
   windUntil: number;
   spin: number;
+  spinAng: number;
   kind: 'white' | 'rain' | 'snow';
   phase: Phase;
   t: number;             // 페이즈 시계
@@ -40,6 +41,9 @@ const tmpV2 = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 const tmpQ2 = new THREE.Quaternion();
 const ID_Q = new THREE.Quaternion();
+const DQ = new THREE.Quaternion();     // BUILD 236: 끌림 dq 전용 — tmpQ2 공유가 끌림을 바람으로 덮고 있었다
+const Q_ALIGN = new THREE.Quaternion();
+const Q_YAW = new THREE.Quaternion();
 
 function makePrecip(kind: 'rain' | 'snow', n: number, baseOpacity: number): Precip {
   const dir = new Float32Array(n * 3);
@@ -145,6 +149,7 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
       windRate: (0.004 + rnd() * 0.009) * (rnd() < 0.5 ? -1 : 1),
       windUntil: 0,
       spin: (rnd() - 0.5) * 0.08,
+      spinAng: rnd() * Math.PI * 2,
       kind,
       phase: 'in',
       t: 0,
@@ -176,7 +181,7 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
       tmpQ.copy(planet.quaternion).multiply(tmpQ2.copy(prevQ).invert()); // dq (월드)
       prevQ.copy(planet.quaternion);
       const drag = THREE.MathUtils.clamp(1 - (spec.cloudFree ?? 0.1), 0, 1);
-      const dq = tmpQ2.copy(ID_Q).slerp(tmpQ, drag);
+      const dq = DQ.copy(ID_Q).slerp(tmpQ, drag);
 
       // ── 흰 구름 정원 관리
       const want = Math.max(0, Math.round(spec.clouds ?? 0));
@@ -215,7 +220,11 @@ export function createPlanetSky(scene: THREE.Scene, dress: (root: THREE.Object3D
         c.d.applyQuaternion(tmpQ2.setFromAxisAngle(c.windAxis, c.windRate * dt)).normalize();
         const cloudR = R * (1 + c.altMul);
         c.g.position.set(center.x + c.d.x * cloudR, center.y + c.d.y * cloudR, center.z + c.d.z * cloudR);
-        c.g.rotation.y += c.spin * dt;
+        // BUILD 236: 구름의 배는 늘 지구를 본다 — 로컬 +Y를 방사 방향에 정렬, 자전은 그 축 둘레로
+        c.spinAng += c.spin * dt;
+        Q_ALIGN.setFromUnitVectors(UP, c.d);
+        Q_YAW.setFromAxisAngle(UP, c.spinAng);
+        c.g.quaternion.copy(Q_ALIGN).multiply(Q_YAW);
         // 페이즈
         // BUILD 235: 지평선 너머로 흘러간 흰 구름은 조용히 앞하늘로 다시 태어난다 — 하늘이 비지 않게
         if (c.kind === 'white' && c.phase === 'live' && Math.acos(THREE.MathUtils.clamp(c.d.y, -1, 1)) > 1.85) { c.phase = 'out'; c.t = 0; c.life = -1; }
