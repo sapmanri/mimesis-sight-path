@@ -115,6 +115,7 @@ export default function App() {
   });
   const [passportOpen, setPassportOpen] = useState(false);
   const onFlagPop = (name: string) => {
+    if (!name || !name.trim()) return; // BUILD 238: 이름 없는 깃발(이니셜 페넌트)은 여권에 남기지 않는다 — 'ㅎ·호·흣'의 정체
     setFlagWhisper(name);
     if (whisperTimer.current) window.clearTimeout(whisperTimer.current);
     whisperTimer.current = window.setTimeout(() => setFlagWhisper(null), 3400);
@@ -308,7 +309,11 @@ export default function App() {
             {passport.length > 0 ? (
               <>
                 <div style={{ fontSize: 12.5, lineHeight: 1.9 }}>{passport.join(' · ')}</div>
-                <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8 }}>오늘 그녀는 {passport.length}곳을 지났습니다</div>
+                <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>오늘 그녀는 {passport.length}곳을 지났습니다</span>
+                  <button type="button" onClick={() => { setPassport([]); try { localStorage.removeItem(PASSPORT_KEY); } catch { /* 조용히 */ } }}
+                    style={{ background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '2px 8px', fontSize: 10.5, cursor: 'pointer' }}>비우기</button>
+                </div>
               </>
             ) : (
               <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 아무 곳도 지나지 않았어요.<br />돌려두고, 하던 일을 하세요.</div>

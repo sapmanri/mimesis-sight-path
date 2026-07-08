@@ -6,6 +6,8 @@ import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createPlanetSky } from './planetSky';
 import { createPlanetGulls } from './planetGulls';
+import { createMoonRabbit } from './moonRabbit';
+import { createStarSky } from './starSky';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { planetSound } from '../audio/planetSound';
@@ -28,6 +30,23 @@ const RFOG = { v: new THREE.Vector3(11.9, 12.3, 0.8), color: new THREE.Color('#f
 // 지구는 바다가 낮아 길이 R 아래를 지난다 — R 기준이면 수위 0.02에 이미 무릎(실화).
 const RFOG_BASE = { r: 12 };
 // BUILD 221: 국기 화가 — 주요국은 손으로, 모르는 나라는 이니셜 페넌트로. '대강 귀엽게' (Vase)
+// BUILD 238: 여권은 '진짜 나라'만 기록한다 — 이니셜 페넌트(오타·미완성 이름)는 우연이 아니라 실수다.
+// drawFlag의 키워드 목록과 같은 진실원에서 판별한다.
+const FLAG_KEYS = [
+  '한국', '대한민국', 'korea', '일본', 'japan', '중국', 'china', '미국', 'usa', 'america', '미합중국',
+  '영국', 'uk', 'britain', 'england', '프랑스', 'france', '이탈리아', 'italy', '아일랜드', 'ireland',
+  '벨기에', 'belgium', '멕시코', 'mexico', '독일', 'germany', '러시아', 'russia', '네덜란드', 'netherlands', 'holland',
+  '오스트리아', 'austria', '스페인', 'spain', '인도네시아', 'indonesia', '폴란드', 'poland', '태국', 'thailand',
+  '인도', 'india', '브라질', 'brazil', '캐나다', 'canada', '호주', 'australia', '튀르키예', '터키', 'turkey',
+  '베트남', 'vietnam', '스위스', 'switzerland', '스웨덴', 'sweden', '노르웨이', 'norway', '덴마크', 'denmark',
+  '핀란드', 'finland', '그리스', 'greece', '아르헨티나', 'argentina', '이집트', 'egypt',
+];
+export function flagIsKnownCountry(name: string): boolean {
+  const n = (name ?? '').trim().toLowerCase();
+  if (!n) return false;
+  return FLAG_KEYS.some((k) => n.includes(k.toLowerCase()));
+}
+
 function drawFlag(name: string): HTMLCanvasElement {
   const W = 192; const H = 128;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
@@ -565,6 +584,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     h.rotation.y = Math.PI / 2;
     return h;
   }, []);
+  const starRef = useRef<ReturnType<typeof createStarSky> | null>(null);
+  useEffect(() => {
+    starRef.current = createStarSky(scene, camera);
+    return () => { starRef.current?.dispose(); starRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scene, camera]);
   const skyRef = useRef<ReturnType<typeof createPlanetSky> | null>(null);
   const lastRainAmt = useRef(-1);
   useEffect(() => {
@@ -578,27 +603,17 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     return () => { skyRef.current?.dispose(); skyRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scene]);
-  const rabbitMix = useRef<THREE.AnimationMixer | null>(null);
+  const rabbitAI = useRef<ReturnType<typeof createMoonRabbit> | null>(null);
   const gullsRef = useRef<ReturnType<typeof createPlanetGulls> | null>(null);
   const dlRef = useRef(1);
   useEffect(() => {
     if (!built) return undefined;
     let alive = true;
-    // BUILD 236: 달에는 토끼가 산다 (BUILD 216의 약속 이행) — 지구를 보는 면에, 우화의 크기로
-    void loadKitModelWithClips('rabbit', defaultLoader).then(({ group, animations }) => {
+    // BUILD 239: 달의 토끼 — 로밍 AI (Vase가 재업로드한 6클립 Walk/Run/Jump/Eat/Wave/Idle).
+    void loadKitModelWithClips('rabbitRoam', defaultLoader).then(({ group, animations }) => {
       if (!alive) return;
       const moonR = built.moon.geometry.boundingSphere?.radius ?? 1;
-      const sc = (moonR * 0.5) / 0.32;
-      group.scale.setScalar(sc);
-      group.position.set(0, 0, moonR * 0.97);
-      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1));
-      group.rotateY(0.5); // 살짝 비껴 앉는다
-      built.moon.add(group);
-      const idle = animations.find((a) => /idle/i.test(a.name));
-      if (idle) {
-        rabbitMix.current = new THREE.AnimationMixer(group);
-        rabbitMix.current.clipAction(idle).play();
-      }
+      rabbitAI.current = createMoonRabbit(built.moon, moonR, group, animations);
     }).catch(() => {});
     // BUILD 236: 갈매기 — 해안이 있는 세계에만
     void loadKitModel('seagull', defaultLoader).then((proto) => {
@@ -612,7 +627,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     }).catch(() => {});
     return () => {
       alive = false;
-      rabbitMix.current = null;
+      rabbitAI.current?.dispose();
+      rabbitAI.current = null;
       gullsRef.current?.dispose();
       gullsRef.current = null;
     };
@@ -704,7 +720,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const applyXform = (anchor: THREE.Group, pr: PlanetProp) => {
       const dir = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
       anchor.quaternion.setFromUnitVectors(UP, dir);
-      anchor.position.copy(dir).multiplyScalar(pr.r - 0.02 + (HOVER[pr.obj] ?? 0) + (pr.lift ?? 0));
+      // BUILD 238: 소품은 '찍을 때의 반지름'(pr.r)이 아니라 '지금 이 방향의 실제 지표'에 앉는다.
+      // 반지름 다이얼을 줄이면 지형은 재생성되는데 pr.r은 옛값이라 소품이 공중에 떴다(Vase 목격).
+      const groundR = built ? built.surfaceR(dir) : pr.r;
+      anchor.position.copy(dir).multiplyScalar(groundR - 0.02 + (HOVER[pr.obj] ?? 0) + (pr.lift ?? 0));
       const inner = anchor.children[0];
       if (inner) {
         inner.rotation.order = 'YXZ';
@@ -1210,7 +1229,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     spinAng.current += dt * ((Math.PI * 2) / Math.max(10, SP.moon.period)) * (((SP.moon.spin ?? 1)) - 1);
     built.moon.rotateY(spinAng.current);
     MOON_SUN.copy(built.sun.position).sub(built.moon.position).normalize(); // BUILD 236: 위상은 기하가 정한다
-    if (rabbitMix.current) rabbitMix.current.update(dt);
+    if (rabbitAI.current) rabbitAI.current.update(dt);
     built.moonLight.intensity = SP.moon.light;
     // BUILD 214: 태양 공전 — 행성을 공전시킬 수 없으니 태양을 돌린다 (Vase).
     // 고도 대원 궤도: θ = 고도 + 누적 공전각. 지평선 아래로 지면 밤이 온다.
@@ -1222,6 +1241,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     built.sun.position.copy(v).multiplyScalar(built.R * 6.5);
     const dl = THREE.MathUtils.smoothstep(Math.sin(th), -0.12, 0.3); // 낮의 정도 (해가 지평선 아래로 조금 내려가야 완전한 밤)
     dlRef.current = dl;
+    if (starRef.current) starRef.current.update(dt, el, dl, built.planet.quaternion);
     // BUILD 223: 세계가 잠드는 소리 — 밤이 오면 새가 그치고 풀벌레가 운다, 바람은 한 톤 낮게
     if (earState.current === 'day' && dl < 0.25) { earState.current = 'night'; ambience.apply({ time: 'night', wind: 0.2, life: 0.6 }); }
     else if (earState.current === 'night' && dl > 0.5) { earState.current = 'day'; ambience.apply({ time: 'day', wind: 0.28, life: 0.5 }); }
@@ -1234,6 +1254,18 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     // BUILD 218: 밤이 깊을수록 달이 차오른다 — 과학은 태양 반사라지만 우리 달은 스스로 빛나기로 했다 (Vase)
     const moonMat2 = built.moon.material as THREE.MeshStandardMaterial;
     if (moonMat2.emissive) moonMat2.emissiveIntensity = 0.08 + 0.62 * (1 - dl);
+    // BUILD 238: 달도 시야 거리에 걸린다 (Vase) — 걷는 아이에서 달까지가 시야 밖이면 하늘로 스민다.
+    // 안개 면역이라 저절로 사라지지 않으니, 거리로 직접 투명·발광을 죽인다.
+    {
+      const vdM = Math.max(6, SP.viewDist ?? 41);
+      const moonDist = built.moon.position.distanceTo(p); // 걷는 아이(접점 p) 기준
+      const vis = 1 - THREE.MathUtils.smoothstep(moonDist, vdM * 0.9, vdM * 1.35);
+      moonMat2.transparent = vis < 0.999;
+      moonMat2.opacity = vis;
+      moonMat2.emissiveIntensity *= vis;
+      built.moon.visible = vis > 0.01;
+      built.moonLight.intensity = SP.moon.light * vis; // 사라진 달은 빛도 거둔다
+    }
     if (scene.background instanceof THREE.Color) scene.background.copy(SKY_BLEND);
     if (scene.fog) {
       // BUILD 221: 시야 거리 — 이펙트 타이밍에 맡기지 않고 매 프레임 직접 민다 (결정론)
@@ -1258,7 +1290,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         const arc = Math.acos(cosA) * rl;
         const target = fl.v > 0.5 ? (arc < 2.2 ? 1 : 0) : (arc < 1.6 ? 1 : 0);
         // BUILD 222: 폽의 순간 — 속삭임 한 줄. "아, 저기가 그리스구나."
-        if (target === 1 && fl.v <= 0.001) { if (rec.title) onFlagRef.current?.(rec.title); planetSound.pop(true); } // BUILD 223: 통—
+        if (target === 1 && fl.v <= 0.001) { if (rec.title && flagIsKnownCountry(rec.title)) onFlagRef.current?.(rec.title); planetSound.pop(true); } // BUILD 223: 통— / BUILD 238: 진짜 나라만 여권에
         if (target === 0 && fl.v >= 0.999) planetSound.pop(false); // 쇽
         fl.v = Math.min(1, Math.max(0, fl.v + (target > fl.v ? 1 : -1) * dt * 3.4));
         const e = target === 1 ? backOut(fl.v) : fl.v * fl.v;
