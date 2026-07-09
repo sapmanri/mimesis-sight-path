@@ -142,63 +142,56 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
-    camera.position.set(0, 1.2, 5.5);
-    camera.lookAt(0, 1.6, 0);
-    (camera as THREE.PerspectiveCamera).fov = 42;
+    camera.position.set(0, 0, 6);
+    camera.lookAt(0, 0, 0);
+    (camera as THREE.PerspectiveCamera).fov = 45;
     (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
     scene.fog = null;
   }, [camera, scene]);
 
-  // BUILD 301: 진짜 숲 배경 이미지 레이어로 패럴럭스 (The Forest Background 팩, 심리스).
+  // BUILD 306: 배경을 화면에 꽉 차게 깐다(원본 그대로). 별리·정렬은 그 다음.
   useEffect(() => {
     stage.clear();
     layerMats.current = [];
     const loader = new THREE.TextureLoader();
-    const mkLayer = (file: string, z: number, h: number, speed: number, yOff: number) => {
-      const tex = loader.load(`/assets/theatre/${file}`);
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.minFilter = THREE.LinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      const aspect = 1920 / 1080;
-      const w = h * aspect;
-      const repeatX = 3; // 화면보다 넓게 타일 → 심리스 무한 스크롤
-      tex.repeat.set(repeatX, 1);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w * repeatX, h), mat);
-      m.position.set(0, yOff, z);
-      stage.add(m);
-      layerMats.current.push({ mat, speed });
+    const cam = camera as THREE.PerspectiveCamera;
+
+    // 카메라에서 특정 z거리의 평면이 화면을 꽉 채우는 월드 크기 계산
+    const fillSize = (dist: number) => {
+      const d = Math.abs(cam.position.z - dist);
+      const vh = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * d; // 세로
+      const vw = vh * cam.aspect; // 가로
+      return { vw, vh };
     };
-    // 뒤(원경, 느림) → 앞(근경, 빠름). h=세로 월드높이, yOff=상하 위치.
-    // BUILD 303: 기차 배경 — 별리는 철길(이미지 y≈1050) 위에 선다. 배경을 그 지점이 발밑(y0)에 오게 내린다.
-    //   이미지 1920×1073, 철길 y1050 → 아래에서 2.1%. mesh 중심 yOff = h×(0.5 - 1050/1073) = h×-0.478.
-    const IMG_W = 1920, IMG_H = 1073, GROUND_PX = 1068; // 철길 한가운데(별리 발이 여기 닿는다)
-    const mkTrain = (file: string, z: number, h: number, speed: number) => {
+
+    // 모든 레이어를 같은 기준 크기로(통짜 한 장처럼 정렬). 패럴럭스는 스크롤 속도로만.
+    const REF_Z = -6;
+    const { vh: refVH } = fillSize(REF_Z);
+    const mkFull = (file: string, z: number, speed: number) => {
       const tex = loader.load(`/assets/theatre/${file}`);
       tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-      const w = h * (IMG_W / IMG_H);
+      // z가 뒤일수록 원근으로 작아 보이니, 그만큼 키워 화면 꽉 채움 유지
+      const scaleForZ = Math.abs(cam.position.z - z) / Math.abs(cam.position.z - REF_Z);
+      const planeH = refVH * scaleForZ;
+      const planeW = planeH * (1920 / 1073);
       const repeatX = 4;
       tex.repeat.set(repeatX, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w * repeatX, h), mat);
-      const yOff = h * (GROUND_PX / IMG_H - 0.5); // 철길이 월드 y0(별리 발)에 오도록
-      m.position.set(0, yOff, z);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(planeW * repeatX, planeH), mat);
+      m.position.set(0, cam.position.y, z);
       stage.add(m);
       layerMats.current.push({ mat, speed });
     };
-    const H = 13; // 배경 세로 월드높이 — 화면 위로 하늘·달까지 채운다
-    mkTrain('train_far.png', -12, H, 0.15);   // 원경: 하늘·달·성·먼숲 (느림)
-    mkTrain('train_near.png', -6, H, 0.5);     // 근경: 가까운 숲 + 철길
-    mkTrain('train_posts.png', -4, H, 0.7);    // 전신주·케이블
-    mkTrain('train_cars.png', -5, H, 0.9);     // 기차 (별리보다 뒤로 — 겹침 방지)
+    mkFull('train_far.png', -12, 0.15);
+    mkFull('train_near.png', -6, 0.5);
+    mkFull('train_posts.png', -4, 0.7);
+    mkFull('train_cars.png', -3, 0.9);
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
     return () => { stage.clear(); };
-  }, [scene, stage, bubbleRoot]);
+  }, [scene, stage, bubbleRoot, camera]);
 
   // 별리 로드 — 행성과 같은 파이프라인. clipRig면 걷기 클립을 자동 재생.
   useEffect(() => {
