@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.9.3 · 스테이지 회전고정·침대·배경팩 구조화 · BUILD 328';
+const BUILD_LABEL = 'v2.10.0 · 동네 여권·기록 이벤트(세 무대 공유) · BUILD 329';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -457,7 +457,7 @@ export default function App() {
       <main className="app-shell world-core-shell">
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 1.35, 6.2], fov: 38 }} dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
-            <TheatreWorld spec={tSpec} walkerIdx={tSpec.walker ?? -1} paused={false} />
+            <TheatreWorld spec={tSpec} walkerIdx={tSpec.walker ?? -1} paused={false} onEvent={onPlanetEvent} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />

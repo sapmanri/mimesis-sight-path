@@ -41,6 +41,23 @@ export function eventToEntry(e: PlanetEvent): TimelineEntry | null {
       return { id, icon: '🌠', text: '별똥별이 스쳤다', t: e.t, kind: e.kind };
     case 'comet':
       return { id, icon: '☄️', text: '혜성이 긴 꼬리를 끌며 지나갔다', t: e.t, kind: e.kind };
+    // BUILD 329: 동네 이벤트 — 삽만리의 말투로.
+    case 'theatre_arrive': {
+      const v = e.data?.village;
+      const name = v === 'train' ? '기차 동네' : (v ?? '어느 동네');
+      return { id, icon: '🏘', text: `${name}의 밤을 걷다`, t: e.t, kind: e.kind };
+    }
+    case 'stage_play': {
+      const s = e.data?.stage;
+      const label = s === 'piano' ? '가만히 건반을 눌러 보았다'
+        : s === 'sleep' ? '길가에 누워 잠시 눈을 감았다'
+        : s === 'workout' ? '괜히 몸을 움직여 보았다'
+        : s === 'dance' ? '아무도 없는 밤, 혼자 춤췄다'
+        : s === 'treadmill' ? '제자리에서 한참을 달렸다'
+        : '문득 걸음을 멈추고 딴짓을 했다';
+      const icon = s === 'piano' ? '🎹' : s === 'sleep' ? '💤' : s === 'workout' ? '💪' : s === 'dance' ? '💃' : s === 'treadmill' ? '🏃' : '✨';
+      return { id, icon, text: label, t: e.t, kind: `${e.kind}_${s ?? 'x'}` }; // kind에 stage 포함 → 연타방지가 종류별로
+    }
     default:
       return null;
   }

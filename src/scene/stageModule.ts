@@ -318,6 +318,7 @@ export function makeStage(scene: THREE.Object3D) {
     // 레시피 미리 로드(씬 시작 시 호출 권장)
     preload(id: string) { const r = STAGE_RECIPES[id]; if (r) preload(r); },
     isActive: () => S.active || S.phase === 'out', // BUILD 326: 프롭 퇴장(out) 중에도 active로 — 안 그러면 사라지기 전에 새 세션이 겹침
+    currentId: () => (S.active ? S.recipe?.id ?? null : null), // BUILD 329: 현재 진행 중 스테이지 id(이벤트 기록용)
     // 세션 시작 — 성공 시 true. 오브젝트 폽 + 첫 모션.
     play(id: string, anchor: StageAnchor): boolean {
       if (S.active) return false;

@@ -13,6 +13,8 @@ export type TheatreLayer = {
 };
 
 export type TheatreSpec = {
+  // BUILD 329: 동네 식별자 — 여권 기록·다중 동네 라우팅용(기본 'train')
+  village?: string;
   // BUILD 328: 패럴럭스 배경 팩 — 동네마다 이것만 갈아끼우면 새 동네가 된다.
   //   각 레이어 = { 파일, z(깊이), speed(흐름 배율) }. 뒤(작은 z)에서 앞으로 나열.
   bgLayers?: { file: string; z: number; speed: number }[];
@@ -36,6 +38,7 @@ export type TheatreSpec = {
 };
 
 export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
+  village: 'train', // BUILD 329: 첫 동네
   // BUILD 328: 첫 동네 = 기차 동네. 새 동네는 이 배열만 교체(+에셋 추가)하면 된다.
   bgLayers: [
     { file: 'train_far.png', z: -12, speed: 0.15 },

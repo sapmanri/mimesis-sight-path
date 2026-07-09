@@ -14,6 +14,7 @@ import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { makeBubble, updateBubble, type Bubble } from './speech';
 import type { TheatreSpec, TheatreLayer } from './theatreSpec';
+import type { PlanetEvent, PlanetEventKind } from './planetEvents';
 
 // 이음새 없는 능선: 주기(2π)로 닫히는 sin 합. wrapS=Repeat로 무한 스크롤해도 이음매가 없다.
 function ridge(u: number, l: TheatreLayer): number {
@@ -141,12 +142,22 @@ type Props = {
   spec: TheatreSpec;
   walkerIdx: number;
   paused?: boolean;
+  onEvent?: (e: PlanetEvent) => void; // BUILD 329: 동네 이벤트 → App 여권/타임라인(세 무대 공유)
 };
 
-export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
+export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
   const { scene, camera } = useThree();
   const specRef = useRef(spec); specRef.current = spec;
   const pausedRef = useRef(paused); pausedRef.current = paused;
+  // BUILD 329: 동네 이벤트 emit — 세 무대 공유 여권/타임라인으로.
+  const onEventRef = useRef(onEvent); onEventRef.current = onEvent;
+  const emit = (kind: PlanetEventKind, data?: PlanetEvent['data']) => onEventRef.current?.({ kind, data, t: performance.now() });
+  // 동네 진입 시 한 번 — "기차 동네의 밤을 걷다"
+  useEffect(() => {
+    const v = specRef.current.village ?? 'train';
+    const id = window.setTimeout(() => emit('theatre_arrive', { village: v }), 1200);
+    return () => window.clearTimeout(id);
+  }, []);
 
   // 배경 판때기(빌보드 3장) + 하늘 + 지면
   const stage = useMemo(() => new THREE.Group(), []);
@@ -167,6 +178,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const faceRef = useRef(-Math.PI / 2);
   // BUILD 294: 스테이지 모듈 — 폽 세션(춤/캠프/운동…) 공용 엔진. 무대는 앵커만 넘긴다.
   const stageRef = useRef<Stage | null>(null);
+  const lastStageIdRef = useRef<string | null>(null); // BUILD 329: 스테이지 시작 감지용(이벤트 1회 emit)
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
 
@@ -403,7 +415,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // BUILD 328: 스테이지 세션 중(눕기·연주·운동…)엔 방향을 고정한다 — 안 그러면 누운 채 빙글빙글 돈다.
     const inStage = stageRef.current?.isActive?.() ?? false;
     if (inStage) {
-      // 스테이지 중 — 방향 건드리지 않음(그 행동 자세 유지)
+      // BUILD 329: 스테이지 중 — 옆모습(왼쪽)으로 고정. 프롭(피아노·침대 등)과 정합, 회전 방지.
+      faceRef.current = -Math.PI / 2;
     } else if (moving) {
       faceRef.current = -Math.PI / 2;
     } else if (wasWalking && !nowWalking) {
@@ -482,6 +495,13 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
     // BUILD 294: 스테이지 세션 진행 — 모션 이어가기·오브젝트 폽·심볼·사운드를 엔진이 관리
     stageRef.current?.update(dt, _s.clock.elapsedTime);
+
+    // BUILD 329: 스테이지가 새로 시작되면 이벤트 1회 emit(여권/타임라인). id가 바뀌는 순간을 잡는다.
+    const curStageId = stageRef.current?.currentId?.() ?? null;
+    if (curStageId && curStageId !== lastStageIdRef.current) {
+      emit('stage_play', { stage: curStageId });
+    }
+    lastStageIdRef.current = curStageId;
 
     // 말풍선 갱신 (본토 극성: 수명 다하면 true)
     for (let i = bubbles.current.length - 1; i >= 0; i -= 1) {

@@ -15,10 +15,13 @@ export type PlanetEventKind =
   | 'plane'       // 비행기가 하늘을 갈랐다
   | 'ship'        // 배가 수평선을 지났다
   | 'comet'       // 혜성이 스쳤다 (특별)
-  | 'shooting_star'; // 별똥별을 봤다
+  | 'shooting_star' // 별똥별을 봤다
+  // BUILD 329: 동네(theatre) 이벤트 — 이름은 planet이지만 세 무대 공유 시스템.
+  | 'theatre_arrive' // 동네에 들어섰다 (data: village)
+  | 'stage_play';    // 별리가 무언가 했다 (data: stage = 'piano'|'sleep'|'workout'|'dance'|'treadmill')
 
 export type PlanetEvent = {
   kind: PlanetEventKind;
-  data?: { country?: string; kind?: string; meters?: number; seconds?: number; phase?: string; km?: number };
+  data?: { country?: string; kind?: string; meters?: number; seconds?: number; phase?: string; km?: number; village?: string; stage?: string };
   t: number; // performance.now()
 };
