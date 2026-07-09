@@ -337,7 +337,11 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
   useEffect(() => {
     const st = makeStage(stage);
+    // BUILD 323: 모든 레시피 프리로드(prop 있는 것만 실제 로드, 나머지는 무시). 스테이지 확장.
     st.preload('dance');
+    st.preload('sleep');
+    st.preload('piano');
+    st.preload('treadmill');
     stageRef.current = st;
     brainRef.current = makeByeoliBrain({
       rig: () => rigRef.current,
@@ -346,6 +350,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       speak: (icon, pitch) => speakRef.current(icon, pitch),
       lingerEvery: () => Math.max(0, specRef.current.lingerEvery ?? 3),
       lingerLength: () => Math.max(0.2, specRef.current.lingerLength ?? 1),
+      // BUILD 323: 별리가 펼칠 수 있는 스테이지 목록 — 이걸 넘겨야 dance 외 레시피도 발동한다.
+      stageIds: () => ['dance', 'sleep', 'piano', 'workout', 'treadmill'],
     });
     return () => { st.dispose(); stageRef.current = null; brainRef.current = null; };
   }, [stage]);

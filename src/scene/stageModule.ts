@@ -221,6 +221,41 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     tune: 'music',
     tuneEvery: 2.8,
   },
+  // BUILD 323: 레시피 확장 — 별리가 맥락 있는 딴짓을 한다. 에셋·클립 모두 repo 확인됨.
+  sleep: {
+    id: 'sleep',
+    motions: ['LayingShake'],
+    rounds: [1, 2],
+    prop: { file: 'Bed.glb', targetH: 0.55, offset: [0, 0, 0.1], bob: 0 }, // 침대는 낮게, 캐릭터 자리 근처
+    symbols: ['💤', 'z', 'Z'],
+    symbolEvery: 0.8,
+  },
+  piano: {
+    id: 'piano',
+    motions: ['Piano'],
+    rounds: [2, 3],
+    prop: { file: 'Synthesizer.glb', targetH: 0.5, offset: [0.35, 0, 0.15], bob: 0 }, // 신디는 앞쪽에
+    symbols: ['♪', '♫', '♩', '♬'],
+    symbolEvery: 0.4,
+    tune: 'music',
+    tuneEvery: 3.0,
+  },
+  workout: {
+    id: 'workout',
+    motions: ['Situps', 'BicycleCrunch', 'CircleCrunch'],
+    rounds: [2, 4],
+    // 오브젝트 없음 — 맨몸 운동. 폽 버스트만.
+    symbols: ['💪', '✦', '·'],
+    symbolEvery: 0.5,
+  },
+  treadmill: {
+    id: 'treadmill',
+    motions: ['Treadmill'],
+    rounds: [2, 3],
+    prop: { file: 'Treadmill.glb', targetH: 0.7, offset: [0, 0, 0.05], bob: 0 }, // 발밑 러닝머신
+    symbols: ['·', '✦'],
+    symbolEvery: 0.6,
+  },
 };
 
 // ---------- 세션 엔진 ----------
