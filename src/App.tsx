@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.6.4 · 배경 차분한 미니멀 복귀(이미지 자리 대기) · BUILD 300';
+const BUILD_LABEL = 'v2.7.0 · 진짜 숲 배경(The Forest, 심리스 패럴럭스) · BUILD 301';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

@@ -149,47 +149,38 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     scene.fog = null;
   }, [camera, scene]);
 
-  // 하늘 + 3레이어 빌보드 구성
+  // BUILD 301: 진짜 숲 배경 이미지 레이어로 패럴럭스 (The Forest Background 팩, 심리스).
   useEffect(() => {
-    const S = specRef.current;
     stage.clear();
     layerMats.current = [];
-
-    // 하늘 — 큰 평면, 세로 그라디언트
-    const skyCv = document.createElement('canvas'); skyCv.width = 4; skyCv.height = 256;
-    const sg = skyCv.getContext('2d')!;
-    const grad = sg.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, S.skyTop); grad.addColorStop(1, S.skyBottom);
-    sg.fillStyle = grad; sg.fillRect(0, 0, 4, 256);
-    const skyTex = new THREE.CanvasTexture(skyCv); skyTex.colorSpace = THREE.SRGBColorSpace;
-    const sky = new THREE.Mesh(
-      new THREE.PlaneGeometry(60, 24),
-      new THREE.MeshBasicMaterial({ map: skyTex, depthWrite: false, fog: false }),
-    );
-    sky.position.set(0, 4, -14);
-    stage.add(sky);
-
-    // 3레이어 — 뒤(원경)에서 앞(근경) 순으로 z를 당긴다
-    const defs: { layer: TheatreLayer; z: number; h: number; w: number }[] = [
-      { layer: S.far,  z: -10, h: 12, w: 40 },
-      { layer: S.mid,  z: -6,  h: 11, w: 40 },
-      { layer: S.near, z: -2.6, h: 10, w: 40 },
-    ];
-    for (const d of defs) {
-      // 차분한 대기원근 실루엣(픽셀계단 없는 부드러운 능선). 예쁜 배경 이미지는 나중에 이 자리에 끼운다.
-      const tex = bakeLayer(d.layer, {});
-      tex.repeat.set(d.w / 12, 1);
+    const loader = new THREE.TextureLoader();
+    const mkLayer = (file: string, z: number, h: number, speed: number, yOff: number) => {
+      const tex = loader.load(`/assets/theatre/${file}`);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      const aspect = 1920 / 1080;
+      const w = h * aspect;
+      const repeatX = 3; // 화면보다 넓게 타일 → 심리스 무한 스크롤
+      tex.repeat.set(repeatX, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.h), mat);
-      m.position.set(0, d.h / 2 - 1.2, d.z);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w * repeatX, h), mat);
+      m.position.set(0, yOff, z);
       stage.add(m);
-      layerMats.current.push({ mat, speed: d.layer.speed });
-    }
+      layerMats.current.push({ mat, speed });
+    };
+    // 뒤(원경, 느림) → 앞(근경, 빠름). h=세로 월드높이, yOff=상하 위치.
+    mkLayer('forest_bg0.png', -12, 16, 0.15, 3.5); // 원경: 하늘·먼 산
+    mkLayer('forest_bg1.png', -8, 15, 0.4, 2.8);   // 중경: 숲
+    mkLayer('forest_bg2.png', -4, 13, 0.75, 1.8);  // 근경: 가까운 나무
+    mkLayer('forest_ground.png', -1.5, 3.4, 1.0, -1.3); // 지면: 별리 발밑, 가장 빠름
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
     return () => { stage.clear(); };
-  }, [scene, stage, bubbleRoot, spec.skyTop, spec.skyBottom, spec.far, spec.mid, spec.near]);
+  }, [scene, stage, bubbleRoot]);
 
   // 별리 로드 — 행성과 같은 파이프라인. clipRig면 걷기 클립을 자동 재생.
   useEffect(() => {
