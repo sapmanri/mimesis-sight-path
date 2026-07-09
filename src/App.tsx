@@ -453,28 +453,6 @@ export default function App() {
 
   if (theatreMode) {
     const theatreEdit = new URLSearchParams(window.location.search).has('edit');
-    const LayerDials = (label: string, key: 'far' | 'mid' | 'near') => (
-      <div style={{ borderTop: '1px solid #2a302e', paddingTop: 8, marginTop: 8 }}>
-        <div style={{ fontSize: 11.5, color: '#c9bfa6', marginBottom: 4 }}>{label}</div>
-        <label style={{ display: 'block', fontSize: 10.5, marginBottom: 4 }}>
-          흐름 속도
-          <input type="range" min={0} max={2} step={0.02} value={tSpec[key].speed}
-            onChange={(e) => updTSpec((s) => ({ ...s, [key]: { ...s[key], speed: +e.target.value } }))}
-            style={{ width: '100%' }} />
-        </label>
-        <label style={{ display: 'block', fontSize: 10.5, marginBottom: 4 }}>
-          높낮이(진폭)
-          <input type="range" min={0} max={0.3} step={0.005} value={tSpec[key].amp}
-            onChange={(e) => updTSpec((s) => ({ ...s, [key]: { ...s[key], amp: +e.target.value } }))}
-            style={{ width: '100%' }} />
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
-          색
-          <input type="color" value={tSpec[key].color}
-            onChange={(e) => updTSpec((s) => ({ ...s, [key]: { ...s[key], color: e.target.value } }))} />
-        </label>
-      </div>
-    );
     return (
       <main className="app-shell world-core-shell">
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
@@ -514,19 +492,20 @@ export default function App() {
                 onChange={(e) => updTSpec((s) => ({ ...s, lingerLength: +e.target.value }))}
                 style={{ width: '100%' }} />
             </label>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 11, marginBottom: 4 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                하늘 위 <input type="color" value={tSpec.skyTop} onChange={(e) => updTSpec((s) => ({ ...s, skyTop: e.target.value }))} />
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                하늘 아래 <input type="color" value={tSpec.skyBottom} onChange={(e) => updTSpec((s) => ({ ...s, skyBottom: e.target.value }))} />
-              </label>
-            </div>
-            {LayerDials('원경 (먼 산맥)', 'far')}
-            {LayerDials('중경 (언덕/나무)', 'mid')}
-            {LayerDials('근경 (발밑 지면)', 'near')}
+            {/* BUILD 315: 바닥 안개 — 발 높이까지 옅게 피어오르는 밤안개 */}
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              바닥 안개 높이 — {(tSpec.floorFogH ?? 0) === 0 ? '끔' : `발 높이 ×${((tSpec.floorFogH ?? 0.16) / 0.16).toFixed(2)}`}
+              <input type="range" min={0} max={0.5} step={0.01} value={tSpec.floorFogH ?? 0.16}
+                onChange={(e) => updTSpec((s) => ({ ...s, floorFogH: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, marginBottom: 4 }}>
+              바닥 안개 색
+              <input type="color" value={tSpec.floorFogColor ?? '#2a3550'}
+                onChange={(e) => updTSpec((s) => ({ ...s, floorFogColor: e.target.value }))} />
+            </label>
             <div style={{ borderTop: '1px solid #2a302e', paddingTop: 8, marginTop: 8, fontSize: 10.5, color: '#9a927e' }}>
-              골격 단계 — 걷기·오르내림·패럴럭스 확인용. 체류·마법가방은 다음 단계.
+              밤 동네 — 별리는 밤에 잠기고, 가로등이 지날 때만 환해진다. 바닥엔 옅은 밤안개.
             </div>
           </div>
         )}

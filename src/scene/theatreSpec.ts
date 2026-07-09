@@ -23,6 +23,8 @@ export type TheatreSpec = {
   ground: string;      // 캐릭터가 딛는 지면 띠 색
   groundAmp?: number;  // BUILD 286: 지면 오르내림 크기(월드 유닛) — 별리가 타는 언덕의 높낮이
   groundFreq?: number; // BUILD 286: 지면 언덕 촘촘함
+  floorFogH?: number;  // BUILD 315: 바닥 안개 높이(화면 세로 대비 0~1). 0=끔. 발 높이쯤이 자연스러움
+  floorFogColor?: string; // BUILD 315: 바닥 안개 색 (밤 대기색)
   walker?: number;     // 산책자 인덱스 (행성과 공유 로스터). undefined/-1 = 랜덤
   // BUILD 282 계승: 체류(2단계에서 연결)
   lingerEvery?: number;
@@ -40,6 +42,8 @@ export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
   ground: '#4a5f3a',
   groundAmp: 0,    // BUILD 303: 기차 배경은 평평한 철길 — 오르내림 없음
   groundFreq: 0.5,
+  floorFogH: 0.16,          // BUILD 315: 발 높이쯤까지 옅게 깔리는 밤안개
+  floorFogColor: '#2a3550', // 밤 대기색
   walker: 13, // 별리(Kid5b)
   lingerEvery: 3,
   lingerLength: 1,

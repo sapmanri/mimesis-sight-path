@@ -6,7 +6,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset } from '../engine/worldCore';
+import { loadWalkerAsset, defaultLoader } from '../engine/worldCore';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { makeStage, type Stage } from './stageModule';
 import { makeByeoliBrain, type ByeoliBrain } from './byeoliBrain';
@@ -130,6 +130,9 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
   const feetYRef = useRef(0); // BUILD 308: 별리 발이 서는 철길 월드높이
   const scrollRef = useRef(0);
+  // BUILD 315: 가로등 3개 — 별리와 배경 사이. 왼쪽으로 흐르다 화면 밖으로 나가면 오른쪽 끝으로 리사이클(무한).
+  //   각 머리에 따뜻한 PointLight. 별리(X 고정)에 가까워질수록 별리가 밝아진다 → "빛 닿을 때만 환해짐".
+  const lampsRef = useRef<{ group: THREE.Group; light: THREE.PointLight }[]>([]);
   // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
   //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
   // BUILD 296: 별리 행동은 공용 brain에 위임. 동네는 걷는 방식(배경 스크롤)만 소유.
@@ -210,6 +213,9 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       group.position.set(0, 0, 0);
       // BUILD 314: 동네는 옆면 무대라 높이안개가 없다. 별리 material의 height fog를 벗긴다.
       //   (별리를 철길 높이로 내리면 안개 bottom 아래라 회색으로 잠기던 버그 — 스피커는 새 material이라 멀쩡했음)
+      // BUILD 315: 밤톤. 옷/신발 색을 어둡게 곱해 밤에 잠기게 하되,
+      //   material은 MeshStandard라 가로등 PointLight가 닿으면 그만큼 다시 밝아진다(빛 닿을 때만 환해짐).
+      const NIGHT_MUL = new THREE.Color(0.34, 0.40, 0.52); // 어둡고 살짝 푸른 밤 곱셈틴트
       group.traverse((n) => {
         const mesh = n as THREE.Mesh;
         if (!mesh.isMesh) return;
@@ -220,8 +226,10 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
             std.onBeforeCompile = () => {};
             std.customProgramCacheKey = () => `nofog|${mesh.id}`;
             std.userData.hfog = false;
-            std.needsUpdate = true;
           }
+          // 밤톤 곱: map 있는 재질(color=#fff)도, 단색 옷도 함께 눌린다.
+          if (std.color) std.color.multiply(NIGHT_MUL);
+          std.needsUpdate = true;
         });
       });
       const mount = new THREE.Group();
@@ -237,6 +245,85 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     }).catch(() => { /* 조용한 극장 */ });
     return () => { alive = false; };
   }, [stage, walkerIdx]);
+
+  // BUILD 315: 바닥 안개 — 화면 하단에서 발 높이까지 옅게 피어오른다. 위로 갈수록 투명(그라디언트).
+  //   별리 앞(z=1.2)에 두어 발밑을 감싼다. 높이·색은 에디터(spec.floorFogH/floorFogColor)로 조절.
+  const fogMatRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const fogMeshRef = useRef<THREE.Mesh | null>(null);
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const FOG_Z = 1.2; // 별리(z=0)보다 앞 — 발밑을 살짝 덮는다
+    const d = Math.abs(cam.position.z - FOG_Z);
+    const vh = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * d;
+    const vw = vh * cam.aspect;
+    // 위=투명 → 아래=안개색 그라디언트 텍스처
+    const cv = document.createElement('canvas');
+    cv.width = 4; cv.height = 128;
+    const g2 = cv.getContext('2d')!;
+    const grd = g2.createLinearGradient(0, 0, 0, 128);
+    grd.addColorStop(0, 'rgba(255,255,255,0)');
+    grd.addColorStop(0.55, 'rgba(255,255,255,0.5)');
+    grd.addColorStop(1, 'rgba(255,255,255,0.92)');
+    g2.fillStyle = grd; g2.fillRect(0, 0, 4, 128);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
+    mat.color.set(specRef.current.floorFogColor ?? '#2a3550');
+    const fogH0 = (specRef.current.floorFogH ?? 0.16) * vh;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(vw * 1.2, 1), mat);
+    // 화면 하단에 밑변을 붙인다: 중심 y = -vh/2 + fogH/2, 스케일 y = fogH
+    mesh.scale.set(1, Math.max(0.0001, fogH0), 1);
+    mesh.position.set(0, -vh / 2 + fogH0 / 2, FOG_Z);
+    mesh.renderOrder = 5;
+    stage.add(mesh);
+    fogMatRef.current = mat; fogMeshRef.current = mesh;
+    // 높이/색이 바뀌면 반영하도록 vh를 보관
+    mesh.userData.vh = vh;
+    return () => { stage.remove(mesh); mat.dispose(); tex.dispose(); fogMatRef.current = null; fogMeshRef.current = null; };
+  }, [stage, camera]);
+
+  // BUILD 315: 가로등 3개 로드 + 배치. 별리(z=0)와 near배경(z=-6) 사이(z=-2)에 세운다.
+  //   X는 화면 폭 기준 균등 간격. 매 프레임 왼쪽으로 흐르고, 왼끝을 넘으면 오른끝으로 되돌린다(무한 리사이클).
+  useEffect(() => {
+    const LAMP_N = 3;
+    const LAMP_Z = -2;
+    const cam = camera as THREE.PerspectiveCamera;
+    // z=LAMP_Z 평면에서 화면을 채우는 월드 폭 — 가로등 간격/리사이클 경계 계산용
+    const d = Math.abs(cam.position.z - LAMP_Z);
+    const vh = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * d;
+    const vw = vh * cam.aspect;
+    const span = vw * 1.5;                 // 리사이클 폭(화면보다 넉넉히)
+    const gap = span / LAMP_N;             // 가로등 간격
+    const footY = -vh * 0.42;              // 가로등이 서는 발밑(별리 발 근처)
+    lampsRef.current = [];
+    let alive = true;
+    void defaultLoader('Lamp.glb').then(({ scene: lampScene }) => {
+      if (!alive) return;
+      // 원본 크기 → 목표 높이로 정규화
+      const box = new THREE.Box3().setFromObject(lampScene);
+      const h = Math.max(0.0001, box.max.y - box.min.y);
+      const targetH = vh * 0.5;
+      const s = targetH / h;
+      for (let i = 0; i < LAMP_N; i += 1) {
+        const g = lampScene.clone(true);
+        g.scale.setScalar(s);
+        // 밑동을 footY에 맞춤
+        const b2 = new THREE.Box3().setFromObject(g);
+        g.position.set(-vw * 0.75 + i * gap, footY - b2.min.y, LAMP_Z);
+        // 따뜻한 가로등 광원 — 머리 높이쯤에
+        const light = new THREE.PointLight('#ffdca0', 0, 6, 2);
+        light.position.set(0, targetH * 0.92, 0.6); // 살짝 앞(별리 쪽)으로
+        g.add(light);
+        stage.add(g);
+        lampsRef.current.push({ group: g, light });
+      }
+    }).catch(() => { /* 가로등 없으면 그냥 어두운 밤 */ });
+    return () => {
+      alive = false;
+      for (const l of lampsRef.current) stage.remove(l.group);
+      lampsRef.current = [];
+    };
+  }, [stage, camera]);
 
   // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
   useEffect(() => {
@@ -301,6 +388,42 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       if (Lm.mat.map) Lm.mat.map.offset.x = -scroll * Lm.speed * 0.06;
     }
 
+    // BUILD 315: 가로등 — near배경과 같은 속도로 왼쪽으로 흐르고, 왼끝을 넘으면 오른끝으로 되돌린다(무한).
+    //   별리는 X=0 고정 → 가로등이 X=0에 가까워질수록 그 광원이 별리를 환하게 물들인다.
+    const lamps = lampsRef.current;
+    if (lamps.length) {
+      const cam2 = camera as THREE.PerspectiveCamera;
+      const d2 = Math.abs(cam2.position.z - (-2));
+      const vh2 = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * d2;
+      const vw2 = vh2 * cam2.aspect;
+      const span = vw2 * 1.5;
+      const flow = moving ? S.walkSpeed * 0.5 * dt : 0; // near 속도(0.5)에 맞춤
+      for (const l of lamps) {
+        l.group.position.x -= flow;
+        // 리사이클: 왼끝(-span/2 - 여유)을 넘으면 오른끝으로
+        if (l.group.position.x < -span * 0.5 - vw2 * 0.25) l.group.position.x += span;
+        // 별리(X=0)와의 거리로 광원 세기: 가까울수록 밝게
+        const dx = Math.abs(l.group.position.x);
+        const reach = vw2 * 0.32;
+        const near01 = Math.max(0, 1 - dx / reach);
+        l.light.intensity = near01 * near01 * 5.5; // 부드러운 감쇠, 최대 세기
+      }
+    }
+
+    // BUILD 315: 바닥 안개 — 에디터에서 높이/색 바꾸면 실시간 반영
+    const fm = fogMeshRef.current, fmat = fogMatRef.current;
+    if (fm && fmat) {
+      const vhF = (fm.userData.vh as number) ?? 1;
+      const fogH = (S.floorFogH ?? 0) * vhF;
+      fm.visible = fogH > 0.0001;
+      if (fm.visible) {
+        fm.scale.y = fogH;
+        fm.position.y = -vhF / 2 + fogH / 2;
+      }
+      const want = S.floorFogColor ?? '#2a3550';
+      if ('#' + fmat.color.getHexString() !== want.toLowerCase()) fmat.color.set(want);
+    }
+
     // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다 (BUILD 287: 오르내림은 래퍼에)
     const g = walkerGroupRef.current;
     const mnt = walkerMountRef.current;
@@ -330,8 +453,10 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
   return (
     <>
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[3, 6, 4]} intensity={0.7} />
+      {/* BUILD 315: 밤 동네 — 별리를 밤에 잠근다. 배경 png는 MeshBasicMaterial이라 조명 무시(안 어두워짐).
+          기본 빛을 낮춰 별리를 어둠에 두고, 지나가는 가로등 PointLight가 닿을 때만 얼굴이 환해지게. */}
+      <ambientLight intensity={0.22} color="#3a4a63" />
+      <directionalLight position={[3, 6, 4]} intensity={0.16} color="#6a7a9a" />
     </>
   );
 }
