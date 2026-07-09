@@ -208,6 +208,22 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       //   오르내림은 group이 아니라 이 래퍼에 걸어야 살아남는다. (PlanetWorld liftGroup과 같은 원리)
       group.rotation.y = -Math.PI / 2;
       group.position.set(0, 0, 0);
+      // BUILD 314: 동네는 옆면 무대라 높이안개가 없다. 별리 material의 height fog를 벗긴다.
+      //   (별리를 철길 높이로 내리면 안개 bottom 아래라 회색으로 잠기던 버그 — 스피커는 새 material이라 멀쩡했음)
+      group.traverse((n) => {
+        const mesh = n as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((m) => {
+          const std = m as THREE.MeshStandardMaterial;
+          if (std.userData?.hfog) {
+            std.onBeforeCompile = () => {};
+            std.customProgramCacheKey = () => `nofog|${mesh.id}`;
+            std.userData.hfog = false;
+            std.needsUpdate = true;
+          }
+        });
+      });
       const mount = new THREE.Group();
       mount.add(group);
       stage.add(mount);
