@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { loadWalkerAsset } from '../engine/worldCore';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { makeStage, type Stage } from './stageModule';
+import { makeByeoliBrain, type ByeoliBrain } from './byeoliBrain';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { makeBubble, updateBubble, type Bubble } from './speech';
@@ -82,8 +83,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const scrollRef = useRef(0);
   // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
   //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
-  const phaseRef = useRef<'walk' | 'linger'>('walk');
-  const lingerRef = useRef({ left: 0, gap: 0, timer: 0, walkLeft: 4 + Math.random() * 3 });
+  // BUILD 296: 별리 행동은 공용 brain에 위임. 동네는 걷는 방식(배경 스크롤)만 소유.
+  const brainRef = useRef<ByeoliBrain | null>(null);
   // BUILD 289: 바라보는 방향 — 걸을 땐 왼쪽(-π/2) 고정, 놀 땐 정면 쪽으로 자유롭게.
   const faceRef = useRef(-Math.PI / 2);
   // BUILD 294: 스테이지 모듈 — 폽 세션(춤/캠프/운동…) 공용 엔진. 무대는 앵커만 넘긴다.
@@ -166,15 +167,23 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     return () => { alive = false; };
   }, [stage, walkerIdx]);
 
-  // BUILD 294: 스테이지 생성 + 레시피 미리 로드(한 번). 춤 세션 때 stage.play('dance').
+  // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
   useEffect(() => {
     const st = makeStage(stage);
     st.preload('dance');
     stageRef.current = st;
-    return () => { st.dispose(); stageRef.current = null; };
+    brainRef.current = makeByeoliBrain({
+      rig: () => rigRef.current,
+      stageMount: () => walkerMountRef.current,
+      stage: () => stageRef.current,
+      speak: (icon, pitch) => speakRef.current(icon, pitch),
+      lingerEvery: () => Math.max(0, specRef.current.lingerEvery ?? 3),
+      lingerLength: () => Math.max(0.2, specRef.current.lingerLength ?? 1),
+    });
+    return () => { st.dispose(); stageRef.current = null; brainRef.current = null; };
   }, [stage]);
 
-  // 웅얼웅얼 (행성과 동일)
+  // 웅얼웅얼 (행성과 동일) — brain이 speakRef로 지연 호출
   const speak = (icon?: string, pitch = 1) => {
     const g = walkerGroupRef.current;
     if (!g || bubbles.current.length >= 2) return;
@@ -183,70 +192,30 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     bubbleRoot.add(b.sprite);
     ambience.mumble?.(pitch);
   };
+  const speakRef = useRef(speak); speakRef.current = speak;
 
   useFrame((_s, rawDt) => {
     const dt = Math.min(0.05, rawDt);
     const S = specRef.current;
-    const P = phaseRef.current;
-    const L = lingerRef.current;
-    const lingerEvery = Math.max(0, S.lingerEvery ?? 3); // 0 = 체류 없음(계속 걷기)
-    const lingerLen = Math.max(0.2, S.lingerLength ?? 1);
 
-    // BUILD 288: 체류 상태머신 — 걷기는 다음 볼거리로 가는 짧은 전환, 체류가 기본.
-    let moving = false;
-    if (pausedRef.current) {
-      moving = false;
-    } else if (P === 'linger') {
-      // 멈춰서 딴짓과 '가만히'를 번갈아 — 이 동안 배경도 멈춘다(여기 머문다).
-      moving = false;
-      const st = stageRef.current;
-      if (st?.isActive()) {
-        // 스테이지 세션(춤 등) 진행 중 — 엔진이 모션·오브젝트·분위기를 관리(update에서 진행).
-      } else {
-        L.gap -= dt;
-        if (L.gap <= 0 && L.left > 0) {
-          const rig = rigRef.current; const mnt = walkerMountRef.current;
-          // 가끔(20%) 스테이지 세션(춤=스피커 폽+음표+음악). 아니면 평범한 딴짓.
-          if (st && rig && mnt && Math.random() < 0.2
-              && st.play('dance', { parent: mnt, rig, setFace: (r) => { faceRef.current = r; } })) {
-            L.left -= 1;
-          } else {
-            const dur = rigRef.current?.flourish?.() ?? 0;
-            if (Math.random() < 0.4) {
-              const r = Math.random();
-              speak(r < 0.72 ? undefined : r < 0.86 ? '♪' : r < 0.94 ? '~' : '!', 0.85 + Math.random() * 0.35);
-            }
-            // BUILD 289: 놀 땐 방향 자유 — 딴짓마다 가끔 정면/좌/우로 튼다(무대 배우처럼).
-            const pick = Math.random();
-            faceRef.current = pick < 0.5 ? 0 : pick < 0.72 ? -0.5 : pick < 0.88 ? 0.5 : -Math.PI / 2;
-            L.left -= 1;
-            // BUILD 290: 로봇 차렷 제거 — 대개는 클립이 끝나기 직전 다음 동작을 불러 크로스페이드로 잇는다.
-            if (Math.random() < 0.25) {
-              L.gap = (dur > 0 ? dur : 1.2) + (0.8 + Math.random() * 2.0) * lingerLen;
-            } else {
-              L.gap = dur > 0 ? Math.max(0.2, dur - 0.35) : 1.0;
-            }
-          }
-        }
-      }
-      if (!stageRef.current?.isActive() && L.left <= 0 && L.gap <= 0) {
-        phaseRef.current = 'walk';
-        faceRef.current = -Math.PI / 2; // 다시 걸으면 진행방향(왼쪽)
-        L.walkLeft = lingerEvery; // 정확히 이 초만큼 걷는다
-      }
-    } else {
-      // walk — 배경이 흐른다. lingerEvery초 걷다 체류로. lingerEvery=0이면 계속 걷는다.
-      moving = true;
-      faceRef.current = -Math.PI / 2; // 걸을 땐 왼쪽 고정
-      if (lingerEvery > 0) {
-        L.walkLeft -= dt;
-        if (L.walkLeft <= 0) {
-          phaseRef.current = 'linger';
-          faceRef.current = 0; // 멈추면 우선 정면(관객)을 본다
-          L.left = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen));
-          L.gap = 0.6 + Math.random() * 1.4;
-        }
-      }
+    // BUILD 296: 노는 법은 brain(공용)이 결정. 무대는 걷는 법(배경 스크롤)만 실행.
+    const brain = brainRef.current;
+    const wasWalking = brain?.phase() === 'walk';
+    const res = brain ? brain.update(dt, !!pausedRef.current) : { moving: !pausedRef.current };
+    const moving = res.moving;
+    const nowWalking = brain?.phase() === 'walk';
+
+    // 동네 옆면 무대의 방향 연출(brain은 방향을 강제하지 않는다 — 별리는 알아서 논다).
+    //   걸을 땐 진행방향(왼쪽) 고정. 막 놀기 시작하면 한 번 정면 쪽으로 틀고,
+    //   그 뒤엔 딴짓마다 가끔 이리저리(정면/좌/우/뒤) — 뒤통수도 보이게, 자유롭게.
+    if (moving) {
+      faceRef.current = -Math.PI / 2;
+    } else if (wasWalking && !nowWalking) {
+      faceRef.current = 0; // 방금 멈춤 — 우선 관객 쪽
+    } else if (Math.random() < dt * 0.4) {
+      // 놀다가 가끔 방향을 바꾼다(뒤통수 포함 전방위)
+      const pick = Math.random();
+      faceRef.current = pick < 0.35 ? 0 : pick < 0.55 ? -0.6 : pick < 0.75 ? 0.6 : pick < 0.9 ? Math.PI : -Math.PI / 2;
     }
 
     if (moving) scrollRef.current += S.walkSpeed * dt;

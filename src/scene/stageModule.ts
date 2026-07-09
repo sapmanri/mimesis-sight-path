@@ -207,7 +207,6 @@ export type StageRecipe = {
   symbolEvery?: number;     // 심볼 방출 간격(초)
   tune?: 'music';           // 분위기 사운드
   tuneEvery?: number;       // 사운드 반복 간격(초)
-  face?: number;            // 세션 중 바라볼 방향(라디안, 옆면 무대용)
 };
 
 // 첫 레시피: 춤 — 스피커 폽 + 음표 + 음악 + 여러 곡.
@@ -221,7 +220,6 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     symbolEvery: 0.35,
     tune: 'music',
     tuneEvery: 2.8,
-    face: 0,
   },
 };
 
@@ -230,7 +228,6 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
 export type StageAnchor = {
   parent: THREE.Object3D;                 // 오브젝트를 add할 그룹(예: 캐릭터 mount)
   rig: WalkerRig;                         // 모션 재생 대상
-  setFace?: (rad: number) => void;        // 옆면 무대의 바라보는 방향(선택)
 };
 
 type Loaded = { proto: THREE.Object3D };
@@ -283,7 +280,6 @@ export function makeStage(scene: THREE.Object3D) {
       S.active = true; S.recipe = recipe; S.anchor = anchor;
       S.roundsLeft = recipe.rounds[0] + Math.floor(Math.random() * (recipe.rounds[1] - recipe.rounds[0] + 1));
       S.timer = dur; S.tuneT = 0; S.symT = 0; S.popT = 0;
-      if (recipe.face !== undefined) anchor.setFace?.(recipe.face);
       // 오브젝트 소환
       const p = recipe.prop;
       const cached = p ? protoCache.get(p.file) : null;
@@ -320,7 +316,6 @@ export function makeStage(scene: THREE.Object3D) {
     stop() {
       if (!S.active) return;
       S.anchor?.rig.stopNamed?.();
-      if (S.recipe?.face !== undefined) S.anchor?.setFace?.(-Math.PI / 2); // 기본 진행방향 복귀(옆면 무대)
       S.active = false; S.recipe = null;
       S.phase = S.obj ? 'out' : 'none';
     },
