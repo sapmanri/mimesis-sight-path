@@ -360,6 +360,40 @@ function createAmbience() {
     }
   };
 
+  // ---------- BUILD 291: 음악 웅얼웅얼 — 심즈의 "띠딩댕딩". 스피커 켜고 흥얼거림 ----------
+  // 무언어지만 음정이 있다. 펜타토닉(도레미솔라)이라 아무렇게나 이어도 명랑하게 들린다.
+  const mumbleTune = () => {
+    if (!ensure() || !ctx || !master || muted) return;
+    let t = ctx.currentTime + 0.02;
+    const penta = [0, 2, 4, 7, 9, 12]; // 반음 오프셋 (메이저 펜타토닉)
+    const root = 392; // G4 부근 — 밝은 음역
+    const n = 5 + Math.floor(Math.random() * 4);
+    const out = ctx.createGain(); out.gain.value = 0.02;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1800; lp.Q.value = 0.5;
+    lp.connect(out).connect(master);
+    let prev = penta[1 + Math.floor(Math.random() * 3)];
+    for (let i = 0; i < n; i += 1) {
+      // 이전 음에서 한두 계단 오르내림 — 멜로디의 흐름
+      const step = (Math.random() < 0.5 ? 1 : -1) * (1 + Math.floor(Math.random() * 2));
+      let idx = penta.indexOf(prev) + step;
+      idx = Math.max(0, Math.min(penta.length - 1, idx));
+      prev = penta[idx];
+      const f = root * Math.pow(2, prev / 12);
+      const dur = 0.12 + Math.random() * 0.1;
+      const o = ctx.createOscillator();
+      o.type = Math.random() < 0.5 ? 'triangle' : 'square';
+      o.frequency.setValueAtTime(f, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.5 + Math.random() * 0.3, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g).connect(lp);
+      o.start(t); o.stop(t + dur + 0.02);
+      t += dur + 0.02 + Math.random() * 0.04;
+    }
+  };
+
   // ---------- BUILD 173: 꼬끼오 ----------
   /** 수탉 — 4음절: 꼬, 끼, 오오오(비브라토), 오(내려앉음). 만화적이지만 이 세계의 만화다 */
   const roosterCrow = (vol = 1) => {
@@ -487,6 +521,7 @@ function createAmbience() {
     gullCry,
     roosterCrow,
     mumble,
+    mumbleTune,
     /** 모닥불 근접도 0~1 — 잉걸 게인과 타닥임 밀도가 함께 따른다 */
     setFire(level: number) {
       fireLevel = Math.min(1, Math.max(0, level));
