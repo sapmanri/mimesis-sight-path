@@ -168,20 +168,24 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // 모든 레이어를 같은 기준 크기로(통짜 한 장처럼 정렬). 패럴럭스는 스크롤 속도로만.
     const REF_Z = -6;
     const { vh: refVH, vw: refVW } = fillSize(REF_Z);
+    // BUILD 309: 별리 발을 화면 안 높이(FEET_Y)에 두고, 배경을 철길이 거기 오도록 통째로 올린다.
+    const FEET_Y = -1.8;                        // 화면 하단 1/3쯤 (카메라 y0 기준)
+    const railFrac = 1050 / 1073 - 0.5;         // 철길 위치(배경 세로중심 대비, 아래쪽 +0.478)
+    const bgCenterY = FEET_Y + refVH * railFrac; // 철길이 FEET_Y에 오게 배경 중심을 올림
+    feetYRef.current = FEET_Y;
     const mkFull = (file: string, z: number, speed: number) => {
       const tex = loader.load(`/assets/theatre/${file}`);
       tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-      // z가 뒤일수록 원근으로 작아 보이니, 그만큼 키워 화면 꽉 채움 유지
       const scaleForZ = Math.abs(cam.position.z - z) / Math.abs(cam.position.z - REF_Z);
-      const planeH = refVH * scaleForZ;               // 화면 세로 꽉
-      const oneImgW = planeH * (1920 / 1073);          // 이 세로에서 원본 한 장의 가로(제 비율)
-      const planeW = refVW * scaleForZ * 3;            // 평면은 화면 가로의 3배(스크롤 여유)
-      const repeatX = planeW / oneImgW;                // 평면에 원본이 몇 번 → 왜곡 없음
+      const planeH = refVH * scaleForZ;
+      const oneImgW = planeH * (1920 / 1073);
+      const planeW = refVW * scaleForZ * 3;
+      const repeatX = planeW / oneImgW;
       tex.repeat.set(repeatX, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
-      m.position.set(0, cam.position.y, z);
+      m.position.set(0, bgCenterY, z);
       stage.add(m);
       layerMats.current.push({ mat, speed });
     };
@@ -189,8 +193,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     mkFull('train_near.png', -6, 0.5);
     mkFull('train_posts.png', -4, 0.7);
     mkFull('train_cars.png', -3, 0.9);
-    // BUILD 308: 별리가 설 철길 높이 — 이미지 y1050(아래에서 2.1%)이 배경 세로에서의 위치.
-    feetYRef.current = cam.position.y - refVH * (1050 / 1073 - 0.5);
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
