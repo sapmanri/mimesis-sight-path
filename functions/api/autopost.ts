@@ -23,9 +23,18 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, X-Publish-Key',
 };
 
-// 봇이 붙일 수 있는 이미지 풀 (지금은 비어 있음 — Vase가 URL 채우면 랜덤 첨부).
-// 예: 'https://.../byeolli/night01.jpg'
-const IMAGE_POOL: string[] = [];
+// 봇이 붙일 수 있는 이미지 풀 — 별리 산책 스크린샷 8장 (public/byeolli/).
+// 봇이 1/2 확률로 랜덤 첨부.
+const IMAGE_POOL: string[] = [
+  'https://mimesis-sight-path.pages.dev/byeolli/walk01.jpg',
+  'https://mimesis-sight-path.pages.dev/byeolli/walk02.jpg',
+  'https://mimesis-sight-path.pages.dev/byeolli/walk03.jpg',
+  'https://mimesis-sight-path.pages.dev/byeolli/walk04.jpg',
+  'https://mimesis-sight-path.pages.dev/byeolli/walk05.jpg',
+  'https://mimesis-sight-path.pages.dev/byeolli/walk06.jpg',
+  'https://mimesis-sight-path.pages.dev/byeolli/walk07.jpg',
+  'https://mimesis-sight-path.pages.dev/byeolli/walk08.jpg',
+];
 
 const POSTS: { text: string }[] = (byeolliPosts as { posts: { text: string }[] }).posts;
 
