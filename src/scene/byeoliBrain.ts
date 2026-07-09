@@ -7,7 +7,7 @@
 // brain은 방향을 강제하지 않는다 — 놀 때 별리는 알아서 이리저리 본다(뒤통수든 옆이든 자유).
 
 import type { WalkerRig } from './walkerRig';
-import type { Stage } from './stageModule';
+import { STAGE_RECIPES, type Stage } from './stageModule';
 
 // 무대가 brain에 제공하는 것
 export type BrainHost = {
@@ -50,9 +50,16 @@ export function makeByeoliBrain(host: BrainHost) {
           const mnt = host.stageMount();
           const chance = host.stageChance?.() ?? 0.2;
           const ids = host.stageIds?.() ?? ['dance'];
+          // BUILD 324: 현재 무드에 맞는 레시피만 고른다(맥락). moods 없는 레시피는 아무 무드나 허용.
+          //   관조 땐 눕기/연주, 활기 땐 춤/달리기 — 맥락 있는 딴짓.
+          const moodIds = ids.filter((id) => {
+            const m = STAGE_RECIPES[id]?.moods;
+            return !m || m.includes(mood);
+          });
+          const pool = moodIds.length ? moodIds : ids; // 맞는 게 없으면 전체 허용(안전)
           // 가끔 스테이지 세션(춤 등). 아니면 평범한 딴짓(flourish)+가끔 웅얼웅얼.
           if (stage && rig && mnt && Math.random() < chance
-              && stage.play(ids[Math.floor(Math.random() * ids.length)], { parent: mnt, rig })) {
+              && stage.play(pool[Math.floor(Math.random() * pool.length)], { parent: mnt, rig })) {
             L.left -= 1;
           } else {
             const dur = rig?.flourish?.(mood) ?? 0;

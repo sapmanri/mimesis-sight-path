@@ -207,6 +207,7 @@ export type StageRecipe = {
   symbolEvery?: number;     // 심볼 방출 간격(초)
   tune?: 'music';           // 분위기 사운드
   tuneEvery?: number;       // 사운드 반복 간격(초)
+  moods?: string[];         // BUILD 324: 이 놀이가 어울리는 무드(contemplative/playful/idle). 없으면 아무 무드나.
 };
 
 // 첫 레시피: 춤 — 스피커 폽 + 음표 + 음악 + 여러 곡.
@@ -220,8 +221,10 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     symbolEvery: 0.35,
     tune: 'music',
     tuneEvery: 2.8,
+    moods: ['playful'], // 신나는 활기
   },
   // BUILD 323: 레시피 확장 — 별리가 맥락 있는 딴짓을 한다. 에셋·클립 모두 repo 확인됨.
+  // BUILD 324: 각 놀이에 어울리는 무드 태그 — 관조 땐 눕고, 활기 땐 춤추고(맥락).
   sleep: {
     id: 'sleep',
     motions: ['LayingShake'],
@@ -229,6 +232,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     prop: { file: 'Bed.glb', targetH: 0.55, offset: [0, 0, 0.1], bob: 0 }, // 침대는 낮게, 캐릭터 자리 근처
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
+    moods: ['contemplative', 'idle'], // 차분·나른
   },
   piano: {
     id: 'piano',
@@ -239,6 +243,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     symbolEvery: 0.4,
     tune: 'music',
     tuneEvery: 3.0,
+    moods: ['contemplative', 'idle'], // 잔잔한 연주
   },
   workout: {
     id: 'workout',
@@ -247,6 +252,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     // 오브젝트 없음 — 맨몸 운동. 폽 버스트만.
     symbols: ['💪', '✦', '·'],
     symbolEvery: 0.5,
+    moods: ['playful', 'idle'], // 활동적인 일상
   },
   treadmill: {
     id: 'treadmill',
@@ -255,6 +261,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     prop: { file: 'Treadmill.glb', targetH: 0.7, offset: [0, 0, 0.05], bob: 0 }, // 발밑 러닝머신
     symbols: ['·', '✦'],
     symbolEvery: 0.6,
+    moods: ['playful', 'idle'], // 활기찬 운동
   },
 };
 
