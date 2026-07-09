@@ -289,7 +289,7 @@ export function createClipRig(
     if (a === sitDown && gesture === 'sitDown' && sitIdle) { switchTo(sitIdle, 0.25); gesture = 'sit'; }
     else if (a === standUp && gesture === 'standUp') { switchTo(idle, 0.3); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
     else if (a === pickup && gesture === 'pickup') { switchTo(idle, 0.4); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
-    else if (gesture === 'flourish' && extras.includes(a)) { switchTo(idle, 0.35); gesture = 'none'; gestureGrace = 0.6; rollingMin = Infinity; } // BUILD 146
+    else if (gesture === 'flourish' && a === current && extras.includes(a)) { switchTo(idle, 0.35); gesture = 'none'; gestureGrace = 0.6; rollingMin = Infinity; } // BUILD 146 / 290: 갈아탄 옛 클립의 뒤늦은 finished는 무시
   });
 
   // 걷기↔뛰기 전환 문턱: 두 고유속도의 기하평균 부근
@@ -340,7 +340,9 @@ export function createClipRig(
       rollingMin = Infinity;
     },
     flourish() {
-      if (riding || gesture !== 'none' || !extras.length) return 0;
+      // BUILD 290: flourish 중이면 새 flourish로 갈아탈 수 있게(크로스페이드로 이어짐, 차렷 안 거침).
+      //   단 sit/pickup/named 등 다른 제스처 중엔 여전히 막는다.
+      if (riding || (gesture !== 'none' && gesture !== 'flourish') || !extras.length) return 0;
       const a = extras[Math.floor(Math.random() * extras.length)];
       gesture = 'flourish';
       switchTo(a, 0.3);

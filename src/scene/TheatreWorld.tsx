@@ -198,7 +198,13 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
         const pick = Math.random();
         faceRef.current = pick < 0.5 ? 0 : pick < 0.72 ? -0.5 : pick < 0.88 ? 0.5 : -Math.PI / 2;
         L.left -= 1;
-        L.gap = (dur > 0 ? dur : 1.4) + (1.4 + Math.random() * 2.8) * lingerLen;
+        // BUILD 290: 로봇 차렷 제거 — 대개는 클립이 끝나기 직전 다음 동작을 불러 크로스페이드로 잇는다(idle 안 거침).
+        //   가끔(25%)만 진짜 한 박자 쉬어 '가만히'를 준다. 완전히 쉼 없으면 그것대로 부산스러우니.
+        if (Math.random() < 0.25) {
+          L.gap = (dur > 0 ? dur : 1.2) + (0.8 + Math.random() * 2.0) * lingerLen; // 쉬는 박자
+        } else {
+          L.gap = dur > 0 ? Math.max(0.2, dur - 0.35) : 1.0; // 끝나기 직전 다음 동작 → 이어짐
+        }
       }
       if (L.left <= 0 && L.gap <= 0) {
         phaseRef.current = 'walk';
