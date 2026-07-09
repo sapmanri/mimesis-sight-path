@@ -143,8 +143,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
-    camera.position.set(0, 0, 6);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(0, -2.6, 6);
+    camera.lookAt(0, -2.6, 0);
     (camera as THREE.PerspectiveCamera).fov = 45;
     (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
     scene.fog = null;
@@ -168,11 +168,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // 모든 레이어를 같은 기준 크기로(통짜 한 장처럼 정렬). 패럴럭스는 스크롤 속도로만.
     const REF_Z = -6;
     const { vh: refVH, vw: refVW } = fillSize(REF_Z);
-    // BUILD 309: 별리 발을 화면 안 높이(FEET_Y)에 두고, 배경을 철길이 거기 오도록 통째로 올린다.
-    const FEET_Y = -1.8;                        // 화면 하단 1/3쯤 (카메라 y0 기준)
-    const railFrac = 1050 / 1073 - 0.5;         // 철길 위치(배경 세로중심 대비, 아래쪽 +0.478)
-    const bgCenterY = FEET_Y + refVH * railFrac; // 철길이 FEET_Y에 오게 배경 중심을 올림
-    feetYRef.current = FEET_Y;
+    // 배경은 건드리지 않는다(완벽했던 상태 = 카메라 y0 중심). 별리 발 높이만 맞춘다.
     const mkFull = (file: string, z: number, speed: number) => {
       const tex = loader.load(`/assets/theatre/${file}`);
       tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -185,7 +181,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       tex.repeat.set(repeatX, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
-      m.position.set(0, bgCenterY, z);
+      m.position.set(0, 0, z); // 배경 y0 고정(카메라와 무관 — 완벽했던 상태)
       stage.add(m);
       layerMats.current.push({ mat, speed });
     };
@@ -193,6 +189,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     mkFull('train_near.png', -6, 0.5);
     mkFull('train_posts.png', -4, 0.7);
     mkFull('train_cars.png', -3, 0.9);
+    // 별리 발만 철길 높이로. 배경(y0 중심)에서 철길은 아래로 refVH×0.478 지점.
+    feetYRef.current = 0 - refVH * (1050 / 1073 - 0.5);
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
