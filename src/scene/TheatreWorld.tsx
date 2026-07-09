@@ -101,35 +101,6 @@ function shade(hex: string, amt: number): string {
   return `rgb(${f(r)},${f(g)},${f(b)})`;
 }
 
-// BUILD 299: 갈대밭 텍스처 — 황금빛 갈대가 촘촘히. 위는 투명(하늘), 아래는 갈대 줄기.
-//   반투명 PNG처럼 근경 앞에 깔아 바람에 흔들리게 한다(저 실사 이미지의 핵심 무드).
-function bakeReeds(color: string, density = 220): THREE.CanvasTexture {
-  const W = 2048, H = 512;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const g = cv.getContext('2d')!;
-  g.clearRect(0, 0, W, H);
-  g.lineCap = 'round';
-  for (let i = 0; i < density; i += 1) {
-    const x = (i / density) * W + Math.sin(i * 5.1) * 6;
-    const h = H * (0.4 + Math.random() * 0.5); // 갈대 키
-    const lean = (Math.random() - 0.5) * 26;
-    const c = i % 3 === 0 ? shade(color, 0.15) : i % 3 === 1 ? color : shade(color, -0.18);
-    g.strokeStyle = c; g.lineWidth = 2 + Math.random() * 1.5;
-    g.beginPath();
-    g.moveTo(x, H);
-    g.quadraticCurveTo(x + lean * 0.5, H - h * 0.5, x + lean, H - h);
-    g.stroke();
-    // 이삭(끝)
-    g.fillStyle = shade(color, 0.2);
-    g.beginPath(); g.ellipse(x + lean, H - h, 3, 7, lean * 0.02, 0, Math.PI * 2); g.fill();
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = 4;
-  return tex;
-}
-
 // BUILD 293: 밋밋한 회색 스피커 상자에 '스피커 얼굴'을 그려 입힌다 — 원본 모델엔 콘·그물이 없다.
 //   빈티지 우드톤 + 콘 2개(우퍼/트위터) + 그물 점무늬. 네 세계의 아날로그 감성.
 // 지면 곡선의 '월드 높이' — 별리 발이 이 값을 탄다. scroll이 흐르면 언덕이 다가왔다 지나간다.
@@ -157,7 +128,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const walkerMountRef = useRef<THREE.Group | null>(null); // BUILD 287: 오르내림을 거는 래퍼
   const footRef = useRef<THREE.Object3D | null>(null);
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
-  const reedMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]); // BUILD 299: 갈대밭
   const scrollRef = useRef(0);
   // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
   //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
@@ -206,7 +176,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       { layer: S.near, z: -2.6, h: 10, w: 40 },
     ];
     for (const d of defs) {
-      // 협곡 톤 — 나무는 빼고 능선 실루엣만(대기원근 그라디언트). 갈대는 별도 앞 레이어로.
+      // 차분한 대기원근 실루엣(픽셀계단 없는 부드러운 능선). 예쁜 배경 이미지는 나중에 이 자리에 끼운다.
       const tex = bakeLayer(d.layer, {});
       tex.repeat.set(d.w / 12, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
@@ -214,22 +184,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       m.position.set(0, d.h / 2 - 1.2, d.z);
       stage.add(m);
       layerMats.current.push({ mat, speed: d.layer.speed });
-    }
-
-    // BUILD 299: 갈대밭 — 카메라 앞에 2겹. 별리가 갈대 사이를 지나는 느낌. 바람에 흔들린다(프레임 루프).
-    const reedDefs = [
-      { z: 1.2, h: 3.2, w: 30, speed: 1.4, dens: 200, yoff: -1.5 }, // 앞 갈대(빠름·큼)
-      { z: -1.0, h: 2.6, w: 34, speed: 1.05, dens: 240, yoff: -1.3 }, // 뒤 갈대
-    ];
-    reedMats.current = [];
-    for (const r of reedDefs) {
-      const tex = bakeReeds(specRef.current.near.color, r.dens);
-      tex.repeat.set(r.w / 10, 1);
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.h), mat);
-      m.position.set(0, r.yoff, r.z);
-      stage.add(m);
-      reedMats.current.push({ mat, speed: r.speed });
     }
 
     if (!stage.parent) scene.add(stage);
@@ -323,13 +277,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // 레이어 U-스크롤 — 별리가 왼쪽으로 가니 배경은 왼쪽으로 흐른다(offset 음수). 체류 중엔 안 흐름.
     for (const Lm of layerMats.current) {
       if (Lm.mat.map) Lm.mat.map.offset.x = -scroll * Lm.speed * 0.06;
-    }
-    // BUILD 299: 갈대밭 — 스크롤 + 바람 흔들림(offset.y를 미세하게 흔들어 갈대가 살랑인다)
-    const wind = Math.sin(_s.clock.elapsedTime * 1.3) * 0.004 + Math.sin(_s.clock.elapsedTime * 2.7) * 0.002;
-    for (const Rm of reedMats.current) {
-      if (Rm.mat.map) {
-        Rm.mat.map.offset.x = -scroll * Rm.speed * 0.06 + wind * 3;
-      }
     }
 
     // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다 (BUILD 287: 오르내림은 래퍼에)
