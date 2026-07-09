@@ -317,7 +317,8 @@ export function makeStage(scene: THREE.Object3D) {
       if (!S.active) return;
       S.anchor?.rig.stopNamed?.();
       S.active = false; S.recipe = null;
-      S.phase = S.obj ? 'out' : 'none';
+      if (S.obj) { S.popT = 0.4; S.phase = 'out'; } // BUILD 320: out 시작점 고정(k=1→0). 안 그러면 popT가 들쭉날쭉해 프롭이 안 사라짐
+      else S.phase = 'none';
     },
     // 매 프레임 — 모션 이어가기 + 오브젝트 폽 애니 + 심볼 + 사운드
     update(dt: number, elapsed: number) {
@@ -361,7 +362,10 @@ export function makeStage(scene: THREE.Object3D) {
         S.popT -= dt * 3;
         const k = Math.max(0, S.popT / 0.4);
         obj.scale.setScalar(Math.max(0.001, 0.9 * k));
-        if (k <= 0.01) { obj.parent?.remove(obj); S.obj = null; S.face = null; S.phase = 'none'; }
+        if (k <= 0.01 || S.popT <= 0) { obj.parent?.remove(obj); S.obj = null; S.face = null; S.phase = 'none'; }
+      } else if (!obj && S.phase === 'out') {
+        // BUILD 320: obj가 이미 없는데 out에 걸린 잔여 상태 정리
+        S.phase = 'none';
       }
     },
     dispose() {
