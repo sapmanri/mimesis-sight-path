@@ -30,14 +30,14 @@ export type TheatreSpec = {
 };
 
 export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
-  skyTop: '#e8d9c4',
-  skyBottom: '#f6efe0',
-  fogTint: '#efe6d4',
+  skyTop: '#7fb0d8',
+  skyBottom: '#cfe4ee',
+  fogTint: '#d8e4ea',
   walkSpeed: 1.0,
-  far:  { color: '#b9c0c9', speed: 0.18, baseY: 0.54, amp: 0.11, freq: 1.3, seed: 11 }, // 먼 산 — 옅은 청회
-  mid:  { color: '#9db089', speed: 0.45, baseY: 0.40, amp: 0.15, freq: 2.1, seed: 27 }, // 중경 — 세이지
-  near: { color: '#5f7a4e', speed: 1.00, baseY: 0.27, amp: 0.09, freq: 3.4, seed: 53 }, // 근경 — 진초록
-  ground: '#4a5f3a',
+  far:  { color: '#9fb8c9', speed: 0.18, baseY: 0.56, amp: 0.13, freq: 1.2, seed: 11 }, // 먼 섬 — 푸른 대기
+  mid:  { color: '#b5714a', speed: 0.45, baseY: 0.42, amp: 0.18, freq: 1.8, seed: 27 }, // 붉은 협곡 절벽
+  near: { color: '#c9a24e', speed: 1.00, baseY: 0.28, amp: 0.10, freq: 3.0, seed: 53 }, // 황금 갈대 바닥
+  ground: '#a8842f',
   groundAmp: 0.6,  // BUILD 286: 눈에 보이는 오르내림
   groundFreq: 0.5,
   walker: 13, // 별리(Kid5b)
