@@ -6,7 +6,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset, defaultLoader } from '../engine/worldCore';
+import { loadWalkerAsset } from '../engine/worldCore';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { makeStage, type Stage } from './stageModule';
 import { makeByeoliBrain, type ByeoliBrain } from './byeoliBrain';
@@ -130,9 +130,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
   const feetYRef = useRef(0); // BUILD 308: 별리 발이 서는 철길 월드높이
   const scrollRef = useRef(0);
-  // BUILD 315: 가로등 3개 — 별리와 배경 사이. 왼쪽으로 흐르다 화면 밖으로 나가면 오른쪽 끝으로 리사이클(무한).
-  //   각 머리에 따뜻한 PointLight. 별리(X 고정)에 가까워질수록 별리가 밝아진다 → "빛 닿을 때만 환해짐".
-  const lampsRef = useRef<{ group: THREE.Group; light: THREE.PointLight }[]>([]);
   // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
   //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
   // BUILD 296: 별리 행동은 공용 brain에 위임. 동네는 걷는 방식(배경 스크롤)만 소유.
@@ -282,49 +279,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     return () => { stage.remove(mesh); mat.dispose(); tex.dispose(); fogMatRef.current = null; fogMeshRef.current = null; };
   }, [stage, camera]);
 
-  // BUILD 315: 가로등 3개 로드 + 배치. 별리(z=0)와 near배경(z=-6) 사이(z=-2)에 세운다.
-  //   X는 화면 폭 기준 균등 간격. 매 프레임 왼쪽으로 흐르고, 왼끝을 넘으면 오른끝으로 되돌린다(무한 리사이클).
-  useEffect(() => {
-    const LAMP_N = 3;
-    const LAMP_Z = -2;
-    const cam = camera as THREE.PerspectiveCamera;
-    // z=LAMP_Z 평면에서 화면을 채우는 월드 폭 — 가로등 간격/리사이클 경계 계산용
-    const d = Math.abs(cam.position.z - LAMP_Z);
-    const vh = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * d;
-    const vw = vh * cam.aspect;
-    const span = vw * 1.5;                 // 리사이클 폭(화면보다 넉넉히)
-    const gap = span / LAMP_N;             // 가로등 간격
-    const footY = -vh * 0.42;              // 가로등이 서는 발밑(별리 발 근처)
-    lampsRef.current = [];
-    let alive = true;
-    void defaultLoader('Lamp.glb').then(({ scene: lampScene }) => {
-      if (!alive) return;
-      // 원본 크기 → 목표 높이로 정규화
-      const box = new THREE.Box3().setFromObject(lampScene);
-      const h = Math.max(0.0001, box.max.y - box.min.y);
-      const targetH = vh * 0.5;
-      const s = targetH / h;
-      for (let i = 0; i < LAMP_N; i += 1) {
-        const g = lampScene.clone(true);
-        g.scale.setScalar(s);
-        // 밑동을 footY에 맞춤
-        const b2 = new THREE.Box3().setFromObject(g);
-        g.position.set(-vw * 0.75 + i * gap, footY - b2.min.y, LAMP_Z);
-        // 따뜻한 가로등 광원 — 머리 높이쯤에
-        const light = new THREE.PointLight('#ffdca0', 0, 6, 2);
-        light.position.set(0, targetH * 0.92, 0.6); // 살짝 앞(별리 쪽)으로
-        g.add(light);
-        stage.add(g);
-        lampsRef.current.push({ group: g, light });
-      }
-    }).catch(() => { /* 가로등 없으면 그냥 어두운 밤 */ });
-    return () => {
-      alive = false;
-      for (const l of lampsRef.current) stage.remove(l.group);
-      lampsRef.current = [];
-    };
-  }, [stage, camera]);
-
   // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
   useEffect(() => {
     const st = makeStage(stage);
@@ -386,28 +340,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // 레이어 U-스크롤 — 별리가 왼쪽으로 가니 배경은 왼쪽으로 흐른다(offset 음수). 체류 중엔 안 흐름.
     for (const Lm of layerMats.current) {
       if (Lm.mat.map) Lm.mat.map.offset.x = -scroll * Lm.speed * 0.06;
-    }
-
-    // BUILD 315: 가로등 — near배경과 같은 속도로 왼쪽으로 흐르고, 왼끝을 넘으면 오른끝으로 되돌린다(무한).
-    //   별리는 X=0 고정 → 가로등이 X=0에 가까워질수록 그 광원이 별리를 환하게 물들인다.
-    const lamps = lampsRef.current;
-    if (lamps.length) {
-      const cam2 = camera as THREE.PerspectiveCamera;
-      const d2 = Math.abs(cam2.position.z - (-2));
-      const vh2 = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * d2;
-      const vw2 = vh2 * cam2.aspect;
-      const span = vw2 * 1.5;
-      const flow = moving ? S.walkSpeed * 0.5 * dt : 0; // near 속도(0.5)에 맞춤
-      for (const l of lamps) {
-        l.group.position.x -= flow;
-        // 리사이클: 왼끝(-span/2 - 여유)을 넘으면 오른끝으로
-        if (l.group.position.x < -span * 0.5 - vw2 * 0.25) l.group.position.x += span;
-        // 별리(X=0)와의 거리로 광원 세기: 가까울수록 밝게
-        const dx = Math.abs(l.group.position.x);
-        const reach = vw2 * 0.32;
-        const near01 = Math.max(0, 1 - dx / reach);
-        l.light.intensity = near01 * near01 * 5.5; // 부드러운 감쇠, 최대 세기
-      }
     }
 
     // BUILD 315: 바닥 안개 — 에디터에서 높이/색 바꾸면 실시간 반영
