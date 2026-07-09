@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.6.0 · 별리 brain(행동 공용화) + 방향자유 · BUILD 296';
+const BUILD_LABEL = 'v2.6.1 · 딴짓 무드(맥락 있는 흐름) · BUILD 297';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

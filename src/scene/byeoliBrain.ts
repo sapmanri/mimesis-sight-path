@@ -25,6 +25,9 @@ export type BrainHost = {
 export function makeByeoliBrain(host: BrainHost) {
   let phase: 'walk' | 'linger' = 'walk';
   const L = { left: 0, gap: 0, walkLeft: 4 + Math.random() * 3 };
+  // BUILD 297: 체류 한 번 = 하나의 무드. 그 무드로 딴짓을 이어가 맥락을 만든다(관조 흐름, 활기 흐름…).
+  const MOODS = ['contemplative', 'contemplative', 'playful', 'idle']; // 관조에 가중치(별리다움)
+  let mood = 'contemplative';
 
   return {
     phase: () => phase,
@@ -52,7 +55,7 @@ export function makeByeoliBrain(host: BrainHost) {
               && stage.play(ids[Math.floor(Math.random() * ids.length)], { parent: mnt, rig })) {
             L.left -= 1;
           } else {
-            const dur = rig?.flourish?.() ?? 0;
+            const dur = rig?.flourish?.(mood) ?? 0;
             if (Math.random() < 0.4) {
               const r = Math.random();
               host.speak(r < 0.72 ? undefined : r < 0.86 ? '♪' : r < 0.94 ? '~' : '!', 0.85 + Math.random() * 0.35);
@@ -78,6 +81,7 @@ export function makeByeoliBrain(host: BrainHost) {
         L.walkLeft -= dt;
         if (L.walkLeft <= 0) {
           phase = 'linger';
+          mood = MOODS[Math.floor(Math.random() * MOODS.length)]; // 이번 체류의 성격을 정한다
           L.left = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen));
           L.gap = 0.6 + Math.random() * 1.4;
           return { moving: false };

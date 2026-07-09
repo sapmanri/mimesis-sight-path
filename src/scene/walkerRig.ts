@@ -32,8 +32,8 @@ export type WalkerRig = {
   setRiding?: (on: boolean) => void;
   /** BUILD 138: 탑승 클립의 엉덩이 높이 — 바닥 양반다리 0.02, 의자 앉기 0.3, 서서 타면 0 */
   rideSeat?: () => number;
-  /** BUILD 146: 여분 클립 하나를 즉흥으로 — 재생 길이(초) 반환, 없거나 바쁘면 0 */
-  flourish?: () => number;
+  /** BUILD 146/297: 여분 클립 하나를 즉흥으로 — mood를 주면 그 성격의 클립만. 재생 길이(초) 반환 */
+  flourish?: (mood?: string) => number;
   /** BUILD 283: 지정 클립을 반복(지속) 재생 — 한 바퀴 길이(초) 반환. 캠프/prop-act 지속 자세용 */
   playNamed?: (clipName: string) => number;
   /** BUILD 283: playNamed로 시작한 지속 자세를 접고 idle로 복귀 */
@@ -207,12 +207,22 @@ export function createClipRig(
     'NeckStretch', 'ArmStretch', 'Yawn', 'Excited', 'Happy', 'Talking',
     'Jump', 'Jump2', 'Baseball', 'MmaKick', 'Drinking',
   ]);
+  // BUILD 297: 무드 — 딴짓을 무작위로 뿌리지 않고 '성격'으로 묶는다. 체류 한 번에 한 무드로 이어가면 맥락이 생긴다.
+  //   관조(별리다움): 두리번·기지개·하품·목풀기. 활기: 손흔들기·신남·점프. 일상: 혼잣말·물마시기.
+  const MOOD_CLIPS: Record<string, string[]> = {
+    contemplative: ['LookAround', 'LookAround2', 'LookDown', 'LookBehind', 'LookShoulder', 'NeckStretch', 'ArmStretch', 'Yawn'],
+    playful: ['Waving', 'Waving2', 'Excited', 'Happy', 'Jump', 'Jump2'],
+    idle: ['Talking', 'Drinking', 'LookAround', 'Yawn'],
+  };
   const allExtras = animations.filter((c) => !knownNames.has(c.name));
   // 화이트리스트가 하나라도 매칭되면 그걸로(별리), 아니면 예전처럼 전부(다른 아이들 호환)
   const hasWhitelist = allExtras.some((c) => FLOURISH_CLIPS.has(c.name));
   const extras = allExtras
     .filter((c) => (hasWhitelist ? FLOURISH_CLIPS.has(c.name) : true))
     .map((c) => { const a = mixer.clipAction(c); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; return a; });
+  // BUILD 297: 이름 → flourish 액션. 무드가 이 맵에서 골라 맥락 있는 딴짓을 낸다.
+  const extraByName = new Map<string, THREE.AnimationAction>();
+  for (const a of extras) extraByName.set(a.getClip().name, a);
   // BUILD 281: 이름으로 특정 클립 재생(캠프/전용상황용). 전체 클립 접근.
   const clipByName = new Map<string, THREE.AnimationClip>();
   for (const c of animations) clipByName.set(c.name, c);
@@ -341,11 +351,17 @@ export function createClipRig(
       gestureGrace = 0.6;
       rollingMin = Infinity;
     },
-    flourish() {
+    flourish(mood?: string) {
       // BUILD 290: flourish 중이면 새 flourish로 갈아탈 수 있게(크로스페이드로 이어짐, 차렷 안 거침).
       //   단 sit/pickup/named 등 다른 제스처 중엔 여전히 막는다.
       if (riding || (gesture !== 'none' && gesture !== 'flourish') || !extras.length) return 0;
-      const a = extras[Math.floor(Math.random() * extras.length)];
+      // BUILD 297: 무드가 있으면 그 성격의 클립 중에서만 뽑는다(맥락). 없으면 전체 무작위(호환).
+      let pool = extras;
+      if (mood && MOOD_CLIPS[mood]) {
+        const moodPool = MOOD_CLIPS[mood].map((n) => extraByName.get(n)).filter((a): a is THREE.AnimationAction => !!a);
+        if (moodPool.length) pool = moodPool;
+      }
+      const a = pool[Math.floor(Math.random() * pool.length)];
       gesture = 'flourish';
       switchTo(a, 0.3);
       return a.getClip().duration;
