@@ -39,7 +39,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.0.6 · BYEOLLI HAS PHOTOS · BUILD 278';
+const BUILD_LABEL = 'v2.0.7 · KID5B IN ROSTER · BUILD 279';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

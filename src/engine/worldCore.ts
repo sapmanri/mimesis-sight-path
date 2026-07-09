@@ -399,6 +399,11 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // 클립 9종(Idle/Walking/Running/PickUp/Sitting/Yawn/춤3) 이름 병합, 루트모션 제거, 드리프트 실측.
   { file: 'Girl1.glb', height: 0.95, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.013, run: 0.029 } },
   MODELS.byeoli, // BUILD 274: 별이 — Mixamo 몸+애니 한 몸. 배지로 확인 후 대표 승격.
+  // BUILD 279: Kid5b(별2) — 원본 Kid5 몸에 Mixamo 모션 17종 raw 병합(In-Place 전부 확인, 골격 무결 67노드/52joints).
+  // 21클립: Walking/Idle/Running/Sitting + SitLaugh/SitClap/Talking/Stroke/HipHop/Samba/Rumba/Shuffle/
+  //   Situps/BicycleCrunch/CircleCrunch/Baseball/MmaKick/GoofyRun/Jogging/Treadmill/LayingShake.
+  // 외형=Kid5와 동일 메쉬/UV라 Kid5_texture.png 공유. 배지로 확인 후 스펙 walker=이 idx로 승격.
+  { file: 'Kid5b.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'Kid5_texture.png', clipSpeeds: { walk: 0.044, run: 0.098 } },
   // BUILD 266: 여행자(Traveler.glb) 로스터에서 제외 — Rigify 골격이 우리 rig(Mixamo)와 불화.
   // 걷기 안 붙고 잔발 뛰기만, 앉기 클립 없음. 파일은 보존(나중에 리타겟 시 복귀 가능).
   // BUILD 269: 별(byeol)도 로스터 제외 — 몸이 접혀 눕는 좀비(clip 병합이 rest 포즈와 불화).
