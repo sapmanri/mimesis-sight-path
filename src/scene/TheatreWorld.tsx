@@ -120,19 +120,19 @@ function makeTheatreLamp(): { group: THREE.Group; light: THREE.PointLight } {
   g.add(pole);
   const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 6), iron);
   arm.rotation.z = Math.PI / 2;
-  arm.position.set(-0.1, 1.13, 0); // 팔을 별리 쪽(왼쪽)으로
+  arm.position.set(0.1, 1.13, 0); // 팔을 별리 쪽(오른쪽, +X)으로
   g.add(arm);
   const head = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.07, 6), iron);
-  head.position.set(-0.2, 1.12, 0);
+  head.position.set(0.2, 1.12, 0);
   g.add(head);
   const bulb = new THREE.Mesh(
     new THREE.SphereGeometry(0.05, 10, 8),
     new THREE.MeshStandardMaterial({ color: '#fff2cc', emissive: '#ffcf7a', emissiveIntensity: 2.6, roughness: 0.5, fog: false }),
   );
-  bulb.position.set(-0.2, 1.085, 0);
+  bulb.position.set(0.2, 1.085, 0);
   g.add(bulb);
   const light = new THREE.PointLight('#ffd9a0', 4, 5.5, 2);
-  light.position.set(-0.2, 1.0, 0.6); // 전구 아래 살짝 앞(별리 쪽)
+  light.position.set(0.2, 1.0, 0.6); // 전구 아래 살짝 앞(별리 쪽)
   g.add(light);
   return { group: g, light };
 }
