@@ -356,6 +356,21 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     return () => { st.dispose(); stageRef.current = null; brainRef.current = null; };
   }, [stage]);
 
+  // BUILD 327: 동네 사운드 — 본토·행성처럼 앰비언스를 깐다(그동안 동네만 무음이었음).
+  //   마을 밤 조합: 숲의 밤바람 + 풀벌레(time:night이면 4겹 생명이 cricket). 발자국은 별리 rig에 이미 배선됨.
+  useEffect(() => {
+    ambience.apply?.({
+      kind: 'clear',
+      wind: 0.28,      // 숲의 은은한 밤바람
+      rainAmount: 0,
+      time: 'night',   // 밤 → 새 대신 풀벌레
+      sea: 0,          // 바다 없음
+      life: 0.7,       // 풀벌레 밀도(숲이라 살아있게)
+    });
+    ambience.unlock?.();
+    return () => { /* 다른 무대로 갈 때 App이 새 state를 apply하므로 여기선 유지 */ };
+  }, []);
+
   // 웅얼웅얼 (행성과 동일) — brain이 speakRef로 지연 호출
   const speak = (icon?: string, pitch = 1) => {
     const g = walkerGroupRef.current;
