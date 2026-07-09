@@ -21,6 +21,8 @@ export type TheatreSpec = {
   mid: TheatreLayer;   // 중경 — 언덕/나무 띠
   near: TheatreLayer;  // 근경 — 발밑 지면, 가장 빠름
   ground: string;      // 캐릭터가 딛는 지면 띠 색
+  groundAmp?: number;  // BUILD 286: 지면 오르내림 크기(월드 유닛) — 별리가 타는 언덕의 높낮이
+  groundFreq?: number; // BUILD 286: 지면 언덕 촘촘함
   walker?: number;     // 산책자 인덱스 (행성과 공유 로스터). undefined/-1 = 랜덤
   // BUILD 282 계승: 체류(2단계에서 연결)
   lingerEvery?: number;
@@ -36,6 +38,8 @@ export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
   mid:  { color: '#a68f63', speed: 0.45, baseY: 0.40, amp: 0.14, freq: 2.3, seed: 27 },
   near: { color: '#6e5b38', speed: 1.00, baseY: 0.26, amp: 0.08, freq: 3.6, seed: 53 },
   ground: '#5c4a2e',
+  groundAmp: 0.6,  // BUILD 286: 눈에 보이는 오르내림
+  groundFreq: 0.5,
   walker: 13, // 별리(Kid5b)
   lingerEvery: 3,
   lingerLength: 1,

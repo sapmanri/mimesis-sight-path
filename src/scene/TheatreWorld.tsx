@@ -51,10 +51,11 @@ function bakeLayer(l: TheatreLayer, W = 1024, H = 256): THREE.CanvasTexture {
   return tex;
 }
 
-// 지면 곡선의 '월드 높이' — 별리 발이 이 값을 탄다. scrollU는 근경과 같은 속도로 흐른다.
-function groundHeight(worldX: number, scrollU: number, l: TheatreLayer): number {
-  const u = worldX * 0.6 + scrollU; // 완만한 오르내림 (길폭 정도)
-  return ridge(u, l) * l.amp * 3.4; // 월드 유닛 스케일
+// 지면 곡선의 '월드 높이' — 별리 발이 이 값을 탄다. scroll이 흐르면 언덕이 다가왔다 지나간다.
+// BUILD 286: near 실루엣 진폭에 묶지 않고 전용 amp/freq로 — 눈에 확실히 보이는 오르내림.
+function groundHeight(scroll: number, amp: number, freq: number): number {
+  const u = scroll * freq;
+  return (Math.sin(u) * 0.6 + Math.sin(u * 1.7 + 1.3) * 0.3 + Math.sin(u * 0.4 + 2.1) * 0.1) * amp;
 }
 
 type Props = {
@@ -77,7 +78,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const scrollRef = useRef(0);
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
-  const groundLayerRef = useRef<TheatreLayer>(spec.near);
+  const mutterRef = useRef(6 + Math.random() * 8); // BUILD 286: 첫 혼잣말까지
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
@@ -123,7 +124,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       stage.add(m);
       layerMats.current.push({ mat, speed: d.layer.speed });
     }
-    groundLayerRef.current = S.near;
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
@@ -168,16 +168,27 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     const scroll = scrollRef.current;
 
     // 레이어 U-스크롤 — 근경이 빠르고 원경이 느리다 (패럴럭스)
+    // 레이어 U-스크롤 — 별리가 왼쪽으로 가니 배경은 왼쪽으로 흐른다(offset 음수).
     for (const L of layerMats.current) {
-      if (L.mat.map) L.mat.map.offset.x = scroll * L.speed * 0.06;
+      if (L.mat.map) L.mat.map.offset.x = -scroll * L.speed * 0.06;
     }
 
-    // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다
+    // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다 (BUILD 286: 눈에 보이는 오르내림)
     const g = walkerGroupRef.current;
     if (g) {
-      const gy = groundHeight(0, scroll, groundLayerRef.current);
-      g.position.y += (gy - g.position.y) * Math.min(1, dt * 6); // 스프링 추적
+      const gy = groundHeight(scroll, S.groundAmp ?? 0.6, S.groundFreq ?? 0.5);
+      g.position.y += (gy - g.position.y) * Math.min(1, dt * 4); // 스프링 추적
       rigRef.current?.update?.(dt, 0.5, !pausedRef.current, _s.clock.elapsedTime, S.walkSpeed * dt);
+    }
+
+    // BUILD 286: 웅얼웅얼 — 골격에도 주기적으로(체류는 다음 단계). 15~35초마다 무언어 혼잣말.
+    if (!pausedRef.current) {
+      mutterRef.current -= dt;
+      if (mutterRef.current <= 0) {
+        mutterRef.current = 15 + Math.random() * 20;
+        const r = Math.random();
+        speak(r < 0.72 ? undefined : r < 0.88 ? '♪' : '~', 0.85 + Math.random() * 0.3);
+      }
     }
 
     // 말풍선 갱신 (본토 극성: 수명 다하면 true)

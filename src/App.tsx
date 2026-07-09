@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.2.0 · 그림자 극장(페러럴) 골격 · BUILD 285';
+const BUILD_LABEL = 'v2.2.1 · 동네 버그수정(방향·오르내림·웅얼) · BUILD 286';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -489,11 +489,17 @@ export default function App() {
             padding: '14px 16px', borderRadius: 14, background: 'rgba(16,22,23,0.92)', color: '#e8dcc2',
             border: '1px solid #3a423f', fontSize: 12,
           }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>🎭 그림자 극장 에디터</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>🏘 동네 에디터</div>
             <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
               걷는 속도 (배경 흐름)
               <input type="range" min={0} max={3} step={0.05} value={tSpec.walkSpeed}
                 onChange={(e) => updTSpec((s) => ({ ...s, walkSpeed: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              지면 오르내림 (언덕 높낮이)
+              <input type="range" min={0} max={2} step={0.05} value={tSpec.groundAmp ?? 0.6}
+                onChange={(e) => updTSpec((s) => ({ ...s, groundAmp: +e.target.value }))}
                 style={{ width: '100%' }} />
             </label>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 11, marginBottom: 4 }}>
