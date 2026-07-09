@@ -86,6 +86,91 @@ export function makeSymbolSystem(parent: THREE.Object3D, glyphs: string[]) {
   };
 }
 
+// ---------- BUILD 295: 폽 버스트 — 파스텔 별이 사방으로 + 몽글 연기. 모든 스테이지 폽에 공통 ----------
+// 화려하지 않되 "펑!"의 임팩트. 소환 순간 별 사방 분사 + 아래 연기, 0.5~0.7초에 사라진다.
+function starTexture(color: string): THREE.CanvasTexture {
+  const S = 64; const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  const g = cv.getContext('2d')!; g.translate(S / 2, S / 2);
+  g.fillStyle = color; g.beginPath();
+  for (let i = 0; i < 10; i += 1) {
+    const r = i % 2 === 0 ? 26 : 11; const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+    if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.closePath(); g.fill();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+function puffTexture(): THREE.CanvasTexture {
+  const S = 64; const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  const g = cv.getContext('2d')!;
+  const grad = g.createRadialGradient(S / 2, S / 2, 2, S / 2, S / 2, S / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,0.95)'); grad.addColorStop(0.7, 'rgba(250,250,250,0.6)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.beginPath(); g.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); g.fill();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+
+type Burst = { spr: THREE.Sprite; t: number; life: number; v: THREE.Vector3; spin: number; sz: number; kind: 'star' | 'puff' };
+function makeBurstSystem(parent: THREE.Object3D) {
+  const PASTEL = ['#f7b9c4', '#f5e6a0', '#b8dca8', '#a9d0e8', '#d8c4e8']; // 핑크·노랑·연두·하늘·연보라
+  const starTex = PASTEL.map(starTexture);
+  const puffTex = puffTexture();
+  const root = new THREE.Group();
+  parent.add(root);
+  const items: Burst[] = [];
+  return {
+    root,
+    // at: 월드 좌표 소환 지점. 별 사방 분사 + 연기 아래에서 피어오름.
+    fire(at: THREE.Vector3) {
+      const N = 12 + Math.floor(Math.random() * 5);
+      for (let i = 0; i < N; i += 1) {
+        const tex = starTex[Math.floor(Math.random() * starTex.length)];
+        const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1, depthWrite: false, fog: false });
+        const spr = new THREE.Sprite(mat);
+        const sz = 0.12 + Math.random() * 0.14;
+        spr.scale.setScalar(sz);
+        spr.position.copy(at);
+        root.add(spr);
+        const ang = (i / N) * Math.PI * 2 + Math.random() * 0.5;
+        const spd = 1.4 + Math.random() * 1.6;
+        items.push({ spr, t: 0, life: 0.45 + Math.random() * 0.3, v: new THREE.Vector3(Math.cos(ang) * spd, Math.abs(Math.sin(ang)) * spd * 0.8 + 0.6, (Math.random() - 0.5) * 0.4), spin: (Math.random() - 0.5) * 12, sz, kind: 'star' });
+      }
+      // 연기 퍼프 몇 개 — 아래에서 부풀며 옅어짐
+      for (let i = 0; i < 5; i += 1) {
+        const mat = new THREE.SpriteMaterial({ map: puffTex, transparent: true, opacity: 0.9, depthWrite: false, fog: false });
+        const spr = new THREE.Sprite(mat);
+        const sz = 0.4 + Math.random() * 0.3;
+        spr.scale.setScalar(sz);
+        spr.position.copy(at).add(new THREE.Vector3((Math.random() - 0.5) * 0.5, -0.1 + Math.random() * 0.2, (Math.random() - 0.5) * 0.2));
+        root.add(spr);
+        items.push({ spr, t: 0, life: 0.5 + Math.random() * 0.25, v: new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3 + Math.random() * 0.2, 0), spin: 0, sz, kind: 'puff' });
+      }
+    },
+    update(dt: number) {
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        const b = items[i]; b.t += dt;
+        const k = b.t / b.life;
+        b.spr.position.addScaledVector(b.v, dt);
+        if (b.kind === 'star') {
+          b.v.y -= 3.5 * dt; // 중력 — 별이 살짝 포물선
+          b.spr.material.rotation += b.spin * dt;
+          (b.spr.material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - k);
+          b.spr.scale.setScalar(b.sz * (1 - k * 0.3));
+        } else {
+          b.v.multiplyScalar(0.92); // 연기는 느려지며
+          const gs = b.sz * (1 + k * 1.2); // 부풀고
+          b.spr.scale.setScalar(gs);
+          (b.spr.material as THREE.SpriteMaterial).opacity = Math.max(0, 0.9 * (1 - k));
+        }
+        if (b.t >= b.life) {
+          (b.spr.material as THREE.SpriteMaterial).dispose();
+          root.remove(b.spr); items.splice(i, 1);
+        }
+      }
+    },
+    clear() { items.forEach((b) => { (b.spr.material as THREE.SpriteMaterial).dispose(); root.remove(b.spr); }); items.length = 0; },
+  };
+}
+
 // ---------- 스피커 얼굴 텍스처 (원본 모델이 밋밋한 회색 박스라 콘·그물을 그려 입힌다) ----------
 export function speakerFaceTexture(): THREE.CanvasTexture {
   const W = 256, H = 512;
@@ -153,6 +238,7 @@ const protoCache = new Map<string, Loaded>();
 
 export function makeStage(scene: THREE.Object3D) {
   const symbolSys = makeSymbolSystem(scene, ['♪', '♫', '♩', '♬']);
+  const burstSys = makeBurstSystem(scene);
   const S = {
     active: false,
     recipe: null as StageRecipe | null,
@@ -217,8 +303,15 @@ export function makeStage(scene: THREE.Object3D) {
         anchor.parent.add(sp);
         S.obj = sp;
         S.phase = 'in';
+        // BUILD 295: 펑! 파스텔 별 버스트 + 연기 — 오브젝트 소환 지점에서
+        sp.updateWorldMatrix(true, false);
+        const wp = sp.getWorldPosition(new THREE.Vector3()); wp.y += p!.targetH * 0.5;
+        burstSys.fire(wp);
       } else {
         S.phase = 'hold'; // 오브젝트 없어도 모션은 돈다
+        // 오브젝트 없는 세션도 캐릭터 앞에서 펑
+        const wp = anchor.parent.getWorldPosition(new THREE.Vector3()); wp.y += 0.6;
+        burstSys.fire(wp);
       }
       if (recipe.tune === 'music') ambience.mumbleTune?.();
       return true;
@@ -234,6 +327,7 @@ export function makeStage(scene: THREE.Object3D) {
     // 매 프레임 — 모션 이어가기 + 오브젝트 폽 애니 + 심볼 + 사운드
     update(dt: number, elapsed: number) {
       symbolSys.update(dt);
+      burstSys.update(dt);
       if (S.active && S.recipe && S.anchor) {
         const R = S.recipe;
         S.timer -= dt;
@@ -277,7 +371,9 @@ export function makeStage(scene: THREE.Object3D) {
     },
     dispose() {
       symbolSys.clear();
+      burstSys.clear();
       scene.remove(symbolSys.root);
+      scene.remove(burstSys.root);
       if (S.obj) { S.obj.parent?.remove(S.obj); S.obj = null; }
     },
   };
