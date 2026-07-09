@@ -190,7 +190,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     mkFull('train_posts.png', -4, 0.7);
     mkFull('train_cars.png', -3, 0.9);
     // 별리 발을 화면 안 하단 1/3에 둔다(철길 픽셀에 정확히 안 맞아도, 배경 지면 근처면 자연스럽다).
-    feetYRef.current = -refVH * 0.16;
+    feetYRef.current = -refVH * 0.23;
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
