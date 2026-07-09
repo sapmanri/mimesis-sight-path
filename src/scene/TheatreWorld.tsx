@@ -142,9 +142,9 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
-    camera.position.set(0, 1.6, 6.2);
-    camera.lookAt(0, 1.4, 0);
-    (camera as THREE.PerspectiveCamera).fov = 40;
+    camera.position.set(0, 1.2, 5.5);
+    camera.lookAt(0, 1.6, 0);
+    (camera as THREE.PerspectiveCamera).fov = 42;
     (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
     scene.fog = null;
   }, [camera, scene]);
@@ -174,7 +174,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // 뒤(원경, 느림) → 앞(근경, 빠름). h=세로 월드높이, yOff=상하 위치.
     // BUILD 303: 기차 배경 — 별리는 철길(이미지 y≈1050) 위에 선다. 배경을 그 지점이 발밑(y0)에 오게 내린다.
     //   이미지 1920×1073, 철길 y1050 → 아래에서 2.1%. mesh 중심 yOff = h×(0.5 - 1050/1073) = h×-0.478.
-    const IMG_W = 1920, IMG_H = 1073, GROUND_PX = 1050;
+    const IMG_W = 1920, IMG_H = 1073, GROUND_PX = 1068; // 철길 한가운데(별리 발이 여기 닿는다)
     const mkTrain = (file: string, z: number, h: number, speed: number) => {
       const tex = loader.load(`/assets/theatre/${file}`);
       tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
@@ -184,16 +184,16 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       tex.repeat.set(repeatX, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w * repeatX, h), mat);
-      const yOff = h * (GROUND_PX / IMG_H - 0.5); // 철길이 월드 y0에 오도록 (배경은 위로)
+      const yOff = h * (GROUND_PX / IMG_H - 0.5); // 철길이 월드 y0(별리 발)에 오도록
       m.position.set(0, yOff, z);
       stage.add(m);
       layerMats.current.push({ mat, speed });
     };
-    const H = 9; // 배경 세로 월드높이(별리 키에 맞춤)
+    const H = 13; // 배경 세로 월드높이 — 화면 위로 하늘·달까지 채운다
     mkTrain('train_far.png', -12, H, 0.15);   // 원경: 하늘·달·성·먼숲 (느림)
     mkTrain('train_near.png', -6, H, 0.5);     // 근경: 가까운 숲 + 철길
     mkTrain('train_posts.png', -4, H, 0.7);    // 전신주·케이블
-    mkTrain('train_cars.png', -3, H, 0.9);     // 기차 (철길 위)
+    mkTrain('train_cars.png', -5, H, 0.9);     // 기차 (별리보다 뒤로 — 겹침 방지)
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
