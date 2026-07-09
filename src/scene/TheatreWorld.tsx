@@ -214,10 +214,14 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       stage.add(m);
       layerMats.current.push({ mat, speed });
     };
-    mkFull('train_far.png', -12, 0.15);
-    mkFull('train_near.png', -6, 0.5);
-    mkFull('train_posts.png', -4, 0.7);
-    mkFull('train_cars.png', -3, 0.9);
+    // BUILD 328: 배경 팩을 spec에서 읽는다 — 동네마다 bgLayers만 갈아끼우면 새 동네.
+    const layers = specRef.current.bgLayers ?? [
+      { file: 'train_far.png', z: -12, speed: 0.15 },
+      { file: 'train_near.png', z: -6, speed: 0.5 },
+      { file: 'train_posts.png', z: -4, speed: 0.7 },
+      { file: 'train_cars.png', z: -3, speed: 0.9 },
+    ];
+    for (const L of layers) mkFull(L.file, L.z, L.speed);
     // 별리 발을 화면 안 하단 1/3에 둔다(철길 픽셀에 정확히 안 맞아도, 배경 지면 근처면 자연스럽다).
     feetYRef.current = -refVH * 0.23;
 
@@ -396,7 +400,11 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // 동네 옆면 무대의 방향 — 별리는 관찰자(카메라)를 모른다. 자기 삶을 살 뿐.
     //   걸을 땐 진행방향(왼쪽). 놀 땐 그 언저리에서 자연스럽게 흔들린다 —
     //   뭔가 보거나 두리번거리다 우연히 이쪽/저쪽. 관객 정면을 '의식해서' 보지 않는다.
-    if (moving) {
+    // BUILD 328: 스테이지 세션 중(눕기·연주·운동…)엔 방향을 고정한다 — 안 그러면 누운 채 빙글빙글 돈다.
+    const inStage = stageRef.current?.isActive?.() ?? false;
+    if (inStage) {
+      // 스테이지 중 — 방향 건드리지 않음(그 행동 자세 유지)
+    } else if (moving) {
       faceRef.current = -Math.PI / 2;
     } else if (wasWalking && !nowWalking) {
       // 방금 멈춤 — 진행방향 언저리에서 살짝 튼다(관객 쪽 아님)

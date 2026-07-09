@@ -230,7 +230,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'Bed.glb', targetH: 1.1, offset: [0, 0, 0], bob: 0 }, // BUILD 326: 침대는 눕는 가구 — 크게(1.1). 별리 자리 중심
+    prop: { file: 'Bed.glb', targetH: 1.9, offset: [0, 0, -0.1], bob: 0 }, // BUILD 328: 침대 길이가 별리(0.9)보다 커야 눕는다 — maxDim 1.9
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른

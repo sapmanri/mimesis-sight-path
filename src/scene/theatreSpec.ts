@@ -13,6 +13,9 @@ export type TheatreLayer = {
 };
 
 export type TheatreSpec = {
+  // BUILD 328: 패럴럭스 배경 팩 — 동네마다 이것만 갈아끼우면 새 동네가 된다.
+  //   각 레이어 = { 파일, z(깊이), speed(흐름 배율) }. 뒤(작은 z)에서 앞으로 나열.
+  bgLayers?: { file: string; z: number; speed: number }[];
   skyTop: string;      // 하늘 위쪽 색
   skyBottom: string;   // 하늘 아래쪽 색
   fogTint: string;     // 대기 원근(옅어짐) 색
@@ -33,6 +36,13 @@ export type TheatreSpec = {
 };
 
 export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
+  // BUILD 328: 첫 동네 = 기차 동네. 새 동네는 이 배열만 교체(+에셋 추가)하면 된다.
+  bgLayers: [
+    { file: 'train_far.png', z: -12, speed: 0.15 },
+    { file: 'train_near.png', z: -6, speed: 0.5 },
+    { file: 'train_posts.png', z: -4, speed: 0.7 },
+    { file: 'train_cars.png', z: -3, speed: 0.9 },
+  ],
   skyTop: '#dce6ea',
   skyBottom: '#eef2ec',
   fogTint: '#e4ebe6',
