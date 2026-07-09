@@ -310,7 +310,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
   // BUILD 319: 가로등 3개 — 별리(키 0.9유닛)와 같은 절대단위·같은 평면(z=0)에. 밑동을 별리 발과 정확히 일치.
   useEffect(() => {
-    const LAMP_N = 3;
+    const LAMP_N = 5;              // BUILD 325: 3→5(1.5배). span 그대로라 설치 간격이 좁아짐
     const cam = camera as THREE.PerspectiveCamera;
     const REF_Z = -6;
     const dRef = Math.abs(cam.position.z - REF_Z);
@@ -318,8 +318,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     const refVW = refVH * cam.aspect;
     const footY = -refVH * 0.23;    // 별리 발과 같은 높이(feetYRef와 동일)
     const LAMP_Z = 0.4;            // BUILD 321: 별리(z=0)보다 살짝만 앞 — 별리가 가로등 뒤로 지나간다(뚫기 해결). 크기·높이 어긋남은 미미
-    const LAMP_H = 1.45;           // 절대 1.45유닛 — z=0.4 앞 원근보정 포함, 화면상 별리의 ~1.7배
-    const s = LAMP_H / 1.2;        // makeTheatreLamp 원본 높이 ≈1.2 → 1.45
+    const LAMP_H = 1.74;           // BUILD 325: 1.45→1.74(1.2배). 박힌 곳(footY·z)은 그대로
+    const s = LAMP_H / 1.2;        // makeTheatreLamp 원본 높이 ≈1.2 → 1.74
     const span = refVW * 1.6;       // 리사이클 폭
     const gap = span / LAMP_N;
     const built: { group: THREE.Group; light: THREE.PointLight }[] = [];

@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.8.3 · 별리 회색버그 수정(height fog 제거) · BUILD 314';
+const BUILD_LABEL = 'v2.9.0 · 밤 동네(가로등·달빛·바닥안개) + 스테이지 맥락화 · BUILD 325';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -461,6 +461,7 @@ export default function App() {
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
+        <div className="build-badge">{BUILD_LABEL}</div>
         {theatreEdit && (
           <div style={{
             position: 'fixed', top: 18, right: 18, width: 288, maxHeight: '90vh', overflowY: 'auto', zIndex: 8,
