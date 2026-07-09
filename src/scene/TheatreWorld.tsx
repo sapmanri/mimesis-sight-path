@@ -73,6 +73,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const stage = useMemo(() => new THREE.Group(), []);
   const rigRef = useRef<WalkerRig | null>(null);
   const walkerGroupRef = useRef<THREE.Group | null>(null);
+  const walkerMountRef = useRef<THREE.Group | null>(null); // BUILD 287: 오르내림을 거는 래퍼
   const footRef = useRef<THREE.Object3D | null>(null);
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
   const scrollRef = useRef(0);
@@ -134,13 +135,17 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   useEffect(() => {
     let alive = true;
     rigRef.current = null;
-    if (walkerGroupRef.current) { stage.remove(walkerGroupRef.current); walkerGroupRef.current = null; }
+    if (walkerMountRef.current) { stage.remove(walkerMountRef.current); walkerMountRef.current = null; walkerGroupRef.current = null; }
     void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
       if (!alive) return;
-      // 옆면 무대: 별리가 왼쪽을 보고 걷도록 살짝 돌린다 (진행=화면 왼쪽)
+      // BUILD 287: 별리를 래퍼(mount)에 담는다. rig는 group(=root)의 Y를 매 프레임 덮어쓰므로(접지보정),
+      //   오르내림은 group이 아니라 이 래퍼에 걸어야 살아남는다. (PlanetWorld liftGroup과 같은 원리)
       group.rotation.y = -Math.PI / 2;
       group.position.set(0, 0, 0);
-      stage.add(group);
+      const mount = new THREE.Group();
+      mount.add(group);
+      stage.add(mount);
+      walkerMountRef.current = mount;
       walkerGroupRef.current = group;
       footRef.current = null;
       group.traverse((n) => { if (!footRef.current && /left.*foot$/i.test(n.name)) footRef.current = n; });
@@ -173,11 +178,14 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       if (L.mat.map) L.mat.map.offset.x = -scroll * L.speed * 0.06;
     }
 
-    // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다 (BUILD 286: 눈에 보이는 오르내림)
+    // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다 (BUILD 287: 오르내림은 래퍼에)
     const g = walkerGroupRef.current;
-    if (g) {
+    const mnt = walkerMountRef.current;
+    if (mnt) {
       const gy = groundHeight(scroll, S.groundAmp ?? 0.6, S.groundFreq ?? 0.5);
-      g.position.y += (gy - g.position.y) * Math.min(1, dt * 4); // 스프링 추적
+      mnt.position.y += (gy - mnt.position.y) * Math.min(1, dt * 4); // 스프링 추적 (rig가 안 건드리는 래퍼)
+    }
+    if (g) {
       rigRef.current?.update?.(dt, 0.5, !pausedRef.current, _s.clock.elapsedTime, S.walkSpeed * dt);
     }
 
