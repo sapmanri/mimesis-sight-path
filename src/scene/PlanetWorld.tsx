@@ -1051,7 +1051,11 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const petRef = useRef<{ pet: LoadedPet; d: THREE.Vector3; goal: THREE.Vector3; mode: 'idle' | 'wander' | 'chase' | 'trick'; timer: number; running: boolean; cur: THREE.AnimationAction | null; t1: THREE.Vector3; t2: THREE.Vector3; q1: THREE.Quaternion } | null>(null);
   const dirLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiRef = useRef<THREE.HemisphereLight>(null);
-  const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory' | 'camp', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0, campCooldown: 20 });
+  // BUILD 282: 체류(linger)를 1급 상태로 승격 — 별리는 걷는 게 아니라 이 별을 즐긴다.
+  // lingerLeft: 이번 체류에서 앞으로 할 딴짓 개수(다 쓰면 다음 지점으로 짧게 이동)
+  // gap: 딴짓과 딴짓 사이 '가만히 있는' 여백 타이머(그냥 서서 별 보는 시간)
+  // walkLeft: 이동 구간에 남은 시간(짧게만 걷는다)
+  const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory' | 'camp' | 'linger', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0, campCooldown: 20, lingerLeft: 0, gap: 0, walkLeft: 0 });
   // BUILD 263: 캠핑 쉼 — 가끔 멈춰 캠프(모닥불+텐트)를 소환하고 앉거나 서서 쉰다
   const campSetRef = useRef<{ group: THREE.Group; born: number; life: number } | null>(null);
   const campProtoRef = useRef<{ fire: THREE.Group | null; tent: THREE.Group | null } | null>(null);
@@ -1129,6 +1133,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const el = state.clock.elapsedTime;
     const runEvery = SP.runEvery ?? 45;
     const rideEvery = SP.rideEvery ?? 120;
+    // BUILD 282: 체류 슬라이더 — Vase가 에디터에서 조절. 이동시간(짧게)과 체류 길이 배율.
+    const lingerEvery = Math.max(0.5, SP.lingerEvery ?? 3);   // 다음 체류까지 걷는 초. 작을수록 자주 논다
+    const lingerLen = Math.max(0.2, SP.lingerLength ?? 1);    // 체류 길이 배율. 클수록 오래 논다
+    const nextWalkLeft = () => lingerEvery * (0.7 + Math.random() * 0.7); // 이동 구간 길이(약간의 무작위)
     if (MV.nextRun < 0) { MV.nextRun = el + 14 + Math.random() * 18; MV.nextRide = el + 35 + Math.random() * 45; }
     if (!pausedRef.current && MV.mode === 'walk' && P.phase === 'walk') {
       if (rideEvery > 0 && el >= MV.nextRide && !rigRef.current?.setRiding) {
@@ -1226,6 +1234,30 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     if (pausedRef.current) moving = false;
     if (pausedRef.current) {
       // BUILD 224: 정지 — 시간이 멈춘 지구본. 찍기의 평화.
+    } else if (P.phase === 'linger') {
+      // BUILD 282: 체류 — 한 자리에 머물며 딴짓과 '가만히'를 번갈아 한다. 이게 별리의 기본 상태.
+      moving = false;
+      P.timer -= dt;
+      P.gap -= dt;
+      // 여백(가만히 서서 별 보는 시간)이 끝나면 다음 딴짓을 꺼낸다
+      if (P.gap <= 0 && P.lingerLeft > 0) {
+        const dur = rigRef.current?.flourish?.() ?? 0;
+        P.lingerLeft -= 1;
+        // 딴짓 하나 + 그 뒤 '가만히' 여백. 관조가 삼바보다 별리답다. lingerLength가 크면 여백도 길어진다.
+        P.gap = (dur > 0 ? dur : 1.4) + (1.4 + Math.random() * 2.8) * lingerLen;
+      }
+      // 딴짓을 다 썼고 마지막 여백도 지나면 → 다음 볼거리로 '짧게' 이동
+      if (P.lingerLeft <= 0 && P.gap <= 0) {
+        if (SP.roam && roamRef.current) {
+          // 새 방향으로 마음이 기운다 — 다음 지점을 향해 한 번 크게 튼다
+          const turn = (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 2.2);
+          roamRef.current.T.applyQuaternion(tmp.Q.setFromAxisAngle(roamRef.current.d, turn));
+        }
+        P.phase = 'walk';
+        P.walkLeft = nextWalkLeft(); // 다음 지점까지만 — 짧게 걷는다 (lingerEvery로 조절)
+        P.jumpTo = -1;
+        P.cooldown = 0.4;
+      }
     } else if (P.phase !== 'walk') {
       moving = false;
       P.timer -= dt;
@@ -1238,27 +1270,36 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           roamRef.current.T.applyQuaternion(tmp.Q.setFromAxisAngle(roamRef.current.d, turn));
         }
         if (P.phase === 'ponder' && P.jumpTo >= 0) S.current = P.jumpTo;
+        // BUILD 282: 캠프/기억을 마치면 잠깐만 걷다 다시 체류로 — roam은 강제 도보(8초)를 걸지 않는다.
         P.phase = 'walk';
         P.jumpTo = -1;
-        P.cooldown = 8;
+        P.cooldown = SP.roam ? 0.4 : 8;
+        if (SP.roam) P.walkLeft = nextWalkLeft();
       }
     } else if (SP.roam) {
-      // BUILD 281: 이동 1 : 딴짓 2 — 자주 멈춰 서서 즉흥 동작(flourish)을 한다.
-      // 우주여행자 별리는 걷기만 하지 않는다. 멈춰 두리번거리고, 손 흔들고, 하품하고, 기지개 켠다.
-      if (MV.mode === 'walk' && P.phase === 'walk' && P.cooldown <= 0 && Math.random() < dt * 0.22) {
-        const dur = rigRef.current?.flourish?.() ?? 0;
-        P.phase = 'ponder';
-        P.timer = dur > 0 ? dur + 0.4 : 1.2 + Math.random() * 2.0; // 동작 길이만큼 머문다
-        P.jumpTo = -1;
-      }
-      // BUILD 263: 캠핑 쉼 — 아주 가끔(평균 ~2분) 캠프를 차리고 오래 쉰다. 탈것 안 탔을 때만.
+      // BUILD 282: 걷기는 이제 '다음 볼거리로 가는 짧은 전환'일 뿐이다. 무게중심은 체류(linger)에 있다.
+      // 우주여행자 별리는 이 별을 즐긴다 — 한 자리에 오래 머물며 두리번거리고, 하늘 보고, 기지개 켜고, 또 가만히.
       P.campCooldown -= dt;
-      if (MV.mode === 'walk' && P.phase === 'walk' && P.campCooldown <= 0 && campProtoRef.current && Math.random() < dt * 0.06) {
-        P.phase = 'camp';
-        P.timer = 16 + Math.random() * 12; // 16~28초 머문다
-        P.campCooldown = 90 + Math.random() * 60; // 다음 캠프까지 최소 90초
-        spawnCamp();
-        rigRef.current?.playInspect('sit'); // 앉기 클립 있으면 앉고, 없으면 서있음
+      if (MV.mode === 'walk' && P.phase === 'walk' && P.cooldown <= 0) {
+        P.walkLeft -= dt;
+        // 짧은 이동이 끝나면(또는 애초에 이동시간이 안 잡혀 있으면) → 체류로 진입해 오래 머문다.
+        if (P.walkLeft <= 0) {
+          // 아주 가끔(체류 대신) 캠프를 차리고 훨씬 오래 쉰다. 탈것 안 탔을 때만.
+          if (P.campCooldown <= 0 && campProtoRef.current && Math.random() < 0.28) {
+            P.phase = 'camp';
+            P.timer = 16 + Math.random() * 12; // 16~28초 머문다
+            P.campCooldown = 90 + Math.random() * 60;
+            spawnCamp();
+            rigRef.current?.playInspect('sit');
+          } else {
+            // 보통은 체류: 이 자리에서 여러 딴짓을 여백을 두고 이어서 한다. 길이는 lingerLength로 조절.
+            P.phase = 'linger';
+            P.lingerLeft = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen)); // 기본 2~5회, 배율 적용
+            P.gap = 0.6 + Math.random() * 1.4; // 멈춰 서서 숨 고른 뒤 첫 딴짓
+            P.timer = 0;
+            P.jumpTo = -1;
+          }
+        }
       }
     } else {
       S.current += SP.walkSpeed * spdMul * dt;

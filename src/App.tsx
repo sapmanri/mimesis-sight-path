@@ -39,7 +39,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.0.9 · DUST·PLANE·SIT·FLOURISH · BUILD 281';
+const BUILD_LABEL = 'v2.1.0 · LINGER (체류 중심) · BUILD 282';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -638,6 +638,8 @@ export default function App() {
               <input type="checkbox" checked={pSpec.roam ?? false} onChange={(e) => updSpec((s) => ({ ...s, roam: e.target.checked }))} />
               🧭 자유 배회 — 지구본 모드 (길·기억 없이 마음대로)
             </label>
+            <Dial label="체류 빈도 — 얼마나 자주 멈춰 노나 (s · 작을수록 자주)" value={pSpec.lingerEvery ?? 3} min={0.5} max={20} step={0.5} onChange={(v) => updSpec((s) => ({ ...s, lingerEvery: v }))} />
+            <Dial label="체류 길이 — 한 자리 얼마나 오래 노나 (배율)" value={pSpec.lingerLength ?? 1} min={0.2} max={3} step={0.1} onChange={(v) => updSpec((s) => ({ ...s, lingerLength: v }))} />
             <Dial label="뛰기 주기 (s · 0=안 뜀)" value={pSpec.runEvery ?? 45} min={0} max={180} step={5} onChange={(v) => updSpec((s) => ({ ...s, runEvery: v }))} />
             <Dial label="탈것 주기 (s · 0=안 탐)" value={pSpec.rideEvery ?? 120} min={0} max={360} step={10} onChange={(v) => updSpec((s) => ({ ...s, rideEvery: v }))} />
             <label style={{ display: 'block', fontSize: 11, margin: '6px 0' }}>

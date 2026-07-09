@@ -27,6 +27,8 @@ export type PlanetSpec = {
   shipEvery?: number;  // BUILD 244: 배 출현 주기(s) — 0=없음
   runEvery: number;    // BUILD 224: 뛰기 주기 (s, 0=안 뜀) — 평균 이 간격으로 한바탕 달린다
   rideEvery: number;   // BUILD 224: 탈것 주기 (s, 0=안 탐) — 구름/빗자루에 올라 한 바퀴
+  lingerEvery?: number;  // BUILD 282: 체류 빈도 — 다음 체류까지 걷는 시간(s). 작을수록 자주 멈춰 논다 (기본 3)
+  lingerLength?: number; // BUILD 282: 체류 길이 — 한 자리 머무는 정도 배율. 클수록 오래 논다 (기본 1)
   pet: string;         // BUILD 224: 반려 ('none' | PET_ROSTER id)
   walker?: number;     // BUILD 251: 산책자 캐릭터 인덱스 (발행 시 고정 — 방문자 전원이 같은 아이를 본다). undefined/-1 = 랜덤
   moon: { size: number; dist: number; period: number; tilt: number; light: number; spin: number };
@@ -56,6 +58,8 @@ export const DEFAULT_PLANET_SPEC: PlanetSpec = {
   shipEvery: 30,
   runEvery: 45,
   rideEvery: 120,
+  lingerEvery: 3,   // BUILD 282: 평균 3초 걷고 멈춰 논다 (체류 중심)
+  lingerLength: 1,  // BUILD 282: 체류 길이 기본 배율
   pet: 'none',
   moon: { size: 0.273, dist: 34, period: 150, tilt: 15, light: 2.2, spin: 1 },
   sun: { az: 40, el: 52, period: 0 },
