@@ -34,6 +34,10 @@ export type WalkerRig = {
   rideSeat?: () => number;
   /** BUILD 146: 여분 클립 하나를 즉흥으로 — 재생 길이(초) 반환, 없거나 바쁘면 0 */
   flourish?: () => number;
+  /** BUILD 283: 지정 클립을 반복(지속) 재생 — 한 바퀴 길이(초) 반환. 캠프/prop-act 지속 자세용 */
+  playNamed?: (clipName: string) => number;
+  /** BUILD 283: playNamed로 시작한 지속 자세를 접고 idle로 복귀 */
+  stopNamed?: () => void;
   /** BUILD 146: 두리번 — 머리 뼈에 요 오프셋 (0이면 정면) */
   setLook?: (y: number) => void;
   inspecting: () => boolean;
@@ -194,9 +198,11 @@ export function createClipRig(
   // (제외: LayingShake=침대전용, Piano=신디사이저전용, Treadmill=러닝머신전용,
   //  Sit*/StandToSit/SitToStand/Kneel*=앉기, Situps/BicycleCrunch/CircleCrunch=운동매트,
   //  SneakWalk/SneakFwd=걷기변형, PlantSeeds=특별이벤트)
+  // BUILD 283: ★ Stroke 제거 — 벤치 실측 결과 '쓰다듬기'가 아니라 바닥에 '누운' 모션(척추수직도 -0.02).
+  //   서서 하는 즉흥이 아니라 지속 자세라, 공중에 툭 눕는 버그를 냈다. 눕기는 침대/매트 위 전용(prop-act)으로.
   const FLOURISH_CLIPS = new Set([
     'Waving', 'Waving2', 'LookAround', 'LookAround2', 'LookBehind', 'LookShoulder', 'LookDown',
-    'NeckStretch', 'ArmStretch', 'Yawn', 'Excited', 'Happy', 'Stroke', 'Talking',
+    'NeckStretch', 'ArmStretch', 'Yawn', 'Excited', 'Happy', 'Talking',
     'Jump', 'Jump2', 'Baseball', 'MmaKick', 'HipHop', 'Samba', 'Rumba', 'Shuffle', 'Drinking',
   ]);
   const allExtras = animations.filter((c) => !knownNames.has(c.name));
@@ -274,8 +280,9 @@ export function createClipRig(
     current = a;
   };
 
-  type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp' | 'flourish'; // BUILD 146
+  type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp' | 'flourish' | 'named'; // BUILD 146 / 283
   let gesture: Gesture = 'none';
+  let namedAction: THREE.AnimationAction | null = null; // BUILD 283: 지정 클립 지속재생(캠프/prop-act)
   let riding = false; // BUILD 136: 구름 위
   mixer.addEventListener('finished', (e) => {
     const a = (e as unknown as { action: THREE.AnimationAction }).action;
@@ -308,6 +315,30 @@ export function createClipRig(
     },
     rideSeat: () => rideSeatH, // BUILD 138
     // BUILD 146: 즉흥 — 여분 클립 하나. 걷는 기계에게 주는 자유
+    // BUILD 283: 지정 클립을 '오래' 재생. flourish(단발 LoopOnce)와 달리 반복(LoopRepeat)해 지속 자세를 만든다.
+    //   침대에 누워 까딱까딱, 매트에서 윗몸일으키기, 신디사이저 연주 등 — 한 번 돌고 마는 게 아니라 머무는 시간만큼 반복.
+    //   PlanetWorld가 체류/캠프 timer가 끝날 때 stopNamed()로 접는다.
+    playNamed(clipName: string) {
+      if (riding || gesture !== 'none') return 0;
+      const clip = clipByName.get(clipName);
+      if (!clip) return 0;
+      const a = mixer.clipAction(clip);
+      a.setLoop(THREE.LoopRepeat, Infinity);
+      a.clampWhenFinished = false;
+      a.reset();
+      namedAction = a;
+      gesture = 'named';
+      switchTo(a, 0.35);
+      return clip.duration; // 한 바퀴 길이 — 호출자가 몇 바퀴 돌릴지 timer 계산에 쓴다
+    },
+    stopNamed() {
+      if (gesture !== 'named') return;
+      switchTo(idle, 0.4);
+      if (namedAction) { namedAction = null; }
+      gesture = 'none';
+      gestureGrace = 0.6;
+      rollingMin = Infinity;
+    },
     flourish() {
       if (riding || gesture !== 'none' || !extras.length) return 0;
       const a = extras[Math.floor(Math.random() * extras.length)];
