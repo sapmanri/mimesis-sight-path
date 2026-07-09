@@ -166,19 +166,20 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
     // 모든 레이어를 같은 기준 크기로(통짜 한 장처럼 정렬). 패럴럭스는 스크롤 속도로만.
     const REF_Z = -6;
-    const { vh: refVH } = fillSize(REF_Z);
+    const { vh: refVH, vw: refVW } = fillSize(REF_Z);
     const mkFull = (file: string, z: number, speed: number) => {
       const tex = loader.load(`/assets/theatre/${file}`);
       tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
       // z가 뒤일수록 원근으로 작아 보이니, 그만큼 키워 화면 꽉 채움 유지
       const scaleForZ = Math.abs(cam.position.z - z) / Math.abs(cam.position.z - REF_Z);
-      const planeH = refVH * scaleForZ;
-      const planeW = planeH * (1920 / 1073);
-      const repeatX = 4;
+      const planeH = refVH * scaleForZ;               // 화면 세로 꽉
+      const oneImgW = planeH * (1920 / 1073);          // 이 세로에서 원본 한 장의 가로(제 비율)
+      const planeW = refVW * scaleForZ * 3;            // 평면은 화면 가로의 3배(스크롤 여유)
+      const repeatX = planeW / oneImgW;                // 평면에 원본이 몇 번 → 왜곡 없음
       tex.repeat.set(repeatX, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(planeW * repeatX, planeH), mat);
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
       m.position.set(0, cam.position.y, z);
       stage.add(m);
       layerMats.current.push({ mat, speed });
