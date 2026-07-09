@@ -45,7 +45,7 @@ export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
   groundFreq: 0.5,
   floorFogH: 0.16,          // BUILD 315: 발 높이쯤까지 옅게 깔리는 밤안개
   floorFogColor: '#2a3550', // 밤 대기색
-  moonlight: 0.7,           // BUILD 318: 달빛 세기 — 배경 달 방향에서 오는 은은한 방향광
+  moonlight: 1.5,           // BUILD 319: 달빛 세기 — 배경 달 방향에서 오는 방향광(별리를 비춤)
   walker: 13, // 별리(Kid5b)
   lingerEvery: 3,
   lingerLength: 1,

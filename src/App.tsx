@@ -494,8 +494,8 @@ export default function App() {
             </label>
             {/* BUILD 318: 달빛 — 배경 달에서 오는 은은한 빛 */}
             <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
-              달빛 — {(tSpec.moonlight ?? 0.7).toFixed(2)}
-              <input type="range" min={0} max={2} step={0.05} value={tSpec.moonlight ?? 0.7}
+              달빛 — {(tSpec.moonlight ?? 1.5).toFixed(2)}
+              <input type="range" min={0} max={5} step={0.1} value={tSpec.moonlight ?? 1.5}
                 onChange={(e) => updTSpec((s) => ({ ...s, moonlight: +e.target.value }))}
                 style={{ width: '100%' }} />
             </label>

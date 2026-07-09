@@ -126,13 +126,13 @@ function makeTheatreLamp(): { group: THREE.Group; light: THREE.PointLight } {
   head.position.set(-0.2, 1.12, 0);
   g.add(head);
   const bulb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.035, 8, 6),
-    new THREE.MeshStandardMaterial({ color: '#ffe9b0', emissive: '#ffcf7a', emissiveIntensity: 1.6, roughness: 0.6, fog: false }),
+    new THREE.SphereGeometry(0.05, 10, 8),
+    new THREE.MeshStandardMaterial({ color: '#fff2cc', emissive: '#ffcf7a', emissiveIntensity: 2.6, roughness: 0.5, fog: false }),
   );
   bulb.position.set(-0.2, 1.085, 0);
   g.add(bulb);
-  const light = new THREE.PointLight('#ffd9a0', 2.2, 3.6, 2);
-  light.position.set(-0.2, 1.085, 0.5); // 살짝 앞(별리 쪽)으로
+  const light = new THREE.PointLight('#ffd9a0', 4, 5.5, 2);
+  light.position.set(-0.2, 1.0, 0.6); // 전구 아래 살짝 앞(별리 쪽)
   g.add(light);
   return { group: g, light };
 }
@@ -308,20 +308,19 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     return () => { stage.remove(mesh); mat.dispose(); tex.dispose(); fogMatRef.current = null; fogMeshRef.current = null; };
   }, [stage, camera]);
 
-  // BUILD 318: 가로등 3개 — 별리와 '같은 좌표계'로 배치(교훈: 좌표는 일관된 space). 별리 발과 같은 높이에 세운다.
+  // BUILD 319: 가로등 3개 — 별리(키 0.9유닛)와 같은 절대단위·같은 평면(z=0)에. 밑동을 별리 발과 정확히 일치.
   useEffect(() => {
     const LAMP_N = 3;
     const cam = camera as THREE.PerspectiveCamera;
-    // 별리와 동일하게 REF_Z=-6 기준 refVH/refVW를 쓴다(별리 feetY = -refVH*0.23와 같은 space).
     const REF_Z = -6;
     const dRef = Math.abs(cam.position.z - REF_Z);
     const refVH = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * dRef;
     const refVW = refVH * cam.aspect;
-    const footY = -refVH * 0.23;    // 별리 발과 정확히 같은 높이
-    const LAMP_Z = -0.5;            // 별리(z=0) 살짝 뒤 — 화면 정중앙 평면
-    const targetH = refVH * 0.34;   // 가로등 전체 높이(화면의 ~1/3). 별리보다 조금 큰 정도
-    const s = targetH / 1.2;        // 원본 높이 1.2 → targetH
-    const span = refVW * 1.5;       // 리사이클 폭(화면보다 넉넉히)
+    const footY = -refVH * 0.23;    // 별리 발과 같은 높이(feetYRef와 동일)
+    const LAMP_Z = 0;               // 별리와 같은 평면 — 원근 왜곡 없이 나란히
+    const LAMP_H = 1.3;             // 절대 높이 1.3유닛(별리 0.9의 ~1.45배) — 사람보다 살짝 큰 가로등
+    const s = LAMP_H / 1.2;         // makeTheatreLamp 원본 높이 ≈1.2 → 1.3
+    const span = refVW * 1.6;       // 리사이클 폭
     const gap = span / LAMP_N;
     const built: { group: THREE.Group; light: THREE.PointLight }[] = [];
     for (let i = 0; i < LAMP_N; i += 1) {
@@ -398,22 +397,22 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       if (Lm.mat.map) Lm.mat.map.offset.x = -scroll * Lm.speed * 0.06;
     }
 
-    // BUILD 318: 가로등 — 별리와 같은 좌표계(REF_Z=-6)로 흐름/리사이클. 배경과 같은 왼쪽(-x)으로.
+    // BUILD 319: 가로등 — 흐름 방향 수정(배경과 같은 방향으로 보이게 +x). 광원 세기 강화.
     const lamps = lampsRef.current;
     if (lamps.length) {
       const cam2 = camera as THREE.PerspectiveCamera;
       const dRef = Math.abs(cam2.position.z - (-6));
       const refVH = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * dRef;
       const refVW = refVH * cam2.aspect;
-      const span = refVW * 1.5;
-      const flow = moving ? S.walkSpeed * 0.5 * dt : 0; // near 배경 속도(0.5)에 맞춤
+      const span = refVW * 1.6;
+      const flow = moving ? S.walkSpeed * 0.5 * dt : 0;
       for (const l of lamps) {
-        l.group.position.x -= flow;                       // 왼쪽으로
-        if (l.group.position.x < -span * 0.5) l.group.position.x += span; // 왼끝 넘으면 오른끝
+        l.group.position.x += flow;                        // 배경과 같은 방향(수정: 거꾸로였음)
+        if (l.group.position.x > span * 0.5) l.group.position.x -= span; // 오른끝 넘으면 왼끝
         const dx = Math.abs(l.group.position.x);
-        const reach = refVW * 0.32;
+        const reach = refVW * 0.3;
         const near01 = Math.max(0, 1 - dx / reach);
-        l.light.intensity = 1.2 + near01 * near01 * 2.5;  // 기본 은은 + 별리 근처서 강해짐
+        l.light.intensity = 3 + near01 * near01 * 5;       // 기본 밝게 + 별리 근처서 더
       }
     }
 
@@ -469,7 +468,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       <ambientLight intensity={0.22} color="#3a4a63" />
       <directionalLight position={[3, 6, 4]} intensity={0.16} color="#6a7a9a" />
       {/* BUILD 318: 달빛 — 배경 달(화면 왼쪽)에서 오는 차고 은은한 방향광. 세기는 에디터로 조절. */}
-      <directionalLight ref={moonLightRef} position={[-8, 4, 3]} intensity={0.7} color="#adc6e8" />
+      <directionalLight ref={moonLightRef} position={[-8, 4, 3]} intensity={1.5} color="#c2d4f0" />
     </>
   );
 }
