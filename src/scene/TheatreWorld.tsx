@@ -143,8 +143,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
-    camera.position.set(0, -2.6, 6);
-    camera.lookAt(0, -2.6, 0);
+    camera.position.set(0, 0, 6);
+    camera.lookAt(0, 0, 0);
     (camera as THREE.PerspectiveCamera).fov = 45;
     (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
     scene.fog = null;
@@ -189,8 +189,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     mkFull('train_near.png', -6, 0.5);
     mkFull('train_posts.png', -4, 0.7);
     mkFull('train_cars.png', -3, 0.9);
-    // 별리 발만 철길 높이로. 배경(y0 중심)에서 철길은 아래로 refVH×0.478 지점.
-    feetYRef.current = 0 - refVH * (1050 / 1073 - 0.5);
+    // 별리 발을 화면 안 하단 1/3에 둔다(철길 픽셀에 정확히 안 맞아도, 배경 지면 근처면 자연스럽다).
+    feetYRef.current = -refVH * 0.30;
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
