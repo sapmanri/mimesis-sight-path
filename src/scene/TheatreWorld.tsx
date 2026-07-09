@@ -142,9 +142,9 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
-    camera.position.set(0, 1.35, 6.2);
-    camera.lookAt(0, 1.15, 0);
-    (camera as THREE.PerspectiveCamera).fov = 38;
+    camera.position.set(0, 1.6, 6.2);
+    camera.lookAt(0, 1.4, 0);
+    (camera as THREE.PerspectiveCamera).fov = 40;
     (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
     scene.fog = null;
   }, [camera, scene]);
@@ -184,7 +184,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       tex.repeat.set(repeatX, 1);
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w * repeatX, h), mat);
-      const yOff = h * (0.5 - GROUND_PX / IMG_H); // 철길이 월드 y0에 오도록
+      const yOff = h * (GROUND_PX / IMG_H - 0.5); // 철길이 월드 y0에 오도록 (배경은 위로)
       m.position.set(0, yOff, z);
       stage.add(m);
       layerMats.current.push({ mat, speed });
