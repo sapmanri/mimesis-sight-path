@@ -1,0 +1,286 @@
+// ---------- BUILD 294: StageModule — 폽 세션 엔진 (본토·행성·동네 공용) ----------
+// 별리가 어디서든 오브젝트를 '폽'으로 불러내 그걸로 논다: 스피커 켜고 춤, 모닥불 피우고 앉기,
+// 매트 깔고 운동, 침대 펴고 잠, 책 펴고 읽기… 무대(평면/구면)와 무관한 하나의 엔진.
+//
+// 설계: 엔진은 하나, 놀이는 '레시피' 데이터로. 무대는 앵커(부모 그룹·위치)만 넘긴다.
+//   레시피 = { 오브젝트 glb, 모션들, 분위기, 배치, 지속 }.
+//   새 놀이 추가 = 레시피 하나 추가. 엔진은 그대로.
+
+import * as THREE from 'three';
+import { defaultLoader } from '../engine/worldCore';
+import type { WalkerRig } from './walkerRig';
+import { ambience } from '../audio/ambience';
+
+// ---------- 공용 정규화 — wrap 그룹에서 world bbox 재서 세우고 바닥+중심 정렬 ----------
+// glb 노드에 회전이 박혀 있어도(예: Speaker) world 기준이라 바로 선다.
+export function normalizeProp(raw: THREE.Object3D, targetH: number): THREE.Group {
+  const wrap = new THREE.Group();
+  wrap.add(raw);
+  wrap.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(wrap);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const s = targetH / maxDim;
+  raw.scale.multiplyScalar(s);
+  raw.position.sub(center.multiplyScalar(s));
+  wrap.updateMatrixWorld(true);
+  const box2 = new THREE.Box3().setFromObject(wrap);
+  raw.position.y -= box2.min.y;
+  return wrap;
+}
+
+// ---------- 떠오르는 심볼(음표 등) 파티클 ----------
+function symbolTexture(glyph: string): THREE.CanvasTexture {
+  const S = 64;
+  const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  const g = cv.getContext('2d')!;
+  g.font = '46px serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = 'rgba(90,82,69,0.9)';
+  g.fillText(glyph, S / 2, S / 2 + 2);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+type Particle = { spr: THREE.Sprite; t: number; life: number; vx: number; vy: number; sway: number };
+export function makeSymbolSystem(parent: THREE.Object3D, glyphs: string[]) {
+  const texes = glyphs.map(symbolTexture);
+  const root = new THREE.Group();
+  parent.add(root);
+  const items: Particle[] = [];
+  return {
+    root,
+    emit(from: THREE.Vector3) {
+      if (items.length > 14) return;
+      const tex = texes[Math.floor(Math.random() * texes.length)];
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, fog: false });
+      const spr = new THREE.Sprite(mat);
+      spr.scale.set(0.28, 0.28, 1);
+      spr.position.copy(from).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.1, 0.1));
+      root.add(spr);
+      items.push({ spr, t: 0, life: 1.8 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.3, vy: 0.5 + Math.random() * 0.3, sway: Math.random() * 6 });
+    },
+    update(dt: number) {
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        const n = items[i];
+        n.t += dt;
+        n.spr.position.x += (n.vx + Math.sin(n.t * 3 + n.sway) * 0.15) * dt;
+        n.spr.position.y += n.vy * dt;
+        const inK = Math.min(1, n.t / 0.25);
+        const outK = Math.min(1, Math.max(0, (n.life - n.t) / 0.5));
+        (n.spr.material as THREE.SpriteMaterial).opacity = Math.min(inK, outK) * 0.9;
+        if (n.t >= n.life) {
+          (n.spr.material as THREE.SpriteMaterial).map?.dispose();
+          (n.spr.material as THREE.SpriteMaterial).dispose();
+          root.remove(n.spr);
+          items.splice(i, 1);
+        }
+      }
+    },
+    clear() {
+      items.forEach((n) => { (n.spr.material as THREE.SpriteMaterial).dispose(); root.remove(n.spr); });
+      items.length = 0;
+    },
+  };
+}
+
+// ---------- 스피커 얼굴 텍스처 (원본 모델이 밋밋한 회색 박스라 콘·그물을 그려 입힌다) ----------
+export function speakerFaceTexture(): THREE.CanvasTexture {
+  const W = 256, H = 512;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#2c2620'; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(255,255,255,0.04)';
+  for (let y = 6; y < H; y += 9) for (let x = 6; x < W; x += 9) { g.beginPath(); g.arc(x, y, 1.4, 0, Math.PI * 2); g.fill(); }
+  const cone = (cy: number, r: number) => {
+    g.beginPath(); g.arc(W / 2, cy, r, 0, Math.PI * 2); g.fillStyle = '#1a1712'; g.fill();
+    g.strokeStyle = '#4a4038'; g.lineWidth = 3; g.stroke();
+    g.beginPath(); g.arc(W / 2, cy, r * 0.42, 0, Math.PI * 2); g.fillStyle = '#3a332b'; g.fill();
+  };
+  cone(H * 0.34, W * 0.34); cone(H * 0.72, W * 0.20);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+
+// ---------- 레시피 ----------
+// 오브젝트 하나를 폽으로 불러 배치하고, 그 위에서 어떤 모션을 몇 번 돌리며, 어떤 분위기를 낼지.
+export type StageProp = {
+  file: string;              // glb 파일명 (public/assets/models/)
+  targetH: number;          // 정규화 높이(월드 유닛)
+  offset: [number, number, number]; // 캐릭터(앵커) 기준 배치 오프셋
+  bodyColor?: string;       // 몸통 재질 덮어쓰기(선택)
+  faceQuad?: 'speaker';     // 앞면에 붙일 얼굴판 종류(선택)
+  bob?: number;             // 재생 중 위아래 들썩임(0=없음)
+};
+export type StageRecipe = {
+  id: string;
+  motions: string[];        // 재생할 모션 클립 이름들(무작위로 이어 재생)
+  rounds: [number, number]; // 반복 횟수 범위 [min, max]
+  prop?: StageProp;         // 소환 오브젝트(없으면 모션만)
+  symbols?: string[];       // 떠오르는 심볼(음표 ['♪','♫'] 등)
+  symbolEvery?: number;     // 심볼 방출 간격(초)
+  tune?: 'music';           // 분위기 사운드
+  tuneEvery?: number;       // 사운드 반복 간격(초)
+  face?: number;            // 세션 중 바라볼 방향(라디안, 옆면 무대용)
+};
+
+// 첫 레시피: 춤 — 스피커 폽 + 음표 + 음악 + 여러 곡.
+export const STAGE_RECIPES: Record<string, StageRecipe> = {
+  dance: {
+    id: 'dance',
+    motions: ['HipHop', 'Samba', 'Rumba', 'Shuffle'],
+    rounds: [2, 4],
+    prop: { file: 'Speaker.glb', targetH: 0.9, offset: [-0.7, 0, 0.2], bodyColor: '#6b4a2e', faceQuad: 'speaker', bob: 0.03 },
+    symbols: ['♪', '♫', '♩', '♬'],
+    symbolEvery: 0.35,
+    tune: 'music',
+    tuneEvery: 2.8,
+    face: 0,
+  },
+};
+
+// ---------- 세션 엔진 ----------
+// 무대가 넘기는 것: parent(오브젝트를 담을 그룹), rig(모션), onFace(방향 지정 콜백, 선택).
+export type StageAnchor = {
+  parent: THREE.Object3D;                 // 오브젝트를 add할 그룹(예: 캐릭터 mount)
+  rig: WalkerRig;                         // 모션 재생 대상
+  setFace?: (rad: number) => void;        // 옆면 무대의 바라보는 방향(선택)
+};
+
+type Loaded = { proto: THREE.Object3D };
+const protoCache = new Map<string, Loaded>();
+
+export function makeStage(scene: THREE.Object3D) {
+  const symbolSys = makeSymbolSystem(scene, ['♪', '♫', '♩', '♬']);
+  const S = {
+    active: false,
+    recipe: null as StageRecipe | null,
+    anchor: null as StageAnchor | null,
+    obj: null as THREE.Group | null,
+    face: null as THREE.Mesh | null,
+    roundsLeft: 0,
+    timer: 0,
+    tuneT: 0,
+    symT: 0,
+    popT: 0,
+    phase: 'none' as 'none' | 'in' | 'hold' | 'out',
+  };
+
+  // 프로토 미리 로드(레시피의 prop) — 있으면 즉시 소환 가능
+  const preload = (recipe: StageRecipe) => {
+    const p = recipe.prop; if (!p || protoCache.has(p.file)) return;
+    void defaultLoader(p.file).then((gltf) => {
+      const root = gltf.scene;
+      if (p.bodyColor) {
+        root.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) m.material = new THREE.MeshStandardMaterial({ color: p.bodyColor, roughness: 0.7, metalness: 0.05 });
+        });
+      }
+      protoCache.set(p.file, { proto: root });
+    }).catch(() => { /* 없으면 모션만 */ });
+  };
+
+  return {
+    symbolSys,
+    // 레시피 미리 로드(씬 시작 시 호출 권장)
+    preload(id: string) { const r = STAGE_RECIPES[id]; if (r) preload(r); },
+    isActive: () => S.active,
+    // 세션 시작 — 성공 시 true. 오브젝트 폽 + 첫 모션.
+    play(id: string, anchor: StageAnchor): boolean {
+      if (S.active) return false;
+      const recipe = STAGE_RECIPES[id]; if (!recipe) return false;
+      const first = recipe.motions[Math.floor(Math.random() * recipe.motions.length)];
+      const dur = anchor.rig.playNamed?.(first) ?? 0;
+      if (dur <= 0) return false;
+      S.active = true; S.recipe = recipe; S.anchor = anchor;
+      S.roundsLeft = recipe.rounds[0] + Math.floor(Math.random() * (recipe.rounds[1] - recipe.rounds[0] + 1));
+      S.timer = dur; S.tuneT = 0; S.symT = 0; S.popT = 0;
+      if (recipe.face !== undefined) anchor.setFace?.(recipe.face);
+      // 오브젝트 소환
+      const p = recipe.prop;
+      const cached = p ? protoCache.get(p.file) : null;
+      if (p && cached) {
+        const sp = normalizeProp(cached.proto.clone(true), p.targetH);
+        sp.position.set(p.offset[0], p.offset[1], p.offset[2]);
+        if (p.faceQuad === 'speaker') {
+          const box = new THREE.Box3().setFromObject(sp);
+          const size = box.getSize(new THREE.Vector3());
+          const fm = new THREE.MeshStandardMaterial({ map: speakerFaceTexture(), roughness: 0.85, metalness: 0.05 });
+          const face = new THREE.Mesh(new THREE.PlaneGeometry(size.x * 0.9, size.y * 0.9), fm);
+          face.position.set(0, size.y * 0.5, size.z * 0.5 + 0.005);
+          sp.add(face);
+          S.face = face;
+        }
+        sp.scale.setScalar(0.001);
+        anchor.parent.add(sp);
+        S.obj = sp;
+        S.phase = 'in';
+      } else {
+        S.phase = 'hold'; // 오브젝트 없어도 모션은 돈다
+      }
+      if (recipe.tune === 'music') ambience.mumbleTune?.();
+      return true;
+    },
+    // 세션 종료(외부에서 강제 종료 가능)
+    stop() {
+      if (!S.active) return;
+      S.anchor?.rig.stopNamed?.();
+      if (S.recipe?.face !== undefined) S.anchor?.setFace?.(-Math.PI / 2); // 기본 진행방향 복귀(옆면 무대)
+      S.active = false; S.recipe = null;
+      S.phase = S.obj ? 'out' : 'none';
+    },
+    // 매 프레임 — 모션 이어가기 + 오브젝트 폽 애니 + 심볼 + 사운드
+    update(dt: number, elapsed: number) {
+      symbolSys.update(dt);
+      if (S.active && S.recipe && S.anchor) {
+        const R = S.recipe;
+        S.timer -= dt;
+        if (R.tune === 'music') { S.tuneT -= dt; if (S.tuneT <= 0) { ambience.mumbleTune?.(); S.tuneT = R.tuneEvery ?? 2.8; } }
+        if (S.timer <= 0) {
+          S.roundsLeft -= 1;
+          if (S.roundsLeft > 0) {
+            const next = R.motions[Math.floor(Math.random() * R.motions.length)];
+            S.timer = S.anchor.rig.playNamed?.(next) ?? 2;
+          } else {
+            this.stop();
+          }
+        }
+      }
+      // 오브젝트 폽 애니
+      const obj = S.obj;
+      if (obj && S.phase === 'in') {
+        S.popT += dt;
+        const k = Math.min(1, S.popT / 0.4);
+        const base = S.recipe?.prop?.targetH ? 0.9 : 0.9;
+        const pop = base * (1 + 0.25 * Math.sin(k * Math.PI)) * (k < 1 ? k : 1);
+        obj.scale.setScalar(Math.max(0.001, pop));
+        if (k >= 1) { obj.scale.setScalar(0.9); S.phase = 'hold'; }
+      } else if (obj && S.phase === 'hold') {
+        const bob = S.recipe?.prop?.bob ?? 0;
+        if (bob > 0) obj.position.y = Math.abs(Math.sin(elapsed * 6)) * bob;
+        if (S.recipe?.symbols?.length) {
+          S.symT -= dt;
+          if (S.symT <= 0) {
+            S.symT = S.recipe.symbolEvery ?? 0.3;
+            const wp = obj.getWorldPosition(new THREE.Vector3()); wp.y += 0.9;
+            symbolSys.emit(wp);
+          }
+        }
+      } else if (obj && S.phase === 'out') {
+        S.popT -= dt * 3;
+        const k = Math.max(0, S.popT / 0.4);
+        obj.scale.setScalar(Math.max(0.001, 0.9 * k));
+        if (k <= 0.01) { obj.parent?.remove(obj); S.obj = null; S.face = null; S.phase = 'none'; }
+      }
+    },
+    dispose() {
+      symbolSys.clear();
+      scene.remove(symbolSys.root);
+      if (S.obj) { S.obj.parent?.remove(S.obj); S.obj = null; }
+    },
+  };
+}
+
+export type Stage = ReturnType<typeof makeStage>;

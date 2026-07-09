@@ -6,8 +6,9 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset, defaultLoader } from '../engine/worldCore';
+import { loadWalkerAsset } from '../engine/worldCore';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
+import { makeStage, type Stage } from './stageModule';
 import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { makeBubble, updateBubble, type Bubble } from './speech';
@@ -53,112 +54,11 @@ function bakeLayer(l: TheatreLayer, W = 1024, H = 256): THREE.CanvasTexture {
 
 // BUILD 293: 밋밋한 회색 스피커 상자에 '스피커 얼굴'을 그려 입힌다 — 원본 모델엔 콘·그물이 없다.
 //   빈티지 우드톤 + 콘 2개(우퍼/트위터) + 그물 점무늬. 네 세계의 아날로그 감성.
-function speakerFaceTexture(): THREE.CanvasTexture {
-  const W = 256, H = 512;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const g = cv.getContext('2d')!;
-  // 그물망 바탕 (어두운 천)
-  g.fillStyle = '#2c2620'; g.fillRect(0, 0, W, H);
-  // 그물 점무늬
-  g.fillStyle = 'rgba(255,255,255,0.04)';
-  for (let y = 6; y < H; y += 9) for (let x = 6; x < W; x += 9) { g.beginPath(); g.arc(x, y, 1.4, 0, Math.PI * 2); g.fill(); }
-  const cone = (cy: number, r: number) => {
-    g.beginPath(); g.arc(W / 2, cy, r, 0, Math.PI * 2);
-    g.fillStyle = '#1a1712'; g.fill();
-    g.strokeStyle = '#4a4038'; g.lineWidth = 3; g.stroke();
-    g.beginPath(); g.arc(W / 2, cy, r * 0.42, 0, Math.PI * 2); // 더스트캡
-    g.fillStyle = '#3a332b'; g.fill();
-  };
-  cone(H * 0.34, W * 0.34); // 우퍼(큰 콘)
-  cone(H * 0.72, W * 0.20); // 트위터(작은 콘)
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 // 지면 곡선의 '월드 높이' — 별리 발이 이 값을 탄다. scroll이 흐르면 언덕이 다가왔다 지나간다.
 // BUILD 286: near 실루엣 진폭에 묶지 않고 전용 amp/freq로 — 눈에 확실히 보이는 오르내림.
 function groundHeight(scroll: number, amp: number, freq: number): number {
   const u = scroll * freq;
   return (Math.sin(u) * 0.6 + Math.sin(u * 1.7 + 1.3) * 0.3 + Math.sin(u * 0.4 + 2.1) * 0.1) * amp;
-}
-
-// BUILD 291: 음표 스프라이트 — ♪ ♫ 하나를 크림색 종이 위에 그린다(말풍선과 같은 감성 톤)
-function noteTexture(glyph: string): THREE.CanvasTexture {
-  const S = 64;
-  const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
-  const g = cv.getContext('2d')!;
-  g.font = '46px serif';
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = 'rgba(90,82,69,0.9)';
-  g.fillText(glyph, S / 2, S / 2 + 2);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-// 스피커에서 떠오르는 음표들 — 위로 오르며 좌우로 흔들리고 옅어진다
-type Note = { spr: THREE.Sprite; t: number; life: number; vx: number; vy: number; sway: number };
-function makeNoteSystem(scene: THREE.Object3D) {
-  const glyphs = ['♪', '♫', '♩', '♬'];
-  const texes = glyphs.map(noteTexture);
-  const root = new THREE.Group();
-  scene.add(root);
-  const notes: Note[] = [];
-  return {
-    root,
-    emit(from: THREE.Vector3) {
-      if (notes.length > 14) return;
-      const tex = texes[Math.floor(Math.random() * texes.length)];
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, fog: false });
-      const spr = new THREE.Sprite(mat);
-      spr.scale.set(0.28, 0.28, 1);
-      spr.position.copy(from).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.1, 0.1));
-      root.add(spr);
-      notes.push({ spr, t: 0, life: 1.8 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.3, vy: 0.5 + Math.random() * 0.3, sway: Math.random() * 6 });
-    },
-    update(dt: number) {
-      for (let i = notes.length - 1; i >= 0; i -= 1) {
-        const n = notes[i];
-        n.t += dt;
-        n.spr.position.x += (n.vx + Math.sin(n.t * 3 + n.sway) * 0.15) * dt;
-        n.spr.position.y += n.vy * dt;
-        const inK = Math.min(1, n.t / 0.25);
-        const outK = Math.min(1, Math.max(0, (n.life - n.t) / 0.5));
-        (n.spr.material as THREE.SpriteMaterial).opacity = Math.min(inK, outK) * 0.9;
-        if (n.t >= n.life) {
-          (n.spr.material as THREE.SpriteMaterial).map?.dispose();
-          (n.spr.material as THREE.SpriteMaterial).dispose();
-          root.remove(n.spr);
-          notes.splice(i, 1);
-        }
-      }
-    },
-    clear() {
-      notes.forEach((n) => { (n.spr.material as THREE.SpriteMaterial).dispose(); root.remove(n.spr); });
-      notes.length = 0;
-    },
-  };
-}
-
-// 소품 정규화 — wrap 그룹에서 world bbox 재서 세우고(가장 긴 축=높이) 바닥+중심 정렬.
-// Speaker.glb는 노드에 X축 회전이 박혀 있으니, world 기준으로 재야 바로 선다.
-function normalizeProp(raw: THREE.Object3D, targetH: number): THREE.Group {
-  const wrap = new THREE.Group();
-  wrap.add(raw);
-  wrap.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(wrap);
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z) || 1;
-  const s = targetH / maxDim;
-  raw.scale.multiplyScalar(s);
-  raw.position.sub(center.multiplyScalar(s));
-  // 바닥을 0에 (재측정)
-  wrap.updateMatrixWorld(true);
-  const box2 = new THREE.Box3().setFromObject(wrap);
-  raw.position.y -= box2.min.y;
-  return wrap;
 }
 
 type Props = {
@@ -186,11 +86,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const lingerRef = useRef({ left: 0, gap: 0, timer: 0, walkLeft: 4 + Math.random() * 3 });
   // BUILD 289: 바라보는 방향 — 걸을 땐 왼쪽(-π/2) 고정, 놀 땐 정면 쪽으로 자유롭게.
   const faceRef = useRef(-Math.PI / 2);
-  // BUILD 291: 마법가방 — 스피커. 춤 세션 동안 폽 소환 + 음표 + 음악 웅얼웅얼.
-  const speakerProtoRef = useRef<THREE.Object3D | null>(null); // 로드된 원본(clone해서 씀)
-  const speakerRef = useRef<THREE.Group | null>(null);         // 현재 소환된 스피커
-  const noteSysRef = useRef<ReturnType<typeof makeNoteSystem> | null>(null);
-  const danceRef = useRef({ active: false, timer: 0, danceLeft: 0, gap: 0, popT: 0, tuneT: 0, noteT: 0, phase: 'none' as 'none' | 'in' | 'hold' | 'out' });
+  // BUILD 294: 스테이지 모듈 — 폽 세션(춤/캠프/운동…) 공용 엔진. 무대는 앵커만 넘긴다.
+  const stageRef = useRef<Stage | null>(null);
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
 
@@ -269,25 +166,12 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     return () => { alive = false; };
   }, [stage, walkerIdx]);
 
-  // BUILD 291: 스피커 프로토 + 음표 시스템 로드 (한 번). 춤 세션 때 clone·소환.
+  // BUILD 294: 스테이지 생성 + 레시피 미리 로드(한 번). 춤 세션 때 stage.play('dance').
   useEffect(() => {
-    let alive = true;
-    noteSysRef.current = makeNoteSystem(stage);
-    void defaultLoader('Speaker.glb').then((gltf) => {
-      if (!alive) return;
-      // BUILD 293: 몸통 전체를 빈티지 우드톤으로. 얼굴(콘·그물)은 원본에 없으니 별도 판을 붙인다.
-      gltf.scene.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        mesh.material = new THREE.MeshStandardMaterial({ color: '#6b4a2e', roughness: 0.7, metalness: 0.05 });
-      });
-      speakerProtoRef.current = gltf.scene;
-    }).catch(() => { /* 스피커 없으면 춤만 */ });
-    return () => {
-      alive = false;
-      noteSysRef.current?.clear();
-      if (noteSysRef.current) stage.remove(noteSysRef.current.root);
-    };
+    const st = makeStage(stage);
+    st.preload('dance');
+    stageRef.current = st;
+    return () => { st.dispose(); stageRef.current = null; };
   }, [stage]);
 
   // 웅얼웅얼 (행성과 동일)
@@ -298,48 +182,6 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     bubbles.current.push(b);
     bubbleRoot.add(b.sprite);
     ambience.mumble?.(pitch);
-  };
-
-  // BUILD 291: 춤 세션 시작 — 스피커 폽 소환 + 춤 여러 번 + 음표 + 음악 웅얼웅얼.
-  const DANCES = ['HipHop', 'Samba', 'Rumba', 'Shuffle'];
-  const startDance = () => {
-    const rig = rigRef.current; const proto = speakerProtoRef.current; const mnt = walkerMountRef.current;
-    if (!rig || !mnt) return false;
-    const first = DANCES[Math.floor(Math.random() * DANCES.length)];
-    const dur = rig.playNamed?.(first) ?? 0;
-    if (dur <= 0) return false; // 춤 클립 없으면 포기
-    const D = danceRef.current;
-    D.active = true;
-    D.danceLeft = 2 + Math.floor(Math.random() * 3); // 춤 2~4곡(클립) 이어서
-    D.timer = dur; D.gap = 0; D.popT = 0; D.tuneT = 0; D.noteT = 0;
-    faceRef.current = 0; // 관객을 보고 춤춘다
-    // 스피커 소환 — 별리 옆(왼쪽 약간 앞)에 폽
-    if (proto) {
-      const sp = normalizeProp(proto.clone(true), 0.9);
-      sp.position.set(-0.7, 0, 0.2);
-      // BUILD 293: 스피커 얼굴(콘·그물) 판을 관객(+Z) 쪽에 직접 붙인다 — 원본 모델엔 얼굴이 없다.
-      const box = new THREE.Box3().setFromObject(sp);
-      const size = box.getSize(new THREE.Vector3());
-      const faceMat = new THREE.MeshStandardMaterial({ map: speakerFaceTexture(), roughness: 0.85, metalness: 0.05 });
-      const face = new THREE.Mesh(new THREE.PlaneGeometry(size.x * 0.9, size.y * 0.9), faceMat);
-      face.position.set(0, size.y * 0.5, size.z * 0.5 + 0.005); // 앞면(+Z)에 살짝 띄워
-      sp.add(face);
-      sp.scale.setScalar(0.001);
-      mnt.add(sp);
-      speakerRef.current = sp;
-      D.phase = 'in';
-    } else {
-      D.phase = 'hold'; // 스피커 없어도 춤은 춘다
-    }
-    ambience.mumbleTune?.();
-    return true;
-  };
-  const stopDance = () => {
-    const D = danceRef.current;
-    rigRef.current?.stopNamed?.();
-    D.active = false;
-    if (speakerRef.current) D.phase = 'out'; else D.phase = 'none';
-    faceRef.current = -Math.PI / 2;
   };
 
   useFrame((_s, rawDt) => {
@@ -357,27 +199,16 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     } else if (P === 'linger') {
       // 멈춰서 딴짓과 '가만히'를 번갈아 — 이 동안 배경도 멈춘다(여기 머문다).
       moving = false;
-      const D = danceRef.current;
-      if (D.active) {
-        // 춤 세션 진행 — 한 곡 끝나면 다음 춤으로 이어감(playNamed는 반복이지만 곡을 바꾸려 타이머로 교체)
-        D.timer -= dt;
-        D.tuneT -= dt;
-        if (D.tuneT <= 0) { ambience.mumbleTune?.(); D.tuneT = 2.2 + Math.random() * 1.5; } // 흥얼거림 반복
-        if (D.timer <= 0) {
-          D.danceLeft -= 1;
-          if (D.danceLeft > 0) {
-            const next = DANCES[Math.floor(Math.random() * DANCES.length)];
-            D.timer = rigRef.current?.playNamed?.(next) ?? 2;
-          } else {
-            stopDance();
-            L.gap = 0.5; // 춤 끝나고 잠깐 숨 고르고 다음 딴짓
-          }
-        }
+      const st = stageRef.current;
+      if (st?.isActive()) {
+        // 스테이지 세션(춤 등) 진행 중 — 엔진이 모션·오브젝트·분위기를 관리(update에서 진행).
       } else {
         L.gap -= dt;
         if (L.gap <= 0 && L.left > 0) {
-          // 가끔(스피커 프로토 있고 20%) 춤 세션 — 스피커 폽 + 음표 + 음악. 아니면 평범한 딴짓.
-          if (speakerProtoRef.current && Math.random() < 0.2 && startDance()) {
+          const rig = rigRef.current; const mnt = walkerMountRef.current;
+          // 가끔(20%) 스테이지 세션(춤=스피커 폽+음표+음악). 아니면 평범한 딴짓.
+          if (st && rig && mnt && Math.random() < 0.2
+              && st.play('dance', { parent: mnt, rig, setFace: (r) => { faceRef.current = r; } })) {
             L.left -= 1;
           } else {
             const dur = rigRef.current?.flourish?.() ?? 0;
@@ -398,7 +229,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
           }
         }
       }
-      if (!D.active && L.left <= 0 && L.gap <= 0) {
+      if (!stageRef.current?.isActive() && L.left <= 0 && L.gap <= 0) {
         phaseRef.current = 'walk';
         faceRef.current = -Math.PI / 2; // 다시 걸으면 진행방향(왼쪽)
         L.walkLeft = lingerEvery; // 정확히 이 초만큼 걷는다
@@ -444,35 +275,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       rigRef.current?.update?.(dt, 0.5, moving, _s.clock.elapsedTime, moving ? S.walkSpeed * dt : 0);
     }
 
-    // BUILD 291: 스피커 폽 애니 + 음표 — 등장(elastic), 유지(음표 뿜기·살짝 들썩), 퇴장
-    const D = danceRef.current;
-    const sp = speakerRef.current;
-    if (sp && D.phase === 'in') {
-      D.popT += dt;
-      const k = Math.min(1, D.popT / 0.4);
-      const pop = 0.9 * (1 + 0.25 * Math.sin(k * Math.PI)) * (k < 1 ? k : 1); // 살짝 튀며 커짐
-      sp.scale.setScalar(Math.max(0.001, pop));
-      if (k >= 1) { sp.scale.setScalar(0.9); D.phase = 'hold'; }
-    } else if (sp && D.phase === 'hold') {
-      sp.position.y = Math.abs(Math.sin(_s.clock.elapsedTime * 6)) * 0.03; // 비트에 들썩
-      D.noteT -= dt;
-      if (D.noteT <= 0) {
-        D.noteT = 0.25 + Math.random() * 0.25;
-        const wp = sp.getWorldPosition(new THREE.Vector3());
-        wp.y += 0.9; // 스피커 위에서 음표가 솟는다
-        noteSysRef.current?.emit(wp);
-      }
-    } else if (sp && D.phase === 'out') {
-      D.popT -= dt * 3;
-      const k = Math.max(0, D.popT / 0.4);
-      sp.scale.setScalar(Math.max(0.001, 0.9 * k));
-      if (k <= 0.01) {
-        walkerMountRef.current?.remove(sp);
-        speakerRef.current = null;
-        D.phase = 'none';
-      }
-    }
-    noteSysRef.current?.update(dt);
+    // BUILD 294: 스테이지 세션 진행 — 모션 이어가기·오브젝트 폽·심볼·사운드를 엔진이 관리
+    stageRef.current?.update(dt, _s.clock.elapsedTime);
 
     // 말풍선 갱신 (본토 극성: 수명 다하면 true)
     for (let i = bubbles.current.length - 1; i >= 0; i -= 1) {
