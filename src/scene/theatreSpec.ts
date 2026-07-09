@@ -30,14 +30,14 @@ export type TheatreSpec = {
 };
 
 export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
-  skyTop: '#e6d3b6',
-  skyBottom: '#f4ecdb',
+  skyTop: '#e8d9c4',
+  skyBottom: '#f6efe0',
   fogTint: '#efe6d4',
   walkSpeed: 1.0,
-  far:  { color: '#c7b795', speed: 0.18, baseY: 0.52, amp: 0.10, freq: 1.4, seed: 11 },
-  mid:  { color: '#a68f63', speed: 0.45, baseY: 0.40, amp: 0.14, freq: 2.3, seed: 27 },
-  near: { color: '#6e5b38', speed: 1.00, baseY: 0.26, amp: 0.08, freq: 3.6, seed: 53 },
-  ground: '#5c4a2e',
+  far:  { color: '#b9c0c9', speed: 0.18, baseY: 0.54, amp: 0.11, freq: 1.3, seed: 11 }, // 먼 산 — 옅은 청회
+  mid:  { color: '#9db089', speed: 0.45, baseY: 0.40, amp: 0.15, freq: 2.1, seed: 27 }, // 중경 — 세이지
+  near: { color: '#5f7a4e', speed: 1.00, baseY: 0.27, amp: 0.09, freq: 3.4, seed: 53 }, // 근경 — 진초록
+  ground: '#4a5f3a',
   groundAmp: 0.6,  // BUILD 286: 눈에 보이는 오르내림
   groundFreq: 0.5,
   walker: 13, // 별리(Kid5b)

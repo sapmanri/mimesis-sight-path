@@ -26,31 +26,79 @@ function ridge(u: number, l: TheatreLayer): number {
 }
 
 // 한 레이어의 실루엣을 이음새 없는 타일 텍스처로 굽는다.
-function bakeLayer(l: TheatreLayer, W = 1024, H = 256): THREE.CanvasTexture {
+// BUILD 298: 하이브리드 — 고해상도(픽셀계단✘) + 부드러운 능선 + 나무·풀 실루엣 + 수채 톤.
+function bakeLayer(l: TheatreLayer, opts: { trees?: number; grass?: number } = {}): THREE.CanvasTexture {
+  const W = 2048, H = 512;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d')!;
   g.clearRect(0, 0, W, H);
-  g.fillStyle = l.color;
+  // 능선 높이 함수(캔버스 x → 지면 top)
+  const topAt = (x: number) => {
+    const u = (x / W) * Math.PI * 2;
+    return H * (1 - l.baseY) - ridge(u, l) * l.amp * H;
+  };
+  // 언덕 면 — 위(능선)는 밝게, 아래는 살짝 어둡게(수채 그라디언트)
+  const grad = g.createLinearGradient(0, H * (1 - l.baseY) - l.amp * H, 0, H);
+  grad.addColorStop(0, l.color);
+  grad.addColorStop(1, shade(l.color, -0.12));
+  g.fillStyle = grad;
   g.beginPath();
   g.moveTo(0, H);
-  const N = 256;
-  for (let i = 0; i <= N; i += 1) {
-    const u = (i / N) * Math.PI * 2; // 0..2π → 좌우로 닫힘
-    const x = (i / N) * W;
-    const top = H * (1 - l.baseY) - ridge(u, l) * l.amp * H;
-    g.lineTo(x, top);
-  }
+  const N = 512;
+  for (let i = 0; i <= N; i += 1) { const x = (i / N) * W; g.lineTo(x, topAt(x)); }
   g.lineTo(W, H);
   g.closePath();
   g.fill();
+
+  // 나무 실루엣 — 능선 위에 드문드문. 색은 언덕보다 살짝 진하게.
+  const treeN = opts.trees ?? 0;
+  if (treeN > 0) {
+    g.fillStyle = shade(l.color, -0.18);
+    for (let i = 0; i < treeN; i += 1) {
+      const x = (i + 0.35 + Math.sin(i * 12.9) * 0.3) * (W / treeN);
+      const gy = topAt(x);
+      const th = 26 + ((i * 37) % 22); // 높이 변주
+      // 둥근 활엽수 실루엣
+      g.beginPath();
+      g.moveTo(x - 2, gy);
+      g.lineTo(x - 2, gy - th * 0.5);
+      g.lineTo(x + 2, gy - th * 0.5);
+      g.lineTo(x + 2, gy);
+      g.fill();
+      g.beginPath();
+      g.ellipse(x, gy - th * 0.7, th * 0.42, th * 0.5, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  // 풀 — 능선 라인에 짧은 삐침
+  const grassN = opts.grass ?? 0;
+  if (grassN > 0) {
+    g.strokeStyle = shade(l.color, -0.2); g.lineWidth = 2; g.lineCap = 'round';
+    for (let i = 0; i < grassN; i += 1) {
+      const x = (i + 0.5) * (W / grassN) + Math.sin(i * 7.3) * 8;
+      const gy = topAt(x);
+      const h = 6 + ((i * 13) % 8);
+      g.beginPath(); g.moveTo(x, gy); g.lineTo(x + (i % 2 ? 2 : -2), gy - h); g.stroke();
+    }
+  }
+
   const tex = new THREE.CanvasTexture(cv);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 4;
   return tex;
+}
+
+// 색을 밝게(+)/어둡게(-) — 수채 그라디언트·나무 음영용
+function shade(hex: string, amt: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const f = (v: number) => Math.max(0, Math.min(255, Math.round(v + v * amt)));
+  return `rgb(${f(r)},${f(g)},${f(b)})`;
 }
 
 // BUILD 293: 밋밋한 회색 스피커 상자에 '스피커 얼굴'을 그려 입힌다 — 원본 모델엔 콘·그물이 없다.
@@ -128,7 +176,9 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       { layer: S.near, z: -2.6, h: 10, w: 40 },
     ];
     for (const d of defs) {
-      const tex = bakeLayer(d.layer);
+      const treesFor = d.layer === S.near ? 22 : d.layer === S.mid ? 14 : 0;
+      const grassFor = d.layer === S.near ? 60 : 0;
+      const tex = bakeLayer(d.layer, { trees: treesFor, grass: grassFor });
       tex.repeat.set(d.w / 12, 1); // 가로로 여러 번 타일 → 능선이 촘촘
       const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
       const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.h), mat);
@@ -205,17 +255,21 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     const moving = res.moving;
     const nowWalking = brain?.phase() === 'walk';
 
-    // 동네 옆면 무대의 방향 연출(brain은 방향을 강제하지 않는다 — 별리는 알아서 논다).
-    //   걸을 땐 진행방향(왼쪽) 고정. 막 놀기 시작하면 한 번 정면 쪽으로 틀고,
-    //   그 뒤엔 딴짓마다 가끔 이리저리(정면/좌/우/뒤) — 뒤통수도 보이게, 자유롭게.
+    // 동네 옆면 무대의 방향 — 별리는 관찰자(카메라)를 모른다. 자기 삶을 살 뿐.
+    //   걸을 땐 진행방향(왼쪽). 놀 땐 그 언저리에서 자연스럽게 흔들린다 —
+    //   뭔가 보거나 두리번거리다 우연히 이쪽/저쪽. 관객 정면을 '의식해서' 보지 않는다.
     if (moving) {
       faceRef.current = -Math.PI / 2;
     } else if (wasWalking && !nowWalking) {
-      faceRef.current = 0; // 방금 멈춤 — 우선 관객 쪽
+      // 방금 멈춤 — 진행방향 언저리에서 살짝 튼다(관객 쪽 아님)
+      faceRef.current = -Math.PI / 2 + (Math.random() - 0.5) * 1.0;
     } else if (Math.random() < dt * 0.4) {
-      // 놀다가 가끔 방향을 바꾼다(뒤통수 포함 전방위)
-      const pick = Math.random();
-      faceRef.current = pick < 0.35 ? 0 : pick < 0.55 ? -0.6 : pick < 0.75 ? 0.6 : pick < 0.9 ? Math.PI : -Math.PI / 2;
+      // 놀다가 가끔 방향 전환 — 진행방향(-π/2)을 중심으로 폭넓게. 정면(0)·뒤(π)도 어쩌다.
+      const r = Math.random();
+      faceRef.current = r < 0.5 ? -Math.PI / 2 + (Math.random() - 0.5) * 1.4 // 대개 옆 언저리
+        : r < 0.7 ? -Math.PI / 2 - 0.8 - Math.random() * 0.8 // 뒤쪽으로
+        : r < 0.85 ? -Math.PI / 2 + 0.8 + Math.random() * 0.8 // 앞쪽으로
+        : (Math.random() - 0.5) * 6; // 어쩌다 완전 자유(정면·뒤통수 포함)
     }
 
     if (moving) scrollRef.current += S.walkSpeed * dt;
