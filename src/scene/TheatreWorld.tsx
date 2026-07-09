@@ -310,7 +310,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     const S = specRef.current;
     const P = phaseRef.current;
     const L = lingerRef.current;
-    const lingerEvery = Math.max(0.5, S.lingerEvery ?? 3);
+    const lingerEvery = Math.max(0, S.lingerEvery ?? 3); // 0 = 체류 없음(계속 걷기)
     const lingerLen = Math.max(0.2, S.lingerLength ?? 1);
 
     // BUILD 288: 체류 상태머신 — 걷기는 다음 볼거리로 가는 짧은 전환, 체류가 기본.
@@ -364,18 +364,20 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       if (!D.active && L.left <= 0 && L.gap <= 0) {
         phaseRef.current = 'walk';
         faceRef.current = -Math.PI / 2; // 다시 걸으면 진행방향(왼쪽)
-        L.walkLeft = lingerEvery * (0.7 + Math.random() * 0.7);
+        L.walkLeft = lingerEvery; // 정확히 이 초만큼 걷는다
       }
     } else {
-      // walk — 배경이 흐른다. 짧게 걷다 walkLeft 소진되면 체류로.
+      // walk — 배경이 흐른다. lingerEvery초 걷다 체류로. lingerEvery=0이면 계속 걷는다.
       moving = true;
       faceRef.current = -Math.PI / 2; // 걸을 땐 왼쪽 고정
-      L.walkLeft -= dt;
-      if (L.walkLeft <= 0) {
-        phaseRef.current = 'linger';
-        faceRef.current = 0; // 멈추면 우선 정면(관객)을 본다
-        L.left = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen));
-        L.gap = 0.6 + Math.random() * 1.4;
+      if (lingerEvery > 0) {
+        L.walkLeft -= dt;
+        if (L.walkLeft <= 0) {
+          phaseRef.current = 'linger';
+          faceRef.current = 0; // 멈추면 우선 정면(관객)을 본다
+          L.left = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen));
+          L.gap = 0.6 + Math.random() * 1.4;
+        }
       }
     }
 

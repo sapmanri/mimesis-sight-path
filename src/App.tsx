@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.4.1 · 스피커 방향+춤은 스피커때만 · BUILD 292';
+const BUILD_LABEL = 'v2.4.1 · 스피커방향+체류빈도 초/0 · BUILD 292';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -503,13 +503,13 @@ export default function App() {
                 style={{ width: '100%' }} />
             </label>
             <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
-              체류 빈도 (작을수록 자주 멈춰 논다)
-              <input type="range" min={0.5} max={20} step={0.5} value={tSpec.lingerEvery ?? 3}
+              체류 빈도 — {(tSpec.lingerEvery ?? 3) === 0 ? '체류 없음 (계속 걷기)' : `${tSpec.lingerEvery ?? 3}초마다 멈춰 논다`}
+              <input type="range" min={0} max={30} step={1} value={tSpec.lingerEvery ?? 3}
                 onChange={(e) => updTSpec((s) => ({ ...s, lingerEvery: +e.target.value }))}
                 style={{ width: '100%' }} />
             </label>
             <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
-              체류 길이 (한 자리 오래 논다)
+              체류 길이 — 한 자리 노는 정도 (배율 {(tSpec.lingerLength ?? 1).toFixed(1)})
               <input type="range" min={0.2} max={3} step={0.1} value={tSpec.lingerLength ?? 1}
                 onChange={(e) => updTSpec((s) => ({ ...s, lingerLength: +e.target.value }))}
                 style={{ width: '100%' }} />
