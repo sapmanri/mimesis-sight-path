@@ -492,6 +492,13 @@ export default function App() {
                 onChange={(e) => updTSpec((s) => ({ ...s, lingerLength: +e.target.value }))}
                 style={{ width: '100%' }} />
             </label>
+            {/* BUILD 318: 달빛 — 배경 달에서 오는 은은한 빛 */}
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              달빛 — {(tSpec.moonlight ?? 0.7).toFixed(2)}
+              <input type="range" min={0} max={2} step={0.05} value={tSpec.moonlight ?? 0.7}
+                onChange={(e) => updTSpec((s) => ({ ...s, moonlight: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
             {/* BUILD 315: 바닥 안개 — 발 높이까지 옅게 피어오르는 밤안개 */}
             <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
               바닥 안개 높이 — {(tSpec.floorFogH ?? 0) === 0 ? '끔' : `발 높이 ×${((tSpec.floorFogH ?? 0.16) / 0.16).toFixed(2)}`}

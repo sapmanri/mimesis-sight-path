@@ -25,6 +25,7 @@ export type TheatreSpec = {
   groundFreq?: number; // BUILD 286: 지면 언덕 촘촘함
   floorFogH?: number;  // BUILD 315: 바닥 안개 높이(화면 세로 대비 0~1). 0=끔. 발 높이쯤이 자연스러움
   floorFogColor?: string; // BUILD 315: 바닥 안개 색 (밤 대기색)
+  moonlight?: number;  // BUILD 318: 달빛 세기(0~2). 배경 달 방향에서 오는 방향광. 별리를 은은히 비춤
   walker?: number;     // 산책자 인덱스 (행성과 공유 로스터). undefined/-1 = 랜덤
   // BUILD 282 계승: 체류(2단계에서 연결)
   lingerEvery?: number;
@@ -44,6 +45,7 @@ export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
   groundFreq: 0.5,
   floorFogH: 0.16,          // BUILD 315: 발 높이쯤까지 옅게 깔리는 밤안개
   floorFogColor: '#2a3550', // 밤 대기색
+  moonlight: 0.7,           // BUILD 318: 달빛 세기 — 배경 달 방향에서 오는 은은한 방향광
   walker: 13, // 별리(Kid5b)
   lingerEvery: 3,
   lingerLength: 1,

@@ -308,19 +308,21 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     return () => { stage.remove(mesh); mat.dispose(); tex.dispose(); fogMatRef.current = null; fogMeshRef.current = null; };
   }, [stage, camera]);
 
-  // BUILD 317: 가로등 3개 배치. 별리(z=0)와 near배경(z=-6) 사이(z=-1.5)에. 밑동을 별리 발 높이에 맞춘다.
+  // BUILD 318: 가로등 3개 — 별리와 '같은 좌표계'로 배치(교훈: 좌표는 일관된 space). 별리 발과 같은 높이에 세운다.
   useEffect(() => {
     const LAMP_N = 3;
-    const LAMP_Z = -1.5;
     const cam = camera as THREE.PerspectiveCamera;
-    const d = Math.abs(cam.position.z - LAMP_Z);
-    const vh = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * d;
-    const vw = vh * cam.aspect;
-    const span = vw * 1.4;          // 리사이클 폭
-    const gap = span / LAMP_N;      // 간격
-    const footY = -vh * 0.28;       // 별리 발 근처(feetY와 비슷한 높이)
-    const targetH = vh * 0.42;      // 가로등 전체 높이(화면의 ~0.42) — 우유통 아님, 아담한 진짜 가로등
+    // 별리와 동일하게 REF_Z=-6 기준 refVH/refVW를 쓴다(별리 feetY = -refVH*0.23와 같은 space).
+    const REF_Z = -6;
+    const dRef = Math.abs(cam.position.z - REF_Z);
+    const refVH = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * dRef;
+    const refVW = refVH * cam.aspect;
+    const footY = -refVH * 0.23;    // 별리 발과 정확히 같은 높이
+    const LAMP_Z = -0.5;            // 별리(z=0) 살짝 뒤 — 화면 정중앙 평면
+    const targetH = refVH * 0.34;   // 가로등 전체 높이(화면의 ~1/3). 별리보다 조금 큰 정도
     const s = targetH / 1.2;        // 원본 높이 1.2 → targetH
+    const span = refVW * 1.5;       // 리사이클 폭(화면보다 넉넉히)
+    const gap = span / LAMP_N;
     const built: { group: THREE.Group; light: THREE.PointLight }[] = [];
     for (let i = 0; i < LAMP_N; i += 1) {
       const { group, light } = makeTheatreLamp();
@@ -396,25 +398,27 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       if (Lm.mat.map) Lm.mat.map.offset.x = -scroll * Lm.speed * 0.06;
     }
 
-    // BUILD 317: 가로등 — 배경과 같은 방향(왼쪽, -x)으로 흐르고 왼끝을 넘으면 오른끝으로 되돌린다(무한).
-    //   별리는 X=0 고정 → 가로등이 X=0에 가까울수록 광원이 별리를 물들인다(빛 닿을 때만 환해짐).
+    // BUILD 318: 가로등 — 별리와 같은 좌표계(REF_Z=-6)로 흐름/리사이클. 배경과 같은 왼쪽(-x)으로.
     const lamps = lampsRef.current;
     if (lamps.length) {
       const cam2 = camera as THREE.PerspectiveCamera;
-      const d2 = Math.abs(cam2.position.z - (-1.5));
-      const vh2 = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * d2;
-      const vw2 = vh2 * cam2.aspect;
-      const span = vw2 * 1.4;
+      const dRef = Math.abs(cam2.position.z - (-6));
+      const refVH = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * dRef;
+      const refVW = refVH * cam2.aspect;
+      const span = refVW * 1.5;
       const flow = moving ? S.walkSpeed * 0.5 * dt : 0; // near 배경 속도(0.5)에 맞춤
       for (const l of lamps) {
         l.group.position.x -= flow;                       // 왼쪽으로
         if (l.group.position.x < -span * 0.5) l.group.position.x += span; // 왼끝 넘으면 오른끝
         const dx = Math.abs(l.group.position.x);
-        const reach = vw2 * 0.3;
+        const reach = refVW * 0.32;
         const near01 = Math.max(0, 1 - dx / reach);
         l.light.intensity = 1.2 + near01 * near01 * 2.5;  // 기본 은은 + 별리 근처서 강해짐
       }
     }
+
+    // BUILD 318: 달빛 세기 — 에디터 슬라이더 실시간 반영
+    if (moonLightRef.current) moonLightRef.current.intensity = S.moonlight ?? 0.7;
 
     // BUILD 315: 바닥 안개 — 에디터에서 높이/색 바꾸면 실시간 반영
     const fm = fogMeshRef.current, fmat = fogMatRef.current;
@@ -457,12 +461,15 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     }
   });
 
+  const moonLightRef = useRef<THREE.DirectionalLight>(null);
   return (
     <>
       {/* BUILD 315: 밤 동네 — 별리를 밤에 잠근다. 배경 png는 MeshBasicMaterial이라 조명 무시(안 어두워짐).
           기본 빛을 낮춰 별리를 어둠에 두고, 지나가는 가로등 PointLight가 닿을 때만 얼굴이 환해지게. */}
       <ambientLight intensity={0.22} color="#3a4a63" />
       <directionalLight position={[3, 6, 4]} intensity={0.16} color="#6a7a9a" />
+      {/* BUILD 318: 달빛 — 배경 달(화면 왼쪽)에서 오는 차고 은은한 방향광. 세기는 에디터로 조절. */}
+      <directionalLight ref={moonLightRef} position={[-8, 4, 3]} intensity={0.7} color="#adc6e8" />
     </>
   );
 }
