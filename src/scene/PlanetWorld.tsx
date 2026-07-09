@@ -640,10 +640,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const cometRef = useRef<ReturnType<typeof createComet> | null>(null);
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
-  const speak = (icon: string, pitch = 1) => {
+  const speak = (icon?: string, pitch = 1) => {
     const target = holder; // 걷는 아이 홀더 위에
     if (bubbles.current.length >= 2) return;
-    const b = makeBubble(target, 1.15, icon);
+    const b = makeBubble(target, 1.15, icon); // icon 없으면 웅얼웅얼 필기체 (본토 BUILD 175)
     bubbles.current.push(b);
     bubbleRoot.add(b.sprite);
     ambience.mumble?.(pitch);
@@ -1242,6 +1242,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       // 여백(가만히 서서 별 보는 시간)이 끝나면 다음 딴짓을 꺼낸다
       if (P.gap <= 0 && P.lingerLeft > 0) {
         const dur = rigRef.current?.flourish?.() ?? 0;
+        // BUILD 284: 딴짓할 때 가끔 머리 위로 웅얼웅얼(무언어 말풍선). 본토 speak 재사용.
+        //   대부분은 아이콘 없는 웅얼거림, 아주 가끔 절제된 아이콘(♪ 콧노래 · ~ 느긋 · ! 발견).
+        if (Math.random() < 0.4) {
+          const r = Math.random();
+          const icon = r < 0.72 ? undefined : r < 0.86 ? '♪' : r < 0.94 ? '~' : '!';
+          speak(icon, 0.85 + Math.random() * 0.35);
+        }
         P.lingerLeft -= 1;
         // 딴짓 하나 + 그 뒤 '가만히' 여백. 관조가 삼바보다 별리답다. lingerLength가 크면 여백도 길어진다.
         P.gap = (dur > 0 ? dur : 1.4) + (1.4 + Math.random() * 2.8) * lingerLen;
@@ -1413,7 +1420,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     if (cometRef.current) cometRef.current.update(dt, 1 - THREE.MathUtils.smoothstep(dlRef.current, 0.15, 0.55));
     if (bubbles.current.length) {
       for (let i = bubbles.current.length - 1; i >= 0; i -= 1) {
-        if (!updateBubble(bubbles.current[i], dt)) { bubbleRoot.remove(bubbles.current[i].sprite); bubbles.current.splice(i, 1); }
+        // BUILD 284: updateBubble은 '수명이 다하면 true'(부모가 수거). 살아있는 동안(false)은 갱신만.
+        //   이전 코드가 극성이 뒤집혀(!) 태어나자마자 지워버렸다 — 본토 World.tsx 1689줄이 정답.
+        if (updateBubble(bubbles.current[i], dt)) { bubbleRoot.remove(bubbles.current[i].sprite); bubbles.current.splice(i, 1); }
       }
     }
     if (contactRef) contactRef.current = { dir: [U.x, U.y, U.z], r: p.length(), tan: [Fw.x, Fw.y, Fw.z] };
