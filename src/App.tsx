@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { PlanetWorld, flagIsKnownCountry } from './scene/PlanetWorld';
+import { TheatreWorld } from './scene/TheatreWorld';
+import { DEFAULT_THEATRE_SPEC, loadTheatreDraft, saveTheatreDraft, type TheatreSpec } from './scene/theatreSpec';
 import { walkerCount, WALKER_ROSTER } from './engine/worldCore';
 import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact, type PlanetApi } from './scene/planetSpec';
 import { PROP_CATALOG } from './engine/props';
@@ -39,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.1.2 · 웅얼웅얼 말풍선 (모션 중) · BUILD 284';
+const BUILD_LABEL = 'v2.2.0 · 그림자 극장(페러럴) 골격 · BUILD 285';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -79,6 +81,16 @@ export default function App() {
   // BUILD 207: &edit=1 — 행성 에디터. &draft=1 — 에디터의 초안을 그대로 걷는다.
   const [planetMode] = useState(() => new URLSearchParams(window.location.search).has('planet'));
   const [planetEdit] = useState(() => new URLSearchParams(window.location.search).has('edit'));
+  // BUILD 285: ?theatre=1 — 그림자 극장(페러럴). &edit=1 — 극장 에디터.
+  const [theatreMode] = useState(() => new URLSearchParams(window.location.search).has('theatre'));
+  const [tSpec, setTSpec] = useState<TheatreSpec>(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.has('edit') || q.has('draft')) return loadTheatreDraft();
+    return { ...DEFAULT_THEATRE_SPEC };
+  });
+  const updTSpec = (mut: (s: TheatreSpec) => TheatreSpec) => {
+    setTSpec((s) => { const next = mut(s); saveTheatreDraft(next); return next; });
+  };
   const [pSpec, setPSpec] = useState<PlanetSpec>(() => {
     const q = new URLSearchParams(window.location.search);
     if (q.has('edit') || q.has('draft')) {
@@ -438,6 +450,71 @@ export default function App() {
     setMode('manual');
     setActiveIndex(index);
   };
+
+  if (theatreMode) {
+    const theatreEdit = new URLSearchParams(window.location.search).has('edit');
+    const LayerDials = (label: string, key: 'far' | 'mid' | 'near') => (
+      <div style={{ borderTop: '1px solid #2a302e', paddingTop: 8, marginTop: 8 }}>
+        <div style={{ fontSize: 11.5, color: '#c9bfa6', marginBottom: 4 }}>{label}</div>
+        <label style={{ display: 'block', fontSize: 10.5, marginBottom: 4 }}>
+          흐름 속도
+          <input type="range" min={0} max={2} step={0.02} value={tSpec[key].speed}
+            onChange={(e) => updTSpec((s) => ({ ...s, [key]: { ...s[key], speed: +e.target.value } }))}
+            style={{ width: '100%' }} />
+        </label>
+        <label style={{ display: 'block', fontSize: 10.5, marginBottom: 4 }}>
+          높낮이(진폭)
+          <input type="range" min={0} max={0.3} step={0.005} value={tSpec[key].amp}
+            onChange={(e) => updTSpec((s) => ({ ...s, [key]: { ...s[key], amp: +e.target.value } }))}
+            style={{ width: '100%' }} />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
+          색
+          <input type="color" value={tSpec[key].color}
+            onChange={(e) => updTSpec((s) => ({ ...s, [key]: { ...s[key], color: e.target.value } }))} />
+        </label>
+      </div>
+    );
+    return (
+      <main className="app-shell world-core-shell">
+        <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
+          <Canvas className="world-canvas" camera={{ position: [0, 1.35, 6.2], fov: 38 }} dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
+            <TheatreWorld spec={tSpec} walkerIdx={tSpec.walker ?? -1} paused={false} />
+          </Canvas>
+        </div>
+        <div className="atmosphere-grain" aria-hidden="true" />
+        {theatreEdit && (
+          <div style={{
+            position: 'fixed', top: 18, right: 18, width: 288, maxHeight: '90vh', overflowY: 'auto', zIndex: 8,
+            padding: '14px 16px', borderRadius: 14, background: 'rgba(16,22,23,0.92)', color: '#e8dcc2',
+            border: '1px solid #3a423f', fontSize: 12,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>🎭 그림자 극장 에디터</div>
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              걷는 속도 (배경 흐름)
+              <input type="range" min={0} max={3} step={0.05} value={tSpec.walkSpeed}
+                onChange={(e) => updTSpec((s) => ({ ...s, walkSpeed: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 11, marginBottom: 4 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                하늘 위 <input type="color" value={tSpec.skyTop} onChange={(e) => updTSpec((s) => ({ ...s, skyTop: e.target.value }))} />
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                하늘 아래 <input type="color" value={tSpec.skyBottom} onChange={(e) => updTSpec((s) => ({ ...s, skyBottom: e.target.value }))} />
+              </label>
+            </div>
+            {LayerDials('원경 (먼 산맥)', 'far')}
+            {LayerDials('중경 (언덕/나무)', 'mid')}
+            {LayerDials('근경 (발밑 지면)', 'near')}
+            <div style={{ borderTop: '1px solid #2a302e', paddingTop: 8, marginTop: 8, fontSize: 10.5, color: '#9a927e' }}>
+              골격 단계 — 걷기·오르내림·패럴럭스 확인용. 체류·마법가방은 다음 단계.
+            </div>
+          </div>
+        )}
+      </main>
+    );
+  }
 
   if (planetMode) {
     const M = pSpec.moon;
