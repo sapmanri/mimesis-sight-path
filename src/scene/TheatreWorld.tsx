@@ -81,6 +81,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
   const phaseRef = useRef<'walk' | 'linger'>('walk');
   const lingerRef = useRef({ left: 0, gap: 0, timer: 0, walkLeft: 4 + Math.random() * 3 });
+  // BUILD 289: 바라보는 방향 — 걸을 땐 왼쪽(-π/2) 고정, 놀 땐 정면 쪽으로 자유롭게.
+  const faceRef = useRef(-Math.PI / 2);
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
 
@@ -192,19 +194,25 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
           const r = Math.random();
           speak(r < 0.72 ? undefined : r < 0.86 ? '♪' : r < 0.94 ? '~' : '!', 0.85 + Math.random() * 0.35);
         }
+        // BUILD 289: 놀 땐 방향 자유 — 딴짓마다 가끔 정면/좌/우로 튼다(무대 배우처럼).
+        const pick = Math.random();
+        faceRef.current = pick < 0.5 ? 0 : pick < 0.72 ? -0.5 : pick < 0.88 ? 0.5 : -Math.PI / 2;
         L.left -= 1;
         L.gap = (dur > 0 ? dur : 1.4) + (1.4 + Math.random() * 2.8) * lingerLen;
       }
       if (L.left <= 0 && L.gap <= 0) {
         phaseRef.current = 'walk';
+        faceRef.current = -Math.PI / 2; // 다시 걸으면 진행방향(왼쪽)
         L.walkLeft = lingerEvery * (0.7 + Math.random() * 0.7);
       }
     } else {
       // walk — 배경이 흐른다. 짧게 걷다 walkLeft 소진되면 체류로.
       moving = true;
+      faceRef.current = -Math.PI / 2; // 걸을 땐 왼쪽 고정
       L.walkLeft -= dt;
       if (L.walkLeft <= 0) {
         phaseRef.current = 'linger';
+        faceRef.current = 0; // 멈추면 우선 정면(관객)을 본다
         L.left = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen));
         L.gap = 0.6 + Math.random() * 1.4;
       }
@@ -226,6 +234,12 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       mnt.position.y += (gy - mnt.position.y) * Math.min(1, dt * 4);
     }
     if (g) {
+      // BUILD 289: 바라보는 방향을 목표각으로 부드럽게 회전. 걸을 땐 왼쪽, 놀 땐 자유.
+      let cur = g.rotation.y;
+      let d = faceRef.current - cur;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      g.rotation.y = cur + d * Math.min(1, dt * 5);
       // 체류 중엔 걷기 위상을 굴리지 않는다(distDelta=0) → 딴짓/가만히. 걸을 때만 다리 구른다.
       rigRef.current?.update?.(dt, 0.5, moving, _s.clock.elapsedTime, moving ? S.walkSpeed * dt : 0);
     }
