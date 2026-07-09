@@ -317,9 +317,9 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     const refVH = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * dRef;
     const refVW = refVH * cam.aspect;
     const footY = -refVH * 0.23;    // 별리 발과 같은 높이(feetYRef와 동일)
-    const LAMP_Z = 0;               // 별리와 같은 평면 — 원근 왜곡 없이 나란히
-    const LAMP_H = 1.55;           // 절대 높이 1.55유닛(별리 0.9의 ~1.7배) — 사람보다 큰 가로등
-    const s = LAMP_H / 1.2;        // makeTheatreLamp 원본 높이 ≈1.2 → 1.55
+    const LAMP_Z = 0.4;            // BUILD 321: 별리(z=0)보다 살짝만 앞 — 별리가 가로등 뒤로 지나간다(뚫기 해결). 크기·높이 어긋남은 미미
+    const LAMP_H = 1.45;           // 절대 1.45유닛 — z=0.4 앞 원근보정 포함, 화면상 별리의 ~1.7배
+    const s = LAMP_H / 1.2;        // makeTheatreLamp 원본 높이 ≈1.2 → 1.45
     const span = refVW * 1.6;       // 리사이클 폭
     const gap = span / LAMP_N;
     const built: { group: THREE.Group; light: THREE.PointLight }[] = [];
