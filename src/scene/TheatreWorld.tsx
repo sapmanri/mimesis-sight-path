@@ -172,10 +172,12 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       layerMats.current.push({ mat, speed });
     };
     // 뒤(원경, 느림) → 앞(근경, 빠름). h=세로 월드높이, yOff=상하 위치.
-    mkLayer('forest_bg0.png', -12, 16, 0.15, 3.5); // 원경: 하늘·먼 산
-    mkLayer('forest_bg1.png', -8, 15, 0.4, 2.8);   // 중경: 숲
-    mkLayer('forest_bg2.png', -4, 13, 0.75, 1.8);  // 근경: 가까운 나무
-    mkLayer('forest_ground.png', -1.5, 3.4, 1.0, -1.3); // 지면: 별리 발밑, 가장 빠름
+    // BUILD 302: 기차 배경 팩(심리스 반복 · 진짜 패럴럭스). 원경 하늘/산 → 나무 3겹 → 전신주.
+    mkLayer('train_bg.png', -13, 17, 0.12, 3.2);     // 원경: 하늘·산·달 (가장 느림)
+    mkLayer('train_tree3.png', -9, 16, 0.32, 2.6);   // 먼 나무
+    mkLayer('train_tree2.png', -6, 15, 0.55, 2.0);   // 중간 나무
+    mkLayer('train_tree1.png', -3, 14, 0.85, 1.2);   // 가까운 나무 + 풀밭(지면)
+    mkLayer('train_posts.png', -2, 14, 1.0, 1.2);    // 전신주 (근경 요소)
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
