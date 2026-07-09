@@ -77,9 +77,12 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const footRef = useRef<THREE.Object3D | null>(null);
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
   const scrollRef = useRef(0);
+  // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
+  //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
+  const phaseRef = useRef<'walk' | 'linger'>('walk');
+  const lingerRef = useRef({ left: 0, gap: 0, timer: 0, walkLeft: 4 + Math.random() * 3 });
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
-  const mutterRef = useRef(6 + Math.random() * 8); // BUILD 286: 첫 혼잣말까지
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
@@ -169,13 +172,50 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   useFrame((_s, rawDt) => {
     const dt = Math.min(0.05, rawDt);
     const S = specRef.current;
-    if (!pausedRef.current) scrollRef.current += S.walkSpeed * dt;
+    const P = phaseRef.current;
+    const L = lingerRef.current;
+    const lingerEvery = Math.max(0.5, S.lingerEvery ?? 3);
+    const lingerLen = Math.max(0.2, S.lingerLength ?? 1);
+
+    // BUILD 288: 체류 상태머신 — 걷기는 다음 볼거리로 가는 짧은 전환, 체류가 기본.
+    let moving = false;
+    if (pausedRef.current) {
+      moving = false;
+    } else if (P === 'linger') {
+      // 멈춰서 딴짓과 '가만히'를 번갈아 — 이 동안 배경도 멈춘다(여기 머문다).
+      moving = false;
+      L.gap -= dt;
+      if (L.gap <= 0 && L.left > 0) {
+        const dur = rigRef.current?.flourish?.() ?? 0;
+        // 딴짓할 때 가끔 웅얼웅얼
+        if (Math.random() < 0.4) {
+          const r = Math.random();
+          speak(r < 0.72 ? undefined : r < 0.86 ? '♪' : r < 0.94 ? '~' : '!', 0.85 + Math.random() * 0.35);
+        }
+        L.left -= 1;
+        L.gap = (dur > 0 ? dur : 1.4) + (1.4 + Math.random() * 2.8) * lingerLen;
+      }
+      if (L.left <= 0 && L.gap <= 0) {
+        phaseRef.current = 'walk';
+        L.walkLeft = lingerEvery * (0.7 + Math.random() * 0.7);
+      }
+    } else {
+      // walk — 배경이 흐른다. 짧게 걷다 walkLeft 소진되면 체류로.
+      moving = true;
+      L.walkLeft -= dt;
+      if (L.walkLeft <= 0) {
+        phaseRef.current = 'linger';
+        L.left = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen));
+        L.gap = 0.6 + Math.random() * 1.4;
+      }
+    }
+
+    if (moving) scrollRef.current += S.walkSpeed * dt;
     const scroll = scrollRef.current;
 
-    // 레이어 U-스크롤 — 근경이 빠르고 원경이 느리다 (패럴럭스)
-    // 레이어 U-스크롤 — 별리가 왼쪽으로 가니 배경은 왼쪽으로 흐른다(offset 음수).
-    for (const L of layerMats.current) {
-      if (L.mat.map) L.mat.map.offset.x = -scroll * L.speed * 0.06;
+    // 레이어 U-스크롤 — 별리가 왼쪽으로 가니 배경은 왼쪽으로 흐른다(offset 음수). 체류 중엔 안 흐름.
+    for (const Lm of layerMats.current) {
+      if (Lm.mat.map) Lm.mat.map.offset.x = -scroll * Lm.speed * 0.06;
     }
 
     // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다 (BUILD 287: 오르내림은 래퍼에)
@@ -183,20 +223,11 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     const mnt = walkerMountRef.current;
     if (mnt) {
       const gy = groundHeight(scroll, S.groundAmp ?? 0.6, S.groundFreq ?? 0.5);
-      mnt.position.y += (gy - mnt.position.y) * Math.min(1, dt * 4); // 스프링 추적 (rig가 안 건드리는 래퍼)
+      mnt.position.y += (gy - mnt.position.y) * Math.min(1, dt * 4);
     }
     if (g) {
-      rigRef.current?.update?.(dt, 0.5, !pausedRef.current, _s.clock.elapsedTime, S.walkSpeed * dt);
-    }
-
-    // BUILD 286: 웅얼웅얼 — 골격에도 주기적으로(체류는 다음 단계). 15~35초마다 무언어 혼잣말.
-    if (!pausedRef.current) {
-      mutterRef.current -= dt;
-      if (mutterRef.current <= 0) {
-        mutterRef.current = 15 + Math.random() * 20;
-        const r = Math.random();
-        speak(r < 0.72 ? undefined : r < 0.88 ? '♪' : '~', 0.85 + Math.random() * 0.3);
-      }
+      // 체류 중엔 걷기 위상을 굴리지 않는다(distDelta=0) → 딴짓/가만히. 걸을 때만 다리 구른다.
+      rigRef.current?.update?.(dt, 0.5, moving, _s.clock.elapsedTime, moving ? S.walkSpeed * dt : 0);
     }
 
     // 말풍선 갱신 (본토 극성: 수명 다하면 true)
