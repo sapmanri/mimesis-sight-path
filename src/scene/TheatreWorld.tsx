@@ -128,6 +128,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const walkerMountRef = useRef<THREE.Group | null>(null); // BUILD 287: 오르내림을 거는 래퍼
   const footRef = useRef<THREE.Object3D | null>(null);
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
+  const feetYRef = useRef(0); // BUILD 308: 별리 발이 서는 철길 월드높이
   const scrollRef = useRef(0);
   // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
   //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
@@ -188,6 +189,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     mkFull('train_near.png', -6, 0.5);
     mkFull('train_posts.png', -4, 0.7);
     mkFull('train_cars.png', -3, 0.9);
+    // BUILD 308: 별리가 설 철길 높이 — 이미지 y1050(아래에서 2.1%)이 배경 세로에서의 위치.
+    feetYRef.current = cam.position.y - refVH * (1050 / 1073 - 0.5);
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
@@ -286,7 +289,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     const g = walkerGroupRef.current;
     const mnt = walkerMountRef.current;
     if (mnt) {
-      const gy = groundHeight(scroll, S.groundAmp ?? 0.6, S.groundFreq ?? 0.5);
+      const gy = feetYRef.current + groundHeight(scroll, S.groundAmp ?? 0, S.groundFreq ?? 0.5);
       mnt.position.y += (gy - mnt.position.y) * Math.min(1, dt * 4);
     }
     if (g) {
