@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.10.0 · 동네 여권·기록 이벤트(세 무대 공유) · BUILD 329';
+const BUILD_LABEL = 'v2.11.0 · 동네 비·눈 + 빈도 슬라이더 · BUILD 330';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -498,6 +498,19 @@ export default function App() {
               달빛 — {(tSpec.moonlight ?? 1.5).toFixed(2)}
               <input type="range" min={0} max={5} step={0.1} value={tSpec.moonlight ?? 1.5}
                 onChange={(e) => updTSpec((s) => ({ ...s, moonlight: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
+            {/* BUILD 330: 비/눈 빈도 — 평균 몇 초마다 오나(0=안 옴) */}
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              비 — {(tSpec.rainEvery ?? 0) === 0 ? '안 옴' : `~${tSpec.rainEvery}초마다`}
+              <input type="range" min={0} max={60} step={1} value={tSpec.rainEvery ?? 0}
+                onChange={(e) => updTSpec((s) => ({ ...s, rainEvery: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              눈 — {(tSpec.snowEvery ?? 0) === 0 ? '안 옴' : `~${tSpec.snowEvery}초마다`}
+              <input type="range" min={0} max={60} step={1} value={tSpec.snowEvery ?? 0}
+                onChange={(e) => updTSpec((s) => ({ ...s, snowEvery: +e.target.value }))}
                 style={{ width: '100%' }} />
             </label>
             {/* BUILD 315: 바닥 안개 — 발 높이까지 옅게 피어오르는 밤안개 */}

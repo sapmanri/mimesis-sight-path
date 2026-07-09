@@ -179,6 +179,10 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
   // BUILD 294: 스테이지 모듈 — 폽 세션(춤/캠프/운동…) 공용 엔진. 무대는 앵커만 넘긴다.
   const stageRef = useRef<Stage | null>(null);
   const lastStageIdRef = useRef<string | null>(null); // BUILD 329: 스테이지 시작 감지용(이벤트 1회 emit)
+  // BUILD 330: 강수 — 화면 앞 평면에 비(세로선)/눈(점). 빈도에 따라 왔다 갬.
+  const rainRef = useRef<{ mesh: THREE.LineSegments; pos: Float32Array; vel: Float32Array; N: number } | null>(null);
+  const snowRef = useRef<{ mesh: THREE.Points; pos: Float32Array; vel: Float32Array; N: number } | null>(null);
+  const wxRef = useRef({ rainOn: 0, rainT: 0, snowOn: 0, snowT: 0 }); // 현재 세기(0~1)+다음 전환 타이머
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
 
@@ -241,6 +245,57 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
     if (!bubbleRoot.parent) scene.add(bubbleRoot);
     return () => { stage.clear(); };
   }, [scene, stage, bubbleRoot, camera]);
+
+  // BUILD 330: 비/눈 메시 생성 — 화면 앞 평면(z=2)에 뿌린다. 카메라 고정이라 화면을 덮는다.
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const WX_Z = 2;
+    const d = Math.abs(cam.position.z - WX_Z);
+    const vh = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * d;
+    const vw = vh * cam.aspect;
+    const H = vh * 1.2, W = vw * 1.2;
+    // 비 — 세로 짧은 선(위→아래), 상단 넘으면 재활용
+    const RN = 320;
+    const rpos = new Float32Array(RN * 6);
+    const rvel = new Float32Array(RN);
+    for (let i = 0; i < RN; i += 1) {
+      const x = (Math.random() - 0.5) * W, y = (Math.random() - 0.5) * H;
+      const len = 0.14 + Math.random() * 0.12;
+      rpos[i * 6] = x; rpos[i * 6 + 1] = y; rpos[i * 6 + 2] = WX_Z;
+      rpos[i * 6 + 3] = x + 0.02; rpos[i * 6 + 4] = y - len; rpos[i * 6 + 5] = WX_Z;
+      rvel[i] = 6 + Math.random() * 3;
+    }
+    const rgeo = new THREE.BufferGeometry();
+    rgeo.setAttribute('position', new THREE.BufferAttribute(rpos, 3));
+    const rmat = new THREE.LineBasicMaterial({ color: '#b9c9d6', transparent: true, opacity: 0, fog: false });
+    const rmesh = new THREE.LineSegments(rgeo, rmat);
+    rmesh.frustumCulled = false; rmesh.renderOrder = 10;
+    stage.add(rmesh);
+    rainRef.current = { mesh: rmesh, pos: rpos, vel: rvel, N: RN };
+    // 눈 — 점, 느리게 떨어지며 좌우로 흔들림
+    const SN = 220;
+    const spos = new Float32Array(SN * 3);
+    const svel = new Float32Array(SN * 2); // fallSpeed, swayPhase
+    for (let i = 0; i < SN; i += 1) {
+      spos[i * 3] = (Math.random() - 0.5) * W;
+      spos[i * 3 + 1] = (Math.random() - 0.5) * H;
+      spos[i * 3 + 2] = WX_Z;
+      svel[i * 2] = 0.5 + Math.random() * 0.5;
+      svel[i * 2 + 1] = Math.random() * Math.PI * 2;
+    }
+    const sgeo = new THREE.BufferGeometry();
+    sgeo.setAttribute('position', new THREE.BufferAttribute(spos, 3));
+    const smat = new THREE.PointsMaterial({ color: '#eef4f8', size: 0.05, transparent: true, opacity: 0, fog: false, sizeAttenuation: true });
+    const smesh = new THREE.Points(sgeo, smat);
+    smesh.frustumCulled = false; smesh.renderOrder = 10;
+    stage.add(smesh);
+    snowRef.current = { mesh: smesh, pos: spos, vel: svel, N: SN };
+    return () => {
+      stage.remove(rmesh); rgeo.dispose(); rmat.dispose();
+      stage.remove(smesh); sgeo.dispose(); smat.dispose();
+      rainRef.current = null; snowRef.current = null;
+    };
+  }, [stage, camera]);
 
   // 별리 로드 — 행성과 같은 파이프라인. clipRig면 걷기 클립을 자동 재생.
   useEffect(() => {
@@ -458,8 +513,60 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
       }
     }
 
-    // BUILD 318: 달빛 세기 — 에디터 슬라이더 실시간 반영
+    // BUILD 330: 달빛 세기 — 에디터 슬라이더 실시간 반영
     if (moonLightRef.current) moonLightRef.current.intensity = S.moonlight ?? 0.7;
+
+    // BUILD 330: 비/눈 — 빈도(rainEvery/snowEvery)에 따라 왔다 갠다. 세기를 부드럽게 올렸다 내린다.
+    const wx = wxRef.current;
+    const cam3 = camera as THREE.PerspectiveCamera;
+    const dW = Math.abs(cam3.position.z - 2);
+    const vhW = 2 * Math.tan((cam3.fov * Math.PI / 180) / 2) * dW;
+    const vwW = vhW * cam3.aspect;
+    const HW = vhW * 1.2, WW = vwW * 1.2;
+    // --- 비 ---
+    const rain = rainRef.current;
+    if (rain) {
+      const every = S.rainEvery ?? 0;
+      wx.rainT -= dt;
+      let target = 0;
+      if (every > 0) {
+        if (wx.rainT <= 0) { wx.rainOn = wx.rainOn > 0.5 ? 0 : 1; wx.rainT = every * (0.6 + Math.random() * 0.8); if (wx.rainOn > 0.5) emit('rain_in'); }
+        target = wx.rainOn;
+      }
+      const mat = rain.mesh.material as THREE.LineBasicMaterial;
+      mat.opacity += ((target * 0.42) - mat.opacity) * Math.min(1, dt * 1.5);
+      if (mat.opacity > 0.01) {
+        const p = rain.pos;
+        for (let i = 0; i < rain.N; i += 1) {
+          const dy = rain.vel[i] * dt;
+          p[i * 6 + 1] -= dy; p[i * 6 + 4] -= dy;
+          if (p[i * 6 + 1] < -HW / 2) { const nx = (Math.random() - 0.5) * WW, ny = HW / 2; const len = 0.14 + Math.random() * 0.12; p[i * 6] = nx; p[i * 6 + 1] = ny; p[i * 6 + 3] = nx + 0.02; p[i * 6 + 4] = ny - len; }
+        }
+        rain.mesh.geometry.attributes.position.needsUpdate = true;
+      }
+    }
+    // --- 눈 ---
+    const snow = snowRef.current;
+    if (snow) {
+      const every = S.snowEvery ?? 0;
+      wx.snowT -= dt;
+      let target = 0;
+      if (every > 0) {
+        if (wx.snowT <= 0) { wx.snowOn = wx.snowOn > 0.5 ? 0 : 1; wx.snowT = every * (0.6 + Math.random() * 0.8); if (wx.snowOn > 0.5) emit('snow_in'); }
+        target = wx.snowOn;
+      }
+      const mat = snow.mesh.material as THREE.PointsMaterial;
+      mat.opacity += ((target * 0.85) - mat.opacity) * Math.min(1, dt * 1.2);
+      if (mat.opacity > 0.01) {
+        const p = snow.pos, v = snow.vel;
+        for (let i = 0; i < snow.N; i += 1) {
+          p[i * 3 + 1] -= v[i * 2] * dt;
+          p[i * 3] += Math.sin(_s.clock.elapsedTime * 0.8 + v[i * 2 + 1]) * dt * 0.3;
+          if (p[i * 3 + 1] < -HW / 2) { p[i * 3] = (Math.random() - 0.5) * WW; p[i * 3 + 1] = HW / 2; }
+        }
+        snow.mesh.geometry.attributes.position.needsUpdate = true;
+      }
+    }
 
     // BUILD 315: 바닥 안개 — 에디터에서 높이/색 바꾸면 실시간 반영
     const fm = fogMeshRef.current, fmat = fogMatRef.current;
