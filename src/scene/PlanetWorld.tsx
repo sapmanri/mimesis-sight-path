@@ -1243,8 +1243,14 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         P.cooldown = 8;
       }
     } else if (SP.roam) {
-      // BUILD 219: 지구본 모드 — 기억 정차도 교차로 고민도 없다. 가끔 그냥 멈춰 설 뿐 (평균 ~14s)
-      if (MV.mode === 'walk' && P.cooldown <= 0 && Math.random() < dt * 0.07) { P.phase = 'ponder'; P.timer = 1.2 + Math.random() * 2.2; P.jumpTo = -1; }
+      // BUILD 281: 이동 1 : 딴짓 2 — 자주 멈춰 서서 즉흥 동작(flourish)을 한다.
+      // 우주여행자 별리는 걷기만 하지 않는다. 멈춰 두리번거리고, 손 흔들고, 하품하고, 기지개 켠다.
+      if (MV.mode === 'walk' && P.phase === 'walk' && P.cooldown <= 0 && Math.random() < dt * 0.22) {
+        const dur = rigRef.current?.flourish?.() ?? 0;
+        P.phase = 'ponder';
+        P.timer = dur > 0 ? dur + 0.4 : 1.2 + Math.random() * 2.0; // 동작 길이만큼 머문다
+        P.jumpTo = -1;
+      }
       // BUILD 263: 캠핑 쉼 — 아주 가끔(평균 ~2분) 캠프를 차리고 오래 쉰다. 탈것 안 탔을 때만.
       P.campCooldown -= dt;
       if (MV.mode === 'walk' && P.phase === 'walk' && P.campCooldown <= 0 && campProtoRef.current && Math.random() < dt * 0.06) {

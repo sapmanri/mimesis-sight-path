@@ -178,17 +178,36 @@ export function createClipRig(
     return a;
   };
   const pickup = mk('PickUp') ?? mk('Interact') ?? mk('Pickup');
-  const sitDown = mk('Sit_Floor_Down');
-  const sitIdleFloor = mk('Sit_Floor_Idle', false); // BUILD 138: 바닥파/의자파 구분 — 엉덩이 높이가 다르다
+  // BUILD 281: 별리 진짜 앉기 — 원본 'Sitting'은 힙이 거의 안 내려가(서있는 것과 진배없음, Vase: "앉는 것 한 번도 못 봄").
+  // SitGround가 바닥에 확실히 앉는 클립(힙 하강 2배). 전환은 StandToSit/SitToStand.
+  const sitDown = mk('Sit_Floor_Down') ?? mk('StandToSit');
+  const sitIdleFloor = mk('Sit_Floor_Idle', false) ?? mk('SitGround', false); // BUILD 138: 바닥파/의자파 구분
   const sitIdle = sitIdleFloor ?? mk('Sitting', false) ?? mk('Sitting Idle', false);
-  const rideSeatH = sitIdle ? (sitIdleFloor ? 0.02 : 0.17) : 0; // BUILD 139: 의자파 0.3→0.17 — 방석이 무릎을 파고들었다
-  const standUp = mk('Sit_Floor_StandUp');
+  const rideSeatH = sitIdle ? (sitIdleFloor ? 0.02 : 0.17) : 0; // BUILD 139: 의자파 0.3→0.17
+  const standUp = mk('Sit_Floor_StandUp') ?? mk('SitToStand');
   // BUILD 146: 여분 클립 — 로코모션/제스처에 안 쓰인 나머지가 이 아이의 개성이다
   const knownNames = new Set([cWalk.name, cRun.name, cIdle.name,
-    'PickUp', 'Interact', 'Pickup', 'Sit_Floor_Down', 'Sit_Floor_Idle', 'Sitting', 'Sitting Idle', 'Sit_Floor_StandUp']);
-  const extras = animations
-    .filter((c) => !knownNames.has(c.name))
+    'PickUp', 'Interact', 'Pickup', 'Sit_Floor_Down', 'Sit_Floor_Idle', 'Sitting', 'Sitting Idle', 'Sit_Floor_StandUp',
+    'StandToSit', 'SitGround', 'SitToStand']); // BUILD 281: 별리 앉기 3종도 known(flourish 제외)
+  // BUILD 281: 걷다 멈춰 하는 즉흥(flourish)은 '서서 잠깐 하는 것'만. 별리 49클립 중 배치.
+  // 앉기/눕기/소품필요/로코모션 변형은 flourish에서 제외 — 캠프·전용 상황에서 명시 호출한다.
+  // (제외: LayingShake=침대전용, Piano=신디사이저전용, Treadmill=러닝머신전용,
+  //  Sit*/StandToSit/SitToStand/Kneel*=앉기, Situps/BicycleCrunch/CircleCrunch=운동매트,
+  //  SneakWalk/SneakFwd=걷기변형, PlantSeeds=특별이벤트)
+  const FLOURISH_CLIPS = new Set([
+    'Waving', 'Waving2', 'LookAround', 'LookAround2', 'LookBehind', 'LookShoulder', 'LookDown',
+    'NeckStretch', 'ArmStretch', 'Yawn', 'Excited', 'Happy', 'Stroke', 'Talking',
+    'Jump', 'Jump2', 'Baseball', 'MmaKick', 'HipHop', 'Samba', 'Rumba', 'Shuffle', 'Drinking',
+  ]);
+  const allExtras = animations.filter((c) => !knownNames.has(c.name));
+  // 화이트리스트가 하나라도 매칭되면 그걸로(별리), 아니면 예전처럼 전부(다른 아이들 호환)
+  const hasWhitelist = allExtras.some((c) => FLOURISH_CLIPS.has(c.name));
+  const extras = allExtras
+    .filter((c) => (hasWhitelist ? FLOURISH_CLIPS.has(c.name) : true))
     .map((c) => { const a = mixer.clipAction(c); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; return a; });
+  // BUILD 281: 이름으로 특정 클립 재생(캠프/전용상황용). 전체 클립 접근.
+  const clipByName = new Map<string, THREE.AnimationClip>();
+  for (const c of animations) clipByName.set(c.name, c);
   const headBone0 = null as THREE.Object3D | null; // findBone은 아래에서 정의 — 자리표시
   void headBone0;
   let lookYaw = 0;

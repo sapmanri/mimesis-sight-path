@@ -19,6 +19,15 @@ type Vehicle = {
   phase: Phase;
   t: number;
   baseScale: number;
+  prop?: THREE.Object3D | null;      // BUILD 281: 프로펠러 노드 (회전)
+  smoke?: SmokeTrail | null;         // BUILD 281: 뒤 연기
+};
+
+// BUILD 281: 연기 트레일 — 비행기 꼬리에서 뽕뽕. 입자 각자 수명대로 부풀며 옅어진다.
+type SmokeTrail = {
+  pts: THREE.Points;
+  p: THREE.Vector3[]; life: Float32Array; lifeMax: Float32Array;
+  cursor: number; emitClock: number;
 };
 
 const tv = new THREE.Vector3();
@@ -44,6 +53,41 @@ function makeBoat(): THREE.Group {
   g.add(hull, bow, mast, sail);
   g.scale.setScalar(3.2); // 배 가시성 (BUILD 245 확대)
   return g;
+}
+
+// BUILD 281: 연기 트레일 팩토리 — planet 로컬에 붙는 Points. 비행기 꼬리 자취.
+function makeSmokeTrail(planet: THREE.Group): SmokeTrail {
+  const M = 34;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(M * 3);
+  const aAlpha = new Float32Array(M);
+  const aSize = new Float32Array(M);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aAlpha', new THREE.BufferAttribute(aAlpha, 1));
+  geo.setAttribute('aSize', new THREE.BufferAttribute(aSize, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {},
+    transparent: true, depthWrite: false, fog: false,
+    vertexShader: `
+      attribute float aAlpha; attribute float aSize;
+      varying float vA;
+      void main(){ vA=aAlpha; vec4 mv=modelViewMatrix*vec4(position,1.0);
+        gl_PointSize = aSize * 900.0 / max(0.001,-mv.z); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `
+      varying float vA;
+      void main(){ vec2 d=gl_PointCoord-0.5; float r=length(d);
+        float a=smoothstep(0.5,0.0,r)*vA; gl_FragColor=vec4(0.93,0.93,0.95,a); }`,
+  });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false; pts.renderOrder = 2;
+  planet.add(pts);
+  return {
+    pts,
+    p: Array.from({ length: M }, () => new THREE.Vector3()),
+    life: new Float32Array(M).fill(0),
+    lifeMax: new Float32Array(M).fill(1),
+    cursor: 0, emitClock: 0,
+  };
 }
 
 export function createPlanetVehicles(
@@ -108,17 +152,25 @@ export function createPlanetVehicles(
     const baseScale = group.scale.x || 1; // 정규화된 기본 배율 보존
     group.scale.setScalar(0.001);
     planet.add(group);
+    // BUILD 281: 프로펠러 노드 찾기(스페인어 Hélice) + 연기 트레일
+    let prop: THREE.Object3D | null = null;
+    let smoke: SmokeTrail | null = null;
+    if (kind === 'plane') {
+      group.traverse((o) => { if (/^h[ée]lice$/i.test(o.name) && !prop) prop = o; });
+      smoke = makeSmokeTrail(planet);
+    }
     vehicles.push({
       kind, group, from, to, axis, ang, u: 0,
       speed: kind === 'plane' ? 0.05 + seedRnd() * 0.03 : 0.02 + seedRnd() * 0.015,
       cruiseAlt: kind === 'plane' ? R * (0.12 + seedRnd() * 0.06) : 0,
-      phase: 'in', t: 0, baseScale,
+      phase: 'in', t: 0, baseScale, prop, smoke,
     });
     onEvent(kind);
   }
 
   function kill(v: Vehicle) {
     planet.remove(v.group);
+    if (v.smoke) { planet.remove(v.smoke.pts); v.smoke.pts.geometry.dispose(); (v.smoke.pts.material as THREE.Material).dispose(); }
     vehicles.splice(vehicles.indexOf(v), 1);
   }
 
@@ -159,13 +211,59 @@ export function createPlanetVehicles(
         const r = groundR + 0.01 + alt;
         v.group.position.copy(tv).multiplyScalar(r);
 
-        // 자세: 위(+Y)를 지표 법선에, 정면(-Z)을 진행 tangent에 (BUILD 259: basis 순서 교정 — 삐딱 사건)
+        // 자세: 위(+Y)를 지표 법선에, 정면(+Z)을 진행 tangent에.
+        // BUILD 281: 비행기 모델 정면축은 +Z(프로펠러=코 방향). 259의 -Z는 거꾸로였다(Vase: 프로펠러가 뒤로 남).
         const up = tv.clone().normalize();
         const fwd = tangent.clone().addScaledVector(up, -tangent.dot(up)).normalize(); // tangent를 접평면에 투영
-        const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
-        const m = new THREE.Matrix4().makeBasis(right, up, fwd.clone().multiplyScalar(-1));
+        const right = new THREE.Vector3().crossVectors(up, fwd).normalize();
+        const m = new THREE.Matrix4().makeBasis(right, up, fwd);
         v.group.quaternion.setFromRotationMatrix(m);
         if (v.kind === 'ship') { v.group.rotateZ(Math.sin(el * 1.3 + i) * 0.03); } // 물결에 흔들 (자세 위에 덧댐)
+
+        // BUILD 281: 프로펠러 회전 — 진행축(로컬 Z) 둘레로 빠르게
+        if (v.prop) v.prop.rotation.z += dt * 34;
+
+        // BUILD 281: 연기 트레일 — 꼬리(정면 반대 = -Z)에서 뽕뽕. planet 로컬에 남겨 자취가 흐른다.
+        if (v.smoke && v.kind === 'plane' && alt > v.cruiseAlt * 0.3) {
+          const sm = v.smoke;
+          sm.emitClock += dt;
+          const tailWorldOffset = fwd.clone().multiplyScalar(-0.06 * v.baseScale); // 꼬리 뒤로 살짝
+          const tailPos = v.group.position.clone().add(tailWorldOffset);
+          const EMIT = 0.05; // 0.05초마다 한 알
+          while (sm.emitClock >= EMIT) {
+            sm.emitClock -= EMIT;
+            const k = sm.cursor; sm.cursor = (sm.cursor + 1) % sm.p.length;
+            sm.p[k].copy(tailPos).addScaledVector(up, 0.004 * v.baseScale);
+            sm.lifeMax[k] = 1.1; sm.life[k] = 1.1;
+          }
+          const posArr = sm.pts.geometry.getAttribute('position').array as Float32Array;
+          const aArr = sm.pts.geometry.getAttribute('aAlpha').array as Float32Array;
+          const szArr = sm.pts.geometry.getAttribute('aSize').array as Float32Array;
+          for (let k = 0; k < sm.p.length; k += 1) {
+            if (sm.life[k] > 0) {
+              sm.life[k] -= dt;
+              sm.p[k].addScaledVector(up, 0.02 * dt); // 살짝 떠오름
+              const kk = Math.max(0, sm.life[k] / sm.lifeMax[k]);
+              aArr[k] = 0.5 * kk;
+              szArr[k] = (0.03 + (1 - kk) * 0.05) * v.baseScale; // 부풀며 옅어짐
+            } else { aArr[k] = 0; }
+            posArr[k * 3] = sm.p[k].x; posArr[k * 3 + 1] = sm.p[k].y; posArr[k * 3 + 2] = sm.p[k].z;
+          }
+          sm.pts.geometry.getAttribute('position').needsUpdate = true;
+          sm.pts.geometry.getAttribute('aAlpha').needsUpdate = true;
+          sm.pts.geometry.getAttribute('aSize').needsUpdate = true;
+        } else if (v.smoke) {
+          // 저고도(이착륙)에선 연기 페이드만
+          const sm = v.smoke; const aArr = sm.pts.geometry.getAttribute('aAlpha').array as Float32Array;
+          const posArr = sm.pts.geometry.getAttribute('position').array as Float32Array;
+          for (let k = 0; k < sm.p.length; k += 1) {
+            if (sm.life[k] > 0) { sm.life[k] -= dt; const kk = Math.max(0, sm.life[k] / sm.lifeMax[k]); aArr[k] = 0.5 * kk; }
+            else aArr[k] = 0;
+            posArr[k * 3] = sm.p[k].x; posArr[k * 3 + 1] = sm.p[k].y; posArr[k * 3 + 2] = sm.p[k].z;
+          }
+          sm.pts.geometry.getAttribute('position').needsUpdate = true;
+          sm.pts.geometry.getAttribute('aAlpha').needsUpdate = true;
+        }
 
         // 폽 스케일 (in/out): 나타나고 사라질 때 통—/쇽
         let pop = 1;
