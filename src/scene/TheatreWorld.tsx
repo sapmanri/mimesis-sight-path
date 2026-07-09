@@ -286,6 +286,7 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     if (proto) {
       const sp = normalizeProp(proto.clone(true), 0.9);
       sp.position.set(-0.7, 0, 0.2);
+      sp.rotation.y = Math.PI; // BUILD 292: 스피커 정면(그물망)이 관객을 보게 — 뒤집힘 수정
       sp.scale.setScalar(0.001);
       mnt.add(sp);
       speakerRef.current = sp;

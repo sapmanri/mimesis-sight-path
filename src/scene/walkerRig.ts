@@ -200,10 +200,12 @@ export function createClipRig(
   //  SneakWalk/SneakFwd=걷기변형, PlantSeeds=특별이벤트)
   // BUILD 283: ★ Stroke 제거 — 벤치 실측 결과 '쓰다듬기'가 아니라 바닥에 '누운' 모션(척추수직도 -0.02).
   //   서서 하는 즉흥이 아니라 지속 자세라, 공중에 툭 눕는 버그를 냈다. 눕기는 침대/매트 위 전용(prop-act)으로.
+  // BUILD 292: 춤(HipHop/Samba/Rumba/Shuffle) 제거 — 춤은 오직 스피커 세션에서만(맥락 있는 춤).
+  //   맥락 없이 툭 추던 삼바가 어색했던 원인. flourish는 서서 하는 관조·제스처 위주로.
   const FLOURISH_CLIPS = new Set([
     'Waving', 'Waving2', 'LookAround', 'LookAround2', 'LookBehind', 'LookShoulder', 'LookDown',
     'NeckStretch', 'ArmStretch', 'Yawn', 'Excited', 'Happy', 'Talking',
-    'Jump', 'Jump2', 'Baseball', 'MmaKick', 'HipHop', 'Samba', 'Rumba', 'Shuffle', 'Drinking',
+    'Jump', 'Jump2', 'Baseball', 'MmaKick', 'Drinking',
   ]);
   const allExtras = animations.filter((c) => !knownNames.has(c.name));
   // 화이트리스트가 하나라도 매칭되면 그걸로(별리), 아니면 예전처럼 전부(다른 아이들 호환)
