@@ -172,12 +172,28 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
       layerMats.current.push({ mat, speed });
     };
     // 뒤(원경, 느림) → 앞(근경, 빠름). h=세로 월드높이, yOff=상하 위치.
-    // BUILD 302: 기차 배경 팩(심리스 반복 · 진짜 패럴럭스). 원경 하늘/산 → 나무 3겹 → 전신주.
-    mkLayer('train_bg.png', -13, 17, 0.12, 3.2);     // 원경: 하늘·산·달 (가장 느림)
-    mkLayer('train_tree3.png', -9, 16, 0.32, 2.6);   // 먼 나무
-    mkLayer('train_tree2.png', -6, 15, 0.55, 2.0);   // 중간 나무
-    mkLayer('train_tree1.png', -3, 14, 0.85, 1.2);   // 가까운 나무 + 풀밭(지면)
-    mkLayer('train_posts.png', -2, 14, 1.0, 1.2);    // 전신주 (근경 요소)
+    // BUILD 303: 기차 배경 — 별리는 철길(이미지 y≈1050) 위에 선다. 배경을 그 지점이 발밑(y0)에 오게 내린다.
+    //   이미지 1920×1073, 철길 y1050 → 아래에서 2.1%. mesh 중심 yOff = h×(0.5 - 1050/1073) = h×-0.478.
+    const IMG_W = 1920, IMG_H = 1073, GROUND_PX = 1050;
+    const mkTrain = (file: string, z: number, h: number, speed: number) => {
+      const tex = loader.load(`/assets/theatre/${file}`);
+      tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+      const w = h * (IMG_W / IMG_H);
+      const repeatX = 4;
+      tex.repeat.set(repeatX, 1);
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w * repeatX, h), mat);
+      const yOff = h * (0.5 - GROUND_PX / IMG_H); // 철길이 월드 y0에 오도록
+      m.position.set(0, yOff, z);
+      stage.add(m);
+      layerMats.current.push({ mat, speed });
+    };
+    const H = 9; // 배경 세로 월드높이(별리 키에 맞춤)
+    mkTrain('train_far.png', -12, H, 0.15);   // 원경: 하늘·달·성·먼숲 (느림)
+    mkTrain('train_near.png', -6, H, 0.5);     // 근경: 가까운 숲 + 철길
+    mkTrain('train_posts.png', -4, H, 0.7);    // 전신주·케이블
+    mkTrain('train_cars.png', -3, H, 0.9);     // 기차 (철길 위)
 
     if (!stage.parent) scene.add(stage);
     if (!bubbleRoot.parent) scene.add(bubbleRoot);

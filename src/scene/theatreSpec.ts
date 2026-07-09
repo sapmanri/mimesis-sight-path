@@ -37,8 +37,8 @@ export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
   far:  { color: '#c3ccc9', speed: 0.18, baseY: 0.54, amp: 0.11, freq: 1.3, seed: 11 }, // 먼 능선 — 옅은 회청
   mid:  { color: '#a9b8a4', speed: 0.45, baseY: 0.40, amp: 0.15, freq: 2.1, seed: 27 }, // 중경 — 부드러운 세이지
   near: { color: '#8a9c7e', speed: 1.00, baseY: 0.27, amp: 0.09, freq: 3.4, seed: 53 }, // 근경 — 차분한 녹회
-  ground: '#75866a',
-  groundAmp: 0.6,  // BUILD 286: 눈에 보이는 오르내림
+  ground: '#4a5f3a',
+  groundAmp: 0,    // BUILD 303: 기차 배경은 평평한 철길 — 오르내림 없음
   groundFreq: 0.5,
   walker: 13, // 별리(Kid5b)
   lingerEvery: 3,
