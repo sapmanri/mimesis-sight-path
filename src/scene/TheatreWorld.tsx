@@ -51,6 +51,31 @@ function bakeLayer(l: TheatreLayer, W = 1024, H = 256): THREE.CanvasTexture {
   return tex;
 }
 
+// BUILD 293: 밋밋한 회색 스피커 상자에 '스피커 얼굴'을 그려 입힌다 — 원본 모델엔 콘·그물이 없다.
+//   빈티지 우드톤 + 콘 2개(우퍼/트위터) + 그물 점무늬. 네 세계의 아날로그 감성.
+function speakerFaceTexture(): THREE.CanvasTexture {
+  const W = 256, H = 512;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d')!;
+  // 그물망 바탕 (어두운 천)
+  g.fillStyle = '#2c2620'; g.fillRect(0, 0, W, H);
+  // 그물 점무늬
+  g.fillStyle = 'rgba(255,255,255,0.04)';
+  for (let y = 6; y < H; y += 9) for (let x = 6; x < W; x += 9) { g.beginPath(); g.arc(x, y, 1.4, 0, Math.PI * 2); g.fill(); }
+  const cone = (cy: number, r: number) => {
+    g.beginPath(); g.arc(W / 2, cy, r, 0, Math.PI * 2);
+    g.fillStyle = '#1a1712'; g.fill();
+    g.strokeStyle = '#4a4038'; g.lineWidth = 3; g.stroke();
+    g.beginPath(); g.arc(W / 2, cy, r * 0.42, 0, Math.PI * 2); // 더스트캡
+    g.fillStyle = '#3a332b'; g.fill();
+  };
+  cone(H * 0.34, W * 0.34); // 우퍼(큰 콘)
+  cone(H * 0.72, W * 0.20); // 트위터(작은 콘)
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // 지면 곡선의 '월드 높이' — 별리 발이 이 값을 탄다. scroll이 흐르면 언덕이 다가왔다 지나간다.
 // BUILD 286: near 실루엣 진폭에 묶지 않고 전용 amp/freq로 — 눈에 확실히 보이는 오르내림.
 function groundHeight(scroll: number, amp: number, freq: number): number {
@@ -250,6 +275,12 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     noteSysRef.current = makeNoteSystem(stage);
     void defaultLoader('Speaker.glb').then((gltf) => {
       if (!alive) return;
+      // BUILD 293: 몸통 전체를 빈티지 우드톤으로. 얼굴(콘·그물)은 원본에 없으니 별도 판을 붙인다.
+      gltf.scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.material = new THREE.MeshStandardMaterial({ color: '#6b4a2e', roughness: 0.7, metalness: 0.05 });
+      });
       speakerProtoRef.current = gltf.scene;
     }).catch(() => { /* 스피커 없으면 춤만 */ });
     return () => {
@@ -286,7 +317,13 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     if (proto) {
       const sp = normalizeProp(proto.clone(true), 0.9);
       sp.position.set(-0.7, 0, 0.2);
-      sp.rotation.y = Math.PI; // BUILD 292: 스피커 정면(그물망)이 관객을 보게 — 뒤집힘 수정
+      // BUILD 293: 스피커 얼굴(콘·그물) 판을 관객(+Z) 쪽에 직접 붙인다 — 원본 모델엔 얼굴이 없다.
+      const box = new THREE.Box3().setFromObject(sp);
+      const size = box.getSize(new THREE.Vector3());
+      const faceMat = new THREE.MeshStandardMaterial({ map: speakerFaceTexture(), roughness: 0.85, metalness: 0.05 });
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(size.x * 0.9, size.y * 0.9), faceMat);
+      face.position.set(0, size.y * 0.5, size.z * 0.5 + 0.005); // 앞면(+Z)에 살짝 띄워
+      sp.add(face);
       sp.scale.setScalar(0.001);
       mnt.add(sp);
       speakerRef.current = sp;
