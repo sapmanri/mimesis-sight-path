@@ -46,24 +46,26 @@ export function createFootDust(parent: THREE.Object3D) {
   const footPrevY = [Infinity, Infinity];
   const footPrevDown = [false, false];
 
-  function emitAt(pos: THREE.Vector3, up: THREE.Vector3, water: boolean) {
+  function emitAt(pos: THREE.Vector3, up: THREE.Vector3, water: boolean, groundR: number) {
     const i = cursor; cursor = (cursor + 1) % N;
-    p[i].copy(pos);
-    const side = tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.015);
-    vel[i].copy(up).multiplyScalar(water ? 0.05 : 0.08).add(side);
-    life[i] = water ? 1.0 : 0.65;
+    // 발 뼈(발목)가 아니라 발바닥(지표면)에 찍는다 — 방향 유지하고 반경을 지표로
+    p[i].copy(pos).normalize().multiplyScalar(groundR + 0.006);
+    // 옆으로 거의 안 흩고, 아주 살짝만 위로 (발밑 중앙에 낮게)
+    const side = tmp.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.006);
+    vel[i].copy(up).multiplyScalar(water ? 0.02 : 0.03).add(side);
+    life[i] = water ? 0.9 : 0.6; // 1초 안에 사라진다
   }
 
   return {
-    // feet: [왼발pos, 오른발pos] (parent 로컬), up: 지표 법선, water, moving
-    updateFeet(dt: number, feet: (THREE.Vector3 | null)[], up: THREE.Vector3, water: boolean, moving: boolean) {
+    // feet: [왼발pos, 오른발pos] (parent 로컬), up: 지표 법선, water, moving, groundR: 지표 반경
+    updateFeet(dt: number, feet: (THREE.Vector3 | null)[], up: THREE.Vector3, water: boolean, moving: boolean, groundR: number) {
       if (moving) {
         for (let f = 0; f < 2; f += 1) {
           const foot = feet[f];
           if (!foot) continue;
           const y = foot.length();
           const goingDown = y < footPrevY[f] - 0.0005;
-          if (footPrevDown[f] && !goingDown) emitAt(foot, up, water); // 최저점=딛음
+          if (footPrevDown[f] && !goingDown) emitAt(foot, up, water, groundR); // 최저점=딛음
           footPrevDown[f] = goingDown;
           footPrevY[f] = y;
         }

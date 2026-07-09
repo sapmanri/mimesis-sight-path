@@ -1532,7 +1532,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       } else {
         FOOT_UP.set(0, 1, 0); FOOT_WATER.value = false;
       }
-      footDustRef.current.updateFeet(dt, [footL, footR], FOOT_UP, FOOT_WATER.value, moving && MV.mode !== 'ride');
+      const groundR = built.surfaceR(FOOT_UP);
+      footDustRef.current.updateFeet(dt, [footL, footR], FOOT_UP, FOOT_WATER.value, moving && MV.mode !== 'ride', groundR);
     }
     // BUILD 263: 캠프 폽 애니메이션 — 소환 직후 통 커지고, 머무는 시간 끝물엔 쏙 접힌다
     if (campSetRef.current) {
