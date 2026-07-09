@@ -110,6 +110,33 @@ function groundHeight(scroll: number, amp: number, freq: number): number {
   return (Math.sin(u) * 0.6 + Math.sin(u * 1.7 + 1.3) * 0.3 + Math.sin(u * 0.4 + 2.1) * 0.1) * amp;
 }
 
+// BUILD 317: 동네 전용 가로등 — props.ts makeStreetlamp를 옆면 무대에 이식(height fog 없음).
+//   전체 높이 ≈1.2 유닛. 기둥→팔→갓→발광구→따뜻한 PointLight. 팔이 별리 쪽(-X, 왼쪽)을 향하게.
+function makeTheatreLamp(): { group: THREE.Group; light: THREE.PointLight } {
+  const g = new THREE.Group();
+  const iron = new THREE.MeshStandardMaterial({ color: '#4a5049', roughness: 0.92, metalness: 0 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.022, 1.15, 6), iron);
+  pole.position.y = 0.575;
+  g.add(pole);
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 6), iron);
+  arm.rotation.z = Math.PI / 2;
+  arm.position.set(-0.1, 1.13, 0); // 팔을 별리 쪽(왼쪽)으로
+  g.add(arm);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.07, 6), iron);
+  head.position.set(-0.2, 1.12, 0);
+  g.add(head);
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 6),
+    new THREE.MeshStandardMaterial({ color: '#ffe9b0', emissive: '#ffcf7a', emissiveIntensity: 1.6, roughness: 0.6, fog: false }),
+  );
+  bulb.position.set(-0.2, 1.085, 0);
+  g.add(bulb);
+  const light = new THREE.PointLight('#ffd9a0', 2.2, 3.6, 2);
+  light.position.set(-0.2, 1.085, 0.5); // 살짝 앞(별리 쪽)으로
+  g.add(light);
+  return { group: g, light };
+}
+
 type Props = {
   spec: TheatreSpec;
   walkerIdx: number;
@@ -130,6 +157,8 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
   const feetYRef = useRef(0); // BUILD 308: 별리 발이 서는 철길 월드높이
   const scrollRef = useRef(0);
+  // BUILD 317: 진짜 가로등 3개(props.ts makeStreetlamp 이식, height fog 없이). 왼쪽 흐름+무한 리사이클.
+  const lampsRef = useRef<{ group: THREE.Group; light: THREE.PointLight }[]>([]);
   // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
   //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
   // BUILD 296: 별리 행동은 공용 brain에 위임. 동네는 걷는 방식(배경 스크롤)만 소유.
@@ -279,6 +308,31 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     return () => { stage.remove(mesh); mat.dispose(); tex.dispose(); fogMatRef.current = null; fogMeshRef.current = null; };
   }, [stage, camera]);
 
+  // BUILD 317: 가로등 3개 배치. 별리(z=0)와 near배경(z=-6) 사이(z=-1.5)에. 밑동을 별리 발 높이에 맞춘다.
+  useEffect(() => {
+    const LAMP_N = 3;
+    const LAMP_Z = -1.5;
+    const cam = camera as THREE.PerspectiveCamera;
+    const d = Math.abs(cam.position.z - LAMP_Z);
+    const vh = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * d;
+    const vw = vh * cam.aspect;
+    const span = vw * 1.4;          // 리사이클 폭
+    const gap = span / LAMP_N;      // 간격
+    const footY = -vh * 0.28;       // 별리 발 근처(feetY와 비슷한 높이)
+    const targetH = vh * 0.42;      // 가로등 전체 높이(화면의 ~0.42) — 우유통 아님, 아담한 진짜 가로등
+    const s = targetH / 1.2;        // 원본 높이 1.2 → targetH
+    const built: { group: THREE.Group; light: THREE.PointLight }[] = [];
+    for (let i = 0; i < LAMP_N; i += 1) {
+      const { group, light } = makeTheatreLamp();
+      group.scale.setScalar(s);
+      group.position.set(-span * 0.5 + i * gap, footY, LAMP_Z);
+      stage.add(group);
+      built.push({ group, light });
+    }
+    lampsRef.current = built;
+    return () => { for (const l of built) stage.remove(l.group); lampsRef.current = []; };
+  }, [stage, camera]);
+
   // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
   useEffect(() => {
     const st = makeStage(stage);
@@ -340,6 +394,26 @@ export function TheatreWorld({ spec, walkerIdx, paused }: Props) {
     // 레이어 U-스크롤 — 별리가 왼쪽으로 가니 배경은 왼쪽으로 흐른다(offset 음수). 체류 중엔 안 흐름.
     for (const Lm of layerMats.current) {
       if (Lm.mat.map) Lm.mat.map.offset.x = -scroll * Lm.speed * 0.06;
+    }
+
+    // BUILD 317: 가로등 — 배경과 같은 방향(왼쪽, -x)으로 흐르고 왼끝을 넘으면 오른끝으로 되돌린다(무한).
+    //   별리는 X=0 고정 → 가로등이 X=0에 가까울수록 광원이 별리를 물들인다(빛 닿을 때만 환해짐).
+    const lamps = lampsRef.current;
+    if (lamps.length) {
+      const cam2 = camera as THREE.PerspectiveCamera;
+      const d2 = Math.abs(cam2.position.z - (-1.5));
+      const vh2 = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * d2;
+      const vw2 = vh2 * cam2.aspect;
+      const span = vw2 * 1.4;
+      const flow = moving ? S.walkSpeed * 0.5 * dt : 0; // near 배경 속도(0.5)에 맞춤
+      for (const l of lamps) {
+        l.group.position.x -= flow;                       // 왼쪽으로
+        if (l.group.position.x < -span * 0.5) l.group.position.x += span; // 왼끝 넘으면 오른끝
+        const dx = Math.abs(l.group.position.x);
+        const reach = vw2 * 0.3;
+        const near01 = Math.max(0, 1 - dx / reach);
+        l.light.intensity = 1.2 + near01 * near01 * 2.5;  // 기본 은은 + 별리 근처서 강해짐
+      }
     }
 
     // BUILD 315: 바닥 안개 — 에디터에서 높이/색 바꾸면 실시간 반영
