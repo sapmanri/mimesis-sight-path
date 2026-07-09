@@ -208,6 +208,7 @@ export type StageRecipe = {
   tune?: 'music';           // 분위기 사운드
   tuneEvery?: number;       // 사운드 반복 간격(초)
   moods?: string[];         // BUILD 324: 이 놀이가 어울리는 무드(contemplative/playful/idle). 없으면 아무 무드나.
+  minDuration?: number;     // BUILD 326: 최소 지속(초). rounds가 끝나도 이 시간 전엔 계속 반복 — 짧은 클립이 순식간에 끝나는 것 방지
 };
 
 // 첫 레시피: 춤 — 스피커 폽 + 음표 + 음악 + 여러 곡.
@@ -229,21 +230,23 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'Bed.glb', targetH: 0.55, offset: [0, 0, 0.1], bob: 0 }, // 침대는 낮게, 캐릭터 자리 근처
+    prop: { file: 'Bed.glb', targetH: 1.1, offset: [0, 0, 0], bob: 0 }, // BUILD 326: 침대는 눕는 가구 — 크게(1.1). 별리 자리 중심
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른
+    minDuration: 8, // BUILD 326: 자는 건 오래 — 최소 8초
   },
   piano: {
     id: 'piano',
     motions: ['Piano'],
     rounds: [2, 3],
-    prop: { file: 'Synthesizer.glb', targetH: 0.5, offset: [0.35, 0, 0.15], bob: 0 }, // 신디는 앞쪽에
+    prop: { file: 'Synthesizer.glb', targetH: 0.5, offset: [0.15, 0, 0.05], bob: 0 }, // BUILD 326: 별리 손 앞으로 당김
     symbols: ['♪', '♫', '♩', '♬'],
     symbolEvery: 0.4,
     tune: 'music',
     tuneEvery: 3.0,
     moods: ['contemplative', 'idle'], // 잔잔한 연주
+    minDuration: 7,
   },
   workout: {
     id: 'workout',
@@ -253,15 +256,17 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     symbols: ['💪', '✦', '·'],
     symbolEvery: 0.5,
     moods: ['playful', 'idle'], // 활동적인 일상
+    minDuration: 6,
   },
   treadmill: {
     id: 'treadmill',
     motions: ['Treadmill'],
     rounds: [2, 3],
-    prop: { file: 'Treadmill.glb', targetH: 0.7, offset: [0, 0, 0.05], bob: 0 }, // 발밑 러닝머신
+    prop: { file: 'Treadmill.glb', targetH: 0.85, offset: [0, 0, 0], bob: 0 }, // BUILD 326: 발밑 러닝머신, 살짝 키움
     symbols: ['·', '✦'],
     symbolEvery: 0.6,
     moods: ['playful', 'idle'], // 활기찬 운동
+    minDuration: 7, // 너무 빨리 끝나던 것 — 최소 7초 달린다
   },
 };
 
@@ -289,6 +294,7 @@ export function makeStage(scene: THREE.Object3D) {
     tuneT: 0,
     symT: 0,
     popT: 0,
+    sessionAge: 0, // BUILD 326: 세션 경과 시간(초) — minDuration 판정용
     phase: 'none' as 'none' | 'in' | 'hold' | 'out',
   };
 
@@ -311,7 +317,7 @@ export function makeStage(scene: THREE.Object3D) {
     symbolSys,
     // 레시피 미리 로드(씬 시작 시 호출 권장)
     preload(id: string) { const r = STAGE_RECIPES[id]; if (r) preload(r); },
-    isActive: () => S.active,
+    isActive: () => S.active || S.phase === 'out', // BUILD 326: 프롭 퇴장(out) 중에도 active로 — 안 그러면 사라지기 전에 새 세션이 겹침
     // 세션 시작 — 성공 시 true. 오브젝트 폽 + 첫 모션.
     play(id: string, anchor: StageAnchor): boolean {
       if (S.active) return false;
@@ -321,7 +327,7 @@ export function makeStage(scene: THREE.Object3D) {
       if (dur <= 0) return false;
       S.active = true; S.recipe = recipe; S.anchor = anchor;
       S.roundsLeft = recipe.rounds[0] + Math.floor(Math.random() * (recipe.rounds[1] - recipe.rounds[0] + 1));
-      S.timer = dur; S.tuneT = 0; S.symT = 0; S.popT = 0;
+      S.timer = dur; S.tuneT = 0; S.symT = 0; S.popT = 0; S.sessionAge = 0;
       // 오브젝트 소환
       const p = recipe.prop;
       const cached = p ? protoCache.get(p.file) : null;
@@ -368,11 +374,14 @@ export function makeStage(scene: THREE.Object3D) {
       burstSys.update(dt);
       if (S.active && S.recipe && S.anchor) {
         const R = S.recipe;
+        S.sessionAge += dt;
         S.timer -= dt;
         if (R.tune === 'music') { S.tuneT -= dt; if (S.tuneT <= 0) { ambience.mumbleTune?.(); S.tuneT = R.tuneEvery ?? 2.8; } }
         if (S.timer <= 0) {
           S.roundsLeft -= 1;
-          if (S.roundsLeft > 0) {
+          // BUILD 326: rounds가 끝나도 minDuration 전이면 계속 반복(짧은 클립이 순식간에 끝나는 것 방지)
+          const minDur = R.minDuration ?? 0;
+          if (S.roundsLeft > 0 || S.sessionAge < minDur) {
             const next = R.motions[Math.floor(Math.random() * R.motions.length)];
             S.timer = S.anchor.rig.playNamed?.(next) ?? 2;
           } else {
