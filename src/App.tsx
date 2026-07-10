@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.16.0 · 별 촬영 행성 이식(캠프·멈춤 각 30%) · BUILD 358';
+const BUILD_LABEL = 'v2.17.0 · 별 촬영 지역 이식 → 세 맵 완결(도착·멈춤·우편·캠프) · BUILD 359';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1111,6 +1111,7 @@ export default function App() {
             riding={riding}
             stroll={stroll}
             onMail={setMailItem}
+            onByeoliCapture={onByeoliCapture}
           />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />

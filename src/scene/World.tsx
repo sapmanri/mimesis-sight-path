@@ -47,11 +47,13 @@ type WorldProps = {
   onPathTap?: (index: number) => void;
   /** BUILD 106: 에디터 — 기억 사물 클릭 선택 */
   onScenePick?: (index: number) => void;
+  /** 별이 자율 촬영 — 별이 도착·멈춤·캠프 등에서 스스로 찍는다(맵 무관, 별 종속). */
+  onByeoliCapture?: (dataUrl: string, reason: 'stage' | 'mood' | 'event') => void;
 };
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll, onMail }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll, onMail, onByeoliCapture }: WorldProps) {
   const world = useMemo(() => {
     const w = buildWorld(scenes, undefined, spec);
     // BUILD 176: 안개 일제 집행 — 길이 생성될 때 자동으로 따라붙는 모든 것(출처 불문)을
@@ -72,7 +74,23 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
     return holder;
   }, []);
   const rigRef = useRef<WalkerRig | null>(null);
-  const { gl, scene: r3fScene } = useThree();
+  const { gl, scene: r3fScene, camera: r3fCamera } = useThree();
+  // 별이 자율 촬영 — 별 종속(맵 무관). 도착·멈춤·캠프 등 자연스러운 순간에 확률로 부른다.
+  const onByeoliCaptureRef = useRef(onByeoliCapture);
+  onByeoliCaptureRef.current = onByeoliCapture;
+  const byeoliShotAt = useRef(0);
+  const byeoliShot = (reason: 'stage' | 'mood' | 'event') => {
+    const cb = onByeoliCaptureRef.current;
+    if (!cb) return;
+    const now = performance.now();
+    if (now - byeoliShotAt.current < 8000) return; // 연타 방지 8초
+    byeoliShotAt.current = now;
+    try {
+      gl.render(r3fScene, r3fCamera);
+      const dataUrl = gl.domElement.toDataURL('image/jpeg', 0.6);
+      cb(dataUrl, reason);
+    } catch { /* 조용히 */ }
+  };
   // BUILD 189: ?fogfirst=1 — <fog attach>가 커밋되기 전, 렌더 시점에 시야안개를 명령형으로 선주입한다.
   // frame 1이 무안개로 렌더되어 셰이더가 USE_FOG 없이 구워진다는 가설(인계 §5.7)의 정공법 스위치.
   // <fog attach>가 커밋되면 자기 인스턴스로 교체하지만, 그때는 이미 안개 있는 프레임만 존재한다.
@@ -1204,6 +1222,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           if (M.next <= 0) {
             M.next = 9 + Math.random() * 11;
             const d = rigRef.current?.flourish?.() ?? 0;
+            if (Math.random() < 0.3) byeoliShot('mood'); // 별이: 걷다 문득 멈춰 딴짓하는 순간 30% 촬영
             if (d > 0.2) { M.kind = 'clip'; M.left = Math.min(d, 4) + 0.35; } // 여분 클립이 있으면 그것
             else { M.kind = 'look'; M.left = 1.3 + Math.random() * 1.3; M.phase = 0; } // 없으면 두리번
           }
@@ -1291,6 +1310,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
         if (Math.abs(charProgress.current - rawIdx) < 0.22) {
           const nearIdx = ((rawIdx % scenes.length) + scenes.length) % scenes.length; // BUILD 150: 순환 길에선 감아서 읽는다
           onArrive?.(nearIdx);
+          if (Math.random() < 0.3) byeoliShot('stage'); // 별이: 기억 앞 도착 순간 30% 촬영(특별한 순간)
           const scene = scenes[nearIdx];
           const st = scene?.stillness ?? 0;
           if (!ridingRef.current) { // BUILD 138: 구름 위에선 내려서 들여다보지 않는다 — 흘러가며 볼 뿐
@@ -1518,6 +1538,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             if (item) onMail?.(item);
             rigRef.current?.playInspect('pickup'); // 들여다본다 — 편지의 동작
             speak(walker, 1.28, '✉');
+            if (Math.random() < 0.3) byeoliShot('event'); // 별이: 우체통 편지 받는 순간 30% 촬영(사건)
             break;
           }
         }
@@ -1645,6 +1666,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             campRest.current = { until: tt2 + 9 + Math.random() * 8, fire: spt.grp.position.clone() };
             if (!ridingRef.current) rigRef.current?.playInspect('sit');
             speak(walker, 1.28, '♪'); // BUILD 175: 온기의 콧노래
+            if (Math.random() < 0.3) byeoliShot('stage'); // 별이: 모닥불 앞 쉬어가는 순간 30% 촬영
             if (spt.guest) window.setTimeout(() => { if (spt.guest) speak(spt.guest.group, 1.24, undefined, 1.1); }, 700); // 선객의 인사
           }
         }
