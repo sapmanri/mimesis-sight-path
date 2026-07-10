@@ -233,7 +233,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'BedroomScene.glb', targetH: 2.6, offset: [0, 0, -0.3], bob: 0, fitAxis: 'y' }, // BUILD 335: 길 한가운데 방 통째로(초현실). 높이 기준 2.6으로. 별리는 방 안에서 잔다
+    prop: { file: 'BedroomScene.glb', targetH: 1.6, offset: [0, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0] }, // BUILD 336: 방이 벽을 보여줬음 → Y 180° 돌려 열린 면을 카메라로, 크기 축소
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른
