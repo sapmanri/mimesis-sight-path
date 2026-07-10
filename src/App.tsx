@@ -1126,12 +1126,13 @@ export default function App() {
         </div>
       </header>
 
-      <section className="viewport-card world-core-viewport">
+      <section className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
         <Canvas
           className="world-canvas"
           camera={{ position: [0, 3.1, 8.4], fov: 42 }}
           dpr={[1, 2]}
           shadows
+          gl={{ preserveDrawingBuffer: true }}
         >
           <World
             activeIndex={activeIndex}
