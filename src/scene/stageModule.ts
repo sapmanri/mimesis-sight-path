@@ -243,7 +243,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'piano',
     motions: ['Piano'],
     rounds: [2, 3],
-    prop: { file: 'Synthesizer.glb', targetH: 0.5, offset: [0.15, 0, 0.05], bob: 0 }, // BUILD 326: 별리 손 앞으로 당김
+    prop: { file: 'Synthesizer.glb', targetH: 0.55, offset: [-0.42, 0, 0.05], bob: 0, rot: [0, Math.PI / 2, 0] }, // BUILD 339: 별리는 왼쪽 보며 친다 → 신디를 왼쪽에 두고 건반이 별리(+x)를 향하게 Y 90°
     symbols: ['♪', '♫', '♩', '♬'],
     symbolEvery: 0.4,
     tune: 'music',
