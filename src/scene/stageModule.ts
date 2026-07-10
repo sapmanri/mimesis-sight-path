@@ -233,7 +233,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [-0.3, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0] }, // BUILD 341: -1.0은 과해 별리가 옷장 밖으로 밀림 → -0.3으로. 침대가 별리 자리 근처
+    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [-0.6, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0] }, // BUILD 342: 침대가 별리(바닥 누운 자리)에 오게 더 왼쪽으로(-0.3→-0.6)
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른
@@ -243,7 +243,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'piano',
     motions: ['Piano'],
     rounds: [2, 3],
-    prop: { file: 'Synthesizer.glb', targetH: 0.55, offset: [-0.25, 0, 0.05], bob: 0, rot: [0, Math.PI / 2, 0] }, // BUILD 341: 별리 폭만큼만 당김(-0.42→-0.25)
+    prop: { file: 'Synthesizer.glb', targetH: 0.55, offset: [-0.19, 0, 0.05], bob: 0, rot: [0, Math.PI / 2, 0] }, // BUILD 342: 신디 몸통 반 더 붙임(-0.25→-0.19)
     symbols: ['♪', '♫', '♩', '♬'],
     symbolEvery: 0.4,
     tune: 'music',
@@ -265,7 +265,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'treadmill',
     motions: ['Treadmill'],
     rounds: [4, 6],
-    prop: { file: 'Treadmill.glb', targetH: 1.1, offset: [0.15, 0, 0], bob: 0, rot: [0, Math.PI, 0] }, // BUILD 340: 좌우 반대 → Y 180°
+    prop: { file: 'Treadmill.glb', targetH: 1.1, offset: [0.3, 0, 0], bob: 0, rot: [0, Math.PI, 0] }, // BUILD 342: 별리가 왼쪽 치우쳐 → 오른쪽으로(0.15→0.3)
     symbols: ['·', '✦'],
     symbolEvery: 0.6,
     moods: ['playful', 'idle'], // 활기찬 운동
