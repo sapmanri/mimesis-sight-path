@@ -4,7 +4,7 @@
 // 공유 코어: loadWalkerAsset · createClipRig(별리) · speech · ambience (행성/본토와 같은 자산).
 
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import { loadWalkerAsset } from '../engine/worldCore';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
@@ -143,10 +143,11 @@ type Props = {
   walkerIdx: number;
   paused?: boolean;
   onEvent?: (e: PlanetEvent) => void; // BUILD 329: 동네 이벤트 → App 여권/타임라인(세 무대 공유)
+  captureRef?: MutableRefObject<(() => string | null) | null>; // BUILD 353: 씬 캡처 — App 성취 트리거가 부른다
 };
 
-export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
-  const { scene, camera } = useThree();
+export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef }: Props) {
+  const { scene, camera, gl } = useThree();
   const specRef = useRef(spec); specRef.current = spec;
   const pausedRef = useRef(paused); pausedRef.current = paused;
   // BUILD 329: 동네 이벤트 emit — 세 무대 공유 여권/타임라인으로.
@@ -158,6 +159,18 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
     const id = window.setTimeout(() => emit('theatre_arrive', { village: v }), 1200);
     return () => window.clearTimeout(id);
   }, []);
+
+  // BUILD 353: 씬 캡처 — 행성과 동일 방식(gl.render 강제 후 toDataURL). App 성취 트리거가 captureRef로 부른다.
+  useEffect(() => {
+    if (!captureRef) return undefined;
+    captureRef.current = () => {
+      try {
+        gl.render(scene, camera); // 캡처 직전 한 프레임 강제 (preserveDrawingBuffer 보장)
+        return gl.domElement.toDataURL('image/jpeg', 0.6);
+      } catch { return null; }
+    };
+    return () => { if (captureRef) captureRef.current = null; };
+  }, [captureRef, scene, camera, gl]);
 
   // 배경 판때기(빌보드 3장) + 하늘 + 지면
   const stage = useMemo(() => new THREE.Group(), []);

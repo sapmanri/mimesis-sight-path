@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.13.1 · 여권·기록 UI 세 맵 공용 · BUILD 352';
+const BUILD_LABEL = 'v2.13.2 · 동네 씬 캡처 배선 · BUILD 353';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -170,6 +170,7 @@ export default function App() {
   const [propScale, setPropScale] = useState(1);
   // BUILD 216: 찍어서 배치 + 선택·키보드 편집 — 에디터의 본분
   const planetApi = useRef<PlanetApi | null>(null);
+  const theatreCapture = useRef<(() => string | null) | null>(null); // BUILD 353: 동네 씬 캡처
   const [placeArm, setPlaceArm] = useState<null | { mode: 'new' } | { mode: 'move'; id: string }>(null);
   const [propSel, setPropSel] = useState<string | null>(null);
   // BUILD 222: 깃발 속삭임 — 멈추지 않고, 이름만 스친다
@@ -240,7 +241,7 @@ export default function App() {
         earnedIds.current.add(id);
         const ach = ACHIEVEMENTS.find((a) => a.id === id);
         if (!ach) continue;
-        const img = planetApi.current?.capture() ?? null;
+        const img = (planetApi.current?.capture() ?? theatreCapture.current?.()) ?? null; // BUILD 353: 현재 맵의 캡처
         const post: FeedPost = { id: `${id}-${Date.now()}`, achId: id, icon: ach.icon, title: ach.title, text: ach.earnedText, img, likes: makeLikes(), comments: makeComments(id, 2 + Math.floor(Math.random() * 2)), t: Date.now() };
         if (!threadMuted) {
           planetSound.shutter(); // 찰칵 — 사진 올린다
@@ -581,7 +582,7 @@ export default function App() {
       <main className="app-shell world-core-shell">
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 1.35, 6.2], fov: 38 }} dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
-            <TheatreWorld spec={tSpec} walkerIdx={tSpec.walker ?? -1} paused={false} onEvent={onPlanetEvent} />
+            <TheatreWorld spec={tSpec} walkerIdx={tSpec.walker ?? -1} paused={false} onEvent={onPlanetEvent} captureRef={theatreCapture} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
