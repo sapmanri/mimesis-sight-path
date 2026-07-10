@@ -322,9 +322,10 @@ export const MODELS: Record<string, ModelSpec> = {
   // BUILD 267: 별 — 스타일라이즈 키즈팩(Vase 구매). Mixamo 골격이라 우리 rig에 딱.
   // 클립: Idle/Walking/Running/Sitting(앉기!)/Talking 병합. 별리 세계관 주인공 후보 2호.
   byeol: { file: 'Byeol.glb', height: 0.9, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.9, run: 1.6 } },
-  // BUILD 274: 별이 — Vase가 Mixamo로 몸+애니 함께 뽑음(한 몸=좀비/눕기 없음, Hips 회전 [0,0,0,1]).
-  // 클립 7종: Idle/Walking/Running/Sitting/SitTalk/PickUp/Dance. 별리 세계관 주인공.
-  byeoli: { file: 'Byeoli.glb', height: 0.9, tint: '#ffffff', keepLook: true, clipSpeeds: { walk: 0.9, run: 1.6 } },
+  // ⚠️ 별(주인공) 아님! 이건 BUILD 274에 별 후보로 올렸다가 BUILD 279에 Kid5b(idx 13)에게
+  //   대표 자리를 내준 '옛 별 후보'다. 로스터 자리(idx 12)만 유지 — 빼면 Kid5b가 12로 밀려 walker:13이 깨진다.
+  //   실제 별 = Kid5b.glb (로스터 idx 13). byeoliBrain은 그 별의 뇌(이름·실체 일치, 무관).
+  oldByeolCandidate: { file: 'OldByeolCandidate.glb', height: 0.9, tint: '#ffffff', keepLook: true, clipSpeeds: { walk: 0.9, run: 1.6 } },
   // BUILD 269: 주인공 — Vase가 고른 그 애 (키즈팩 다른 캐릭터). Mixamo 65관절, 애니 6종.
   // Idle/Walking/Running/Sitting(앉기)/Jump/Talking. 별리 세계관 대표. "얘한테 다 맞춘다."
   hero: { file: 'Hero.glb', height: 0.92, tint: '#ffffff', keepLook: true, clipSpeeds: { walk: 0.9, run: 1.6 } },
@@ -398,7 +399,7 @@ export const WALKER_ROSTER: ModelSpec[] = [
   // 회색 점토는 UV 삼각형 대조(정확+센트로이드 폴백, 100.0% 매칭)로 Vroid01 재질 15종 복원.
   // 클립 9종(Idle/Walking/Running/PickUp/Sitting/Yawn/춤3) 이름 병합, 루트모션 제거, 드리프트 실측.
   { file: 'Girl1.glb', height: 0.95, tint: '#57534a', keepLook: true, clipSpeeds: { walk: 0.013, run: 0.029 } },
-  MODELS.byeoli, // BUILD 274: 별이 — Mixamo 몸+애니 한 몸. 배지로 확인 후 대표 승격.
+  MODELS.oldByeolCandidate, // idx 12 — 옛 별 후보(BUILD 274). 별 아님. 자리 유지용(빼면 Kid5b idx 밀림).
   // BUILD 279: Kid5b(별2) — 원본 Kid5 몸에 Mixamo 모션 17종 raw 병합(In-Place 전부 확인, 골격 무결 67노드/52joints).
   // 21클립: Walking/Idle/Running/Sitting + SitLaugh/SitClap/Talking/Stroke/HipHop/Samba/Rumba/Shuffle/
   //   Situps/BicycleCrunch/CircleCrunch/Baseball/MmaKick/GoofyRun/Jogging/Treadmill/LayingShake.
