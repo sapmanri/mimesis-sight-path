@@ -413,7 +413,7 @@ export function makeStage(scene: THREE.Object3D) {
         const base = S.recipe?.prop?.targetH ? 0.9 : 0.9;
         const pop = base * (1 + 0.25 * Math.sin(k * Math.PI)) * (k < 1 ? k : 1);
         obj.scale.setScalar(Math.max(0.001, pop));
-        if (k >= 1) { obj.scale.setScalar(0.9); S.phase = 'hold'; }
+        if (k >= 1) { obj.scale.setScalar(0.9); S.phase = 'hold'; console.log('[DBG전이] in→hold', S.recipe?.id, 'symbols:', S.recipe?.symbols?.length ?? 0); }
       } else if (obj && S.phase === 'hold') {
         const bob = S.recipe?.prop?.bob ?? 0;
         if (bob > 0) obj.position.y = Math.abs(Math.sin(elapsed * 6)) * bob;
@@ -422,6 +422,7 @@ export function makeStage(scene: THREE.Object3D) {
           if (S.symT <= 0) {
             S.symT = S.recipe.symbolEvery ?? 0.3;
             const wp = obj.getWorldPosition(new THREE.Vector3()); wp.y += 0.9;
+            console.log('[DBG음표emit]', S.recipe.id, 'phase:', S.phase, 'wp:', wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1));
             symbolSys.emit(wp);
           }
         }
