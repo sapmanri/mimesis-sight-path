@@ -233,7 +233,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [-0.6, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0] }, // BUILD 342: 침대가 별리(바닥 누운 자리)에 오게 더 왼쪽으로(-0.3→-0.6)
+    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [-0.15, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0] }, // BUILD 343: 별리는 방바닥에 눕는 컨셉(침대정렬 포기). 옷장에 안 가리게 살짝 오른쪽
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른
