@@ -41,14 +41,14 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.11.1 · 본토 ?stroll=1 무한산책 URL · BUILD 331';
+const BUILD_LABEL = 'v2.11.2 · 본토 순환길 URL(?loop=ring|wander|knot) · BUILD 332';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const [muted, setMuted] = useState(false);
   const [riding, setRiding] = useState(false); // BUILD 136: 구름 탑승
-  const [stroll, setStroll] = useState(() => new URLSearchParams(window.location.search).has('stroll')); // BUILD 331: ?stroll=1이면 무한 산책으로 시작 — 뷰어 주소로도 무한길
+  const [stroll, setStroll] = useState(() => { const q = new URLSearchParams(window.location.search); return q.has('stroll') || ['ring', 'wander', 'knot'].includes(q.get('loop') ?? ''); }); // BUILD 332: ?stroll=1 또는 ?loop=… 이면 무한 산책으로 시작
   const [mailItem, setMailItem] = useState<{ text?: string; photo?: string } | null>(null); // BUILD 169: 배달된 편지
   const [uiIdle, setUiIdle] = useState(false); // BUILD 156: UI 유휴 — 틀어놓는 화면에서 단추는 유령이 된다
   useEffect(() => {
@@ -368,7 +368,17 @@ export default function App() {
   };
   const [memCard, setMemCard] = useState<PlanetMemory | null>(null);
   const scenes = draft?.scenes ?? jejuScenes;
-  const [spec] = useState<WorldSpec>(draft?.spec ?? JEJU_SPEC);
+  // BUILD 332: ?loop=ring|wander|knot 이면 순환길로 오버라이드 — 뷰어 주소로도 무한/매듭길이 나온다.
+  //   (본토 draft는 localStorage 전용이라 외부에 안 나갔다. URL 파라미터로 길 종류를 실어 밖에서도 같은 길을 본다.)
+  const [spec] = useState<WorldSpec>(() => {
+    const base = draft?.spec ?? JEJU_SPEC;
+    const q = new URLSearchParams(window.location.search);
+    const loopStyle = q.get('loop');
+    if (loopStyle === 'ring' || loopStyle === 'wander' || loopStyle === 'knot') {
+      return { ...base, path: { ...base.path, loop: true, loopStyle } };
+    }
+    return base;
+  });
   const lastMoveAt = useRef(0);
   const lastManualAt = useRef(0);
 
