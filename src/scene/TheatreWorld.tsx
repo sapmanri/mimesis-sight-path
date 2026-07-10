@@ -398,10 +398,10 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
     lampContainer.name = '__lampContainer';
     stage.add(lampContainer);
     lampsRef.current = [];
-    // BUILD 344: 절대 간격 — 화면 너비와 무관(세로/가로 모드 동일). 화면 폭을 덮을 만큼 개수 자동 산출.
+    // BUILD 349: span은 반드시 gap의 정수배 — 안 그러면 리사이클된 가로등이 격자와 어긋나 '짧은 구간'이 생긴다.
     const gap = Math.max(1.5, specRef.current.lampGap ?? 4.5);
-    const span = Math.max(refVW * 1.5, gap * 2);       // 리사이클 폭(화면보다 넉넉히, 최소 간격 2배)
-    const LAMP_N = Math.max(2, Math.ceil(span / gap) + 1); // 간격을 채우는 개수
+    const LAMP_N = Math.max(3, Math.ceil((refVW * 1.5) / gap) + 1); // 화면 폭을 덮는 개수
+    const span = gap * LAMP_N;                                       // 정확히 gap의 정수배
     const built: { group: THREE.Group; light: THREE.PointLight }[] = [];
     for (let i = 0; i < LAMP_N; i += 1) {
       const { group, light } = makeTheatreLamp();
@@ -512,12 +512,12 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
       const refVH = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * dRef;
       const refVW = refVH * cam2.aspect;
       const gap = Math.max(1.5, S.lampGap ?? 4.5);
-      const span = Math.max(refVW * 1.5, gap * 2);
       const glow = S.lampGlow ?? 5;
       const flow = moving ? S.walkSpeed * 0.5 * dt : 0;
       for (const l of lamps) {
         l.group.position.x += flow;                        // 배경과 같은 방향
-        if (l.group.position.x > span * 0.5) l.group.position.x -= span; // 오른끝 넘으면 왼끝
+        const lampSpan = (l.group.userData.span as number) || (gap * lamps.length); // 배치 때 저장한 span(격자 일치)
+        if (l.group.position.x > lampSpan * 0.5) l.group.position.x -= lampSpan; // 오른끝 넘으면 왼끝
         const dx = Math.abs(l.group.position.x);
         const reach = refVW * 0.3;
         const near01 = Math.max(0, 1 - dx / reach);
