@@ -266,7 +266,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'treadmill',
     motions: ['Treadmill'],
     rounds: [4, 6],
-    prop: { file: 'Treadmill.glb', targetH: 1.1, offset: [0.3, 0, 0], bob: 0, rot: [0, Math.PI, 0] }, // BUILD 342: 별리가 왼쪽 치우쳐 → 오른쪽으로(0.15→0.3)
+    prop: { file: 'Treadmill.glb', targetH: 1.1, offset: [-0.15, 0, 0], bob: 0, rot: [0, Math.PI, 0] }, // BUILD 348: 러닝머신이 오른쪽 치우쳐 발판 삐져나옴 → 왼쪽으로(0.3→-0.15)
     symbols: ['·', '✦'],
     symbolEvery: 0.6,
     moods: ['playful', 'idle'], // 활기찬 운동
