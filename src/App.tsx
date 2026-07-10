@@ -41,7 +41,14 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.13.3 · 캡처 R2 업로드+방송 R2연동 · BUILD 355';
+// BUILD 356: 별이 사진 올릴 때 붙이는 한마디 — 이유(스테이지/무드/사건)별. 반말·툭·여백.
+const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
+  stage: ['이런 것도 해봤어.', '가끔은 이렇게.', '혼자 노는 법을 안다.', '누가 보든 말든.'],
+  mood: ['잠깐 멈췄어.', '여기 좋다.', '이 순간을 두고 가기 아까워서.', '그냥, 담아뒀어.', '문득.'],
+  event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
+};
+
+const BUILD_LABEL = 'v2.14.0 · 별이 스스로 찍는다(brain 촬영) · BUILD 356';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -281,6 +288,42 @@ export default function App() {
     }, 120);
     return () => clearTimeout(timer);
   }, [timeline]);
+
+  // BUILD 356: 별이 스스로 찍은 순간 — R2 업로드 후 기록에 남긴다. 성취와 별개, 별의 자율 촬영.
+  const byeoliShotAt = useRef(0);
+  const onByeoliCapture = (dataUrl: string, reason: 'stage' | 'mood' | 'event') => {
+    if (!isSapmanri) return; // 발행 권한 있는 세션만(방문자 화면은 오염 안 시킴)
+    const now = Date.now();
+    if (now - byeoliShotAt.current < 8000) return; // 연타 방지(최소 8초 간격)
+    byeoliShotAt.current = now;
+    const key = sessionStorage.getItem('mimesis.publishKey');
+    if (!key) return;
+    const curMap = planetMode ? 'planet' : theatreMode ? 'theatre' : 'region';
+    const cap = BYEOLI_SHOT_TEXT[reason];
+    const text = cap[Math.floor(Math.random() * cap.length)];
+    const publishShot = (img: string | null) => {
+      const post: FeedPost = { id: `byeoli-${now}`, achId: `byeoli_${reason}`, icon: '📷', title: '', text, img, likes: makeLikes(), comments: makeComments('night_owl', 1 + Math.floor(Math.random() * 2)), t: now };
+      setFeed((prev) => {
+        const next = [post, ...prev].slice(0, 60);
+        try { localStorage.setItem(FEED_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
+        return next;
+      });
+      fetch('/api/feed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
+        body: JSON.stringify({ title: post.title, text: post.text, img: post.img, icon: post.icon, likes: post.likes, comments: post.comments }),
+      }).catch(() => { /* 조용히 */ });
+    };
+    fetch('/api/upload-capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
+      body: JSON.stringify({ map: curMap, dataUrl }),
+    })
+      .then((r) => r.json())
+      .then((res: { ok?: boolean; url?: string }) => publishShot(res.ok && res.url ? res.url : null))
+      .catch(() => publishShot(null));
+  };
+
   const onPlanetEvent = (e: PlanetEvent) => {
     const entry = eventToEntry(e);
     if (!entry) return;
@@ -598,7 +641,7 @@ export default function App() {
       <main className="app-shell world-core-shell">
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 1.35, 6.2], fov: 38 }} dpr={[1, 2]} gl={{ preserveDrawingBuffer: true }}>
-            <TheatreWorld spec={tSpec} walkerIdx={tSpec.walker ?? -1} paused={false} onEvent={onPlanetEvent} captureRef={theatreCapture} />
+            <TheatreWorld spec={tSpec} walkerIdx={tSpec.walker ?? -1} paused={false} onEvent={onPlanetEvent} captureRef={theatreCapture} onByeoliCapture={onByeoliCapture} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />

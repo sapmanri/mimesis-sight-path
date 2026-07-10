@@ -20,6 +20,9 @@ export type BrainHost = {
   lingerLength: () => number;  // 체류 길이 배율
   stageChance?: () => number;  // 딴짓 대신 스테이지 세션을 펼칠 확률(기본 0.2)
   stageIds?: () => string[];   // 펼칠 수 있는 스테이지 목록(기본 ['dance'])
+  // BUILD 356: 별이 자기 세계를 직접 찍는다. brain이 "지금 찍고 싶다"고 판단하면 부른다.
+  //   각 맵이 자기 capture(현재 씬 촬영→R2→기록)를 주입. brain은 타이밍만 정한다.
+  capture?: (reason: 'stage' | 'mood' | 'event') => void;
 };
 
 export function makeByeoliBrain(host: BrainHost) {
@@ -61,6 +64,7 @@ export function makeByeoliBrain(host: BrainHost) {
           if (stage && rig && mnt && Math.random() < chance
               && stage.play(pool[Math.floor(Math.random() * pool.length)], { parent: mnt, rig })) {
             L.left -= 1;
+            if (Math.random() < 0.3) host.capture?.('stage'); // BUILD 356: 스테이지 하는 순간 30% 촬영
           } else {
             const dur = rig?.flourish?.(mood) ?? 0;
             if (Math.random() < 0.4) {
@@ -91,6 +95,7 @@ export function makeByeoliBrain(host: BrainHost) {
           mood = MOODS[Math.floor(Math.random() * MOODS.length)]; // 이번 체류의 성격을 정한다
           L.left = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen));
           L.gap = 0.6 + Math.random() * 1.4;
+          if (Math.random() < 0.3) host.capture?.('mood'); // BUILD 356: 문득 멈춰 바라보는 순간 30% 촬영
           return { moving: false };
         }
       }

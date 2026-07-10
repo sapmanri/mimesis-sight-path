@@ -144,14 +144,16 @@ type Props = {
   paused?: boolean;
   onEvent?: (e: PlanetEvent) => void; // BUILD 329: 동네 이벤트 → App 여권/타임라인(세 무대 공유)
   captureRef?: MutableRefObject<(() => string | null) | null>; // BUILD 353: 씬 캡처 — App 성취 트리거가 부른다
+  onByeoliCapture?: (dataUrl: string, reason: 'stage' | 'mood' | 'event') => void; // BUILD 356: 별이 스스로 찍은 순간 → App(R2+기록)
 };
 
-export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef }: Props) {
+export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onByeoliCapture }: Props) {
   const { scene, camera, gl } = useThree();
   const specRef = useRef(spec); specRef.current = spec;
   const pausedRef = useRef(paused); pausedRef.current = paused;
   // BUILD 329: 동네 이벤트 emit — 세 무대 공유 여권/타임라인으로.
   const onEventRef = useRef(onEvent); onEventRef.current = onEvent;
+  const onByeoliCaptureRef = useRef(onByeoliCapture); onByeoliCaptureRef.current = onByeoliCapture; // BUILD 356
   const emit = (kind: PlanetEventKind, data?: PlanetEvent['data']) => onEventRef.current?.({ kind, data, t: performance.now() });
   // 동네 진입 시 한 번 — "기차 동네의 밤을 걷다"
   useEffect(() => {
@@ -446,6 +448,16 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef }: P
       lingerLength: () => Math.max(0.2, specRef.current.lingerLength ?? 1),
       // BUILD 323: 별리가 펼칠 수 있는 스테이지 목록 — 이걸 넘겨야 dance 외 레시피도 발동한다.
       stageIds: () => ['dance', 'sleep', 'piano', 'workout', 'treadmill'],
+      // BUILD 356: 별이 스스로 찍는다 — brain이 부르면 현재 화면을 찍어 App(R2+기록)으로.
+      capture: (reason) => {
+        const cb = onByeoliCaptureRef.current;
+        if (!cb) return;
+        try {
+          gl.render(scene, camera);
+          const dataUrl = gl.domElement.toDataURL('image/jpeg', 0.6);
+          cb(dataUrl, reason);
+        } catch { /* 조용히 */ }
+      },
     });
     return () => { st.dispose(); stageRef.current = null; brainRef.current = null; };
   }, [stage]);
