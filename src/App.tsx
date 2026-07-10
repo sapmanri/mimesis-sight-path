@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.13.2 · 동네 씬 캡처 배선 · BUILD 353';
+const BUILD_LABEL = 'v2.13.3 · 캡처 R2 업로드+방송 R2연동 · BUILD 355';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -236,30 +236,46 @@ export default function App() {
     if (!fresh.length) return;
     // 캡처는 다음 프레임 이후에 — api·canvas가 준비되고 한 프레임 그려진 뒤라야 그림이 담긴다
     const timer = setTimeout(() => {
+      const key = sessionStorage.getItem('mimesis.publishKey');
+      const curMap = planetMode ? 'planet' : theatreMode ? 'theatre' : 'region'; // BUILD 355: 현재 맵
       for (const id of fresh) {
         if (earnedIds.current.has(id)) continue;
         earnedIds.current.add(id);
         const ach = ACHIEVEMENTS.find((a) => a.id === id);
         if (!ach) continue;
-        const img = (planetApi.current?.capture() ?? theatreCapture.current?.()) ?? null; // BUILD 353: 현재 맵의 캡처
-        const post: FeedPost = { id: `${id}-${Date.now()}`, achId: id, icon: ach.icon, title: ach.title, text: ach.earnedText, img, likes: makeLikes(), comments: makeComments(id, 2 + Math.floor(Math.random() * 2)), t: Date.now() };
-        if (!threadMuted) {
-          planetSound.shutter(); // 찰칵 — 사진 올린다
-          post.comments.forEach((_, ci) => window.setTimeout(() => { if (!threadMutedRef.current) planetSound.comment(); }, 700 + ci * 550)); // 댓글이 하나씩 달린다
-        }
-        setFeed((prev) => {
-          const next = [post, ...prev].slice(0, 60);
-          try { localStorage.setItem(FEED_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
-          return next;
-        });
-        // BUILD 250: 삽만리가 남긴 관찰을 공용 스레드로도 발행 (방문자 전원이 본다)
-        const key = sessionStorage.getItem('mimesis.publishKey');
-        if (key) {
-          fetch('/api/feed', {
+        const dataUrl = (planetApi.current?.capture() ?? theatreCapture.current?.()) ?? null; // BUILD 353: 현재 맵의 캡처
+        // BUILD 355: 캡처를 R2에 올리고 URL만 포스트에 담는다(KV 팽창 방지). 업로드 후 포스트 갱신.
+        const publishPost = (img: string | null) => {
+          const post: FeedPost = { id: `${id}-${Date.now()}`, achId: id, icon: ach.icon, title: ach.title, text: ach.earnedText, img, likes: makeLikes(), comments: makeComments(id, 2 + Math.floor(Math.random() * 2)), t: Date.now() };
+          if (!threadMuted) {
+            planetSound.shutter();
+            post.comments.forEach((_, ci) => window.setTimeout(() => { if (!threadMutedRef.current) planetSound.comment(); }, 700 + ci * 550));
+          }
+          setFeed((prev) => {
+            const next = [post, ...prev].slice(0, 60);
+            try { localStorage.setItem(FEED_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
+            return next;
+          });
+          if (key) {
+            fetch('/api/feed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
+              body: JSON.stringify({ title: post.title, text: post.text, img: post.img, icon: post.icon, likes: post.likes, comments: post.comments }),
+            }).catch(() => { /* 발행 실패는 조용히 */ });
+          }
+        };
+        if (dataUrl && key) {
+          // R2 업로드 → URL 받아서 발행. 실패하면 이미지 없이라도 발행.
+          fetch('/api/upload-capture', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
-            body: JSON.stringify({ title: post.title, text: post.text, img: post.img, icon: post.icon, likes: post.likes, comments: post.comments }),
-          }).catch(() => { /* 발행 실패는 조용히 — 로컬엔 이미 남았다 */ });
+            body: JSON.stringify({ map: curMap, dataUrl }),
+          })
+            .then((r) => r.json())
+            .then((res: { ok?: boolean; url?: string }) => publishPost(res.ok && res.url ? res.url : null))
+            .catch(() => publishPost(null));
+        } else {
+          publishPost(null);
         }
       }
     }, 120);

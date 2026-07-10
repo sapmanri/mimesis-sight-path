@@ -10,6 +10,8 @@ import byeolliPosts from './byeolli_posts.json';
 interface Env {
   PLANET: KVNamespace;
   PUBLISH_KEY?: string;
+  CAPTURES?: R2Bucket;            // BUILD 355: R2 캡처 버킷 — 방송 이미지를 여기서 뽑는다
+  CAPTURES_PUBLIC_BASE?: string; // r2.dev 공개 URL 접두사
 }
 
 const FEED_KEY = 'feed';
@@ -72,9 +74,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const pick = candidates[Math.floor(Math.random() * candidates.length)];
   const chosen = POSTS[pick];
 
-  // 이미지 풀 있으면 자주(4/5) 첨부 — BUILD 333: 사진이 거의 안 붙던 문제, 확률 상향(0.5→0.8)
-  const img = IMAGE_POOL.length > 0 && Math.random() < 0.8
-    ? IMAGE_POOL[Math.floor(Math.random() * IMAGE_POOL.length)]
+  // BUILD 355: 이미지 — R2 최근 캡처 우선, 없으면 하드코딩 풀. 자주(4/5) 첨부.
+  let imgPool: string[] = [];
+  if (env.CAPTURES && env.CAPTURES_PUBLIC_BASE) {
+    try {
+      const listed = await env.CAPTURES.list({ prefix: 'captures/', limit: 200 });
+      const base = env.CAPTURES_PUBLIC_BASE.replace(/\/$/, '');
+      imgPool = listed.objects.map((o) => o.key).sort().reverse().slice(0, 40).map((k) => `${base}/${k}`);
+    } catch { /* R2 실패 시 폴백 */ }
+  }
+  if (imgPool.length === 0) imgPool = IMAGE_POOL; // 폴백: 하드코딩 8장
+  const img = imgPool.length > 0 && Math.random() < 0.8
+    ? imgPool[Math.floor(Math.random() * imgPool.length)]
     : null;
 
   // 피드에 prepend
