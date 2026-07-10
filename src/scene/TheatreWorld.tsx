@@ -381,29 +381,31 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
 
   // BUILD 319: 가로등 3개 — 별리(키 0.9유닛)와 같은 절대단위·같은 평면(z=0)에. 밑동을 별리 발과 정확히 일치.
   useEffect(() => {
-    const LAMP_N = 5;              // BUILD 325: 3→5(1.5배). span 그대로라 설치 간격이 좁아짐
     const cam = camera as THREE.PerspectiveCamera;
     const REF_Z = -6;
     const dRef = Math.abs(cam.position.z - REF_Z);
     const refVH = 2 * Math.tan((cam.fov * Math.PI / 180) / 2) * dRef;
     const refVW = refVH * cam.aspect;
     const footY = -refVH * 0.23;    // 별리 발과 같은 높이(feetYRef와 동일)
-    const LAMP_Z = 0.4;            // BUILD 321: 별리(z=0)보다 살짝만 앞 — 별리가 가로등 뒤로 지나간다(뚫기 해결). 크기·높이 어긋남은 미미
-    const LAMP_H = 1.74;           // BUILD 325: 1.45→1.74(1.2배). 박힌 곳(footY·z)은 그대로
-    const s = LAMP_H / 1.2;        // makeTheatreLamp 원본 높이 ≈1.2 → 1.74
-    const span = refVW * 1.6;       // 리사이클 폭
-    const gap = span / LAMP_N;
+    const LAMP_Z = 0.4;            // BUILD 321: 별리(z=0)보다 살짝만 앞
+    const LAMP_H = 1.74;           // BUILD 325: 가로등 높이
+    const s = LAMP_H / 1.2;        // 원본 높이 ≈1.2 → 1.74
+    // BUILD 344: 절대 간격 — 화면 너비와 무관(세로/가로 모드 동일). 화면 폭을 덮을 만큼 개수 자동 산출.
+    const gap = Math.max(1.5, specRef.current.lampGap ?? 4.5);
+    const span = Math.max(refVW * 1.5, gap * 2);       // 리사이클 폭(화면보다 넉넉히, 최소 간격 2배)
+    const LAMP_N = Math.max(2, Math.ceil(span / gap) + 1); // 간격을 채우는 개수
     const built: { group: THREE.Group; light: THREE.PointLight }[] = [];
     for (let i = 0; i < LAMP_N; i += 1) {
       const { group, light } = makeTheatreLamp();
       group.scale.setScalar(s);
       group.position.set(-span * 0.5 + i * gap, footY, LAMP_Z);
+      group.userData.span = span; // 리사이클용
       stage.add(group);
       built.push({ group, light });
     }
     lampsRef.current = built;
     return () => { for (const l of built) stage.remove(l.group); lampsRef.current = []; };
-  }, [stage, camera]);
+  }, [stage, camera, spec.lampGap]);
 
   // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
   useEffect(() => {
@@ -501,15 +503,17 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
       const dRef = Math.abs(cam2.position.z - (-6));
       const refVH = 2 * Math.tan((cam2.fov * Math.PI / 180) / 2) * dRef;
       const refVW = refVH * cam2.aspect;
-      const span = refVW * 1.6;
+      const gap = Math.max(1.5, S.lampGap ?? 4.5);
+      const span = Math.max(refVW * 1.5, gap * 2);
+      const glow = S.lampGlow ?? 5;
       const flow = moving ? S.walkSpeed * 0.5 * dt : 0;
       for (const l of lamps) {
-        l.group.position.x += flow;                        // 배경과 같은 방향(수정: 거꾸로였음)
+        l.group.position.x += flow;                        // 배경과 같은 방향
         if (l.group.position.x > span * 0.5) l.group.position.x -= span; // 오른끝 넘으면 왼끝
         const dx = Math.abs(l.group.position.x);
         const reach = refVW * 0.3;
         const near01 = Math.max(0, 1 - dx / reach);
-        l.light.intensity = 3 + near01 * near01 * 5;       // 기본 밝게 + 별리 근처서 더
+        l.light.intensity = glow * 0.6 + near01 * near01 * glow; // 기본 은은 + 별리 근처서 최대
       }
     }
 

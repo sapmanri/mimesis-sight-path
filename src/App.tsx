@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.12.2 · 방=바닥눕기 컨셉 확정 · BUILD 343';
+const BUILD_LABEL = 'v2.12.3 · 가로등 간격(절대값)·밝기 슬라이더 · BUILD 344';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -501,6 +501,19 @@ export default function App() {
               체류 길이 — 한 자리 노는 정도 (배율 {(tSpec.lingerLength ?? 1).toFixed(1)})
               <input type="range" min={0.2} max={3} step={0.1} value={tSpec.lingerLength ?? 1}
                 onChange={(e) => updTSpec((s) => ({ ...s, lingerLength: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
+            {/* BUILD 344: 가로등 — 간격(절대값)·광원 밝기 */}
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              가로등 간격 — {(tSpec.lampGap ?? 4.5).toFixed(1)}
+              <input type="range" min={2} max={12} step={0.2} value={tSpec.lampGap ?? 4.5}
+                onChange={(e) => updTSpec((s) => ({ ...s, lampGap: +e.target.value }))}
+                style={{ width: '100%' }} />
+            </label>
+            <label style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+              가로등 밝기 — {(tSpec.lampGlow ?? 5).toFixed(1)}
+              <input type="range" min={0} max={15} step={0.5} value={tSpec.lampGlow ?? 5}
+                onChange={(e) => updTSpec((s) => ({ ...s, lampGlow: +e.target.value }))}
                 style={{ width: '100%' }} />
             </label>
             {/* BUILD 318: 달빛 — 배경 달에서 오는 은은한 빛 */}

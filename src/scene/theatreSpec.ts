@@ -31,6 +31,8 @@ export type TheatreSpec = {
   floorFogH?: number;  // BUILD 315: 바닥 안개 높이(화면 세로 대비 0~1). 0=끔. 발 높이쯤이 자연스러움
   floorFogColor?: string; // BUILD 315: 바닥 안개 색 (밤 대기색)
   moonlight?: number;  // BUILD 318: 달빛 세기(0~2). 배경 달 방향에서 오는 방향광. 별리를 은은히 비춤
+  lampGap?: number;    // BUILD 344: 가로등 사이 절대 간격(월드 유닛). 화면 너비와 무관 — 세로/가로 모드 동일
+  lampGlow?: number;   // BUILD 344: 가로등 광원 밝기 배율(별리 근처서의 최대 세기)
   rainEvery?: number;  // BUILD 330: 비 빈도 — 평균 몇 초마다 소나기(0=안 옴). 오면 한동안 내리다 갬
   snowEvery?: number;  // BUILD 330: 눈 빈도 — 평균 몇 초마다 눈(0=안 옴)
   walker?: number;     // 산책자 인덱스 (행성과 공유 로스터). undefined/-1 = 랜덤
@@ -61,6 +63,8 @@ export const DEFAULT_THEATRE_SPEC: TheatreSpec = {
   floorFogH: 0.16,          // BUILD 315: 발 높이쯤까지 옅게 깔리는 밤안개
   floorFogColor: '#2a3550', // 밤 대기색
   moonlight: 1.5,           // BUILD 319: 달빛 세기 — 배경 달 방향에서 오는 방향광(별리를 비춤)
+  lampGap: 4.5,             // BUILD 344: 가로등 절대 간격(유닛). 화면 크기와 무관
+  lampGlow: 5,              // BUILD 344: 가로등 광원 밝기 배율
   rainEvery: 0,             // BUILD 330: 기본 안 옴 — 에디터에서 켠다
   snowEvery: 0,
   walker: 13, // 별리(Kid5b)
