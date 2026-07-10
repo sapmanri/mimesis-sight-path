@@ -358,7 +358,7 @@ const FOOT_WATER = { value: false }; // BUILD 264: 발밑 물 판정
 const MOON_SUN = new THREE.Vector3(0, 1, 0); // BUILD 236: 달→태양 방향 (위상 셰이더 공유 참조)
 const PET_V = new THREE.Vector3(); // BUILD 231: 펫 위치 환산용 — PT.t2를 쓰면 yawFrom(=PT.t2 별칭)이 덮여 요가 죽는다
 
-export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, onEvent, contactRef, apiRef }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; onEvent?: (e: PlanetEvent) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null> }) {
+export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, onEvent, contactRef, apiRef, onByeoliCapture }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; onEvent?: (e: PlanetEvent) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null>; onByeoliCapture?: (dataUrl: string, reason: 'stage' | 'mood' | 'event') => void }) {
   const { scene, camera, gl } = useThree();
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
   // BUILD 214: 시야 거리 다이얼 — 씬 안개 near/far 즉답 갱신
@@ -376,6 +376,23 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   onFlagRef.current = onFlag;
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
+  // 별이 자율 촬영 — 별 종속(맵 무관). 상태머신의 자연스러운 순간에 확률로 부른다.
+  const onByeoliCaptureRef = useRef(onByeoliCapture);
+  onByeoliCaptureRef.current = onByeoliCapture;
+  const byeoliShotAt = useRef(0);
+  // 현재 화면을 찍어 App(R2+기록)으로. 연타 방지 8초. gl.render→toDataURL은 apiRef.capture와 동일 방식.
+  const byeoliShot = (reason: 'stage' | 'mood' | 'event') => {
+    const cb = onByeoliCaptureRef.current;
+    if (!cb) return;
+    const now = performance.now();
+    if (now - byeoliShotAt.current < 8000) return;
+    byeoliShotAt.current = now;
+    try {
+      gl.render(scene, camera);
+      const dataUrl = gl.domElement.toDataURL('image/jpeg', 0.6);
+      cb(dataUrl, reason);
+    } catch { /* 조용히 */ }
+  };
   const rainInAt = useRef(0);
   const lastKm = useRef(0);
   const lastPhase = useRef('');
@@ -1298,6 +1315,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             P.campCooldown = 90 + Math.random() * 60;
             spawnCamp();
             rigRef.current?.playInspect('sit');
+            if (Math.random() < 0.3) byeoliShot('stage'); // 별이: 캠프 차리는 순간 30% 촬영(동네 스테이지에 대응)
           } else {
             // 보통은 체류: 이 자리에서 여러 딴짓을 여백을 두고 이어서 한다. 길이는 lingerLength로 조절.
             P.phase = 'linger';
@@ -1305,6 +1323,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             P.gap = 0.6 + Math.random() * 1.4; // 멈춰 서서 숨 고른 뒤 첫 딴짓
             P.timer = 0;
             P.jumpTo = -1;
+            if (Math.random() < 0.3) byeoliShot('mood'); // 별이: 문득 멈춰 바라보는 순간 30% 촬영(동네 무드에 대응)
           }
         }
       }

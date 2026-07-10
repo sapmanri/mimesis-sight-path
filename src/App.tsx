@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.15.1 · 옛 별후보 에셋 이름정리(Byeoli.glb→OldByeolCandidate) · BUILD 357.2';
+const BUILD_LABEL = 'v2.16.0 · 별 촬영 행성 이식(캠프·멈춤 각 30%) · BUILD 358';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -739,7 +739,7 @@ export default function App() {
       <main className={`app-shell world-core-shell${uiIdle ? ' ui-idle' : ''}`}>
         <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
           <Canvas className="world-canvas" camera={{ position: [0, 2.25, 5.6], fov: 42 }} dpr={[1, 2]} shadows gl={{ preserveDrawingBuffer: true }}>
-            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} paused={planetPaused} onMemory={setMemCard} onFlag={onFlagPop} onEvent={onPlanetEvent} contactRef={planetContact} apiRef={planetApi} />
+            <PlanetWorld spec={pSpec} walkerIdx={planetWalker} paused={planetPaused} onMemory={setMemCard} onFlag={onFlagPop} onEvent={onPlanetEvent} contactRef={planetContact} apiRef={planetApi} onByeoliCapture={onByeoliCapture} />
           </Canvas>
         </div>
         <div className="atmosphere-grain" aria-hidden="true" />
