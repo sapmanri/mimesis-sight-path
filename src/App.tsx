@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.14.0 · 별이 스스로 찍는다(brain 촬영) · BUILD 356';
+const BUILD_LABEL = 'v2.15.0 · 별이 독립화 1단계(<Byeoli> 소환·동네) · BUILD 357';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
