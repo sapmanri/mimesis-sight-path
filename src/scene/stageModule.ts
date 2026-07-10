@@ -265,7 +265,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'treadmill',
     motions: ['Treadmill'],
     rounds: [2, 3],
-    prop: { file: 'Treadmill.glb', targetH: 1.0, offset: [0.1, 0, 0], bob: 0, fitAxis: 'x' }, // BUILD 334: 러닝머신 — 가로(발판)를 1.0 기준. 별리가 발판 위에
+    prop: { file: 'Treadmill.glb', targetH: 1.1, offset: [0.15, 0, 0], bob: 0 }, // BUILD 338: 정크평면 제거 후 실제 러닝머신 크기로 정규화(maxDim 1.1). 별리 옆에
     symbols: ['·', '✦'],
     symbolEvery: 0.6,
     moods: ['playful', 'idle'], // 활기찬 운동
@@ -306,6 +306,15 @@ export function makeStage(scene: THREE.Object3D) {
     const p = recipe.prop; if (!p || protoCache.has(p.file)) return;
     void defaultLoader(p.file).then((gltf) => {
       const root = gltf.scene;
+      // BUILD 338: 일부 glb는 렌더용 카메라·조명·배경평면이 같이 들어있다(VRayCam/Light, Plane).
+      //   이것들이 bbox를 잡아먹어 정규화를 망친다(러닝머신이 판때기로 뜨던 원인) → 제거.
+      const junk: THREE.Object3D[] = [];
+      root.traverse((o) => {
+        if (/vraycam|vraylight|camera|\.target$|^plane\d|^plane$/i.test(o.name)) junk.push(o);
+        const anyO = o as unknown as { isCamera?: boolean; isLight?: boolean };
+        if (anyO.isCamera || anyO.isLight) junk.push(o);
+      });
+      for (const j of junk) j.parent?.remove(j);
       if (p.bodyColor) {
         root.traverse((o) => {
           const m = o as THREE.Mesh;
