@@ -390,8 +390,13 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
     const LAMP_Z = 0.4;            // BUILD 321: 별리(z=0)보다 살짝만 앞
     const LAMP_H = 1.74;           // BUILD 325: 가로등 높이
     const s = LAMP_H / 1.2;        // 원본 높이 ≈1.2 → 1.74
-    // BUILD 346: 재실행 시 기존 가로등을 먼저 싹 정리(이중 생성 방지). cleanup만으론 겹칠 수 있어 방어적으로.
-    for (const old of lampsRef.current) stage.remove(old.group);
+    // BUILD 347: StrictMode 이중 실행에도 안전하게 — 가로등 전용 컨테이너를 쓴다.
+    //   기존 컨테이너가 있으면 통째로 제거하고 새로 만든다. 절대 겹치지 않는다.
+    const prevContainer = stage.getObjectByName('__lampContainer');
+    if (prevContainer) stage.remove(prevContainer);
+    const lampContainer = new THREE.Group();
+    lampContainer.name = '__lampContainer';
+    stage.add(lampContainer);
     lampsRef.current = [];
     // BUILD 344: 절대 간격 — 화면 너비와 무관(세로/가로 모드 동일). 화면 폭을 덮을 만큼 개수 자동 산출.
     const gap = Math.max(1.5, specRef.current.lampGap ?? 4.5);
@@ -403,11 +408,11 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
       group.scale.setScalar(s);
       group.position.set(-span * 0.5 + i * gap, footY, LAMP_Z);
       group.userData.span = span; // 리사이클용
-      stage.add(group);
+      lampContainer.add(group);
       built.push({ group, light });
     }
     lampsRef.current = built;
-    return () => { for (const l of built) stage.remove(l.group); lampsRef.current = []; };
+    return () => { stage.remove(lampContainer); lampsRef.current = []; };
   }, [stage, camera, spec.lampGap]);
 
   // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
