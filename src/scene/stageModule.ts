@@ -200,6 +200,7 @@ export type StageProp = {
   bob?: number;             // 재생 중 위아래 들썩임(0=없음)
   rot?: [number, number, number]; // BUILD 334: 정규화 전 회전(라디안) — 세로로 서 있는 모델(침대 등)을 눕힌다
   fitAxis?: 'y' | 'x' | 'z' | 'max'; // BUILD 334: 어느 축을 targetH에 맞출지(기본 max). 길쭉한 가구는 특정 축 기준
+  stripNodes?: string[]; // BUILD 345: 이 이름들의 노드를 로드 시 제거(예: 빈백을 빼고 그 자리에 별리를 눕힌다)
 };
 export type StageRecipe = {
   id: string;
@@ -233,7 +234,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [-0.15, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0] }, // BUILD 343: 별리는 방바닥에 눕는 컨셉(침대정렬 포기). 옷장에 안 가리게 살짝 오른쪽
+    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [0.3, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0], stripNodes: ['Seat_1_Sphere'] }, // BUILD 345: 빈백 제거, 카펫 자리에 별리 눕게 정렬
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른
@@ -309,8 +310,10 @@ export function makeStage(scene: THREE.Object3D) {
       // BUILD 338: 일부 glb는 렌더용 카메라·조명·배경평면이 같이 들어있다(VRayCam/Light, Plane).
       //   이것들이 bbox를 잡아먹어 정규화를 망친다(러닝머신이 판때기로 뜨던 원인) → 제거.
       const junk: THREE.Object3D[] = [];
+      const strip = p.stripNodes ?? [];
       root.traverse((o) => {
         if (/vraycam|vraylight|camera|\.target$|^plane\d|^plane$/i.test(o.name)) junk.push(o);
+        if (strip.some((n) => o.name.includes(n))) junk.push(o); // BUILD 345: 지정 노드 제거(빈백 등)
         const anyO = o as unknown as { isCamera?: boolean; isLight?: boolean };
         if (anyO.isCamera || anyO.isLight) junk.push(o);
       });
