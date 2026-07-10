@@ -264,12 +264,12 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
   treadmill: {
     id: 'treadmill',
     motions: ['Treadmill'],
-    rounds: [2, 3],
-    prop: { file: 'Treadmill.glb', targetH: 1.1, offset: [0.15, 0, 0], bob: 0 }, // BUILD 338: 정크평면 제거 후 실제 러닝머신 크기로 정규화(maxDim 1.1). 별리 옆에
+    rounds: [4, 6],
+    prop: { file: 'Treadmill.glb', targetH: 1.1, offset: [0.15, 0, 0], bob: 0, rot: [0, Math.PI, 0] }, // BUILD 340: 좌우 반대 → Y 180°
     symbols: ['·', '✦'],
     symbolEvery: 0.6,
     moods: ['playful', 'idle'], // 활기찬 운동
-    minDuration: 7, // 너무 빨리 끝나던 것 — 최소 7초 달린다
+    minDuration: 14, // BUILD 340: 7→14초, 스샷 찍을 시간도 없이 짧던 것
   },
 };
 
