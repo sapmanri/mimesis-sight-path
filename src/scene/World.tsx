@@ -13,6 +13,7 @@ import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
 import { createSkyDrift, dayLightAt } from '../engine/skyDrift';
 import { guardShot, SHOT_RECIPES, type GuardParams } from './cameraGuard';
+import type { PlanetEvent } from './planetEvents';
 
 // BUILD 090: 액자 수호 규칙 값 — 에디터 Camera 패널 노출 예정
 const ZERO_VEL = new THREE.Vector3();
@@ -49,11 +50,13 @@ type WorldProps = {
   onScenePick?: (index: number) => void;
   /** 별이 자율 촬영 — 별이 도착·멈춤·캠프 등에서 스스로 찍는다(맵 무관, 별 종속). */
   onByeoliCapture?: (dataUrl: string, reason: 'stage' | 'mood' | 'event') => void;
+  /** BUILD 360: 지역 사건을 App으로 흘린다 — 여권/기록이 채워진다 (행성·동네와 공유 싱크) */
+  onEvent?: (e: PlanetEvent) => void;
 };
 
 // 걷는 시간이 주인공이다.
 // 카메라는 걷는 사람의 눈이 아니라, 그를 조용히 따라가는 시선이다.
-export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll, onMail, onByeoliCapture }: WorldProps) {
+export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPick, onArrive, onDepart, props, freeCamera, riding, onPathTap, onScenePick, onAnchors, stroll, onMail, onByeoliCapture, onEvent }: WorldProps) {
   const world = useMemo(() => {
     const w = buildWorld(scenes, undefined, spec);
     // BUILD 176: 안개 일제 집행 — 길이 생성될 때 자동으로 따라붙는 모든 것(출처 불문)을
@@ -78,6 +81,12 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
   // 별이 자율 촬영 — 별 종속(맵 무관). 도착·멈춤·캠프 등 자연스러운 순간에 확률로 부른다.
   const onByeoliCaptureRef = useRef(onByeoliCapture);
   onByeoliCaptureRef.current = onByeoliCapture;
+  const onEventRef = useRef(onEvent);
+  onEventRef.current = onEvent;
+  // BUILD 360: 지역 사건 흘리기 — App 공유 싱크가 연타방지·기록화 담당
+  const emitEvent = (kind: PlanetEvent['kind'], data?: PlanetEvent['data']) => {
+    onEventRef.current?.({ kind, data, t: performance.now() });
+  };
   const byeoliShotAt = useRef(0);
   const byeoliShot = (reason: 'stage' | 'mood' | 'event') => {
     const cb = onByeoliCaptureRef.current;
@@ -1311,6 +1320,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
           const nearIdx = ((rawIdx % scenes.length) + scenes.length) % scenes.length; // BUILD 150: 순환 길에선 감아서 읽는다
           onArrive?.(nearIdx);
           if (Math.random() < 0.3) byeoliShot('stage'); // 별이: 기억 앞 도착 순간 30% 촬영(특별한 순간)
+          emitEvent('region_arrive', { memory: scenes[nearIdx]?.title }); // BUILD 360: 기억 앞 도착 → 기록
           const scene = scenes[nearIdx];
           const st = scene?.stillness ?? 0;
           if (!ridingRef.current) { // BUILD 138: 구름 위에선 내려서 들여다보지 않는다 — 흘러가며 볼 뿐
@@ -1539,6 +1549,10 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             rigRef.current?.playInspect('pickup'); // 들여다본다 — 편지의 동작
             speak(walker, 1.28, '✉');
             if (Math.random() < 0.3) byeoliShot('event'); // 별이: 우체통 편지 받는 순간 30% 촬영(사건)
+            { // BUILD 360: 우편 → 기록 (편지 첫 구절 짧게)
+              const firstLine = item?.text ? item.text.replace(/\n/g, ' ').trim().slice(0, 16) : undefined;
+              emitEvent('mail', firstLine ? { memory: firstLine } : undefined);
+            }
             break;
           }
         }
@@ -1667,6 +1681,7 @@ export function World({ scenes, activeIndex, mode, spec = JEJU_SPEC, onGroundPic
             if (!ridingRef.current) rigRef.current?.playInspect('sit');
             speak(walker, 1.28, '♪'); // BUILD 175: 온기의 콧노래
             if (Math.random() < 0.3) byeoliShot('stage'); // 별이: 모닥불 앞 쉬어가는 순간 30% 촬영
+            emitEvent('campfire'); // BUILD 360: 모닥불 쉼 → 기록
             if (spt.guest) window.setTimeout(() => { if (spt.guest) speak(spt.guest.group, 1.24, undefined, 1.1); }, 700); // 선객의 인사
           }
         }

@@ -1112,6 +1112,7 @@ export default function App() {
             stroll={stroll}
             onMail={setMailItem}
             onByeoliCapture={onByeoliCapture}
+            onEvent={onPlanetEvent}
           />
         </Canvas>
         <div className="atmosphere-grain" aria-hidden="true" />

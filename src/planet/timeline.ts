@@ -58,6 +58,17 @@ export function eventToEntry(e: PlanetEvent): TimelineEntry | null {
       const icon = s === 'piano' ? '🎹' : s === 'sleep' ? '💤' : s === 'workout' ? '💪' : s === 'dance' ? '💃' : s === 'treadmill' ? '🏃' : '✨';
       return { id, icon, text: label, t: e.t, kind: `${e.kind}_${s ?? 'x'}` }; // kind에 stage 포함 → 연타방지가 종류별로
     }
+    // BUILD 360: 지역(본토) 이벤트 — 삽만리의 말투로.
+    case 'region_arrive': {
+      const m = e.data?.memory;
+      return { id, icon: '📖', text: m ? `‘${m}’ 앞에 오래 머물렀다` : '어느 기억 앞에 오래 머물렀다', t: e.t, kind: e.kind };
+    }
+    case 'mail': {
+      const m = e.data?.memory;
+      return { id, icon: '✉️', text: m ? `우체통에서 편지를 받았다 — ‘${m}’` : '우체통에서 편지 한 통을 받았다', t: e.t, kind: e.kind };
+    }
+    case 'campfire':
+      return { id, icon: '🔥', text: '모닥불 앞에 앉아 잠시 쉬어갔다', t: e.t, kind: e.kind };
     default:
       return null;
   }
