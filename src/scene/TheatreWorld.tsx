@@ -6,13 +6,8 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, type MutableRefObject } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset } from '../engine/worldCore';
-import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
-import { makeStage, type Stage } from './stageModule';
-import { makeByeoliBrain, type ByeoliBrain } from './byeoliBrain';
-import { footsteps } from './footsteps';
 import { ambience } from '../audio/ambience';
-import { makeBubble, updateBubble, type Bubble } from './speech';
+import { Byeoli, type ByeoliHost } from '../byeoli/Byeoli';
 import type { TheatreSpec, TheatreLayer } from './theatreSpec';
 import type { PlanetEvent, PlanetEventKind } from './planetEvents';
 
@@ -148,7 +143,7 @@ type Props = {
 };
 
 export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onByeoliCapture }: Props) {
-  const { scene, camera, gl } = useThree();
+  const { scene, camera } = useThree();
   const specRef = useRef(spec); specRef.current = spec;
   const pausedRef = useRef(paused); pausedRef.current = paused;
   // BUILD 329: 동네 이벤트 emit — 세 무대 공유 여권/타임라인으로.
@@ -162,44 +157,23 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onB
     return () => window.clearTimeout(id);
   }, []);
 
-  // BUILD 353: 씬 캡처 — 행성과 동일 방식(gl.render 강제 후 toDataURL). App 성취 트리거가 captureRef로 부른다.
-  useEffect(() => {
-    if (!captureRef) return undefined;
-    captureRef.current = () => {
-      try {
-        gl.render(scene, camera); // 캡처 직전 한 프레임 강제 (preserveDrawingBuffer 보장)
-        return gl.domElement.toDataURL('image/jpeg', 0.6);
-      } catch { return null; }
-    };
-    return () => { if (captureRef) captureRef.current = null; };
-  }, [captureRef, scene, camera, gl]);
+  // (씬 캡처는 이제 별이 코어가 captureRef host로 소유 — 여기선 별이에게 넘기기만 한다.)
 
   // 배경 판때기(빌보드 3장) + 하늘 + 지면
   const stage = useMemo(() => new THREE.Group(), []);
-  const rigRef = useRef<WalkerRig | null>(null);
-  const walkerGroupRef = useRef<THREE.Group | null>(null);
-  const walkerMountRef = useRef<THREE.Group | null>(null); // BUILD 287: 오르내림을 거는 래퍼
-  const footRef = useRef<THREE.Object3D | null>(null);
   const layerMats = useRef<{ mat: THREE.MeshBasicMaterial; speed: number }[]>([]);
   const feetYRef = useRef(0); // BUILD 308: 별리 발이 서는 철길 월드높이
   const scrollRef = useRef(0);
+  // 별이가 매 프레임 넘겨주는 '지금 걷는 중인가' — 무대가 이 신호로 배경/가로등을 굴린다.
+  const movingRef = useRef(false);
+  // 무대가 매 프레임 계산해 두는 별이 발 지면높이 — 별이 host.groundAt가 읽어 발을 얹는다.
+  const groundYRef = useRef(0);
   // BUILD 317: 진짜 가로등 3개(props.ts makeStreetlamp 이식, height fog 없이). 왼쪽 흐름+무한 리사이클.
   const lampsRef = useRef<{ group: THREE.Group; light: THREE.PointLight }[]>([]);
-  // BUILD 288: 동네 체류 상태머신 — 걷다(배경 흐름) 멈춰서(배경 정지) 딴짓하며 논다.
-  //   행성 linger를 옆면 무대에 이식: '이동'=scroll 증가, '체류'=scroll 정지 + flourish.
-  // BUILD 296: 별리 행동은 공용 brain에 위임. 동네는 걷는 방식(배경 스크롤)만 소유.
-  const brainRef = useRef<ByeoliBrain | null>(null);
-  // BUILD 289: 바라보는 방향 — 걸을 땐 왼쪽(-π/2) 고정, 놀 땐 정면 쪽으로 자유롭게.
-  const faceRef = useRef(-Math.PI / 2);
-  // BUILD 294: 스테이지 모듈 — 폽 세션(춤/캠프/운동…) 공용 엔진. 무대는 앵커만 넘긴다.
-  const stageRef = useRef<Stage | null>(null);
-  const lastStageIdRef = useRef<string | null>(null); // BUILD 329: 스테이지 시작 감지용(이벤트 1회 emit)
   // BUILD 330: 강수 — 화면 앞 평면에 비(세로선)/눈(점). 빈도에 따라 왔다 갬.
   const rainRef = useRef<{ mesh: THREE.LineSegments; pos: Float32Array; vel: Float32Array; N: number } | null>(null);
   const snowRef = useRef<{ mesh: THREE.Points; pos: Float32Array; vel: Float32Array; N: number } | null>(null);
   const wxRef = useRef({ rainOn: 0, rainT: 0, snowOn: 0, snowT: 0 }); // 현재 세기(0~1)+다음 전환 타이머
-  const bubbleRoot = useMemo(() => new THREE.Group(), []);
-  const bubbles = useRef<Bubble[]>([]);
 
   // 옆면 고정 카메라 — 정면(+Z)에서 무대를 바라본다. 캐릭터는 원점 부근.
   useEffect(() => {
@@ -257,9 +231,8 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onB
     feetYRef.current = -refVH * 0.23;
 
     if (!stage.parent) scene.add(stage);
-    if (!bubbleRoot.parent) scene.add(bubbleRoot);
     return () => { stage.clear(); };
-  }, [scene, stage, bubbleRoot, camera]);
+  }, [scene, stage, camera]);
 
   // BUILD 330: 비/눈 메시 생성 — 화면 앞 평면(z=2)에 뿌린다. 카메라 고정이라 화면을 덮는다.
   useEffect(() => {
@@ -312,51 +285,8 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onB
     };
   }, [stage, camera]);
 
-  // 별리 로드 — 행성과 같은 파이프라인. clipRig면 걷기 클립을 자동 재생.
-  useEffect(() => {
-    let alive = true;
-    rigRef.current = null;
-    if (walkerMountRef.current) { stage.remove(walkerMountRef.current); walkerMountRef.current = null; walkerGroupRef.current = null; }
-    void loadWalkerAsset(undefined, walkerIdx < 0 ? 'random' : walkerIdx).then(({ group, animations, clipSpeeds }) => {
-      if (!alive) return;
-      // BUILD 287: 별리를 래퍼(mount)에 담는다. rig는 group(=root)의 Y를 매 프레임 덮어쓰므로(접지보정),
-      //   오르내림은 group이 아니라 이 래퍼에 걸어야 살아남는다. (PlanetWorld liftGroup과 같은 원리)
-      group.rotation.y = -Math.PI / 2;
-      group.position.set(0, 0, 0);
-      // BUILD 314: 동네는 옆면 무대라 높이안개가 없다. 별리 material의 height fog를 벗긴다.
-      //   (별리를 철길 높이로 내리면 안개 bottom 아래라 회색으로 잠기던 버그 — 스피커는 새 material이라 멀쩡했음)
-      // BUILD 315: 밤톤. 옷/신발 색을 어둡게 곱해 밤에 잠기게 하되,
-      //   material은 MeshStandard라 가로등 PointLight가 닿으면 그만큼 다시 밝아진다(빛 닿을 때만 환해짐).
-      const NIGHT_MUL = new THREE.Color(0.34, 0.40, 0.52); // 어둡고 살짝 푸른 밤 곱셈틴트
-      group.traverse((n) => {
-        const mesh = n as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        mats.forEach((m) => {
-          const std = m as THREE.MeshStandardMaterial;
-          if (std.userData?.hfog) {
-            std.onBeforeCompile = () => {};
-            std.customProgramCacheKey = () => `nofog|${mesh.id}`;
-            std.userData.hfog = false;
-          }
-          // 밤톤 곱: map 있는 재질(color=#fff)도, 단색 옷도 함께 눌린다.
-          if (std.color) std.color.multiply(NIGHT_MUL);
-          std.needsUpdate = true;
-        });
-      });
-      const mount = new THREE.Group();
-      mount.add(group);
-      stage.add(mount);
-      walkerMountRef.current = mount;
-      walkerGroupRef.current = group;
-      footRef.current = null;
-      group.traverse((n) => { if (!footRef.current && /left.*foot$/i.test(n.name)) footRef.current = n; });
-      if (!footRef.current) group.traverse((n) => { if (!footRef.current && /foot$/i.test(n.name)) footRef.current = n; });
-      rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
-        ?? createWalkerRig(group, animations, 0.72);
-    }).catch(() => { /* 조용한 극장 */ });
-    return () => { alive = false; };
-  }, [stage, walkerIdx]);
+  // (별이 로드·밤톤·height fog 스트립은 이제 별이 코어가 host 룩 옵션으로 소유.)
+  //   동네 밤톤 곱셈틴트는 host.tint로 넘긴다: NIGHT_MUL = (0.34, 0.40, 0.52).
 
   // BUILD 315: 바닥 안개 — 화면 하단에서 발 높이까지 옅게 피어오른다. 위로 갈수록 투명(그라디언트).
   //   별리 앞(z=1.2)에 두어 발밑을 감싼다. 높이·색은 에디터(spec.floorFogH/floorFogColor)로 조절.
@@ -430,37 +360,7 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onB
     return () => { stage.remove(lampContainer); lampsRef.current = []; };
   }, [stage, camera, spec.lampGap]);
 
-  // BUILD 294/296: 스테이지 + 별리 brain 생성(한 번). brain이 노는 법을, 무대는 걷는 법을.
-  useEffect(() => {
-    const st = makeStage(stage);
-    // BUILD 323: 모든 레시피 프리로드(prop 있는 것만 실제 로드, 나머지는 무시). 스테이지 확장.
-    st.preload('dance');
-    st.preload('sleep');
-    st.preload('piano');
-    st.preload('treadmill');
-    stageRef.current = st;
-    brainRef.current = makeByeoliBrain({
-      rig: () => rigRef.current,
-      stageMount: () => walkerMountRef.current,
-      stage: () => stageRef.current,
-      speak: (icon, pitch) => speakRef.current(icon, pitch),
-      lingerEvery: () => Math.max(0, specRef.current.lingerEvery ?? 3),
-      lingerLength: () => Math.max(0.2, specRef.current.lingerLength ?? 1),
-      // BUILD 323: 별리가 펼칠 수 있는 스테이지 목록 — 이걸 넘겨야 dance 외 레시피도 발동한다.
-      stageIds: () => ['dance', 'sleep', 'piano', 'workout', 'treadmill'],
-      // BUILD 356: 별이 스스로 찍는다 — brain이 부르면 현재 화면을 찍어 App(R2+기록)으로.
-      capture: (reason) => {
-        const cb = onByeoliCaptureRef.current;
-        if (!cb) return;
-        try {
-          gl.render(scene, camera);
-          const dataUrl = gl.domElement.toDataURL('image/jpeg', 0.6);
-          cb(dataUrl, reason);
-        } catch { /* 조용히 */ }
-      },
-    });
-    return () => { st.dispose(); stageRef.current = null; brainRef.current = null; };
-  }, [stage]);
+  // (스테이지·brain·촬영은 이제 별이 코어가 소유. 무대는 spec 값만 host로 넘긴다.)
 
   // BUILD 327: 동네 사운드 — 본토·행성처럼 앰비언스를 깐다(그동안 동네만 무음이었음).
   //   마을 밤 조합: 숲의 밤바람 + 풀벌레(time:night이면 4겹 생명이 cricket). 발자국은 별리 rig에 이미 배선됨.
@@ -477,49 +377,13 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onB
     return () => { /* 다른 무대로 갈 때 App이 새 state를 apply하므로 여기선 유지 */ };
   }, []);
 
-  // 웅얼웅얼 (행성과 동일) — brain이 speakRef로 지연 호출
-  const speak = (icon?: string, pitch = 1) => {
-    const g = walkerGroupRef.current;
-    if (!g || bubbles.current.length >= 2) return;
-    const b = makeBubble(g, 1.15, icon);
-    bubbles.current.push(b);
-    bubbleRoot.add(b.sprite);
-    ambience.mumble?.(pitch);
-  };
-  const speakRef = useRef(speak); speakRef.current = speak;
-
   useFrame((_s, rawDt) => {
     const dt = Math.min(0.05, rawDt);
     const S = specRef.current;
 
-    // BUILD 296: 노는 법은 brain(공용)이 결정. 무대는 걷는 법(배경 스크롤)만 실행.
-    const brain = brainRef.current;
-    const wasWalking = brain?.phase() === 'walk';
-    const res = brain ? brain.update(dt, !!pausedRef.current) : { moving: !pausedRef.current };
-    const moving = res.moving;
-    const nowWalking = brain?.phase() === 'walk';
-
-    // 동네 옆면 무대의 방향 — 별리는 관찰자(카메라)를 모른다. 자기 삶을 살 뿐.
-    //   걸을 땐 진행방향(왼쪽). 놀 땐 그 언저리에서 자연스럽게 흔들린다 —
-    //   뭔가 보거나 두리번거리다 우연히 이쪽/저쪽. 관객 정면을 '의식해서' 보지 않는다.
-    // BUILD 328: 스테이지 세션 중(눕기·연주·운동…)엔 방향을 고정한다 — 안 그러면 누운 채 빙글빙글 돈다.
-    const inStage = stageRef.current?.isActive?.() ?? false;
-    if (inStage) {
-      // BUILD 329: 스테이지 중 — 옆모습(왼쪽)으로 고정. 프롭(피아노·침대 등)과 정합, 회전 방지.
-      faceRef.current = -Math.PI / 2;
-    } else if (moving) {
-      faceRef.current = -Math.PI / 2;
-    } else if (wasWalking && !nowWalking) {
-      // 방금 멈춤 — 진행방향 언저리에서 살짝 튼다(관객 쪽 아님)
-      faceRef.current = -Math.PI / 2 + (Math.random() - 0.5) * 1.0;
-    } else if (Math.random() < dt * 0.4) {
-      // 놀다가 가끔 방향 전환 — 진행방향(-π/2)을 중심으로 폭넓게. 정면(0)·뒤(π)도 어쩌다.
-      const r = Math.random();
-      faceRef.current = r < 0.5 ? -Math.PI / 2 + (Math.random() - 0.5) * 1.4 // 대개 옆 언저리
-        : r < 0.7 ? -Math.PI / 2 - 0.8 - Math.random() * 0.8 // 뒤쪽으로
-        : r < 0.85 ? -Math.PI / 2 + 0.8 + Math.random() * 0.8 // 앞쪽으로
-        : (Math.random() - 0.5) * 6; // 어쩌다 완전 자유(정면·뒤통수 포함)
-    }
+    // 별이가 준 '지금 걷는 중' 신호 — 무대는 이 신호로 걷는 법(배경 스크롤)만 실행.
+    //   방향·rig·스테이지·촬영은 전부 별이 코어가 소유. 무대는 배경만.
+    const moving = movingRef.current;
 
     if (moving) scrollRef.current += S.walkSpeed * dt;
     const scroll = scrollRef.current;
@@ -619,41 +483,34 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onB
       if ('#' + fmat.color.getHexString() !== want.toLowerCase()) fmat.color.set(want);
     }
 
-    // 별리 — X 고정, Y만 지면 곡선을 부드럽게 탄다 (BUILD 287: 오르내림은 래퍼에)
-    const g = walkerGroupRef.current;
-    const mnt = walkerMountRef.current;
-    if (mnt) {
-      const gy = feetYRef.current + groundHeight(scroll, S.groundAmp ?? 0, S.groundFreq ?? 0.5);
-      mnt.position.y += (gy - mnt.position.y) * Math.min(1, dt * 4);
-    }
-    if (g) {
-      // BUILD 289: 바라보는 방향을 목표각으로 부드럽게 회전. 걸을 땐 왼쪽, 놀 땐 자유.
-      let cur = g.rotation.y;
-      let d = faceRef.current - cur;
-      while (d > Math.PI) d -= Math.PI * 2;
-      while (d < -Math.PI) d += Math.PI * 2;
-      g.rotation.y = cur + d * Math.min(1, dt * 5);
-      // 체류 중엔 걷기 위상을 굴리지 않는다(distDelta=0) → 딴짓/가만히. 걸을 때만 다리 구른다.
-      rigRef.current?.update?.(dt, 0.5, moving, _s.clock.elapsedTime, moving ? S.walkSpeed * dt : 0);
-    }
-
-    // BUILD 294: 스테이지 세션 진행 — 모션 이어가기·오브젝트 폽·심볼·사운드를 엔진이 관리
-    stageRef.current?.update(dt, _s.clock.elapsedTime);
-
-    // BUILD 329: 스테이지가 새로 시작되면 이벤트 1회 emit(여권/타임라인). id가 바뀌는 순간을 잡는다.
-    const curStageId = stageRef.current?.currentId?.() ?? null;
-    if (curStageId && curStageId !== lastStageIdRef.current) {
-      emit('stage_play', { stage: curStageId });
-    }
-    lastStageIdRef.current = curStageId;
-
-    // 말풍선 갱신 (본토 극성: 수명 다하면 true)
-    for (let i = bubbles.current.length - 1; i >= 0; i -= 1) {
-      if (updateBubble(bubbles.current[i], dt)) { bubbleRoot.remove(bubbles.current[i].sprite); bubbles.current.splice(i, 1); }
-    }
+    // 별이 발이 탈 지면 높이(feetY + 지면곡선)를 매 프레임 계산해 둔다 — 별이 host.groundAt가 읽는다.
+    //   (별이의 위치·회전·rig·스테이지·촬영·말풍선은 전부 별이 코어 소유. 무대는 지면만 준다.)
+    groundYRef.current = feetYRef.current + groundHeight(scroll, S.groundAmp ?? 0, S.groundFreq ?? 0.5);
   });
 
   const moonLightRef = useRef<THREE.DirectionalLight>(null);
+
+  // 별이(동네)에게 넘길 host — 동네 무대가 좌표·이동·룩·이벤트를 주입한다.
+  const NIGHT_MUL = useMemo(() => new THREE.Color(0.34, 0.40, 0.52), []); // 밤톤 곱셈틴트(옛 BUILD 315)
+  const byeoliHost = useMemo<ByeoliHost>(() => ({
+    parent: () => stage,
+    feetY: () => feetYRef.current,
+    groundAt: () => groundYRef.current - feetYRef.current, // groundYRef는 feetY 포함이므로 곡선분만 돌려준다
+    walkerIdx,
+    paused: () => !!pausedRef.current,
+    tint: () => NIGHT_MUL,          // 동네는 밤 — 별 옷을 어둡게 곱한다
+    stripHeightFog: () => true,     // 동네는 옆면 무대라 height fog 없음 → 별 material에서 벗김
+    onMove: (info) => { movingRef.current = info.moving; },
+    walkStride: (dt) => (specRef.current.walkSpeed ?? 1) * dt, // 배경 스크롤과 같은 속도로 다리 위상
+    lingerEvery: () => Math.max(0, specRef.current.lingerEvery ?? 3),
+    lingerLength: () => Math.max(0.2, specRef.current.lingerLength ?? 1),
+    stageIds: () => ['dance', 'sleep', 'piano', 'workout', 'treadmill'],
+    onEvent: (kind, data) => emit(kind as PlanetEventKind, data as PlanetEvent['data']),
+    onCapture: (dataUrl, reason) => onByeoliCaptureRef.current?.(dataUrl, reason),
+    captureRef, // App 성취 트리거가 부르는 씬 캡처를 별이가 소유
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [stage, walkerIdx, NIGHT_MUL]);
+
   return (
     <>
       {/* BUILD 315: 밤 동네 — 별리를 밤에 잠근다. 배경 png는 MeshBasicMaterial이라 조명 무시(안 어두워짐).
@@ -662,6 +519,8 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent, captureRef, onB
       <directionalLight position={[3, 6, 4]} intensity={0.16} color="#6a7a9a" />
       {/* BUILD 318: 달빛 — 배경 달(화면 왼쪽)에서 오는 차고 은은한 방향광. 세기는 에디터로 조절. */}
       <directionalLight ref={moonLightRef} position={[-8, 4, 3]} intensity={1.5} color="#c2d4f0" />
+      {/* ⭐ 별이 소환 — 동네조차도 별이를 불러 쓴다. 별이가 rig·brain·스테이지·촬영·말풍선을 소유. */}
+      <Byeoli host={byeoliHost} />
     </>
   );
 }
