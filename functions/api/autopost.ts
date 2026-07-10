@@ -72,8 +72,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const pick = candidates[Math.floor(Math.random() * candidates.length)];
   const chosen = POSTS[pick];
 
-  // 이미지 풀 있으면 가끔(1/2) 첨부
-  const img = IMAGE_POOL.length > 0 && Math.random() < 0.5
+  // 이미지 풀 있으면 자주(4/5) 첨부 — BUILD 333: 사진이 거의 안 붙던 문제, 확률 상향(0.5→0.8)
+  const img = IMAGE_POOL.length > 0 && Math.random() < 0.8
     ? IMAGE_POOL[Math.floor(Math.random() * IMAGE_POOL.length)]
     : null;
 
