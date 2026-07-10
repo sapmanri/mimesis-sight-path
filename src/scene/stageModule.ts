@@ -234,7 +234,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [0.3, 0, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0], stripNodes: ['Seat_1_Sphere'] }, // BUILD 345: 빈백 제거, 카펫 자리에 별리 눕게 정렬
+    prop: { file: 'BedroomScene.glb', targetH: 2.0, offset: [0.3, 0.2, -0.5], bob: 0, fitAxis: 'y', rot: [0, Math.PI, 0], stripNodes: ['Seat_1_Sphere'] }, // BUILD 350: 방을 살짝 올려(y 0.2) 별리가 둥근 카펫 정중앙에 눕게
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른
