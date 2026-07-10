@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.12.9 · 별리 카펫 정중앙 · BUILD 350';
+const BUILD_LABEL = 'v2.13.0 · 명칭 정본 통일(캐릭터=별) · BUILD 351';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -549,7 +549,7 @@ export default function App() {
                 onChange={(e) => updTSpec((s) => ({ ...s, floorFogColor: e.target.value }))} />
             </label>
             <div style={{ borderTop: '1px solid #2a302e', paddingTop: 8, marginTop: 8, fontSize: 10.5, color: '#9a927e' }}>
-              밤 동네 — 별리는 밤에 잠기고, 가로등이 지날 때만 환해진다. 바닥엔 옅은 밤안개.
+              밤 동네 — 별은 밤에 잠기고, 가로등이 지날 때만 환해진다. 바닥엔 옅은 밤안개.
             </div>
           </div>
         )}
