@@ -13,15 +13,16 @@ import { ambience } from '../audio/ambience';
 
 // ---------- 공용 정규화 — wrap 그룹에서 world bbox 재서 세우고 바닥+중심 정렬 ----------
 // glb 노드에 회전이 박혀 있어도(예: Speaker) world 기준이라 바로 선다.
-export function normalizeProp(raw: THREE.Object3D, targetH: number): THREE.Group {
+export function normalizeProp(raw: THREE.Object3D, targetH: number, rot?: [number, number, number], fitAxis: 'y' | 'x' | 'z' | 'max' = 'max'): THREE.Group {
   const wrap = new THREE.Group();
+  if (rot) raw.rotation.set(rot[0], rot[1], rot[2]); // BUILD 334: 정규화 전 회전 → 눕힌 상태의 bbox로 정규화
   wrap.add(raw);
   wrap.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(wrap);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z) || 1;
-  const s = targetH / maxDim;
+  const fit = fitAxis === 'y' ? size.y : fitAxis === 'x' ? size.x : fitAxis === 'z' ? size.z : Math.max(size.x, size.y, size.z);
+  const s = targetH / (fit || 1);
   raw.scale.multiplyScalar(s);
   raw.position.sub(center.multiplyScalar(s));
   wrap.updateMatrixWorld(true);
@@ -192,11 +193,13 @@ export function speakerFaceTexture(): THREE.CanvasTexture {
 // 오브젝트 하나를 폽으로 불러 배치하고, 그 위에서 어떤 모션을 몇 번 돌리며, 어떤 분위기를 낼지.
 export type StageProp = {
   file: string;              // glb 파일명 (public/assets/models/)
-  targetH: number;          // 정규화 높이(월드 유닛)
+  targetH: number;          // 정규화 크기(월드 유닛) — fitAxis 축을 이 값에 맞춘다
   offset: [number, number, number]; // 캐릭터(앵커) 기준 배치 오프셋
   bodyColor?: string;       // 몸통 재질 덮어쓰기(선택)
   faceQuad?: 'speaker';     // 앞면에 붙일 얼굴판 종류(선택)
   bob?: number;             // 재생 중 위아래 들썩임(0=없음)
+  rot?: [number, number, number]; // BUILD 334: 정규화 전 회전(라디안) — 세로로 서 있는 모델(침대 등)을 눕힌다
+  fitAxis?: 'y' | 'x' | 'z' | 'max'; // BUILD 334: 어느 축을 targetH에 맞출지(기본 max). 길쭉한 가구는 특정 축 기준
 };
 export type StageRecipe = {
   id: string;
@@ -230,7 +233,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'sleep',
     motions: ['LayingShake'],
     rounds: [1, 2],
-    prop: { file: 'Bed.glb', targetH: 1.9, offset: [0, 0, -0.1], bob: 0 }, // BUILD 328: 침대 길이가 별리(0.9)보다 커야 눕는다 — maxDim 1.9
+    prop: { file: 'Bed.glb', targetH: 1.3, offset: [0, 0, -0.15], bob: 0, rot: [-Math.PI / 2, 0, 0], fitAxis: 'z' }, // BUILD 334: 침대가 세로로 선 모델 → x축 -90°로 눕히고, 눕힌 길이(z)를 1.3으로
     symbols: ['💤', 'z', 'Z'],
     symbolEvery: 0.8,
     moods: ['contemplative', 'idle'], // 차분·나른
@@ -262,7 +265,7 @@ export const STAGE_RECIPES: Record<string, StageRecipe> = {
     id: 'treadmill',
     motions: ['Treadmill'],
     rounds: [2, 3],
-    prop: { file: 'Treadmill.glb', targetH: 0.85, offset: [0, 0, 0], bob: 0 }, // BUILD 326: 발밑 러닝머신, 살짝 키움
+    prop: { file: 'Treadmill.glb', targetH: 1.0, offset: [0.1, 0, 0], bob: 0, fitAxis: 'x' }, // BUILD 334: 러닝머신 — 가로(발판)를 1.0 기준. 별리가 발판 위에
     symbols: ['·', '✦'],
     symbolEvery: 0.6,
     moods: ['playful', 'idle'], // 활기찬 운동
@@ -333,7 +336,7 @@ export function makeStage(scene: THREE.Object3D) {
       const p = recipe.prop;
       const cached = p ? protoCache.get(p.file) : null;
       if (p && cached) {
-        const sp = normalizeProp(cached.proto.clone(true), p.targetH);
+        const sp = normalizeProp(cached.proto.clone(true), p.targetH, p.rot, p.fitAxis);
         sp.position.set(p.offset[0], p.offset[1], p.offset[2]);
         if (p.faceQuad === 'speaker') {
           const box = new THREE.Box3().setFromObject(sp);
