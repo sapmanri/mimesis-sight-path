@@ -41,7 +41,7 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.13.0 · 명칭 정본 통일(캐릭터=별) · BUILD 351';
+const BUILD_LABEL = 'v2.13.1 · 여권·기록 UI 세 맵 공용 · BUILD 352';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -461,6 +461,120 @@ export default function App() {
     setActiveIndex(index);
   };
 
+  // BUILD 352: 여권·기록 UI — 세 맵(행성·지역·동네) 공용. 버튼 + 패널을 한 조각으로.
+  //   행성 return에 있던 것을 추출. 에디터 도구(🪐🚶⏸)는 각 맵이 따로 두고, 여기선 여권·기록만.
+  const passportFeedUI = (
+    <>
+      {passportOpen && (
+        <div style={{
+          position: 'fixed', top: 76, right: 18, width: 250, zIndex: 6,
+          padding: '14px 16px', borderRadius: 14, color: '#e8dcc2',
+          background: 'rgba(18,24,26,0.9)', border: '1px solid rgba(216,178,110,0.3)',
+          backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+        }}>
+          <div style={{ fontSize: 12, color: '#d8b26e', letterSpacing: 2, marginBottom: 8 }}>여권 — 오늘의 우연</div>
+          {passport.length > 0 && (
+            <div style={{ fontSize: 12.5, lineHeight: 1.9, marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid rgba(216,178,110,0.15)' }}>{passport.join(' · ')}</div>
+          )}
+          {timeline.length > 0 ? (
+            <div style={{ maxHeight: 320, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {timeline.map((it) => (
+                <div key={it.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12.5, lineHeight: 1.5 }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>{it.icon}</span>
+                  <span>{it.text}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 아무 일도 일어나지 않았어요.<br />돌려두고, 하던 일을 하세요.</div>
+          )}
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>오늘 {timeline.length}가지 일이 있었습니다</span>
+            <button type="button" onClick={() => { setPassport([]); setTimeline([]); try { localStorage.removeItem(PASSPORT_KEY); localStorage.removeItem(TIMELINE_KEY); } catch { /* 조용히 */ } }}
+              style={{ background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '2px 8px', fontSize: 10.5, cursor: 'pointer' }}>비우기</button>
+          </div>
+          <div style={{ fontSize: 10.5, opacity: 0.4, marginTop: 10, textAlign: 'right' }}>오늘도 느리게 · slow days</div>
+        </div>
+      )}
+      {threadOpen && (
+        <div style={{
+          position: 'fixed', top: 76, right: 18, width: 300, maxHeight: '78vh', zIndex: 7, overflowY: 'auto',
+          padding: '14px 14px', borderRadius: 16, color: '#e8dcc2',
+          background: 'rgba(16,20,24,0.94)', border: '1px solid rgba(216,178,110,0.3)',
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 13, color: '#d8b26e', letterSpacing: 1 }}>기록 · @she_walks_slow</span>
+            <button type="button" onClick={() => { const v = !threadMuted; setThreadMuted(v); try { localStorage.setItem('mimesis.threadMuted', v ? '1' : '0'); } catch { /* 조용히 */ } }}
+              title={threadMuted ? '스레드 알람 켜기' : '스레드 알람 끄기'}
+              style={{ background: 'none', border: '1px solid rgba(216,178,110,0.3)', color: '#d8b26e', borderRadius: 8, padding: '3px 9px', fontSize: 11, cursor: 'pointer' }}>
+              {threadMuted ? '🔕 알람 꺼짐' : '🔔 알람 켜짐'}
+            </button>
+          </div>
+          {feed.length === 0 ? (
+            <div style={{ fontSize: 12, opacity: 0.6, lineHeight: 1.7 }}>아직 남긴 기록이 없어요.<br />걷다 보면 하나씩 쌓입니다.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {feed.map((post) => (
+                <div key={post.id} style={{ borderBottom: '1px solid rgba(216,178,110,0.14)', paddingBottom: 12 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ fontSize: 20 }}>{post.icon}</span>
+                    <div style={{ lineHeight: 1.2 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#e8dcc2' }}>{post.title}</div>
+                      <div style={{ fontSize: 11, opacity: 0.55 }}>@she_walks_slow</div>
+                    </div>
+                  </div>
+                  {post.img && (
+                    <div style={{ position: 'relative', marginBottom: 6 }}>
+                      <img src={post.img} alt="" style={{ width: '100%', borderRadius: 10, display: 'block' }} />
+                      <button type="button" title="사진 저장"
+                        onClick={() => { const a = document.createElement('a'); a.href = post.img!; a.download = `sapmanri_${post.achId}_${post.t}.jpg`; a.click(); }}
+                        style={{ position: 'absolute', right: 8, bottom: 8, background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: 8, padding: '4px 9px', fontSize: 11, cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+                        ⬇ 저장
+                      </button>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 6 }}>{post.text}</div>
+                  <div style={{ fontSize: 11.5, opacity: 0.6, marginBottom: 6 }}>♥ {post.likes}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {post.comments.map((c, i) => (
+                      <div key={i} style={{ fontSize: 11.5, lineHeight: 1.4 }}>
+                        <span style={{ marginRight: 5 }}>{c.persona.avatar}</span>
+                        <span style={{ color: '#d8b26e' }}>{c.persona.name}</span>
+                        <span style={{ opacity: 0.85 }}> {c.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {isSapmanri && feed.length > 0 && (
+            <button type="button" onClick={() => { setFeed([]); earnedIds.current.clear(); try { localStorage.removeItem(FEED_KEY); } catch { /* 조용히 */ } }}
+              style={{ marginTop: 10, background: 'none', border: '1px solid rgba(216,178,110,0.35)', color: '#d8b26e', borderRadius: 8, padding: '3px 10px', fontSize: 10.5, cursor: 'pointer' }}>기록 비우기 (로컬)</button>
+          )}
+        </div>
+      )}
+      <div style={{ position: 'fixed', top: 18, right: 18, display: 'flex', gap: 10, zIndex: 6 }}>
+        {(([
+          ['🛂', () => { setPassportOpen((v) => !v); setPassportSeenN(passport.length); try { localStorage.setItem('mimesis.passportSeenN', String(passport.length)); } catch { /* 조용히 */ } }, passport.length > passportSeenN],
+          ['📖', () => { setThreadOpen((v) => !v); const t = feed[0]?.t ?? 0; setThreadSeenT(t); try { localStorage.setItem('mimesis.threadSeenT', String(t)); } catch { /* 조용히 */ } }, (feed[0]?.t ?? 0) > threadSeenT],
+        ]) as [string, () => void, boolean][]).map(([label, fn, dot]) => (
+          <button key={label} type="button" onClick={fn} style={{
+            width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer', position: 'relative',
+            border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
+            backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff',
+          }}>{label}
+            {dot && (<span style={{
+              position: 'absolute', top: 4, right: 4, width: 10, height: 10, borderRadius: 999,
+              background: '#e5484d', border: '1.5px solid rgba(18,24,26,0.6)',
+            }} />)}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
   if (theatreMode) {
     const theatreEdit = new URLSearchParams(window.location.search).has('edit');
     return (
@@ -553,6 +667,7 @@ export default function App() {
             </div>
           </div>
         )}
+        {passportFeedUI}
       </main>
     );
   }
@@ -974,6 +1089,7 @@ export default function App() {
         )}
         <div className="build-badge">{BUILD_LABEL}</div>
       </section>
+      {passportFeedUI}
       <TouchTrail />
     </main>
   );
