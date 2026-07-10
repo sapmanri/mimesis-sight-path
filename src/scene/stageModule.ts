@@ -413,7 +413,7 @@ export function makeStage(scene: THREE.Object3D) {
         const base = S.recipe?.prop?.targetH ? 0.9 : 0.9;
         const pop = base * (1 + 0.25 * Math.sin(k * Math.PI)) * (k < 1 ? k : 1);
         obj.scale.setScalar(Math.max(0.001, pop));
-        if (k >= 1) { obj.scale.setScalar(0.9); S.phase = 'hold'; console.log('[DBG전이] in→hold', S.recipe?.id, 'symbols:', S.recipe?.symbols?.length ?? 0); }
+        if (k >= 1) { obj.scale.setScalar(0.9); S.phase = 'hold'; }
       } else if (obj && S.phase === 'hold') {
         const bob = S.recipe?.prop?.bob ?? 0;
         if (bob > 0) obj.position.y = Math.abs(Math.sin(elapsed * 6)) * bob;
@@ -421,8 +421,11 @@ export function makeStage(scene: THREE.Object3D) {
           S.symT -= dt;
           if (S.symT <= 0) {
             S.symT = S.recipe.symbolEvery ?? 0.3;
-            const wp = obj.getWorldPosition(new THREE.Vector3()); wp.y += 0.9;
-            console.log('[DBG음표emit]', S.recipe.id, 'phase:', S.phase, 'wp:', wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1));
+            // BUILD 363: 음표를 프롭 '원점+고정0.9'가 아니라 '프롭 높이 기준 위'에서 피운다.
+            //   별이 독립화(357) 이후 stage anchor 부모가 내려가 프롭 원점 월드Y가 음수가 됐고,
+            //   +0.9로는 바닥 아래(-1.2)라 음표가 화면 밖으로 깔렸다. targetH만큼 올려 프롭 위로.
+            const propH = S.recipe.prop?.targetH ?? 0.9;
+            const wp = obj.getWorldPosition(new THREE.Vector3()); wp.y += propH + 0.35;
             symbolSys.emit(wp);
           }
         }
