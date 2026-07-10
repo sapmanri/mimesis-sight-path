@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.17.0 · 별 촬영 지역 이식 → 세 맵 완결(도착·멈춤·우편·캠프) · BUILD 359';
+const BUILD_LABEL = 'v2.18.0 · 촬영 허용 버튼 세 맵 추가(발행과 별개) · BUILD 361';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -168,6 +168,22 @@ export default function App() {
         setPubState('err'); setTimeout(() => setPubState('idle'), 3000);
       }
     } catch { setPubState('err'); setTimeout(() => setPubState('idle'), 3000); }
+  };
+  // BUILD 361: 촬영 허용 — 발행(세계 방송)과 완전히 별개.
+  //   별이가 찍은 사진을 R2에 올리려면 이 세션에 촬영키(=발행키와 같은 PUBLISH_KEY)가 있어야 한다.
+  //   세계를 KV에 발행하는 publishLive와 달리, 여기선 오직 키를 세션에 저장할 뿐 아무것도 방송하지 않는다.
+  const [captureAllowed, setCaptureAllowed] = useState<boolean>(() => !!sessionStorage.getItem('mimesis.publishKey'));
+  const grantCapture = () => {
+    if (sessionStorage.getItem('mimesis.publishKey')) {
+      // 이미 있으면 해제(토글) — 잘못 넣었을 때 다시 넣게
+      sessionStorage.removeItem('mimesis.publishKey');
+      setCaptureAllowed(false);
+      return;
+    }
+    const key = window.prompt('촬영 허용 키를 입력하세요 (별이 사진을 R2에 저장)') || '';
+    if (!key) return;
+    sessionStorage.setItem('mimesis.publishKey', key);
+    setCaptureAllowed(true);
   };
   const planetWalker = pSpec.walker ?? -1; // BUILD 251: 산책자는 스펙이 정한다 (발행 시 고정)
   const [planetPaused, setPlanetPaused] = useState(false); // BUILD 224: 찍기의 평화
@@ -523,6 +539,22 @@ export default function App() {
 
   // BUILD 352: 여권·기록 UI — 세 맵(행성·지역·동네) 공용. 버튼 + 패널을 한 조각으로.
   //   행성 return에 있던 것을 추출. 에디터 도구(🪐🚶⏸)는 각 맵이 따로 두고, 여기선 여권·기록만.
+  // BUILD 361: 촬영 허용 버튼 — 세 맵 공용. isSapmanri(편집·초안) 세션에만 보인다.
+  //   발행("세상에 반영")과 무관: 오직 별이 사진의 R2 저장 권한만 켠다.
+  const captureGrantUI = isSapmanri ? (
+    <button
+      type="button"
+      onClick={grantCapture}
+      title={captureAllowed ? '촬영 허용됨 — 별이 사진이 R2에 저장된다 (눌러서 해제)' : '촬영 허용 — 키를 넣으면 별이 사진이 R2에 저장된다'}
+      style={{
+        position: 'fixed', bottom: 18, left: 18, zIndex: 9,
+        padding: '8px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+        border: '1px solid ' + (captureAllowed ? '#355743' : '#5a5346'),
+        background: captureAllowed ? 'rgba(53,87,67,0.92)' : 'rgba(24,26,25,0.86)',
+        color: captureAllowed ? '#eaf5ec' : '#d8cdb6',
+      }}
+    >{captureAllowed ? '📷 촬영 허용됨 ✓' : '📷 촬영 허용'}</button>
+  ) : null;
   const passportFeedUI = (
     <>
       {passportOpen && (
@@ -728,6 +760,7 @@ export default function App() {
           </div>
         )}
         {passportFeedUI}
+        {captureGrantUI}
       </main>
     );
   }
@@ -1077,6 +1110,7 @@ export default function App() {
           </aside>
         )}
         <div className="build-badge">{BUILD_LABEL}</div>
+        {captureGrantUI}
       </main>
     );
   }
@@ -1152,6 +1186,7 @@ export default function App() {
         <div className="build-badge">{BUILD_LABEL}</div>
       </section>
       {passportFeedUI}
+      {captureGrantUI}
       <TouchTrail />
     </main>
   );
