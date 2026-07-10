@@ -41,14 +41,14 @@ import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
-const BUILD_LABEL = 'v2.11.0 · 동네 비·눈 + 빈도 슬라이더 · BUILD 330';
+const BUILD_LABEL = 'v2.11.1 · 본토 ?stroll=1 무한산책 URL · BUILD 331';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [mode, setMode] = useState<'auto' | 'manual'>('auto');
   const [muted, setMuted] = useState(false);
   const [riding, setRiding] = useState(false); // BUILD 136: 구름 탑승
-  const [stroll, setStroll] = useState(false); // BUILD 150: 무한 산책 — 카드도 도착도 없이, 그냥 걷는다
+  const [stroll, setStroll] = useState(() => new URLSearchParams(window.location.search).has('stroll')); // BUILD 331: ?stroll=1이면 무한 산책으로 시작 — 뷰어 주소로도 무한길
   const [mailItem, setMailItem] = useState<{ text?: string; photo?: string } | null>(null); // BUILD 169: 배달된 편지
   const [uiIdle, setUiIdle] = useState(false); // BUILD 156: UI 유휴 — 틀어놓는 화면에서 단추는 유령이 된다
   useEffect(() => {
