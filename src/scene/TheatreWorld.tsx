@@ -390,6 +390,9 @@ export function TheatreWorld({ spec, walkerIdx, paused, onEvent }: Props) {
     const LAMP_Z = 0.4;            // BUILD 321: 별리(z=0)보다 살짝만 앞
     const LAMP_H = 1.74;           // BUILD 325: 가로등 높이
     const s = LAMP_H / 1.2;        // 원본 높이 ≈1.2 → 1.74
+    // BUILD 346: 재실행 시 기존 가로등을 먼저 싹 정리(이중 생성 방지). cleanup만으론 겹칠 수 있어 방어적으로.
+    for (const old of lampsRef.current) stage.remove(old.group);
+    lampsRef.current = [];
     // BUILD 344: 절대 간격 — 화면 너비와 무관(세로/가로 모드 동일). 화면 폭을 덮을 만큼 개수 자동 산출.
     const gap = Math.max(1.5, specRef.current.lampGap ?? 4.5);
     const span = Math.max(refVW * 1.5, gap * 2);       // 리사이클 폭(화면보다 넉넉히, 최소 간격 2배)
