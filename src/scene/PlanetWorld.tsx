@@ -414,21 +414,27 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   // BUILD 372: 콤보 토큰 하나 실행 → rig 동작으로 번역, 이 동작이 차지할 시간(초) 반환.
   //   시퀀서가 이 시간을 타이머로 써서 끝나면 다음 토큰으로 넘어간다.
+  // BUILD 376: 콤보 토큰 → 실제 클립 정밀 매칭. 'sit 하나'로 뭉개지 않는다 — 상황마다 맞는 포즈.
+  //   앉기: sit(의자)·sitground(바닥). 관찰: 여러 Look/Kneel 클립을 상황·랜덤으로. rig 58클립을 제대로 쓴다.
+  const OBSERVE_CLIPS = ['LookAround', 'LookAround2', 'LookDown', 'KneelDown', 'Kneel']; // 들여다보기/쭈그려 살피기
+  const LOOK_UP_CLIPS = ['LookAround', 'LookBehind', 'LookShoulder', 'KneelPoint', 'Pointing']; // 올려다보기/저기!
   const runComboToken = (tok: ComboToken, targetId?: string): number => {
     const rig = rigRef.current;
     if (!rig) return 0.6;
+    const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
     switch (tok) {
-      case 'observe': rig.playInspect?.('pickup'); return 2.2 + Math.random() * 1.5; // 들여다보기(살핌)
-      case 'look': { const d = rig.playAction?.('LookAround', 1) ?? 0; return d > 0 ? d + 0.3 : 2.0; } // 올려다보기/두리번
+      case 'observe': { const d = rig.playAction?.(pick(OBSERVE_CLIPS), 1) ?? 0; return d > 0 ? d + 0.3 : 2.2; } // 살펴보기(여러 포즈)
+      case 'look': { const d = rig.playAction?.(pick(LOOK_UP_CLIPS), 1) ?? 0; return d > 0 ? d + 0.3 : 2.0; } // 올려다보기/가리키기
       case 'sit': {
-        // 길 A': rig가 자기 의자를 정확히 깔고 앉는다. Vase가 놓은 의자 소품은 앉는 동안 숨긴다(겹침 방지).
+        // 의자 앉기 — rig가 자기 의자를 정확히 깔고 앉는다. Vase 의자 소품은 앉는 동안 숨김(겹침 방지).
         if (targetId) { const rec = propMap.current.get(targetId); if (rec) rec.anchor.visible = false; }
-        rig.playInspect?.('sit'); return 3.5 + Math.random() * 2.5; // 앉아 한동안 머문다
+        rig.playInspect?.('sit'); return 3.5 + Math.random() * 2.5;
       }
+      case 'sitground': rig.playInspect?.('sitGround'); return 3.0 + Math.random() * 2.0; // 바닥 앉기 — 의자 안 꺼냄, 소품 안 숨김
       case 'write': { const d = rig.playAction?.('Writing', 1) ?? 0; return d > 0 ? d + 0.3 : 2.5; } // 적기
-      case 'shot': byeoliShot('mood'); return 3.2 + Math.random() * 0.8; // 사진(SitCamera 안무 — 자체 셔터 타이밍)
-      case 'lean': { const clip = Math.random() < 0.5 ? 'Leaning' : 'LeaningWall'; const d = rig.playAction?.(clip, 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 기대기(벽/허공)
-      case 'search': { const d = rig.playAction?.('LookingFiles', 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 뭔가 뒤적여 찾기
+      case 'shot': byeoliShot('mood'); return 3.2 + Math.random() * 0.8; // 사진(SitCamera 안무)
+      case 'lean': { const d = rig.playAction?.(Math.random() < 0.5 ? 'Leaning' : 'LeaningWall', 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 기대기
+      case 'search': { const d = rig.playAction?.('LookingFiles', 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 뒤적여 찾기
       case 'stand': rig.stopInspect?.(); return 0.5; // 일어나 걷기 복귀
       default: return 0.6;
     }
@@ -1134,7 +1140,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   //   각 소품은 콤보 후보 여럿을 갖고, 도착 시 하나를 확률로 골라 순차 실행(매번 다른 장면).
   //   토큰: observe(들여다보기) look(올려다보기/저기!) sit(앉기) write(적기) shot(사진) stand(일어나 걷기).
   //   추론층(이름만으로 느린 뇌가 콤보 생성)은 느린 뇌 단계에서. 지금은 선언층만.
-  type ComboToken = 'observe' | 'look' | 'sit' | 'write' | 'shot' | 'lean' | 'search' | 'stand';
+  type ComboToken = 'observe' | 'look' | 'sit' | 'sitground' | 'write' | 'shot' | 'lean' | 'search' | 'stand';
   const ATTRACT_AFFORDANCE: Record<string, { radius: number; combos: ComboToken[][] }> = {
     // ⚠️ sit(앉기)는 보류: rig가 '외부에 놓인 의자'에 위치 정합해 SitChair로 앉는 건 별도 작업.
     //    지금 sit을 부르면 chairAsset이 없어 바닥에 앉는다(어색). 앉기는 위치정합 해결 후 재도입.
@@ -1163,11 +1169,11 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       ['look', 'lean', 'write', 'shot', 'stand'],     // 보고 → 기대어 → 적고 → 찍는다
     ] },
     book: { radius: 0.9, combos: [
-      ['observe', 'sit', 'search', 'write', 'stand'], // 보고 → 앉아 → 뒤적여 → 적는다
-      ['sit', 'search', 'write', 'stand'],            // 앉아 → 뒤적여 찾고 → 적는다
-      ['search', 'observe', 'shot', 'stand'],         // 뒤적이고 → 살피고 → 찍는다
-      ['sit', 'search', 'observe', 'shot', 'stand'],  // 앉아 → 뒤적여 → 살피고 → 찍는다
-      ['observe', 'search', 'lean', 'stand'],         // 보고 → 뒤적이다 → 기대어 읽는다
+      ['observe', 'sitground', 'search', 'write', 'stand'], // 보고 → 바닥에 앉아 → 뒤적여 → 적는다
+      ['sitground', 'search', 'write', 'stand'],            // 앉아 → 뒤적여 찾고 → 적는다
+      ['search', 'observe', 'shot', 'stand'],               // 서서 뒤적이고 → 살피고 → 찍는다
+      ['sitground', 'search', 'shot', 'stand'],             // 앉아 → 뒤적여 → 찍는다
+      ['observe', 'search', 'lean', 'stand'],               // 보고 → 뒤적이다 → 기대어 읽는다
     ] },
   };
   const attractCooldown = useRef(new Map<string, number>()); // 소품 id별 쿨다운(방금 상호작용한 것 잠시 억제)
@@ -1502,7 +1508,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
               T2.arrived = true;
               const first = T2.queue.shift();
               T2.step = first ? runComboToken(first, T2.id) : 0;
-              attractCooldown.current.set(T2.id, 20);
+              // 쿨다운은 콤보 '끝날 때' 건다([B] standing). 도착 시점에 걸면 긴 콤보 도는 중 풀려 재선택→반복.
             } else if (moving) {
               // 접근 — 진행방향 T를 목표로 슬며시 튼다.
               const toTarget = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d)).normalize();
@@ -1524,6 +1530,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           // 종료 대기 — 물러나기 시작 후 짧은 여유(step)만큼 기다렸다 걷기(미끄러짐 방지).
           if (T2.step <= 0) {
             const rec = propMap.current.get(T2.id); if (rec) rec.anchor.visible = true; // 숨겼던 의자 복원
+            attractCooldown.current.set(T2.id, 25); // ★콤보 '끝난 시점'에 쿨다운 — 방금 논 소품에 즉시 안 끌림(반복 방지)
             attractTarget.current = null;
           }
         } else if (T2.step <= 0) {
@@ -1535,7 +1542,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           } else {
             rigRef.current?.stopInspect?.(); // 콤보 끝 → 물러나기(일어서기) 시작
             T2.standing = true;
-            T2.step = 1.0; // 일어서는 동작 여유
+            T2.step = 1.2; // 일어서는 동작 여유
           }
         }
       }

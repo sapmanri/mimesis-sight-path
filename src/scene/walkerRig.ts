@@ -24,7 +24,7 @@ export type WalkerRig = {
    */
   update: (dt: number, speed01: number, moving: boolean, elapsed: number, distDelta: number) => void;
   /** 도착 동작. kind: 'pickup'(들여다보기) | 'sit'(바닥에 앉기) — 지원 안 하면 무시 */
-  playInspect: (kind?: 'pickup' | 'sit') => void;
+  playInspect: (kind?: 'pickup' | 'sit' | 'sitGround') => void;
   stopInspect: () => void;
   /** BUILD 104: 마법 의자 자산 주입 (클립 리그 전용, 선택) */
   setChairAsset?: (obj: THREE.Group, seatY: number, seatCz?: number) => void;
@@ -399,7 +399,10 @@ export function createClipRig(
       // BUILD 105: 전원 의자 — 의자 높이 클립은 앉고, 바닥 클립은 의자 위에 양반다리로.
       // (의자파가 3/11뿐이라 열 번을 새로고침해도 의자를 못 보는 문제의 해답)
       // BUILD 364: 의자 소환 여부로 앉기 종류를 가른다 — 의자 있으면 SitChair, 없으면 SitGround.
-      sittingOnChair = kind === 'sit' && !!chairAsset;
+      // BUILD 376: 'sitGround' = 의자 자산이 있어도 무시하고 바닥에 앉는다(책무더기 앞 등). 'sit' = 종전(의자 우선).
+      const wantGround = kind === 'sitGround';
+      const isSit = kind === 'sit' || kind === 'sitGround';
+      sittingOnChair = kind === 'sit' && !!chairAsset; // 바닥 앉기는 의자로 치지 않는다
       if (kind === 'sit' && chairAsset && root.parent && sitIdle) {
         if (!chair) {
           chair = chairAsset;
@@ -425,8 +428,8 @@ export function createClipRig(
         root.parent.worldToLocal(fw);
         feetAnchor = { x: (lx + fw.x) / 2, z: (lz + fw.z) / 2 };
       }
-      if (kind === 'sit' && sitIdle) {
-        const seatIdle = sittingOnChair && sitChairIdle ? sitChairIdle : sitIdle; // BUILD 364: 의자/바닥 구분
+      if (isSit && sitIdle) {
+        const seatIdle = sittingOnChair && sitChairIdle ? sitChairIdle : (wantGround && sitIdleFloor ? sitIdleFloor : sitIdle); // 의자/바닥 구분
         if (sitDown) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
         else { gesture = 'sit'; switchTo(seatIdle, 0.55); } // 전환 클립이 없으면 느린 페이드로
       } else if (pickup) { gesture = 'pickup'; switchTo(pickup, 0.3); }
