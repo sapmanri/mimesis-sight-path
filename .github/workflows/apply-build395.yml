@@ -1,0 +1,33 @@
+name: Apply BUILD 395 device and distance repair
+
+on:
+  push:
+    paths:
+      - '.build395-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply BUILD 395 source patch
+        run: python3 scripts/apply_build395.py
+      - name: Install and build
+        run: npm ci && npm run build
+      - name: Commit BUILD 395
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-build395.yml .build395-trigger scripts/apply_build395.py
+          git add -A
+          git commit -m "BUILD 395: fix held devices, prop distance, and observation journal"
+          git push
