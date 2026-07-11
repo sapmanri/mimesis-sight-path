@@ -1292,9 +1292,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const runEvery = SP.runEvery ?? 45;
     const rideEvery = SP.rideEvery ?? 120;
     // BUILD 282: 체류 슬라이더 — Vase가 에디터에서 조절. 이동시간(짧게)과 체류 길이 배율.
-    const lingerEvery = Math.max(0.5, SP.lingerEvery ?? 3);   // 다음 체류까지 걷는 초. 작을수록 자주 논다
-    const lingerLen = Math.max(0.2, SP.lingerLength ?? 1);    // 체류 길이 배율. 클수록 오래 논다
-    const nextWalkLeft = () => lingerEvery * (0.7 + Math.random() * 0.7); // 이동 구간 길이(약간의 무작위)
+    // BUILD 386: 체류 슬라이더(lingerEvery/lingerLength) 폐기 — 이제 별이 성향(욕구)이 리듬을 만든다.
+    //   nextWalkLeft는 linger 후 '조금 걷고 다시 판정'하는 짧은 간격만 제공(강제 아님).
+    const lingerLen = 1; // 잔존 참조 호환용 상수(더는 슬라이더 아님)
+    const nextWalkLeft = () => 1.5 + Math.random() * 2.0; // linger 후 짧게 걷는 간격
     if (MV.nextRun < 0) { MV.nextRun = el + 14 + Math.random() * 18; MV.nextRide = el + 35 + Math.random() * 45; }
     if (!pausedRef.current && MV.mode === 'walk' && P.phase === 'walk') {
       if (rideEvery > 0 && el >= MV.nextRide && !rigRef.current?.setRiding) {
@@ -1444,30 +1445,19 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         if (SP.roam) P.walkLeft = nextWalkLeft();
       }
     } else if (SP.roam) {
-      // BUILD 282: 걷기는 이제 '다음 볼거리로 가는 짧은 전환'일 뿐이다. 무게중심은 체류(linger)에 있다.
-      // 우주여행자 별리는 이 별을 즐긴다 — 한 자리에 오래 머물며 두리번거리고, 하늘 보고, 기지개 켜고, 또 가만히.
-      P.campCooldown -= dt;
-      if (MV.mode === 'walk' && P.phase === 'walk' && P.cooldown <= 0) {
-        P.walkLeft -= dt;
-        // 짧은 이동이 끝나면(또는 애초에 이동시간이 안 잡혀 있으면) → 체류로 진입해 오래 머문다.
-        if (P.walkLeft <= 0) {
-          // 아주 가끔(체류 대신) 캠프를 차리고 훨씬 오래 쉰다. 탈것 안 탔을 때만.
-          if (P.campCooldown <= 0 && campProtoRef.current && Math.random() < 0.28) {
-            P.phase = 'camp';
-            P.timer = 16 + Math.random() * 12; // 16~28초 머문다
-            P.campCooldown = 90 + Math.random() * 60;
-            spawnCamp();
-            rigRef.current?.playInspect('sit');
-            if (Math.random() < 0.3) byeoliShot('stage'); // 별이: 캠프 차리는 순간 30% 촬영(동네 스테이지에 대응)
-          } else {
-            // 보통은 체류: 이 자리에서 여러 딴짓을 여백을 두고 이어서 한다. 길이는 lingerLength로 조절.
-            P.phase = 'linger';
-            P.lingerLeft = Math.max(1, Math.round((2 + Math.random() * 3) * lingerLen)); // 기본 2~5회, 배율 적용
-            P.gap = 0.6 + Math.random() * 1.4; // 멈춰 서서 숨 고른 뒤 첫 딴짓
-            P.timer = 0;
-            P.jumpTo = -1;
-            if (Math.random() < 0.3) byeoliShot('mood'); // 별이: 문득 멈춰 바라보는 순간 30% 촬영(동네 무드에 대응)
-          }
+      // BUILD 386: 소품 없을 때의 딴짓도 별이 선택 — 타이머 강제(lingerEvery) 폐기.
+      //   걷다가 관찰 욕구가 충분히 차오르면 스스로 멈춰 주변을 본다(소품 없어도 하늘·땅·풍경 관찰).
+      //   관찰하면 욕구 해소 → 다시 걷다 또 차오르면 멈춤. 욕구가 리듬을 만든다. 소품에 끌렸으면 성향 뇌가 전담.
+      if (MV.mode === 'walk' && P.phase === 'walk' && P.cooldown <= 0 && !attractTarget.current) {
+        const D = drives.current;
+        // 관찰 욕구가 높을수록 멈출 확률↑(비선형). 걷는 동안 조금씩 판정.
+        if (D.observe > 0.55 && Math.random() < D.observe * D.observe * dt * 0.6) {
+          P.phase = 'linger';
+          P.lingerLeft = 1 + (D.observe > 0.8 ? 1 : 0); // 욕구 크면 한 번 더
+          P.gap = 0.4 + Math.random() * 0.8;
+          P.timer = 0; P.jumpTo = -1;
+          D.observe = Math.max(0, D.observe - 0.45); // 관찰 욕구 해소
+          if (Math.random() < 0.25) byeoliShot('mood');
         }
       }
     } else {
