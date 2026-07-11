@@ -137,7 +137,6 @@ export const PROP_CATALOG: PropDef[] = [
   { id: 'door', label: '초록 대문', cat: '구조물' },
   { id: 'wall-stone', label: '돌담 조각', cat: '구조물' },
   { id: 'chair', label: '의자', cat: '구조물' },
-  { id: 'bookcase', label: '책장', cat: '구조물' },
   { id: 'streetlamp', label: '가로등 (불빛)', cat: '구조물' },
   { id: 'lantern', label: '랜턴 (불빛)', cat: '구조물' },
   { id: 'oldcar', label: '낡은 차', cat: '구조물' },
@@ -447,9 +446,8 @@ export async function createPropObject(
       case 'plane': return await loadKitModel('airplane', loadModel);
       case 'wall-stone': return KITS['stone-wall-kit'](rnd);
       case 'chair': return await loadKitModel('chair', loadModel);
-      case 'bookcase': return await loadKitModel('bookcase', loadModel);
       case 'suitcase': return await loadKitModel('suitcase', loadModel);
-      case 'book': return KITS['book-kit'](rnd);
+      case 'book': return await loadKitModel('book', loadModel);
       case 'cup': return makeCup(rnd);
       case 'fruit': return KITS['fruit-kit'](rnd);
       case 'cd-shelf': return KITS['cd-shelf-kit'](rnd);

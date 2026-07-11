@@ -1,7 +1,7 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader, makeCloudPuff, loadKitModel, loadKitModelWithClips } from '../engine/worldCore';
+import { loadWalkerAsset, applyHeightFog, PALETTE, defaultLoader, makeCloudPuff, loadKitModel, loadKitModelWithClips, kitHeight } from '../engine/worldCore';
 import { PET_ROSTER, loadPet, type LoadedPet } from '../engine/pets';
 import { createClipRig, createWalkerRig, type WalkerRig } from './walkerRig';
 import { createPlanetSky } from './planetSky';
@@ -414,13 +414,17 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   // BUILD 372: 콤보 토큰 하나 실행 → rig 동작으로 번역, 이 동작이 차지할 시간(초) 반환.
   //   시퀀서가 이 시간을 타이머로 써서 끝나면 다음 토큰으로 넘어간다.
-  const runComboToken = (tok: ComboToken): number => {
+  const runComboToken = (tok: ComboToken, targetId?: string): number => {
     const rig = rigRef.current;
     if (!rig) return 0.6;
     switch (tok) {
       case 'observe': rig.playInspect?.('pickup'); return 2.2 + Math.random() * 1.5; // 들여다보기(살핌)
       case 'look': { const d = rig.playAction?.('LookAround', 1) ?? 0; return d > 0 ? d + 0.3 : 2.0; } // 올려다보기/두리번
-      case 'sit': rig.playInspect?.('sit'); return 3.0 + Math.random() * 2.0; // 앉기(한동안 머문다)
+      case 'sit': {
+        // 길 A': rig가 자기 의자를 정확히 깔고 앉는다. Vase가 놓은 의자 소품은 앉는 동안 숨긴다(겹침 방지).
+        if (targetId) { const rec = propMap.current.get(targetId); if (rec) rec.anchor.visible = false; }
+        rig.playInspect?.('sit'); return 3.5 + Math.random() * 2.5; // 앉아 한동안 머문다
+      }
       case 'write': { const d = rig.playAction?.('Writing', 1) ?? 0; return d > 0 ? d + 0.3 : 2.5; } // 적기
       case 'shot': byeoliShot('mood'); return 3.2 + Math.random() * 0.8; // 사진(SitCamera 안무 — 자체 셔터 타이밍)
       case 'lean': { const clip = Math.random() < 0.5 ? 'Leaning' : 'LeaningWall'; const d = rig.playAction?.(clip, 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 기대기(벽/허공)
@@ -806,6 +810,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       });
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, 0.72);
+      // BUILD 375: 앉기(길 A') — 지역맵 캠핑과 동일 방식. rig가 자기 의자를 힙 밑에 정확히 깔고 앉는다.
+      //   Vase가 놓은 의자 소품은 앉는 순간 숨겨 겹침 방지(같은 Chair.glb라 티 안 남). 확정 자산(rig 앉기) 안 건드림.
+      void loadKitModel('chair', defaultLoader).then((chairObj) => {
+        if (!alive) return;
+        rigRef.current?.setChairAsset?.(chairObj, kitHeight('chair') * 0.50, 0.037); // 지역맵 BUILD 190 실측 그대로
+      }).catch(() => { /* 의자 못 불러오면 조용히 바닥 앉기로 폴백 */ });
       // BUILD 258: 밤 랜턴 — 본토 방식(손 뼈 진자 매달기)을 행성 캐릭터에 이식. 랜덤으로 이 산책자가 든다.
       if (lanternOnRef.current) {
         let hand: THREE.Object3D | null = null;
@@ -1130,9 +1140,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     //    지금 sit을 부르면 chairAsset이 없어 바닥에 앉는다(어색). 앉기는 위치정합 해결 후 재도입.
     //    당분간 의자도 '관찰 대상'(별이는 만지는 게 아니라 보는 존재).
     chair: { radius: 0.9, combos: [
-      ['observe', 'write', 'shot', 'stand'],          // 살펴보고 → 적고 → 찍고 → 물러난다
-      ['look', 'observe', 'shot', 'stand'],           // 훑어보고 → 들여다보고 → 찍고 → 물러난다
-      ['observe', 'observe', 'write', 'stand'],       // 요리조리 보고 → 적고 → 물러난다
+      ['observe', 'sit', 'write', 'shot', 'stand'],   // 살펴보고 → 앉아 → 적고 → 찍고 → 일어난다
+      ['sit', 'shot', 'observe', 'stand'],            // 앉아 → 찍고 → 두리번 → 일어난다
+      ['observe', 'sit', 'observe', 'write', 'stand'],// 보고 → 앉아 → 또 보고 → 적고 → 일어난다
+      ['look', 'sit', 'write', 'stand'],              // 훑어보고 → 앉아 → 적고 → 일어난다
     ] },
     'rock-small': { radius: 0.85, combos: [
       ['observe', 'search', 'write', 'stand'],        // 들여다보고 → 뒤적여 살피고 → 적는다
@@ -1151,15 +1162,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       ['look', 'shot', 'look', 'stand'],              // 우러러보고 → 찍고 → 다시 본다
       ['look', 'lean', 'write', 'shot', 'stand'],     // 보고 → 기대어 → 적고 → 찍는다
     ] },
-    book: { radius: 0.8, combos: [
-      ['observe', 'search', 'write', 'stand'],        // 보고 → 뒤적여 찾고 → 적는다
+    book: { radius: 0.9, combos: [
+      ['observe', 'sit', 'search', 'write', 'stand'], // 보고 → 앉아 → 뒤적여 → 적는다
+      ['sit', 'search', 'write', 'stand'],            // 앉아 → 뒤적여 찾고 → 적는다
       ['search', 'observe', 'shot', 'stand'],         // 뒤적이고 → 살피고 → 찍는다
-    ] },
-    bookcase: { radius: 0.95, combos: [
-      ['observe', 'search', 'write', 'stand'],        // 책장 훑고 → 한 권 뒤적여 → 적는다
-      ['search', 'observe', 'search', 'shot', 'stand'],// 뒤적이고 → 살피고 → 또 뒤적여 → 찍는다
-      ['look', 'search', 'write', 'stand'],           // 위칸 올려다보고 → 뒤적여 → 적는다
-      ['search', 'lean', 'observe', 'stand'],         // 뒤적이다 → 기대어 읽고 → 살핀다
+      ['sit', 'search', 'observe', 'shot', 'stand'],  // 앉아 → 뒤적여 → 살피고 → 찍는다
+      ['observe', 'search', 'lean', 'stand'],         // 보고 → 뒤적이다 → 기대어 읽는다
     ] },
   };
   const attractCooldown = useRef(new Map<string, number>()); // 소품 id별 쿨다운(방금 상호작용한 것 잠시 억제)
@@ -1493,7 +1501,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
               // 도착 — 콤보 시작. phase는 walk 유지(★버그 수정). 이동만 멈춘다(moving=false).
               T2.arrived = true;
               const first = T2.queue.shift();
-              T2.step = first ? runComboToken(first) : 0;
+              T2.step = first ? runComboToken(first, T2.id) : 0;
               attractCooldown.current.set(T2.id, 20);
             } else if (moving) {
               // 접근 — 진행방향 T를 목표로 슬며시 튼다.
@@ -1506,17 +1514,28 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         }
       }
       // [B] 콤보 진행 — 도착한 목표가 있으면 phase 무관하게 매 프레임. 이동 정지.
+      //   ★ 붙잡힘 버그(BUILD 375): 이전엔 !inspecting()을 기다렸는데, 앉기/들여다보기는 스스로 안 끝나
+      //     (inspecting이 계속 true) → 영원히 다음 토큰으로 못 감 = 붙박임. 이제 순수 타이머로 진행하고,
+      //     다음 토큰 실행 직전에 현재 동작을 명시적으로 정리(stopInspect)해 겹침을 막는다.
       if (ATTRACT_ON && T2 && T2.arrived) {
         moving = false; // 콤보 도는 동안 별이는 제자리(장면을 편다)
+        T2.step -= dt;
         if (T2.standing) {
-          // 종료 대기 — 물러나는 동작이 실제 끝날 때까지 기다렸다 걷기(미끄러짐 방지).
-          if (!rigRef.current?.inspecting?.()) attractTarget.current = null;
-        } else {
-          T2.step -= dt;
-          if (T2.step <= 0 && !rigRef.current?.inspecting?.()) {
-            const next = T2.queue.shift();
-            if (next && next !== 'stand') { T2.step = runComboToken(next); }
-            else { rigRef.current?.stopInspect?.(); T2.standing = true; } // 콤보 끝 → 물러나기 시작
+          // 종료 대기 — 물러나기 시작 후 짧은 여유(step)만큼 기다렸다 걷기(미끄러짐 방지).
+          if (T2.step <= 0) {
+            const rec = propMap.current.get(T2.id); if (rec) rec.anchor.visible = true; // 숨겼던 의자 복원
+            attractTarget.current = null;
+          }
+        } else if (T2.step <= 0) {
+          // 현재 동작 종료(앉기/들여다보기 등은 스스로 안 끝나므로 명시적으로 정리) 후 다음 토큰.
+          rigRef.current?.stopInspect?.();
+          const next = T2.queue.shift();
+          if (next && next !== 'stand') {
+            T2.step = runComboToken(next, T2.id);
+          } else {
+            rigRef.current?.stopInspect?.(); // 콤보 끝 → 물러나기(일어서기) 시작
+            T2.standing = true;
+            T2.step = 1.0; // 일어서는 동작 여유
           }
         }
       }

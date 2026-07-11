@@ -308,7 +308,7 @@ export const MODELS: Record<string, ModelSpec> = {
   walker: { file: 'LittleBoy.glb', height: 0.9, tint: '#57534a', keepLook: true, texture: 'LittleBoy_texture.png', clipSpeeds: { walk: 1.48, run: 5.207 } },
   airplane: { file: 'Kawasaki.glb', height: 1.6, tint: '#c9d1cb', fitMaxDim: true },
   chair: { file: 'Chair.glb', height: 0.44, tint: '#7e937f' }, // BUILD 176: 의자 다이어트 0.64→0.44 — 왕좌가 아니라 의자 (Vase 실측 판정: 줄이면 엉덩이에 맞는다)
-  bookcase: { file: 'BookCase.glb', height: 1.1, tint: '#8A6A4A', fitMaxDim: true }, // BUILD 373: Vase 업로드 책장 — 별이 책읽기 콤보용
+  book: { file: 'BookStack.glb', height: 0.5, tint: '#b8a888', fitMaxDim: true }, // BUILD 375: 책 무더기 — 프로시저럴 대신 실측 모델(책스택+커피컵)
   // BUILD 110: 동물들 — 소만 걷는다(스킨+클립 5종 이식본). 나머지는 길가에 선 조각들.
   cow: { file: 'Cow.glb', height: 0.95, tint: '#c9c2b4', keepLook: true },
   dog: { file: 'Dog.glb', height: 0.34, tint: '#8a7a5f' },
