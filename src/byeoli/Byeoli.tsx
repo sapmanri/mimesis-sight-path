@@ -196,16 +196,20 @@ export function Byeoli({ host }: Props) {
       stageChance: hostRef.current.stageChance ? () => hostRef.current.stageChance!() : undefined,
       stageIds: () => hostRef.current.stageIds?.() ?? ['dance', 'sleep', 'piano', 'workout', 'treadmill'],
       capture: (reason) => {
-        // BUILD 367: 찍기와 올리기를 가른다.
-        //   찍기 = 별이의 자유. 촬영허용·발행권한과 무관하게 '항상' 일어난다(자세+셔터+캡처).
-        //   올리기 = 그렇게 찍은 것 '중 일부'만 R2로. 발행 게이트는 App(onCapture)이 판단한다.
-        //   '촬영 허용'이 찍는 전제조건이 되면 별이는 자유가 아니게 된다 — 그래서 분리.
-        rigRef.current?.playAction?.('SitCamera'); // 카메라 드는 자세 — 언제나
-        playShutter();                              // 셔터음 — 언제나
-        const url = grab();                         // 지금 이 순간을 담는다 — 언제나
-        // 올리기 시도: 넘기되, 실제 발행 여부·확률은 App이 결정(권한 없으면 조용히 버려짐)
+        // BUILD 368: 별이의 촬영 안무 — 고민하며 찍는 사색가.
+        //   ① 카메라 자세를 1~3회 재생(어떤 땐 바로, 어떤 땐 한참 고민).
+        //   ② 셔터음+캡처는 자세를 잡고 '한참 본 뒤' — 전체 길이의 후반에 터진다.
+        //   찍기는 촬영허용과 무관하게 늘 일어난다(자유). 올리기만 App이 게이트.
+        const repeats = 1 + Math.floor(Math.random() * 3); // 1~3회
+        const totalSec = rigRef.current?.playAction?.('SitCamera', repeats) ?? 0;
         const cb = hostRef.current.onCapture;
-        if (cb && url) cb(url, reason);
+        // 셔터 순간: 전체의 약 78% 지점(자세 잡고 한참 본 뒤). 최소 0.8초.
+        const shutterAt = Math.max(800, totalSec * 1000 * 0.78);
+        window.setTimeout(() => {
+          playShutter();
+          const url = grab(); // 셔터가 터지는 바로 그 순간을 담는다
+          if (cb && url) cb(url, reason);
+        }, shutterAt);
       },
     });
     return () => {

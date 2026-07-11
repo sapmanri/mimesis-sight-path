@@ -36,8 +36,8 @@ export type WalkerRig = {
   flourish?: (mood?: string) => number;
   /** BUILD 283: 지정 클립을 반복(지속) 재생 — 한 바퀴 길이(초) 반환. 캠프/prop-act 지속 자세용 */
   playNamed?: (clipName: string) => number;
-  /** BUILD 366: 지정 클립을 한 번 재생하고 idle 복귀 (사진/글쓰기 등 원샷 시그니처) */
-  playAction?: (clipName: string) => number;
+  /** BUILD 366/368: 지정 클립을 repeats회 재생하고 idle 복귀 (사진/글쓰기 등 원샷 시그니처). 반환=전체 길이(초) */
+  playAction?: (clipName: string, repeats?: number) => number;
   /** BUILD 283: playNamed로 시작한 지속 자세를 접고 idle로 복귀 */
   stopNamed?: () => void;
   /** BUILD 146: 두리번 — 머리 뼈에 요 오프셋 (0이면 정면) */
@@ -376,18 +376,21 @@ export function createClipRig(
     },
     // BUILD 366: 원샷 지정 재생 — 사진 찍기(SitCamera)·글쓰기(Writing) 등 별이 시그니처 동작.
     //   flourish(랜덤)와 달리 이름으로 콕 집어 한 번 재생하고 끝나면 idle 복귀. named(무한반복)와도 다름.
-    playAction(clipName: string) {
+    playAction(clipName: string, repeats = 1) {
       if (riding || gesture !== 'none') return 0;
       const clip = clipByName.get(clipName);
       if (!clip) return 0;
       const a = mixer.clipAction(clip);
-      a.setLoop(THREE.LoopOnce, 1);
+      // BUILD 368: 반복 횟수 — 별이가 찍을 때 어떤 땐 바로(1회), 어떤 땐 고민하며(2~3회).
+      const n = Math.max(1, Math.round(repeats));
+      if (n === 1) { a.setLoop(THREE.LoopOnce, 1); }
+      else { a.setLoop(THREE.LoopRepeat, n); }
       a.clampWhenFinished = true;
       a.reset();
       actionAction = a;
       gesture = 'action';
       switchTo(a, 0.3);
-      return clip.duration;
+      return clip.duration * n; // 전체 재생 길이(초) — 호출자가 셔터 타이밍 계산에 쓴다
     },
     setLook(y: number) { lookYaw = y; },
     playInspect(kind = 'pickup') {
