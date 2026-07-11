@@ -436,9 +436,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   const doRest = (targetId?: string, propObj?: string): { dur: number; sustained: boolean } => {
     const rig = rigRef.current; if (!rig) return { dur: 0.6, sustained: false };
-    // BUILD 383: 소품에 맞는 앉기 하나만 확정적으로(랜덤으로 기대기/바닥/의자 섞으면 모션이 덧붙어 엉킨다).
-    if (propObj === 'chair' && targetId) { const rec = propMap.current.get(targetId); if (rec) rec.anchor.visible = false; rig.playInspect?.('sit'); return { dur: 7 + Math.random() * 3, sustained: true }; } // 의자에 오래
-    rig.playInspect?.('sitGround'); return { dur: 6 + Math.random() * 3, sustained: true }; // 그 외엔 바닥에 오래
+    // BUILD 387: 의자 앉기(rig 의자소환 방식) 완전 폐기 — 여러 번 뺑뺑이. rest는 바닥 앉기만.
+    void targetId; void propObj;
+    rig.playInspect?.('sitGround'); return { dur: 6 + Math.random() * 3, sustained: true };
   };
   // ★ 별이가 지금 자기 욕구로 행동을 하나 고른다(각본 없음). 소품이 자극한 욕구 + 별이 현재 욕구 중 최강.
   //   고른 행동을 하고 그 욕구를 해소(감소). 다음엔 다른 욕구가 이길 수 있다.
@@ -859,12 +859,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       });
       rigRef.current = (clipSpeeds ? createClipRig(group, animations, clipSpeeds, footsteps.step) : null)
         ?? createWalkerRig(group, animations, 0.72);
-      // BUILD 375: 앉기(길 A') — 지역맵 캠핑과 동일 방식. rig가 자기 의자를 힙 밑에 정확히 깔고 앉는다.
-      //   Vase가 놓은 의자 소품은 앉는 순간 숨겨 겹침 방지(같은 Chair.glb라 티 안 남). 확정 자산(rig 앉기) 안 건드림.
-      void loadKitModel('chair', defaultLoader).then((chairObj) => {
-        if (!alive) return;
-        rigRef.current?.setChairAsset?.(chairObj, kitHeight('chair') * 0.50, 0.037); // 지역맵 BUILD 190 실측 그대로
-      }).catch(() => { /* 의자 못 불러오면 조용히 바닥 앉기로 폴백 */ });
+      // BUILD 387: 의자 앉기 폐기 — rig에 의자 자산 세팅 안 함. 앉기는 바닥 앉기(sitGround)만.
+      //   (의자 소환 방식이 계속 뺑뺑이 유발 → 통째로 걷어냄. 훗날 필요하면 위치정합부터 처음 설계.)
       // BUILD 258: 밤 랜턴 — 본토 방식(손 뼈 진자 매달기)을 행성 캐릭터에 이식. 랜덤으로 이 산책자가 든다.
       if (lanternOnRef.current) {
         let hand: THREE.Object3D | null = null;
@@ -1192,7 +1188,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const driveFatigue = useRef<Record<Drive, number>>({ observe: 0, record: 0, rest: 0, wonder: 0 });
   // 소품이 자극하는 욕구 + 거리 감쇠(atten: 클수록 가까이서만 끌림. 작을수록 멀리서도 방송이 들림).
   const PROP_STIMULUS: Record<string, { radius: number; atten: number; stir: Partial<Record<Drive, number>> }> = {
-    chair:        { radius: 0.9,  atten: 1.4, stir: { rest: 0.8, observe: 0.2 } },              // 가까이서만
+    chair:        { radius: 0.9,  atten: 1.4, stir: { observe: 0.6, wonder: 0.2 } },            // BUILD 387: 앉기 폐기 — 관찰 대상으로만(다가가 보되 안 앉음)
     book:         { radius: 0.9,  atten: 1.6, stir: { observe: 0.6, record: 0.7, rest: 0.3 } }, // 책은 가까이서만 방송
     'rock-small': { radius: 0.85, atten: 1.5, stir: { observe: 0.7, wonder: 0.3 } },
     'rock-big':   { radius: 0.9,  atten: 1.0, stir: { wonder: 0.6, observe: 0.4, rest: 0.2 } }, // 큰 바위는 좀 멀리서도

@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.37.0 · BUILD 386 · 강제 체류 슬라이더 폐기 — 소품없어도 별이 성향(관찰욕구)으로 스스로 멈추고 논다. camp 제거';
+const BUILD_LABEL = 'v2.38.0 · BUILD 387 · 의자 앉기 완전 폐기(관찰만) + 기본 음량 상향(1.6)';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

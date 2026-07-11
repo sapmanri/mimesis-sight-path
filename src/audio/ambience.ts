@@ -76,7 +76,7 @@ function createAmbience() {
       if (!AC) return false;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = muted ? 0 : 1;
+      master.gain.value = muted ? 0 : 1.6; // BUILD 387: 기본 음량 상향(1→1.6). 너무 낮다는 피드백
       master.connect(ctx.destination);
 
       // 공용 노이즈 원료 — 2초 화이트노이즈 루프. 모든 레이어가 여기서 갈라진다.
@@ -530,7 +530,7 @@ function createAmbience() {
     unlock() { installGestureUnlock(); wake(); },
     setMuted(m: boolean) {
       muted = m;
-      if (ctx && master) master.gain.setTargetAtTime(m ? 0 : 1, ctx.currentTime, 0.25);
+      if (ctx && master) master.gain.setTargetAtTime(m ? 0 : 1.6, ctx.currentTime, 0.25); // BUILD 387: 해제 시 1.6
     },
     muted: () => muted,
   };
