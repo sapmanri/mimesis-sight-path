@@ -1097,11 +1097,54 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const campProtoRef = useRef<{ fire: THREE.Group | null; tent: THREE.Group | null } | null>(null);
   const roamRef = useRef<{ d: THREE.Vector3; T: THREE.Vector3 } | null>(null); // BUILD 219: 배회자의 현재 방향·진행
   useEffect(() => { roamRef.current = null; }, [built, spec.roam]);
+  // BUILD 370: 끌림(attraction) 첫 삽 — 오브젝트 인터페이스 계약의 최소 증명.
+  //   별이가 규칙표가 아니라 '끌림'으로 움직인다. 벤치 하나 놓고, 근처 가면 T가 벤치로 틀리고, 도착하면 앉는다.
+  //   결정 로직만 새로, 실행 배관(roamRef 구면 적분)은 그대로. 문제 시 ATTRACT_ON=false로 즉시 원복.
+  const ATTRACT_ON = true;
+  //   attractor: 구 표면 단위방향 d(어디에 있나) + name(추론의 씨앗) + action(선언층 어포던스) + 소환 여부.
+  const attractRef = useRef<{ d: THREE.Vector3; name: string; action: 'sit'; spawned: boolean; cooldown: number } | null>(null);
+  useEffect(() => {
+    // 별이 출발점(curve 시작) 근처, 진행방향으로 살짝 앞에 벤치를 놓는다 — 첫 로드에서 바로 눈에 띄게.
+    if (!built || !ATTRACT_ON) { attractRef.current = null; return; }
+    const d0 = built.curve.getPointAt(0, new THREE.Vector3()).normalize();
+    const t0 = built.curve.getTangentAt(0, new THREE.Vector3());
+    t0.addScaledVector(d0, -t0.dot(d0)).normalize();
+    // 출발 방향으로 구면을 따라 ~2.2rad*(작게) 앞. 살짝만 떨어뜨려 걸어갈 여지를 준다.
+    const benchD = d0.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3().crossVectors(d0, t0).normalize(), 0.22)).normalize();
+    attractRef.current = { d: benchD, name: 'bench', action: 'sit', spawned: false, cooldown: 0 };
+  }, [built]);
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
     v: new THREE.Vector3(),
   }), []);
+  // BUILD 370: 끌림 벤치를 구 표면에 세운다(단순 박스 — 별이가 무엇을 향해 가는지 눈에 보이게).
+  //   확정 자산 아님. 첫 삽 증명용. 나중에 정식 소품(props/)으로 교체.
+  const spawnBench = () => {
+    const A = attractRef.current;
+    if (!built || !A || A.spawned) return;
+    const grp = new THREE.Group();
+    grp.name = 'attractBench';
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.22), new THREE.MeshStandardMaterial({ color: '#8A6A4A', roughness: 0.85 }));
+    seat.position.y = 0.16;
+    const legGeo = new THREE.BoxGeometry(0.05, 0.16, 0.05);
+    const legMat = new THREE.MeshStandardMaterial({ color: '#6b5238', roughness: 0.9 });
+    for (const [lx, lz] of [[-0.2, -0.08], [0.2, -0.08], [-0.2, 0.08], [0.2, 0.08]] as const) {
+      const leg = new THREE.Mesh(legGeo, legMat); leg.position.set(lx, 0.08, lz); grp.add(leg);
+    }
+    grp.add(seat);
+    grp.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) (Array.isArray(m.material) ? m.material : [m.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial)); });
+    // 벤치를 attractor 방향 d의 지표에 세운다(지표 법선 기저).
+    const pd = A.d.clone().normalize();
+    grp.position.copy(pd).multiplyScalar(built.surfaceR(pd));
+    const oUp = pd.clone();
+    const ref = Math.abs(oUp.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const oFwd = new THREE.Vector3().crossVectors(ref, oUp).normalize();
+    const oRight = new THREE.Vector3().crossVectors(oFwd, oUp).normalize();
+    grp.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(oRight, oUp, oFwd.clone().multiplyScalar(-1)));
+    built.planet.add(grp);
+    A.spawned = true;
+  };
   // BUILD 263: 캠프 소환/해제 — 캐릭터 옆에 모닥불+텐트를 폽하고, 시간 지나면 접는다
   const spawnCamp = () => {
     if (!built || campSetRef.current || !campProtoRef.current) return;
@@ -1161,6 +1204,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const dt = Math.min(0.05, rawDt); // 헌법 3조
     const SP = specRef.current;
     const P = walk.current;
+    if (ATTRACT_ON && attractRef.current && !attractRef.current.spawned) spawnBench(); // BUILD 370: 끌림 벤치 1회 소환
     P.cooldown = Math.max(0, P.cooldown - dt);
     P.memCooldown = Math.max(0, P.memCooldown - dt);
     let moving = true;
@@ -1382,6 +1426,36 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         roamRef.current = { d: d0, T: t0 };
       }
       const RM = roamRef.current;
+      // BUILD 370: 끌림 — 벤치가 반경 안에 있으면 진행방향 T를 벤치 쪽으로 부드럽게 튼다.
+      //   규칙표 대신 끌림으로 움직이는 첫 증명. 배관(아래 구면 적분)은 그대로 두고 '어디로'만 바꾼다.
+      const A = attractRef.current;
+      if (ATTRACT_ON && A && A.spawned && P.phase === 'walk' && MV.mode === 'walk') {
+        A.cooldown = Math.max(0, A.cooldown - dt);
+        // 별이 현재 방향 RM.d 와 벤치 방향 A.d 사이 각(구면 거리).
+        const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(A.d), -1, 1));
+        const RADIUS = 0.9;   // 이 각 안에 들면 끌림 발동(구면 라디안)
+        const ARRIVE = 0.12;  // 이보다 가까우면 '도착'
+        if (A.cooldown <= 0 && ang < RADIUS && moving) {
+          if (ang < ARRIVE) {
+            // 도착 — 멈춰서 앉는다. 별이가 '끌려서' 앉은 첫 순간.
+            P.phase = 'linger';
+            P.lingerLeft = 1;
+            P.gap = 0.4;
+            P.timer = 0;
+            P.jumpTo = -1;
+            A.cooldown = 14; // 방금 이 벤치에 앉았으니 잠시 다시 안 끌림(오브젝트 단위 쿨다운)
+            rigRef.current?.playInspect('sit');
+            if (Math.random() < 0.4) byeoliShot('mood'); // 앉는 순간 가끔 촬영(자유 철학: 찍기는 항상 가능)
+          } else {
+            // 접근 — T를 벤치 방향으로 슬며시 튼다. 목표 접선 = A.d를 향한 구면 방향.
+            const toTarget = v.copy(A.d).addScaledVector(RM.d, -A.d.dot(RM.d)).normalize();
+            // 가까울수록 강하게 끌린다(1 - ang/RADIUS). wander보다 우위지만 부드럽게.
+            const pull = (1 - ang / RADIUS) * 2.2 * dt;
+            RM.T.lerp(toTarget, THREE.MathUtils.clamp(pull, 0, 0.5)).normalize();
+            RM.T.addScaledVector(RM.d, -RM.T.dot(RM.d)).normalize();
+          }
+        }
+      }
       if (moving) {
         // 마음의 바람 — 진행방향이 천천히 흔들린다
         RM.T.applyQuaternion(Q.setFromAxisAngle(RM.d, wanderNoise(state.clock.elapsedTime * 0.16) * 0.5 * dt));

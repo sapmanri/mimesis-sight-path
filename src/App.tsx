@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.19.0 · 지역 뷰어 전체화면 + UI 겹침 정리 · BUILD 369 · 행성에 촬영 안무 이식(메인 무대)';
+const BUILD_LABEL = 'v2.20.0 · BUILD 370 · 끌림 첫 삽 — 별이가 규칙표 대신 끌림으로 움직인다(행성 벤치 다가가 앉기)';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
