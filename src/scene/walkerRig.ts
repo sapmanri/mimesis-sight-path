@@ -430,8 +430,13 @@ export function createClipRig(
       }
       if (isSit && sitIdle) {
         const seatIdle = sittingOnChair && sitChairIdle ? sitChairIdle : (wantGround && sitIdleFloor ? sitIdleFloor : sitIdle); // 의자/바닥 구분
-        if (sitDown) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
-        else { gesture = 'sit'; switchTo(seatIdle, 0.55); } // 전환 클립이 없으면 느린 페이드로
+        // BUILD 379/380: 바닥 앉기 전환. StandToSit(의자 전환)을 쓰면 의자 높이에 앉았다 툭 떨어진다.
+        //   BUILD 380에서 Sit_Floor_Down(Kneeling 기반)·Sit_Floor_StandUp(Standing 기반) 병합 → 이제 바닥도 정상 전환.
+        //   전환 모션 없으면(폴백) 느린 페이드로 스르륵.
+        const hasFloorDown = clipByName.has('Sit_Floor_Down');
+        const useSitDown = sitDown && (!wantGround || hasFloorDown);
+        if (useSitDown) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
+        else { gesture = 'sit'; switchTo(seatIdle, wantGround ? 0.8 : 0.55); } // 전환 없을 때만 느린 페이드
       } else if (pickup) { gesture = 'pickup'; switchTo(pickup, 0.3); }
       else if (sitIdle) { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 들여다보기가 없으면 앉는다
     },

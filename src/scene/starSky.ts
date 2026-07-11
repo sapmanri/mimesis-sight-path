@@ -175,7 +175,7 @@ export function createStarSky(scene: THREE.Scene, camera: THREE.Camera, onShoot?
         if (st.on) {
           if (ev.cycle !== shootCycle) {
             shootCycle = ev.cycle;
-            onShoot?.();
+            if (Math.random() < 0.25) onShoot?.(); // BUILD 377: 별똥별 연출은 매번, 기록은 25%만(기록 도배 방지)
             const az = ev.rng() * Math.PI * 2;
             const el0 = 0.35 + ev.rng() * 0.85;
             shootFrom.set(Math.cos(az) * Math.cos(el0), Math.sin(el0), Math.sin(az) * Math.cos(el0)).multiplyScalar(1600);

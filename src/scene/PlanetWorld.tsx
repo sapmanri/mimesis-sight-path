@@ -414,29 +414,41 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   // BUILD 372: 콤보 토큰 하나 실행 → rig 동작으로 번역, 이 동작이 차지할 시간(초) 반환.
   //   시퀀서가 이 시간을 타이머로 써서 끝나면 다음 토큰으로 넘어간다.
-  // BUILD 376: 콤보 토큰 → 실제 클립 정밀 매칭. 'sit 하나'로 뭉개지 않는다 — 상황마다 맞는 포즈.
-  //   앉기: sit(의자)·sitground(바닥). 관찰: 여러 Look/Kneel 클립을 상황·랜덤으로. rig 58클립을 제대로 쓴다.
-  const OBSERVE_CLIPS = ['LookAround', 'LookAround2', 'LookDown', 'KneelDown', 'Kneel']; // 들여다보기/쭈그려 살피기
-  const LOOK_UP_CLIPS = ['LookAround', 'LookBehind', 'LookShoulder', 'KneelPoint', 'Pointing']; // 올려다보기/저기!
-  const runComboToken = (tok: ComboToken, targetId?: string): number => {
+  // BUILD 378: 토큰 실행 → { dur: 이 동작 체류시간, sustained: 지속자세(앉기·기대기 — 끝날 때 일어서기 필요)인지 }
+  const OBSERVE_CLIPS = ['LookAround', 'LookAround2', 'LookDown', 'KneelDown', 'Kneel'];
+  const LOOK_UP_CLIPS = ['LookAround', 'LookBehind', 'LookShoulder', 'KneelPoint', 'Pointing'];
+  const runComboToken = (tok: ComboToken, targetId?: string): { dur: number; sustained: boolean } => {
     const rig = rigRef.current;
-    if (!rig) return 0.6;
+    if (!rig) return { dur: 0.6, sustained: false };
     const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
     switch (tok) {
-      case 'observe': { const d = rig.playAction?.(pick(OBSERVE_CLIPS), 1) ?? 0; return d > 0 ? d + 0.3 : 2.2; } // 살펴보기(여러 포즈)
-      case 'look': { const d = rig.playAction?.(pick(LOOK_UP_CLIPS), 1) ?? 0; return d > 0 ? d + 0.3 : 2.0; } // 올려다보기/가리키기
+      case 'observe': { const d = rig.playAction?.(pick(OBSERVE_CLIPS), 1) ?? 0; return { dur: d > 0 ? d + 0.3 : 2.2, sustained: false }; }
+      case 'look': { const d = rig.playAction?.(pick(LOOK_UP_CLIPS), 1) ?? 0; return { dur: d > 0 ? d + 0.3 : 2.0, sustained: false }; }
       case 'sit': {
-        // 의자 앉기 — rig가 자기 의자를 정확히 깔고 앉는다. Vase 의자 소품은 앉는 동안 숨김(겹침 방지).
+        // 의자 앉기 — rig가 자기 의자를 정확히 깔고 앉는다. Vase 의자 소품은 숨김(겹침 방지). 오래 머문다.
         if (targetId) { const rec = propMap.current.get(targetId); if (rec) rec.anchor.visible = false; }
-        rig.playInspect?.('sit'); return 3.5 + Math.random() * 2.5;
+        rig.playInspect?.('sit'); return { dur: 6.0 + Math.random() * 4.0, sustained: true }; // 6~10초 앉아 머문다
       }
-      case 'sitground': rig.playInspect?.('sitGround'); return 3.0 + Math.random() * 2.0; // 바닥 앉기 — 의자 안 꺼냄, 소품 안 숨김
-      case 'write': { const d = rig.playAction?.('Writing', 1) ?? 0; return d > 0 ? d + 0.3 : 2.5; } // 적기
-      case 'shot': byeoliShot('mood'); return 3.2 + Math.random() * 0.8; // 사진(SitCamera 안무)
-      case 'lean': { const d = rig.playAction?.(Math.random() < 0.5 ? 'Leaning' : 'LeaningWall', 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 기대기
-      case 'search': { const d = rig.playAction?.('LookingFiles', 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 뒤적여 찾기
-      case 'stand': rig.stopInspect?.(); return 0.5; // 일어나 걷기 복귀
-      default: return 0.6;
+      case 'sitground': rig.playInspect?.('sitGround'); return { dur: 5.0 + Math.random() * 4.0, sustained: true }; // 5~9초 바닥에 앉아 머문다
+      case 'write': { const d = rig.playAction?.('Writing', 1) ?? 0; return { dur: d > 0 ? d + 0.3 : 2.5, sustained: false }; }
+      case 'shot': byeoliShot('mood'); return { dur: 3.2 + Math.random() * 0.8, sustained: false };
+      case 'lean': { const d = rig.playAction?.(Math.random() < 0.5 ? 'Leaning' : 'LeaningWall', 1) ?? 0; return { dur: (d > 0 ? d : 3.0) + 2.0 + Math.random() * 2.0, sustained: true }; } // 기대어 오래 머문다
+      case 'search': { const d = rig.playAction?.('LookingFiles', 1) ?? 0; return { dur: d > 0 ? d + 0.3 : 3.0, sustained: false }; }
+      case 'stand': rig.stopInspect?.(); return { dur: 0.5, sustained: false };
+      default: return { dur: 0.6, sustained: false };
+    }
+  };
+  // 다음 토큰 진행. 큐가 비거나 stand면 콤보 종료(일어서기+걷기 복귀).
+  const advanceCombo = (T2: NonNullable<typeof attractTarget.current>) => {
+    const next = T2.queue.shift();
+    if (next && next !== 'stand') {
+      const r = runComboToken(next, T2.id);
+      T2.step = r.dur;
+      T2.wasSustained = r.sustained;
+    } else {
+      rigRef.current?.stopInspect?.(); // 콤보 끝 → 마지막 일어서기
+      T2.standing = true;
+      T2.step = 1.2;
     }
   };
   const rainInAt = useRef(0);
@@ -445,10 +457,12 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const gullSeen = useRef(false);
   const emit = (kind: PlanetEventKind, data?: PlanetEvent['data']) => {
     onEventRef.current?.({ kind, data, t: performance.now() });
-    // BUILD 245: 재미난 이벤트엔 가끔 머리 위 말풍선 (매번은 수다스럽다)
+    // BUILD 377: 머리 위 말풍선. 별똥별·달은 너무 자주 발생 → 말풍선 확률을 확 낮춰(도배 방지),
+    //   드문 이벤트(나라·갈매기·비행기·배)는 떴을 때 잘 보이게 높게. 아이콘 풀은 원래 다양했다(빈도 쏠림이 문제였음).
     const BUBBLE: Partial<Record<PlanetEventKind, string>> = { flag: '🚩', shooting_star: '🌠', plane: '✈️', ship: '⛵', gull: '🕊', moon_phase: '🌙', ride_start: '☁️' };
+    const BUBBLE_CHANCE: Partial<Record<PlanetEventKind, number>> = { shooting_star: 0.06, moon_phase: 0.05 }; // 자주 뜨는 것만 낮게
     const ic = BUBBLE[kind];
-    if (ic && Math.random() < 0.35) speak(ic, 0.9 + Math.random() * 0.3);
+    if (ic && Math.random() < (BUBBLE_CHANCE[kind] ?? 0.5)) speak(ic, 0.9 + Math.random() * 0.3);
   };
 
   // 무거운 다이얼만 재건축을 부른다
@@ -1178,7 +1192,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   const attractCooldown = useRef(new Map<string, number>()); // 소품 id별 쿨다운(방금 상호작용한 것 잠시 억제)
   // BUILD 372: 콤보 목표 — 도착하면 콤보 하나를 순차 실행. queue=남은 동작, step=현재 동작 남은 시간(초).
-  const attractTarget = useRef<{ d: THREE.Vector3; id: string; radius: number; queue: ComboToken[]; step: number; arrived: boolean; standing: boolean } | null>(null);
+  const attractTarget = useRef<{ d: THREE.Vector3; id: string; radius: number; queue: ComboToken[]; step: number; arrived: boolean; standing: boolean; rising: boolean; wasSustained: boolean } | null>(null);
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
@@ -1496,7 +1510,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             let r = Math.random() * total; let pick = cands[0];
             for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
             const combo = pick.combos[Math.floor(Math.random() * pick.combos.length)].slice();
-            attractTarget.current = { d: pick.d, id: pick.id, radius: pick.radius, queue: combo, step: 0, arrived: false, standing: false };
+            attractTarget.current = { d: pick.d, id: pick.id, radius: pick.radius, queue: combo, step: 0, arrived: false, standing: false, rising: false, wasSustained: false };
           }
         } else {
           const stillValid = SP.props.some((pr) => pr.id === T2.id);
@@ -1507,8 +1521,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
               // 도착 — 콤보 시작. phase는 walk 유지(★버그 수정). 이동만 멈춘다(moving=false).
               T2.arrived = true;
               const first = T2.queue.shift();
-              T2.step = first ? runComboToken(first, T2.id) : 0;
-              // 쿨다운은 콤보 '끝날 때' 건다([B] standing). 도착 시점에 걸면 긴 콤보 도는 중 풀려 재선택→반복.
+              if (first) { const r = runComboToken(first, T2.id); T2.step = r.dur; T2.wasSustained = r.sustained; }
+              else { T2.step = 0; T2.wasSustained = false; }
+              // 쿨다운은 콤보 '끝날 때' 건다([B]). 도착 시점에 걸면 긴 콤보 중 풀려 재선택→반복.
             } else if (moving) {
               // 접근 — 진행방향 T를 목표로 슬며시 튼다.
               const toTarget = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d)).normalize();
@@ -1520,29 +1535,33 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         }
       }
       // [B] 콤보 진행 — 도착한 목표가 있으면 phase 무관하게 매 프레임. 이동 정지.
-      //   ★ 붙잡힘 버그(BUILD 375): 이전엔 !inspecting()을 기다렸는데, 앉기/들여다보기는 스스로 안 끝나
-      //     (inspecting이 계속 true) → 영원히 다음 토큰으로 못 감 = 붙박임. 이제 순수 타이머로 진행하고,
-      //     다음 토큰 실행 직전에 현재 동작을 명시적으로 정리(stopInspect)해 겹침을 막는다.
+      //   ★ BUILD 378: '앉았다 바로 일어남' 해결. 지속자세(앉기·기대기)는 step 시간만큼 확실히 머무른 뒤,
+      //     일어서기(rising) 단계를 따로 거쳐 다음 토큰과 겹치지 않게 한다. 매 토큰 stopInspect 남발 제거.
       if (ATTRACT_ON && T2 && T2.arrived) {
         moving = false; // 콤보 도는 동안 별이는 제자리(장면을 편다)
         T2.step -= dt;
         if (T2.standing) {
-          // 종료 대기 — 물러나기 시작 후 짧은 여유(step)만큼 기다렸다 걷기(미끄러짐 방지).
+          // 콤보 전체 종료 대기 — 마지막 일어서기 완료 후 걷기.
           if (T2.step <= 0) {
             const rec = propMap.current.get(T2.id); if (rec) rec.anchor.visible = true; // 숨겼던 의자 복원
-            attractCooldown.current.set(T2.id, 25); // ★콤보 '끝난 시점'에 쿨다운 — 방금 논 소품에 즉시 안 끌림(반복 방지)
+            attractCooldown.current.set(T2.id, 25); // 방금 논 소품 25초 억제(반복 방지)
             attractTarget.current = null;
           }
+        } else if (T2.rising) {
+          // 일어서는 중 — 이 시간이 끝나야 다음 토큰. (앉기→다음 사이 겹침 방지)
+          if (T2.step <= 0) {
+            T2.rising = false;
+            advanceCombo(T2); // 다음 토큰으로
+          }
         } else if (T2.step <= 0) {
-          // 현재 동작 종료(앉기/들여다보기 등은 스스로 안 끝나므로 명시적으로 정리) 후 다음 토큰.
-          rigRef.current?.stopInspect?.();
-          const next = T2.queue.shift();
-          if (next && next !== 'stand') {
-            T2.step = runComboToken(next, T2.id);
+          // 현재 동작의 체류 시간이 끝났다. 지속자세(앉기·기대기)였으면 일어서기 단계를 거친다.
+          if (T2.wasSustained) {
+            rigRef.current?.stopInspect?.(); // 일어서기 시작
+            T2.wasSustained = false;
+            T2.rising = true;
+            T2.step = 1.1; // 일어서는 데 걸리는 시간(그동안 다음 토큰 안 함)
           } else {
-            rigRef.current?.stopInspect?.(); // 콤보 끝 → 물러나기(일어서기) 시작
-            T2.standing = true;
-            T2.step = 1.2; // 일어서는 동작 여유
+            advanceCombo(T2); // 순간동작(관찰·적기 등)은 바로 다음
           }
         }
       }
@@ -1835,7 +1854,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     {
       const dot = MOON_SUN.dot(built.moon.position.clone().sub(PLANET_CENTER).normalize());
       const ph = dot < -0.5 ? 'full' : dot > 0.5 ? 'new' : (spinAng.current % (Math.PI * 2)) < Math.PI ? 'waxing' : 'waning';
-      if (ph !== lastPhase.current) { lastPhase.current = ph; emit('moon_phase', { phase: ph }); }
+      if (ph !== lastPhase.current) { lastPhase.current = ph; if (Math.random() < 0.3) emit('moon_phase', { phase: ph }); } // BUILD 377: 위상 전이가 잦아 기록 도배 → 30%만 기록
     }
     if (dirLightRef.current) {
       dirLightRef.current.position.copy(v).multiplyScalar(20);
