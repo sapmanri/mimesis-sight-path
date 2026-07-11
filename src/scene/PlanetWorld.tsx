@@ -21,6 +21,7 @@ import type { PlanetSpec, PlanetMemory, PlanetContact, PlanetApi, PlanetProp } f
 import type { MutableRefObject } from 'react';
 import { createPropObject } from '../engine/props';
 import { loadHandLanternAsset } from '../engine/props';
+import { loadHeldDeviceAsset } from './heldDevices';
 import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
 import { beginRising, beginStanding, createEncounter, shouldEndEncounter, type ByeoliEncounter } from './byeoliEncounter';
 
@@ -382,6 +383,21 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const onByeoliCaptureRef = useRef(onByeoliCapture);
   onByeoliCaptureRef.current = onByeoliCapture;
   const byeoliShotAt = useRef(0);
+  const heldCameraRef = useRef<THREE.Group | null>(null);
+  const heldPhoneRef = useRef<THREE.Group | null>(null);
+  const heldDeviceTimer = useRef<number | null>(null);
+  const showHeldDevice = (kind: 'camera' | 'phone', durationSec: number) => {
+    const cameraProp = heldCameraRef.current;
+    const phoneProp = heldPhoneRef.current;
+    if (cameraProp) cameraProp.visible = kind === 'camera';
+    if (phoneProp) phoneProp.visible = kind === 'phone';
+    if (heldDeviceTimer.current !== null) window.clearTimeout(heldDeviceTimer.current);
+    heldDeviceTimer.current = window.setTimeout(() => {
+      if (cameraProp) cameraProp.visible = false;
+      if (phoneProp) phoneProp.visible = false;
+      heldDeviceTimer.current = null;
+    }, Math.max(700, durationSec * 1000 + 250));
+  };
   // BUILD 369: 셔터음 — 행성에도(별이 코어와 동일). 짧은 SFX라 HTMLAudio.
   const shutterRef = useRef<HTMLAudioElement | null>(null);
   if (typeof Audio !== 'undefined' && !shutterRef.current) {
@@ -403,6 +419,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     byeoliShotAt.current = now;
     const repeats = 1 + Math.floor(Math.random() * 3); // 1~3회
     const totalSec = rigRef.current?.playAction?.('SitCamera', repeats) ?? 0;
+    if (totalSec > 0) showHeldDevice('camera', totalSec);
     const shutterAt = Math.max(800, totalSec * 1000 * 0.78);
     window.setTimeout(() => {
       playShutter();
@@ -428,7 +445,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   const doRecord = (): { dur: number; sustained: boolean } => {
     const rig = rigRef.current; if (!rig) return { dur: 0.6, sustained: false };
-    const d = rig.playAction?.('Writing', 1) ?? 0; return { dur: d > 0 ? d + 0.3 : 2.5, sustained: false };
+    const d = rig.playAction?.('Writing', 1) ?? 0;
+    if (d > 0) showHeldDevice('phone', d);
+    return { dur: d > 0 ? d + 0.3 : 2.5, sustained: false };
   };
   const doWonder = (): { dur: number; sustained: boolean } => {
     const rig = rigRef.current; if (!rig) return { dur: 0.6, sustained: false };
@@ -851,6 +870,37 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         ?? createWalkerRig(group, animations, 0.72);
       // BUILD 387: 의자 앉기 폐기 — rig에 의자 자산 세팅 안 함. 앉기는 바닥 앉기(sitGround)만.
       //   (의자 소환 방식이 계속 뺑뺑이 유발 → 통째로 걷어냄. 훗날 필요하면 위치정합부터 처음 설계.)
+      // BUILD 392: 사진/글쓰기 동작의 빈손 해결 — 오른손 뼈에 카메라·휴대폰을 미리 달고, 해당 동작 중에만 보인다.
+      let deviceHand: THREE.Object3D | null = null;
+      group.traverse((n) => { if ((n as THREE.Bone).isBone && /RightHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
+      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
+      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /hand/i.test(n.name) && !deviceHand) deviceHand = n; });
+      if (deviceHand) {
+        const h = deviceHand as THREE.Object3D;
+        group.updateMatrixWorld(true);
+        const ws = new THREE.Vector3(); h.getWorldScale(ws);
+        const mountDevice = (kind: 'camera' | 'phone') => {
+          const wrapper = new THREE.Group();
+          wrapper.scale.setScalar(1 / Math.max(ws.x, 1e-6));
+          wrapper.visible = false;
+          h.add(wrapper);
+          if (kind === 'camera') {
+            wrapper.position.set(0.015, -0.035, -0.035);
+            wrapper.rotation.set(Math.PI / 2, 0, Math.PI);
+            heldCameraRef.current = wrapper;
+          } else {
+            wrapper.position.set(0.01, -0.025, -0.02);
+            wrapper.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+            heldPhoneRef.current = wrapper;
+          }
+          void loadHeldDeviceAsset(kind).then((device) => {
+            if (!alive) return;
+            wrapper.add(device);
+          }).catch(() => { /* 소품이 없으면 동작만 유지 */ });
+        };
+        mountDevice('camera');
+        mountDevice('phone');
+      }
       // BUILD 258: 밤 랜턴 — 본토 방식(손 뼈 진자 매달기)을 행성 캐릭터에 이식. 랜덤으로 이 산책자가 든다.
       if (lanternOnRef.current) {
         let hand: THREE.Object3D | null = null;
@@ -874,7 +924,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         }
       }
     }).catch(() => { /* 조용한 행성 */ });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+      if (heldDeviceTimer.current !== null) window.clearTimeout(heldDeviceTimer.current);
+      heldDeviceTimer.current = null;
+      heldCameraRef.current = null;
+      heldPhoneRef.current = null;
+    };
   }, [holder, walkerIdx]);
 
   // BUILD 224: 반려 — 그녀 뒤를 종종종 따라오는 작은 식구

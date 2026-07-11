@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.42.0 · BUILD 391 · 만남 상태기 분리 1단계 — 생성/종료/일어서기 전환을 독립 모듈로';
+const BUILD_LABEL = 'v2.43.0 · BUILD 392 · 사진/글쓰기 빈손 해결 — 카메라·휴대폰 손 부착';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
