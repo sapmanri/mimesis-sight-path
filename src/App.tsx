@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.19.0 · 지역 뷰어 전체화면 + UI 겹침 정리 · BUILD 364 · 의자 앉기(SitChair) 부활';
+const BUILD_LABEL = 'v2.19.0 · 지역 뷰어 전체화면 + UI 겹침 정리 · BUILD 365 · 동작 완주 후 걷기(미끄러짐 제거)';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

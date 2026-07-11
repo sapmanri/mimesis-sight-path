@@ -80,7 +80,10 @@ export function makeByeoliBrain(host: BrainHost) {
             }
           }
         }
-        if (!stage?.isActive() && L.left <= 0 && L.gap <= 0) {
+        // BUILD 365: 걷기로 넘어가기 전, 리그의 동작(flourish 등)이 실제로 끝났는지 확인한다.
+        //   gap은 크로스페이드용으로 클립보다 0.35초 짧게 잡혀(위) 다음이 flourish면 자연스럽지만,
+        //   다음이 '걷기'면 그 잔여 시간에 동작한 채 미끄러진다. 동작을 끝까지 마치고 걷게 한다.
+        if (!stage?.isActive() && L.left <= 0 && L.gap <= 0 && !host.rig()?.inspecting?.()) {
           phase = 'walk';
           L.walkLeft = lingerEvery; // 정확히 이 초만큼 걷는다
         }
