@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.38.0 · BUILD 387 · 의자 앉기 완전 폐기(관찰만) + 기본 음량 상향(1.6)';
+const BUILD_LABEL = 'v2.41.0 · BUILD 390 · 목적지도 욕구로 선택 — 거리 + 현재 성향/욕구 공명';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
