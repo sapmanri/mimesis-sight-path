@@ -15,114 +15,46 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - name: Patch observation journal
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
+
           p = Path('src/App.tsx')
           s = p.read_text()
 
-          old = "const BUILD_LABEL = 'v2.44.0 · BUILD 393 · 관찰자 나레이션 — 별이의 생각과 행동을 조용히 기록';"
-          new = "const BUILD_LABEL = 'v2.45.0 · BUILD 394 · 별이의 관찰일기 — 문장이 사각사각 써지고 오래된 기록은 흐려짐';"
-          assert old in s, 'build label not found'
-          s = s.replace(old, new, 1)
+          s = s.replace(
+            "import { TouchTrail } from './components/TouchTrail';",
+            "import { TouchTrail } from './components/TouchTrail';\nimport { ObservationJournal, type ByeoliJournalEntry } from './components/ObservationJournal';",
+            1,
+          )
+          s = s.replace(
+            "const BUILD_LABEL = 'v2.44.0 · BUILD 393 · 관찰자 나레이션 — 별이의 생각과 행동을 조용히 기록';",
+            "const BUILD_LABEL = 'v2.45.0 · BUILD 394 · 별이의 관찰일기 — 문장이 사각사각 써지고 오래된 기록은 흐려짐';",
+            1,
+          )
+          old_state = """  // BUILD 393: 실제 상태 전환에 근거한 제3자 관찰자 나레이션.
+          const [byeoliNarration, setByeoliNarration] = useState({ text: '별이는 천천히 주변을 살피며 걷고 있다.', key: 0 });
+          const onByeoliNarration = (text: string) => setByeoliNarration({ text, key: Date.now() });"""
+          new_state = """  // BUILD 394: 티커가 아니라 누적되는 관찰일기. 최근 기록은 또박또박 써지고 오래된 줄은 희미해진다.
+          const [byeoliJournal, setByeoliJournal] = useState<ByeoliJournalEntry[]>([
+            { id: 1, text: '별이는 천천히 주변을 살피며 걷고 있다.', at: Date.now() },
+          ]);
+          const onByeoliNarration = (text: string) => setByeoliJournal((prev) => {
+            if (prev[prev.length - 1]?.text === text) return prev;
+            return [...prev, { id: Date.now(), text, at: Date.now() }].slice(-12);
+          });"""
+          if old_state not in s:
+            raise SystemExit('journal state anchor not found')
+          s = s.replace(old_state, new_state, 1)
 
-          anchor = new + "\n"
-          component = r'''
-
-          type ByeoliJournalEntry = { id: number; text: string; at: number };
-
-          function ObservationJournal({ entries }: { entries: ByeoliJournalEntry[] }) {
-            const newest = entries[entries.length - 1];
-            const [typed, setTyped] = useState(newest?.text ?? '별이는 천천히 주변을 살피며 걷고 있다.');
-            const audioRef = useRef<AudioContext | null>(null);
-
-            useEffect(() => {
-              if (!newest) return;
-              setTyped('');
-              let i = 0;
-              const timer = window.setInterval(() => {
-                i += 1;
-                setTyped(newest.text.slice(0, i));
-                if (i % 3 === 0) {
-                  try {
-                    const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-                    if (AudioCtx) {
-                      const ctx = audioRef.current ?? new AudioCtx();
-                      audioRef.current = ctx;
-                      const len = Math.max(1, Math.floor(ctx.sampleRate * 0.025));
-                      const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
-                      const data = buffer.getChannelData(0);
-                      for (let n = 0; n < len; n += 1) data[n] = (Math.random() * 2 - 1) * (1 - n / len);
-                      const src = ctx.createBufferSource();
-                      const filter = ctx.createBiquadFilter();
-                      const gain = ctx.createGain();
-                      filter.type = 'bandpass'; filter.frequency.value = 1450; filter.Q.value = 0.7;
-                      gain.gain.value = 0.018;
-                      src.buffer = buffer; src.connect(filter); filter.connect(gain); gain.connect(ctx.destination); src.start();
-                    }
-                  } catch { /* 자동재생 정책이면 조용히 */ }
-                }
-                if (i >= newest.text.length) window.clearInterval(timer);
-              }, 42);
-              return () => window.clearInterval(timer);
-            }, [newest?.id]);
-
-            const visible = entries.slice(-4);
-            const date = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric' }).format(new Date());
-            return (
-              <div style={{
-                position: 'fixed', left: 18, bottom: 48, zIndex: 6,
-                width: 'min(360px, calc(100vw - 36px))', maxHeight: '42vh', overflow: 'hidden',
-                padding: '18px 20px 17px 28px', borderRadius: 10,
-                color: '#473f33', background: 'rgba(249,245,232,0.93)',
-                border: '1px solid rgba(115,94,60,0.24)', boxShadow: '0 12px 34px rgba(0,0,0,0.2)',
-                backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', pointerEvents: 'none',
-                backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 27px, rgba(113,139,159,0.16) 28px)',
-                fontFamily: "'Nanum Pen Script', 'Apple SD Gothic Neo', cursive",
-              }}>
-                <div style={{ position: 'absolute', left: 15, top: 0, bottom: 0, width: 1, background: 'rgba(201,99,99,0.25)' }} />
-                <div style={{ fontSize: 11, letterSpacing: 1.4, color: '#8a7658', marginBottom: 5 }}>{date}</div>
-                <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 10, letterSpacing: 0.4 }}>별이의 관찰일기</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  {visible.map((entry, idx) => {
-                    const isLatest = entry.id === newest?.id;
-                    const ageRank = visible.length - 1 - idx;
-                    const opacity = isLatest ? 1 : Math.max(0.22, 0.7 - ageRank * 0.18);
-                    return <div key={entry.id} style={{ fontSize: 15.5, lineHeight: '28px', opacity, transition: 'opacity 1.2s ease' }}>
-                      {isLatest ? typed : entry.text}
-                      {isLatest && typed.length < entry.text.length ? <span style={{ opacity: 0.45 }}>│</span> : null}
-                    </div>;
-                  })}
-                </div>
-              </div>
-            );
-          }
-          '''
-          s = s.replace(anchor, anchor + component, 1)
-
-          old = "  // BUILD 393: 실제 상태 전환에 근거한 제3자 관찰자 나레이션.\n  const [byeoliNarration, setByeoliNarration] = useState({ text: '별이는 천천히 주변을 살피며 걷고 있다.', key: 0 });\n  const onByeoliNarration = (text: string) => setByeoliNarration({ text, key: Date.now() });"
-          new = "  // BUILD 394: 티커가 아니라 누적되는 관찰일기. 최근 기록은 또박또박 써지고 오래된 줄은 희미해진다.\n  const [byeoliJournal, setByeoliJournal] = useState<ByeoliJournalEntry[]>([\n    { id: 1, text: '별이는 천천히 주변을 살피며 걷고 있다.', at: Date.now() },\n  ]);\n  const onByeoliNarration = (text: string) => setByeoliJournal((prev) => {\n    if (prev[prev.length - 1]?.text === text) return prev;\n    return [...prev, { id: Date.now(), text, at: Date.now() }].slice(-12);\n  });"
-          assert old in s, 'journal state anchor not found'
-          s = s.replace(old, new, 1)
-
-          old = r'''        <div key={byeoliNarration.key} style={{
-            position: 'fixed', left: '50%', bottom: 46, transform: 'translateX(-50%)', zIndex: 6,
-            width: 'min(620px, calc(100vw - 36px))', padding: '10px 18px 11px', borderRadius: 14,
-            color: '#f2eadb', background: 'rgba(18,24,26,0.68)', border: '1px solid rgba(216,178,110,0.25)',
-            boxShadow: '0 8px 30px rgba(0,0,0,0.18)', backdropFilter: 'blur(9px)', WebkitBackdropFilter: 'blur(9px)',
-            textAlign: 'center', pointerEvents: 'none', animation: 'byeoli-narration-in 0.55s ease-out',
-          }}>
-            <style>{'@keyframes byeoli-narration-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }'}</style>
-            <div style={{ fontSize: 9.5, letterSpacing: 2.2, color: '#d8b26e', opacity: 0.82, marginBottom: 4 }}>관찰자의 기록</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.55, letterSpacing: 0.15 }}>{byeoliNarration.text}</div>
-          </div>
-          '''
-          new = "        <ObservationJournal entries={byeoliJournal} />\n"
-          assert old in s, 'old narration card not found'
-          s = s.replace(old, new, 1)
+          pattern = re.compile(r"        <div key=\{byeoliNarration\.key\} style=\{\{.*?        </div>\n(?=        \{flagWhisper && \()", re.S)
+          s, n = pattern.subn("        <ObservationJournal entries={byeoliJournal} />\n", s, count=1)
+          if n != 1:
+            raise SystemExit(f'old narration card replacement count={n}')
 
           p.write_text(s)
           PY
