@@ -185,6 +185,9 @@ export function Byeoli({ host }: Props) {
       capture: (reason) => {
         const cb = hostRef.current.onCapture;
         if (!cb) return;
+        // BUILD 366: 사진 찍는 순간 카메라 드는 자세(SitCamera). 자세가 잡힌 뒤 셔터.
+        //   (최소 배선: 자세 재생 + 캡처. 소품·셔터음·안무 시퀀스는 다음 단계.)
+        rigRef.current?.playAction?.('SitCamera');
         const url = grab();
         if (url) cb(url, reason);
       },

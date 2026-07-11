@@ -36,6 +36,8 @@ export type WalkerRig = {
   flourish?: (mood?: string) => number;
   /** BUILD 283: 지정 클립을 반복(지속) 재생 — 한 바퀴 길이(초) 반환. 캠프/prop-act 지속 자세용 */
   playNamed?: (clipName: string) => number;
+  /** BUILD 366: 지정 클립을 한 번 재생하고 idle 복귀 (사진/글쓰기 등 원샷 시그니처) */
+  playAction?: (clipName: string) => number;
   /** BUILD 283: playNamed로 시작한 지속 자세를 접고 idle로 복귀 */
   stopNamed?: () => void;
   /** BUILD 146: 두리번 — 머리 뼈에 요 오프셋 (0이면 정면) */
@@ -295,10 +297,11 @@ export function createClipRig(
     current = a;
   };
 
-  type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp' | 'flourish' | 'named'; // BUILD 146 / 283
+  type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp' | 'flourish' | 'named' | 'action'; // BUILD 146 / 283 / 366
   let gesture: Gesture = 'none';
   let namedAction: THREE.AnimationAction | null = null; // BUILD 283: 지정 클립 지속재생(캠프/prop-act)
   let sittingOnChair = false; // BUILD 364: 이번 앉기가 의자 앉기(SitChair)인지 바닥 앉기(SitGround)인지
+  let actionAction: THREE.AnimationAction | null = null; // BUILD 366: 원샷 지정 재생(사진/글쓰기 등 별이 시그니처)
   let riding = false; // BUILD 136: 구름 위
   mixer.addEventListener('finished', (e) => {
     const a = (e as unknown as { action: THREE.AnimationAction }).action;
@@ -306,6 +309,7 @@ export function createClipRig(
     else if (a === standUp && gesture === 'standUp') { switchTo(idle, 0.3); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
     else if (a === pickup && gesture === 'pickup') { switchTo(idle, 0.4); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
     else if (gesture === 'flourish' && a === current && extras.includes(a)) { switchTo(idle, 0.35); gesture = 'none'; gestureGrace = 0.6; rollingMin = Infinity; } // BUILD 146 / 290: 갈아탄 옛 클립의 뒤늦은 finished는 무시
+    else if (gesture === 'action' && a === actionAction) { switchTo(idle, 0.4); gesture = 'none'; actionAction = null; gestureGrace = 0.6; rollingMin = Infinity; } // BUILD 366: 원샷 지정 재생 종료 → idle
   });
 
   // 걷기↔뛰기 전환 문턱: 두 고유속도의 기하평균 부근
@@ -369,6 +373,21 @@ export function createClipRig(
       gesture = 'flourish';
       switchTo(a, 0.3);
       return a.getClip().duration;
+    },
+    // BUILD 366: 원샷 지정 재생 — 사진 찍기(SitCamera)·글쓰기(Writing) 등 별이 시그니처 동작.
+    //   flourish(랜덤)와 달리 이름으로 콕 집어 한 번 재생하고 끝나면 idle 복귀. named(무한반복)와도 다름.
+    playAction(clipName: string) {
+      if (riding || gesture !== 'none') return 0;
+      const clip = clipByName.get(clipName);
+      if (!clip) return 0;
+      const a = mixer.clipAction(clip);
+      a.setLoop(THREE.LoopOnce, 1);
+      a.clampWhenFinished = true;
+      a.reset();
+      actionAction = a;
+      gesture = 'action';
+      switchTo(a, 0.3);
+      return clip.duration;
     },
     setLook(y: number) { lookYaw = y; },
     playInspect(kind = 'pickup') {
