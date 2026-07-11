@@ -10,16 +10,20 @@ import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec,
 import { PROP_CATALOG } from './engine/props';
 import { PET_ROSTER } from './engine/pets';
 
-// ---------- BUILD 207: 행성 에디터 — 다이얼 한 줄 ----------
+// ---------- BUILD 396: 모바일에서는 다이얼을 접어 화면을 되찾는다 ----------
 function Dial({ label, value, min, max, step, onChange, fmt }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; fmt?: (v: number) => string }) {
+  const [open, setOpen] = useState(() => window.innerWidth > 760);
   return (
-    <label style={{ display: 'block', margin: '7px 0', fontSize: 11, color: '#cfc9bb' }}>
-      <span style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span>{label}</span>
-        <span style={{ color: '#d8b26e' }}>{fmt ? fmt(value) : value}</span>
-      </span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: '100%' }} />
-    </label>
+    <div style={{ margin: '5px 0', fontSize: 11, color: '#cfc9bb', borderBottom: '1px solid rgba(255,255,255,0.045)', paddingBottom: open ? 7 : 3 }}>
+      <button type="button" onClick={() => setOpen((v) => !v)} style={{
+        width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+        padding: '7px 2px', border: 0, background: 'transparent', color: '#cfc9bb', cursor: 'pointer', textAlign: 'left',
+      }}>
+        <span><span style={{ display: 'inline-block', width: 15, color: '#8f9b94' }}>{open ? '▾' : '▸'}</span>{label}</span>
+        <span style={{ color: '#d8b26e', flexShrink: 0 }}>{fmt ? fmt(value) : value}</span>
+      </button>
+      {open && <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} style={{ width: '100%', touchAction: 'pan-y' }} />}
+    </div>
   );
 }
 const PANEL_BTN: React.CSSProperties = {
@@ -49,7 +53,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.46.0 · BUILD 395 · 관찰일기 + 손 소품/접근 거리 교정';
+const BUILD_LABEL = 'v2.47.0 · BUILD 396 · 모바일 에디터 접기 — 화면을 가리지 않는 슬라이더';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -89,6 +93,7 @@ export default function App() {
   // BUILD 207: &edit=1 — 행성 에디터. &draft=1 — 에디터의 초안을 그대로 걷는다.
   const [planetMode] = useState(() => new URLSearchParams(window.location.search).has('planet'));
   const [planetEdit] = useState(() => new URLSearchParams(window.location.search).has('edit'));
+  const [planetEditorOpen, setPlanetEditorOpen] = useState(() => window.innerWidth > 760); // BUILD 396: 모바일 기본 접힘
   // BUILD 285: ?theatre=1 — 그림자 극장(페러럴). &edit=1 — 극장 에디터.
   const [theatreMode] = useState(() => new URLSearchParams(window.location.search).has('theatre'));
   const [tSpec, setTSpec] = useState<TheatreSpec>(() => {
@@ -950,12 +955,21 @@ export default function App() {
           </div>
         )}
         {planetEdit && (
+          <button type="button" onClick={() => setPlanetEditorOpen((v) => !v)} aria-label={planetEditorOpen ? '에디터 접기' : '에디터 펼치기'} style={{
+            position: 'fixed', top: 76, right: planetEditorOpen ? 'min(312px, 84vw)' : 12, zIndex: 9,
+            width: 44, height: 44, borderRadius: 999, cursor: 'pointer', fontSize: 18,
+            color: '#e8dcc2', background: 'rgba(18,24,26,0.92)', border: '1px solid rgba(216,178,110,0.42)',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.24)', backdropFilter: 'blur(8px)',
+          }}>{planetEditorOpen ? '×' : '⚙️'}</button>
+        )}
+        {planetEdit && planetEditorOpen && (
           <aside style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0, width: 300, zIndex: 8, overflowY: 'auto',
+            position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(300px, 84vw)', zIndex: 8, overflowY: 'auto',
             background: 'rgba(18,24,26,0.94)', borderLeft: '1px solid rgba(216,178,110,0.25)',
-            padding: '14px 14px 40px', color: '#cfc9bb', backdropFilter: 'blur(10px)',
+            padding: '14px 14px calc(40px + env(safe-area-inset-bottom))', color: '#cfc9bb', backdropFilter: 'blur(10px)',
+            WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
           }}>
-            <div style={{ fontSize: 13, color: '#d8b26e', letterSpacing: 2, marginBottom: 10 }}>작은 행성 에디터</div>
+            <div style={{ position: 'sticky', top: -14, zIndex: 2, margin: '-14px -14px 8px', padding: '16px 58px 10px 14px', fontSize: 13, color: '#d8b26e', letterSpacing: 2, background: 'rgba(18,24,26,0.97)', borderBottom: '1px solid rgba(216,178,110,0.16)' }}>작은 행성 에디터</div>
             <label style={{ display: 'block', fontSize: 11, margin: '6px 0' }}>
               테마
               <select value={pSpec.theme} onChange={(e) => updSpec((s) => ({ ...s, theme: e.target.value as PlanetSpec['theme'] }))}
