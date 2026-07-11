@@ -1,0 +1,259 @@
+--- a/src/scene/PlanetWorld.tsx	2026-07-11 11:43:30.000000000 +0000
++++ b/src/scene/PlanetWorld.tsx	2026-07-11 13:32:25.000000000 +0000
+@@ -21,6 +21,7 @@
+ import type { MutableRefObject } from 'react';
+ import { createPropObject } from '../engine/props';
+ import { loadHandLanternAsset } from '../engine/props';
++import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
+ 
+ // ---------- BUILD 207: 작은 행성 v7 — 스펙이 세계를 정한다 ----------
+ // 에디터의 문법 이식: 세계의 모든 다이얼(테마·반지름·굴곡·안개·걸음·감김·요동·
+@@ -446,17 +447,7 @@
+     const stim = PROP_STIMULUS[propMap.current.get(T2.id)?.obj ?? '']?.stir ?? {};
+     const D = drives.current;
+     const F = driveFatigue.current;
+-    const sc = (k: Drive) => {
+-      const raw = D[k] + (stim[k] ?? 0);
+-      const nonlinear = raw * raw;
+-      const fatigue = 1 / (1 + F[k] * 2);
+-      // ★ BUILD 383: 이 만남에서 이미 앉거나 기댔으면(satSat) rest를 강하게 억제 — 앉기 반복 방지.
+-      //   사람도 앉았다 일어나 또 바로 안 앉는다. 지속자세는 한 만남에 한 번.
+-      const restBlock = (k === 'rest' && T2.restedOnce) ? 0.05 : 1;
+-      return nonlinear * PERSONALITY[k] * fatigue * restBlock * (0.85 + Math.random() * 0.3);
+-    };
+-    const scores: Record<Drive, number> = { observe: sc('observe'), record: sc('record'), rest: sc('rest'), wonder: sc('wonder') };
+-    let best: Drive = 'observe'; for (const k of Object.keys(scores) as Drive[]) if (scores[k] > scores[best]) best = k;
++    const best = chooseDrive(D, F, stim, T2.restedOnce);
+     T2.acts += 1;
+     F[best] = 1;
+     const propObj = propMap.current.get(T2.id)?.obj;
+@@ -887,39 +878,6 @@
+     return () => { alive = false; };
+   }, [holder, walkerIdx]);
+ 
+-  // BUILD 263: 캠프 프로토 로드 — 모닥불(CampfireSet) + 텐트. 소환 때 clone해서 쓴다.
+-  useEffect(() => {
+-    if (!built) return undefined;
+-    let alive = true;
+-    const normalize = (root: THREE.Group, targetH: number) => {
+-      const box = new THREE.Box3().setFromObject(root);
+-      const size = box.getSize(new THREE.Vector3());
+-      const sc = targetH / Math.max(1e-6, size.y);
+-      root.scale.setScalar(sc);
+-      box.setFromObject(root);
+-      root.position.y -= box.min.y; // 바닥 접지
+-      const c = box.getCenter(new THREE.Vector3());
+-      root.position.x -= c.x; root.position.z -= c.z;
+-      root.traverse((o) => {
+-        const mesh = o as THREE.Mesh;
+-        if (mesh.isMesh) (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((mm) => applyRadialFog(mm as THREE.MeshStandardMaterial));
+-      });
+-    };
+-    campProtoRef.current = { fire: null, tent: null };
+-    void defaultLoader('CampfireSet.glb').then((gltf) => {
+-      if (!alive) return;
+-      const root = gltf.scene as THREE.Group;
+-      normalize(root, 0.55); // BUILD 268: 모닥불 키움 (0.32→0.55, 본토 화덕 0.5 기준에 맞춤)
+-      if (campProtoRef.current) campProtoRef.current.fire = root;
+-    }).catch(() => {});
+-    void loadKitModel('tent', defaultLoader).then((tent) => {
+-      if (!alive) return;
+-      normalize(tent, 0.75); // 사람이 들어갈 만한 크기
+-      if (campProtoRef.current) campProtoRef.current.tent = tent;
+-    }).catch(() => {});
+-    return () => { alive = false; campProtoRef.current = null; };
+-  }, [built]);
+-
+   // BUILD 224: 반려 — 그녀 뒤를 종종종 따라오는 작은 식구
+   useEffect(() => {
+     const def = PET_ROSTER.find((x) => x.id === spec.pet);
+@@ -1163,10 +1121,7 @@
+   // lingerLeft: 이번 체류에서 앞으로 할 딴짓 개수(다 쓰면 다음 지점으로 짧게 이동)
+   // gap: 딴짓과 딴짓 사이 '가만히 있는' 여백 타이머(그냥 서서 별 보는 시간)
+   // walkLeft: 이동 구간에 남은 시간(짧게만 걷는다)
+-  const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory' | 'camp' | 'linger', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0, campCooldown: 20, lingerLeft: 0, gap: 0, walkLeft: 0 });
+-  // BUILD 263: 캠핑 쉼 — 가끔 멈춰 캠프(모닥불+텐트)를 소환하고 앉거나 서서 쉰다
+-  const campSetRef = useRef<{ group: THREE.Group; born: number; life: number } | null>(null);
+-  const campProtoRef = useRef<{ fire: THREE.Group | null; tent: THREE.Group | null } | null>(null);
++  const walk = useRef({ phase: 'walk' as 'walk' | 'ponder' | 'memory' | 'linger', timer: 0, jumpTo: -1, cooldown: 0, memCooldown: 0, lingerLeft: 0, gap: 0, walkLeft: 0 });
+   const roamRef = useRef<{ d: THREE.Vector3; T: THREE.Vector3 } | null>(null); // BUILD 219: 배회자의 현재 방향·진행
+   useEffect(() => { roamRef.current = null; }, [built, spec.roam]);
+   // BUILD 370: 끌림(attraction) — 별이가 규칙표가 아니라 '끌림'으로 움직인다.
+@@ -1174,27 +1129,10 @@
+   //   그래야 리스트에 뜨고, 옮기고, 지울 수 있다. 별이는 props를 '어포던스 있는 것'으로 읽을 뿐.
+   //   문제 시 ATTRACT_ON=false로 즉시 원복.
+   const ATTRACT_ON = true;
+-  // ★ BUILD 381: 성향 기반으로 전환 — 각본(고정 콤보)을 버린다. 우리가 "책→관찰→앉기→적기"를 짜지 않는다.
+-  //   소품은 별이의 '욕구'를 자극만 하고, 별이가 그 순간 자기 안에서 제일 강한 욕구를 스스로 골라 행동한다.
+-  //   행동하면 그 욕구가 해소(감소)되고, 다음엔 다른 욕구가 이길 수 있다 → 같은 소품도 매번 다른 흐름.
+-  //   이게 인계서의 '빠른 뇌(주변 스캔→행동별 점수→끌리는 것 실행)' 방향. 느린 뇌(LLM)가 나중에 이 욕구값을 조정.
+-  type Drive = 'observe' | 'record' | 'rest' | 'wonder'; // 관찰·기록·쉼·경탄
+-  // 별이의 현재 욕구(0~1). 시간이 지나면 서서히 차오르고, 그 행동을 하면 해소된다.
+-  const drives = useRef<Record<Drive, number>>({ observe: 0.3, record: 0.2, rest: 0.2, wonder: 0.25 });
+-  // ★ BUILD 382: 별이의 '성격'. 심즈처럼 같은 자극이라도 성격으로 저울질이 달라진다.
+-  //   별이는 사색·관찰이 존재의 핵심(인계서) → 관찰·기록에 높은 가중, 쉼은 낮게. 이게 별이를 '별이답게' 만든다.
+-  const PERSONALITY: Record<Drive, number> = { observe: 1.5, record: 1.3, rest: 0.7, wonder: 1.1 };
+-  // 방금 한 행동은 잠깐 억제한다(같은 동작 연발 방지 — believability의 핵심). 시간이 지나면 회복.
+-  const driveFatigue = useRef<Record<Drive, number>>({ observe: 0, record: 0, rest: 0, wonder: 0 });
+-  // 소품이 자극하는 욕구 + 거리 감쇠(atten: 클수록 가까이서만 끌림. 작을수록 멀리서도 방송이 들림).
+-  const PROP_STIMULUS: Record<string, { radius: number; atten: number; stir: Partial<Record<Drive, number>> }> = {
+-    chair:        { radius: 0.9,  atten: 1.4, stir: { observe: 0.6, wonder: 0.2 } },            // BUILD 387: 앉기 폐기 — 관찰 대상으로만(다가가 보되 안 앉음)
+-    book:         { radius: 0.9,  atten: 1.6, stir: { observe: 0.6, record: 0.7, rest: 0.3 } }, // 책은 가까이서만 방송
+-    'rock-small': { radius: 0.85, atten: 1.5, stir: { observe: 0.7, wonder: 0.3 } },
+-    'rock-big':   { radius: 0.9,  atten: 1.0, stir: { wonder: 0.6, observe: 0.4, rest: 0.2 } }, // 큰 바위는 좀 멀리서도
+-    tree:         { radius: 0.85, atten: 1.1, stir: { observe: 0.5, wonder: 0.4, record: 0.3 } },
+-    lighthouse:   { radius: 1.0,  atten: 0.6, stir: { wonder: 0.9, record: 0.3 } },             // 등대는 멀리서도 우러러본다
+-  };
++  // ★ BUILD 381: 성향 기반으로 전환 — 각본(고정 콤보)을 버린다.
++  // BUILD 389: 욕구의 값·자극표·점수 계산은 순수 모듈 byeoliDrive.ts가 소유한다.
++  const drives = useRef({ ...INITIAL_DRIVES });
++  const driveFatigue = useRef({ ...INITIAL_FATIGUE });
+   const attractCooldown = useRef(new Map<string, number>());
+   // BUILD 381: 성향 목표 — 큐(각본) 없음. 소품 곁에 머물며 별이가 욕구로 행동을 하나씩 스스로 고른다.
+   //   acts=이번 만남에서 한 행동 수(적당히 하면 떠남), sustained/rising=지속자세(앉기·기대기) 처리.
+@@ -1204,60 +1142,6 @@
+     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
+     v: new THREE.Vector3(), at: new THREE.Vector3(),
+   }), []);
+-  // BUILD 263: 캠프 소환/해제 — 캐릭터 옆에 모닥불+텐트를 폽하고, 시간 지나면 접는다
+-  const spawnCamp = () => {
+-    if (!built || campSetRef.current || !campProtoRef.current) return;
+-    const proto = campProtoRef.current;
+-    if (!proto.fire && !proto.tent) return;
+-    const grp = new THREE.Group();
+-    // 캐릭터 현재 위치(월드) → 행성 로컬 방향
+-    const wp = new THREE.Vector3();
+-    holder.getWorldPosition(wp);
+-    const dir = built.planet.worldToLocal(wp.clone()).normalize();
+-    const r = built.surfaceR(dir);
+-    // 지표 법선으로 세우는 기저
+-    const up = dir.clone();
+-    const ref = Math.abs(up.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+-    const tan = new THREE.Vector3().crossVectors(ref, up).normalize();
+-    const bit = new THREE.Vector3().crossVectors(up, tan).normalize();
+-    // 모닥불은 캐릭터 앞쪽 살짝, 텐트는 옆쪽에
+-    const place = (obj: THREE.Group, offT: number, offB: number) => {
+-      const o = obj.clone();
+-      const pos = dir.clone().multiplyScalar(r).addScaledVector(tan, offT).addScaledVector(bit, offB);
+-      const pd = pos.clone().normalize();
+-      o.position.copy(pd).multiplyScalar(built.surfaceR(pd));
+-      const oUp = pd.clone();
+-      const oFwd = new THREE.Vector3().crossVectors(ref, oUp).normalize();
+-      const oRight = new THREE.Vector3().crossVectors(oFwd, oUp).normalize();
+-      o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(oRight, oUp, oFwd.clone().multiplyScalar(-1)));
+-      o.userData.baseScale = o.scale.x; // 폽 보간용 목표 스케일
+-      o.scale.multiplyScalar(0.01); // 폽 in 시작 (작게 → 커짐)
+-      grp.add(o);
+-      return o;
+-    };
+-    if (proto.fire) {
+-      const fire = place(proto.fire, 0.3, -0.15); // BUILD 271: 모닥불 한쪽
+-      // 본토 교훈: 발광 ≠ 광원 — 불빛을 따로 데려온다 (모닥불 위 따뜻한 주황)
+-      const light = new THREE.PointLight('#ff9a4e', 1.4, 4.5, 1.6);
+-      light.position.set(0, 0.35, 0);
+-      fire.add(light);
+-    }
+-    if (proto.tent) place(proto.tent, -0.35, 0.35); // 텐트는 반대쪽 멀리 — 겹침 방지
+-    built.planet.add(grp);
+-    campSetRef.current = { group: grp, born: state0Clock(), life: 0 };
+-  };
+-  const despawnCamp = () => {
+-    const cs = campSetRef.current;
+-    if (!cs || !built) return;
+-    built.planet.remove(cs.group);
+-    cs.group.traverse((o) => {
+-      const mesh = o as THREE.Mesh;
+-      if (mesh.isMesh) { mesh.geometry?.dispose?.(); }
+-    });
+-    campSetRef.current = null;
+-  };
+-  const state0Clock = () => performance.now() / 1000;
+-
+   useFrame((state, rawDt) => {
+     if (!built) return;
+     const dt = Math.min(0.05, rawDt); // 헌법 3조
+@@ -1271,16 +1155,8 @@
+         if (nv <= 0) attractCooldown.current.delete(k); else attractCooldown.current.set(k, nv);
+       }
+     }
+-    { // BUILD 381: 욕구는 시간이 지나면 서서히 차오른다(배고픔처럼). 상한 1.
+-      const D = drives.current;
+-      D.observe = Math.min(1, D.observe + dt * 0.018);
+-      D.record = Math.min(1, D.record + dt * 0.012);
+-      D.rest = Math.min(1, D.rest + dt * 0.010);
+-      D.wonder = Math.min(1, D.wonder + dt * 0.014);
+-      // BUILD 382: 방금 한 행동 억제(fatigue)는 서서히 회복 — 시간 지나면 그 행동 다시 가능.
+-      const F = driveFatigue.current;
+-      for (const k of Object.keys(F) as Drive[]) F[k] = Math.max(0, F[k] - dt * 0.3);
+-    }
++    // BUILD 389: 욕구 증가와 행동 피로 회복은 순수 빠른 뇌 모듈이 계산한다.
++    tickDrives(drives.current, driveFatigue.current, dt);
+     let moving = true;
+     // BUILD 224: 이동 상태기 — 지가 걷다 뛰다 탈것 탔다가 내렸다가
+     const MV = moveState.current;
+@@ -1427,14 +1303,13 @@
+       P.timer -= dt;
+       if (P.timer <= 0) {
+         if (P.phase === 'memory') { onMemRef.current?.(null); P.memCooldown = 6; }
+-        if (P.phase === 'camp') { rigRef.current?.stopInspect(); despawnCamp(); } // BUILD 263: 일어나서 캠프 접기
+         if (P.phase === 'ponder' && SP.roam && roamRef.current) {
+           // 멈춰 섰다 일어나면 마음이 바뀐다 — 크게 한 번 튼다
+           const turn = (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 1.8);
+           roamRef.current.T.applyQuaternion(tmp.Q.setFromAxisAngle(roamRef.current.d, turn));
+         }
+         if (P.phase === 'ponder' && P.jumpTo >= 0) S.current = P.jumpTo;
+-        // BUILD 282: 캠프/기억을 마치면 잠깐만 걷다 다시 체류로 — roam은 강제 도보(8초)를 걸지 않는다.
++        // BUILD 282: 기억/사색을 마치면 잠깐만 걷다 다시 체류로 — roam은 강제 도보(8초)를 걸지 않는다.
+         P.phase = 'walk';
+         P.jumpTo = -1;
+         P.cooldown = SP.roam ? 0.4 : 8;
+@@ -1511,7 +1386,8 @@
+             if (ang > stim.radius) continue;
+             // 거리 감쇠 — atten이 클수록 가까이서만 끌린다(심즈식 방송 세기).
+             const nearness = Math.pow(1 - ang / stim.radius, stim.atten);
+-            cands.push({ d: pd, id: pr.id, radius: stim.radius, score: nearness });
++            const score = scorePropAttraction(nearness, drives.current, driveFatigue.current, stim.stir);
++            cands.push({ d: pd, id: pr.id, radius: stim.radius, score });
+           }
+           if (cands.length && P.phase === 'walk') {
+             const total = cands.reduce((s, c) => s + c.score, 0);
+@@ -1550,7 +1426,6 @@
+         if (T2.standing) {
+           // 콤보 전체 종료 대기 — 마지막 일어서기 완료 후 걷기.
+           if (T2.step <= 0) {
+-            const rec = propMap.current.get(T2.id); if (rec) rec.anchor.visible = true; // 숨겼던 의자 복원
+             attractCooldown.current.set(T2.id, 25); // 방금 논 소품 25초 억제(반복 방지)
+             attractTarget.current = null;
+           }
+@@ -1819,20 +1694,6 @@
+       const groundR = built.surfaceR(FOOT_UP);
+       footDustRef.current.updateFeet(dt, [footL, footR], FOOT_UP, FOOT_WATER.value, moving && MV.mode !== 'ride', groundR);
+     }
+-    // BUILD 263: 캠프 폽 애니메이션 — 소환 직후 통 커지고, 머무는 시간 끝물엔 쏙 접힌다
+-    if (campSetRef.current) {
+-      const cs = campSetRef.current;
+-      cs.life += dt;
+-      const remain = P.phase === 'camp' ? P.timer : 0;
+-      let s = 1;
+-      if (cs.life < 0.5) s = cs.life / 0.5;
+-      else if (remain < 0.5) s = Math.max(0, remain / 0.5);
+-      const ease = s * s * (3 - 2 * s);
+-      cs.group.children.forEach((o) => {
+-        const base = (o.userData.baseScale as number) ?? 1;
+-        o.scale.setScalar(base * Math.max(0.0001, ease));
+-      });
+-    }
+     // BUILD 258: 밤이면 손 랜턴을 켠다 + 중력 정렬(뼈가 어떻게 돌아도 등불은 아래를 안다)
+     if (lanternRef.current) {
+       const isNight = dl < 0.35;
+--- a/src/App.tsx	2026-07-11 11:43:30.000000000 +0000
++++ b/src/App.tsx	2026-07-11 13:32:25.000000000 +0000
+@@ -48,7 +48,7 @@
+   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
+ };
+ 
+-const BUILD_LABEL = 'v2.38.0 · BUILD 387 · 의자 앉기 완전 폐기(관찰만) + 기본 음량 상향(1.6)';
++const BUILD_LABEL = 'v2.41.0 · BUILD 390 · 목적지도 욕구로 선택 — 거리 + 현재 성향/욕구 공명';
+ 
+ export default function App() {
+   const [activeIndex, setActiveIndex] = useState(0);
