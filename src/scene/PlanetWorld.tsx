@@ -1108,6 +1108,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     chair: { action: 'sit', radius: 0.9 }, // 의자 → 다가가 앉는다
   };
   const attractCooldown = useRef(new Map<string, number>()); // 소품 id별 쿨다운(방금 상호작용한 것 잠시 억제)
+  const attractTarget = useRef<{ d: THREE.Vector3; id: string; action: 'sit'; radius: number } | null>(null); // BUILD 371: 지금 끌린 목표(도착·포기까지 유지)
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
@@ -1399,34 +1400,58 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         roamRef.current = { d: d0, T: t0 };
       }
       const RM = roamRef.current;
-      // BUILD 370: 끌림 — Vase가 에디터에서 놓은 소품(SP.props) 중 어포던스 있는 것에 다가간다.
-      //   이게 getNearbyObjects 계약의 실구현: 맵(props)이 오브젝트를 소유하고, 별이는 방향·거리만 읽는다.
-      //   가장 끌리는 것 하나를 골라 T를 그쪽으로 튼다(지금은 최근접, Q2 확률저울질은 다음 단계).
+      // BUILD 371: 끌림 — Vase가 에디터에서 놓은 소품(SP.props) 중 어포던스 있는 것에 다가간다.
+      //   getNearbyObjects 계약: 맵(props)이 오브젝트를 소유, 별이는 방향·거리만 읽는다.
+      //   선택은 가끔(목표 없을 때 확률 저울질로 하나), 추구는 지속(도착·포기까지 그 목표 유지).
+      //   → 매 프레임 주사위를 다시 굴려 두 의자 사이에서 덜덜 떠는 우유부단 방지.
       if (ATTRACT_ON && P.phase === 'walk' && MV.mode === 'walk' && moving && (SP.props?.length ?? 0) > 0) {
-        let best: { d: THREE.Vector3; id: string; action: 'sit'; radius: number; ang: number } | null = null;
-        for (const pr of SP.props) {
-          const aff = ATTRACT_AFFORDANCE[pr.obj]; // 선언층: 이 소품 종류가 부르는 행동
-          if (!aff) continue;                     // 어포던스 없는 소품은 그냥 지나친다
-          if ((attractCooldown.current.get(pr.id) ?? 0) > 0) continue; // 방금 상호작용 → 잠시 억제
-          const pd = v.set(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
-          const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(pd), -1, 1)); // 별이~소품 구면 각
-          if (ang > aff.radius) continue;         // 반경 밖 = 아직 안 보임
-          if (!best || ang < best.ang) best = { d: pd.clone(), id: pr.id, action: aff.action, radius: aff.radius, ang };
+        const AT = attractTarget.current;
+        // 1) 목표가 없으면 — 반경 내 후보를 점수화해 확률(가중 랜덤)로 하나 고른다(Q2=B, 변덕·사색).
+        if (!AT) {
+          const cands: { d: THREE.Vector3; id: string; action: 'sit'; radius: number; score: number }[] = [];
+          for (const pr of SP.props) {
+            const aff = ATTRACT_AFFORDANCE[pr.obj];
+            if (!aff) continue;
+            if ((attractCooldown.current.get(pr.id) ?? 0) > 0) continue;
+            const pd = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
+            const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(pd), -1, 1));
+            if (ang > aff.radius) continue;
+            // 점수 = 끌림세기(baseWeight) × 거리감쇠(가까울수록↑). 지금 baseWeight=1(선언층 기본).
+            const score = 1 * (1 - ang / aff.radius);
+            cands.push({ d: pd, id: pr.id, action: aff.action, radius: aff.radius, score });
+          }
+          if (cands.length) {
+            // 가중 랜덤 — 점수 비율대로 하나 뽑는다(최근접 직행이 아님. 가끔 먼 것에도 끌린다).
+            const total = cands.reduce((s, c) => s + c.score, 0);
+            let r = Math.random() * total;
+            let pick = cands[0];
+            for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
+            attractTarget.current = { d: pick.d, id: pick.id, action: pick.action, radius: pick.radius };
+          }
         }
-        if (best) {
-          const ARRIVE = 0.14; // 이보다 가까우면 도착
-          if (best.ang < ARRIVE) {
-            // 도착 — 멈춰 앉는다. 별이가 '끌려서' 다가와 앉은 순간.
-            P.phase = 'linger'; P.lingerLeft = 1; P.gap = 0.4; P.timer = 0; P.jumpTo = -1;
-            attractCooldown.current.set(best.id, 14); // 이 소품 14초 억제(오브젝트 단위 쿨다운)
-            rigRef.current?.playInspect('sit');
-            if (Math.random() < 0.4) byeoliShot('mood'); // 앉는 순간 가끔 촬영(자유 철학)
+        // 2) 목표가 있으면 — 그리로 지속 추구. 도착하면 앉고, 사라지거나 쿨다운이면 놓는다.
+        const T2 = attractTarget.current;
+        if (T2) {
+          const stillValid = SP.props.some((pr) => pr.id === T2.id) && (attractCooldown.current.get(T2.id) ?? 0) <= 0;
+          if (!stillValid) {
+            attractTarget.current = null; // 목표가 지워졌거나(에디터에서 삭제) 방금 상호작용함 → 놓는다
           } else {
-            // 접근 — 진행방향 T를 소품 쪽으로 슬며시 튼다(가까울수록 강하게).
-            const toTarget = tmp.at.copy(best.d).addScaledVector(RM.d, -best.d.dot(RM.d)).normalize();
-            const pull = (1 - best.ang / best.radius) * 2.2 * dt;
-            RM.T.lerp(toTarget, THREE.MathUtils.clamp(pull, 0, 0.5)).normalize();
-            RM.T.addScaledVector(RM.d, -RM.T.dot(RM.d)).normalize();
+            const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(T2.d), -1, 1));
+            const ARRIVE = 0.14;
+            if (ang < ARRIVE) {
+              // 도착 — 멈춰 앉는다. 별이가 '끌려서' 다가와 앉은 순간.
+              P.phase = 'linger'; P.lingerLeft = 1; P.gap = 0.4; P.timer = 0; P.jumpTo = -1;
+              attractCooldown.current.set(T2.id, 14); // 이 소품 14초 억제(오브젝트 단위 쿨다운)
+              attractTarget.current = null;           // 목표 달성 → 놓는다
+              rigRef.current?.playInspect('sit');
+              if (Math.random() < 0.4) byeoliShot('mood'); // 앉는 순간 가끔 촬영(자유 철학)
+            } else {
+              // 접근 — 진행방향 T를 목표 쪽으로 슬며시 튼다(가까울수록 강하게).
+              const toTarget = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d)).normalize();
+              const pull = (1 - ang / T2.radius) * 2.2 * dt;
+              RM.T.lerp(toTarget, THREE.MathUtils.clamp(pull, 0, 0.5)).normalize();
+              RM.T.addScaledVector(RM.d, -RM.T.dot(RM.d)).normalize();
+            }
           }
         }
       }

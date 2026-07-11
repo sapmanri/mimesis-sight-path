@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.20.0 · BUILD 370 · 끌림 첫 삽 — 별이가 규칙표 대신 끌림으로 움직인다(행성 벤치 다가가 앉기)';
+const BUILD_LABEL = 'v2.21.0 · BUILD 371 · 끌림 확률 저울질 — 여러 소품 중 가중 랜덤으로 하나 정해 지속 추구(선택은 가끔, 추구는 지속)';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
