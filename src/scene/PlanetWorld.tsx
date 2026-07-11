@@ -412,6 +412,23 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       } catch { /* 조용히 */ }
     }, shutterAt);
   };
+  // BUILD 372: 콤보 토큰 하나 실행 → rig 동작으로 번역, 이 동작이 차지할 시간(초) 반환.
+  //   시퀀서가 이 시간을 타이머로 써서 끝나면 다음 토큰으로 넘어간다.
+  const runComboToken = (tok: ComboToken): number => {
+    const rig = rigRef.current;
+    if (!rig) return 0.6;
+    switch (tok) {
+      case 'observe': rig.playInspect?.('pickup'); return 2.2 + Math.random() * 1.5; // 들여다보기(살핌)
+      case 'look': { const d = rig.playAction?.('LookAround', 1) ?? 0; return d > 0 ? d + 0.3 : 2.0; } // 올려다보기/두리번
+      case 'sit': rig.playInspect?.('sit'); return 3.0 + Math.random() * 2.0; // 앉기(한동안 머문다)
+      case 'write': { const d = rig.playAction?.('Writing', 1) ?? 0; return d > 0 ? d + 0.3 : 2.5; } // 적기
+      case 'shot': byeoliShot('mood'); return 3.2 + Math.random() * 0.8; // 사진(SitCamera 안무 — 자체 셔터 타이밍)
+      case 'lean': { const clip = Math.random() < 0.5 ? 'Leaning' : 'LeaningWall'; const d = rig.playAction?.(clip, 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 기대기(벽/허공)
+      case 'search': { const d = rig.playAction?.('LookingFiles', 1) ?? 0; return d > 0 ? d + 0.3 : 3.0; } // 뭔가 뒤적여 찾기
+      case 'stand': rig.stopInspect?.(); return 0.5; // 일어나 걷기 복귀
+      default: return 0.6;
+    }
+  };
   const rainInAt = useRef(0);
   const lastKm = useRef(0);
   const lastPhase = useRef('');
@@ -1102,13 +1119,52 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   //   그래야 리스트에 뜨고, 옮기고, 지울 수 있다. 별이는 props를 '어포던스 있는 것'으로 읽을 뿐.
   //   문제 시 ATTRACT_ON=false로 즉시 원복.
   const ATTRACT_ON = true;
-  //   어떤 소품이 어떤 행동을 부르나(선언층 어포던스). 여기 없는 소품은 별이가 그냥 지나친다.
-  //   추론층(이름만으로 느린 뇌가 어포던스 생성)은 느린 뇌 단계에서. 지금은 선언층만.
-  const ATTRACT_AFFORDANCE: Record<string, { action: 'sit'; radius: number }> = {
-    chair: { action: 'sit', radius: 0.9 }, // 의자 → 다가가 앉는다
+  //   어떤 소품이 어떤 '장면(콤보)'을 부르나. 하나의 만남 = 여러 동작의 시퀀스.
+  //   별이는 뭘 하러 가는 게 아니라 '보러' 간다(사색·관찰이 핵심) — 그래서 대부분 콤보가 관찰로 열리고 닫힌다.
+  //   각 소품은 콤보 후보 여럿을 갖고, 도착 시 하나를 확률로 골라 순차 실행(매번 다른 장면).
+  //   토큰: observe(들여다보기) look(올려다보기/저기!) sit(앉기) write(적기) shot(사진) stand(일어나 걷기).
+  //   추론층(이름만으로 느린 뇌가 콤보 생성)은 느린 뇌 단계에서. 지금은 선언층만.
+  type ComboToken = 'observe' | 'look' | 'sit' | 'write' | 'shot' | 'lean' | 'search' | 'stand';
+  const ATTRACT_AFFORDANCE: Record<string, { radius: number; combos: ComboToken[][] }> = {
+    // ⚠️ sit(앉기)는 보류: rig가 '외부에 놓인 의자'에 위치 정합해 SitChair로 앉는 건 별도 작업.
+    //    지금 sit을 부르면 chairAsset이 없어 바닥에 앉는다(어색). 앉기는 위치정합 해결 후 재도입.
+    //    당분간 의자도 '관찰 대상'(별이는 만지는 게 아니라 보는 존재).
+    chair: { radius: 0.9, combos: [
+      ['observe', 'write', 'shot', 'stand'],          // 살펴보고 → 적고 → 찍고 → 물러난다
+      ['look', 'observe', 'shot', 'stand'],           // 훑어보고 → 들여다보고 → 찍고 → 물러난다
+      ['observe', 'observe', 'write', 'stand'],       // 요리조리 보고 → 적고 → 물러난다
+    ] },
+    'rock-small': { radius: 0.85, combos: [
+      ['observe', 'search', 'write', 'stand'],        // 들여다보고 → 뒤적여 살피고 → 적는다
+      ['observe', 'shot', 'observe', 'stand'],        // 보고 → 찍고 → 다시 본다
+      ['look', 'observe', 'stand'],                   // 올려다보고 → 들여다본다
+    ] },
+    'rock-big': { radius: 0.9, combos: [
+      ['look', 'observe', 'shot', 'stand'],           // 올려다보고 → 살피고 → 찍는다
+      ['look', 'lean', 'observe', 'stand'],           // 올려다보고 → 기대어 쉬고 → 다시 본다
+    ] },
+    tree: { radius: 0.85, combos: [
+      ['look', 'observe', 'write', 'stand'],          // 올려다보고 → 보고 → 적는다
+      ['look', 'lean', 'shot', 'stand'],              // 올려다보고 → 기대어 → 찍는다
+    ] },
+    lighthouse: { radius: 1.0, combos: [
+      ['look', 'shot', 'look', 'stand'],              // 우러러보고 → 찍고 → 다시 본다
+      ['look', 'lean', 'write', 'shot', 'stand'],     // 보고 → 기대어 → 적고 → 찍는다
+    ] },
+    book: { radius: 0.8, combos: [
+      ['observe', 'search', 'write', 'stand'],        // 보고 → 뒤적여 찾고 → 적는다
+      ['search', 'observe', 'shot', 'stand'],         // 뒤적이고 → 살피고 → 찍는다
+    ] },
+    bookcase: { radius: 0.95, combos: [
+      ['observe', 'search', 'write', 'stand'],        // 책장 훑고 → 한 권 뒤적여 → 적는다
+      ['search', 'observe', 'search', 'shot', 'stand'],// 뒤적이고 → 살피고 → 또 뒤적여 → 찍는다
+      ['look', 'search', 'write', 'stand'],           // 위칸 올려다보고 → 뒤적여 → 적는다
+      ['search', 'lean', 'observe', 'stand'],         // 뒤적이다 → 기대어 읽고 → 살핀다
+    ] },
   };
   const attractCooldown = useRef(new Map<string, number>()); // 소품 id별 쿨다운(방금 상호작용한 것 잠시 억제)
-  const attractTarget = useRef<{ d: THREE.Vector3; id: string; action: 'sit'; radius: number } | null>(null); // BUILD 371: 지금 끌린 목표(도착·포기까지 유지)
+  // BUILD 372: 콤보 목표 — 도착하면 콤보 하나를 순차 실행. queue=남은 동작, step=현재 동작 남은 시간(초).
+  const attractTarget = useRef<{ d: THREE.Vector3; id: string; radius: number; queue: ComboToken[]; step: number; arrived: boolean; standing: boolean } | null>(null);
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
@@ -1408,7 +1464,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         const AT = attractTarget.current;
         // 1) 목표가 없으면 — 반경 내 후보를 점수화해 확률(가중 랜덤)로 하나 고른다(Q2=B, 변덕·사색).
         if (!AT) {
-          const cands: { d: THREE.Vector3; id: string; action: 'sit'; radius: number; score: number }[] = [];
+          const cands: { d: THREE.Vector3; id: string; radius: number; combos: ComboToken[][]; score: number }[] = [];
           for (const pr of SP.props) {
             const aff = ATTRACT_AFFORDANCE[pr.obj];
             if (!aff) continue;
@@ -1416,41 +1472,63 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             const pd = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(pd), -1, 1));
             if (ang > aff.radius) continue;
-            // 점수 = 끌림세기(baseWeight) × 거리감쇠(가까울수록↑). 지금 baseWeight=1(선언층 기본).
-            const score = 1 * (1 - ang / aff.radius);
-            cands.push({ d: pd, id: pr.id, action: aff.action, radius: aff.radius, score });
+            const score = 1 * (1 - ang / aff.radius); // 끌림세기×거리감쇠
+            cands.push({ d: pd, id: pr.id, radius: aff.radius, combos: aff.combos, score });
           }
           if (cands.length) {
-            // 가중 랜덤 — 점수 비율대로 하나 뽑는다(최근접 직행이 아님. 가끔 먼 것에도 끌린다).
             const total = cands.reduce((s, c) => s + c.score, 0);
             let r = Math.random() * total;
             let pick = cands[0];
             for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
-            attractTarget.current = { d: pick.d, id: pick.id, action: pick.action, radius: pick.radius };
+            // 이 소품의 콤보 후보 중 하나를 랜덤으로 — 같은 소품도 매번 다른 장면.
+            const combo = pick.combos[Math.floor(Math.random() * pick.combos.length)].slice();
+            attractTarget.current = { d: pick.d, id: pick.id, radius: pick.radius, queue: combo, step: 0, arrived: false, standing: false };
           }
         }
-        // 2) 목표가 있으면 — 그리로 지속 추구. 도착하면 앉고, 사라지거나 쿨다운이면 놓는다.
+        // 2) 목표가 있으면 — 그리로 지속 추구. 도착하면 콤보 순차 실행, 다 끝나면 놓는다.
         const T2 = attractTarget.current;
         if (T2) {
-          const stillValid = SP.props.some((pr) => pr.id === T2.id) && (attractCooldown.current.get(T2.id) ?? 0) <= 0;
+          const stillValid = SP.props.some((pr) => pr.id === T2.id) && (T2.arrived || (attractCooldown.current.get(T2.id) ?? 0) <= 0);
           if (!stillValid) {
-            attractTarget.current = null; // 목표가 지워졌거나(에디터에서 삭제) 방금 상호작용함 → 놓는다
-          } else {
+            attractTarget.current = null; // 목표가 지워졌거나(에디터 삭제) 쿨다운 → 놓는다
+          } else if (!T2.arrived) {
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(T2.d), -1, 1));
             const ARRIVE = 0.14;
             if (ang < ARRIVE) {
-              // 도착 — 멈춰 앉는다. 별이가 '끌려서' 다가와 앉은 순간.
-              P.phase = 'linger'; P.lingerLeft = 1; P.gap = 0.4; P.timer = 0; P.jumpTo = -1;
-              attractCooldown.current.set(T2.id, 14); // 이 소품 14초 억제(오브젝트 단위 쿨다운)
-              attractTarget.current = null;           // 목표 달성 → 놓는다
-              rigRef.current?.playInspect('sit');
-              if (Math.random() < 0.4) byeoliShot('mood'); // 앉는 순간 가끔 촬영(자유 철학)
+              // 도착 — 콤보 시작. 첫 동작을 꺼내 실행하고 그 시간을 타이머로.
+              T2.arrived = true;
+              P.phase = 'linger'; P.lingerLeft = 1; P.gap = 999; P.timer = 0; P.jumpTo = -1; // 콤보가 끝날 때까지 딴짓 억제
+              attractCooldown.current.set(T2.id, 20); // 이 소품 20초 억제(콤보 도는 동안+여운)
+              const first = T2.queue.shift();
+              T2.step = first ? runComboToken(first) : 0;
             } else {
               // 접근 — 진행방향 T를 목표 쪽으로 슬며시 튼다(가까울수록 강하게).
               const toTarget = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d)).normalize();
               const pull = (1 - ang / T2.radius) * 2.2 * dt;
               RM.T.lerp(toTarget, THREE.MathUtils.clamp(pull, 0, 0.5)).normalize();
               RM.T.addScaledVector(RM.d, -RM.T.dot(RM.d)).normalize();
+            }
+          } else {
+            // 도착 후 — 콤보 진행. 현재 동작 시간이 다 되면 다음 토큰으로.
+            if (T2.standing) {
+              // 종료 대기 — 일어나는 동작(standUp)이 실제로 끝날 때까지 걷지 않는다(BUILD 365 교훈: 미끄러짐 방지).
+              if (!rigRef.current?.inspecting?.()) {
+                P.phase = 'walk'; P.gap = 0; P.lingerLeft = 0; P.walkLeft = nextWalkLeft();
+                attractTarget.current = null;
+              }
+            } else {
+              T2.step -= dt;
+              // 다음 토큰은 '타이머 만료 + 현재 동작 완주' 둘 다여야 넘어간다(겹침·미끄러짐 방지).
+              if (T2.step <= 0 && !rigRef.current?.inspecting?.()) {
+                const next = T2.queue.shift();
+                if (next && next !== 'stand') {
+                  T2.step = runComboToken(next);
+                } else {
+                  // 콤보 끝 — 일어나기/물러나기 시작. 완주는 다음 프레임들에서 기다린다(즉시 걷지 않음).
+                  rigRef.current?.stopInspect?.();
+                  T2.standing = true;
+                }
+              }
             }
           }
         }

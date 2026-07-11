@@ -11,6 +11,7 @@
   "dependencies": {
     "@react-three/drei": "latest",
     "@react-three/fiber": "latest",
+    "fbx2gltf": "^0.9.7-p1",
     "react": "latest",
     "react-dom": "latest",
     "three": "latest"

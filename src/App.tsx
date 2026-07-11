@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.21.0 · BUILD 371 · 끌림 확률 저울질 — 여러 소품 중 가중 랜덤으로 하나 정해 지속 추구(선택은 가끔, 추구는 지속)';
+const BUILD_LABEL = 'v2.24.0 · BUILD 373 · 콤보 모션 3종(기대기·찾기) 병합 + 책장 소품 등록 — 별이 책읽기 장면';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
