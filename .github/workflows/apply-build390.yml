@@ -1,0 +1,34 @@
+name: Apply BUILD 390 source sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/apply-build390.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified patch
+        run: git apply --check .github/build390-source-sync.patch && git apply .github/build390-source-sync.patch
+
+      - name: Verify build
+        run: npm ci && npm run build
+
+      - name: Commit synced sources
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/build390-source-sync.patch .github/workflows/apply-build390.yml
+          git add src/App.tsx src/scene/PlanetWorld.tsx .github/build390-source-sync.patch .github/workflows/apply-build390.yml
+          git commit -m "BUILD 390: sync fast brain, cleanup camp legacy, and desire-aware destinations"
+          git push origin main
