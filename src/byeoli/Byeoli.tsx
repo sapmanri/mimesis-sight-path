@@ -88,6 +88,19 @@ export function Byeoli({ host }: Props) {
   const bubbleRoot = useMemo(() => new THREE.Group(), []);
   const bubbles = useRef<Bubble[]>([]);
 
+  // BUILD 367: 셔터음 — 별이가 찍는 순간 늘 울린다(찍기의 소리). 짧은 SFX라 HTMLAudio로 충분.
+  const shutterRef = useRef<HTMLAudioElement | null>(null);
+  if (typeof Audio !== 'undefined' && !shutterRef.current) {
+    const a = new Audio('/assets/sfx/shutter.mp3');
+    a.volume = 0.5; a.preload = 'auto';
+    shutterRef.current = a;
+  }
+  const playShutter = () => {
+    const a = shutterRef.current;
+    if (!a) return;
+    try { a.currentTime = 0; a.play().catch(() => { /* 자동재생 정책 등 — 조용히 */ }); } catch { /* 무시 */ }
+  };
+
   // ---- 별이 자기 화면 촬영: 맵이 grabFrame을 주면 그걸, 아니면 기본(gl.render→toDataURL) ----
   const grab = (): string | null => {
     const h = hostRef.current;
@@ -183,13 +196,16 @@ export function Byeoli({ host }: Props) {
       stageChance: hostRef.current.stageChance ? () => hostRef.current.stageChance!() : undefined,
       stageIds: () => hostRef.current.stageIds?.() ?? ['dance', 'sleep', 'piano', 'workout', 'treadmill'],
       capture: (reason) => {
+        // BUILD 367: 찍기와 올리기를 가른다.
+        //   찍기 = 별이의 자유. 촬영허용·발행권한과 무관하게 '항상' 일어난다(자세+셔터+캡처).
+        //   올리기 = 그렇게 찍은 것 '중 일부'만 R2로. 발행 게이트는 App(onCapture)이 판단한다.
+        //   '촬영 허용'이 찍는 전제조건이 되면 별이는 자유가 아니게 된다 — 그래서 분리.
+        rigRef.current?.playAction?.('SitCamera'); // 카메라 드는 자세 — 언제나
+        playShutter();                              // 셔터음 — 언제나
+        const url = grab();                         // 지금 이 순간을 담는다 — 언제나
+        // 올리기 시도: 넘기되, 실제 발행 여부·확률은 App이 결정(권한 없으면 조용히 버려짐)
         const cb = hostRef.current.onCapture;
-        if (!cb) return;
-        // BUILD 366: 사진 찍는 순간 카메라 드는 자세(SitCamera). 자세가 잡힌 뒤 셔터.
-        //   (최소 배선: 자세 재생 + 캡처. 소품·셔터음·안무 시퀀스는 다음 단계.)
-        rigRef.current?.playAction?.('SitCamera');
-        const url = grab();
-        if (url) cb(url, reason);
+        if (cb && url) cb(url, reason);
       },
     });
     return () => {

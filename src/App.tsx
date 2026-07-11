@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.19.0 · 지역 뷰어 전체화면 + UI 겹침 정리 · BUILD 366 · 별이 신규 모션 6종 병합 + 사진자세 배선';
+const BUILD_LABEL = 'v2.19.0 · 지역 뷰어 전체화면 + UI 겹침 정리 · BUILD 367 · 찍기(자유)와 올리기(발행) 분리 + 셔터음';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -308,9 +308,12 @@ export default function App() {
   // BUILD 356: 별이 스스로 찍은 순간 — R2 업로드 후 기록에 남긴다. 성취와 별개, 별의 자율 촬영.
   const byeoliShotAt = useRef(0);
   const onByeoliCapture = (dataUrl: string, reason: 'stage' | 'mood' | 'event') => {
-    if (!isSapmanri) return; // 발행 권한 있는 세션만(방문자 화면은 오염 안 시킴)
+    // BUILD 367: 여기는 '올리기'다. 찍기는 이미 별이가 코어에서 자유롭게 끝냈다(자세·셔터·캡처).
+    //   찍은 것 '중 일부만' SNS로 올린다 — 별이가 남기고 싶은 몇 장. 나머지는 그냥 흘러간다.
+    if (!isSapmanri) return; // 발행 권한 세션만 올린다(방문자 화면은 오염 안 시킴). 찍긴 이미 찍었다.
+    if (Math.random() > 0.4) return; // 찍은 것 중 ~40%만 올라간다 (별이가 고른 몇 장)
     const now = Date.now();
-    if (now - byeoliShotAt.current < 8000) return; // 연타 방지(최소 8초 간격)
+    if (now - byeoliShotAt.current < 8000) return; // 발행 연타 방지(최소 8초 간격)
     byeoliShotAt.current = now;
     const key = sessionStorage.getItem('mimesis.publishKey');
     if (!key) return;
