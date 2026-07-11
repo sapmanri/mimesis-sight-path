@@ -29,6 +29,7 @@ const PANEL_BTN: React.CSSProperties = {
 import { StoryCard } from './components/StoryCard';
 import { ProgressNav } from './components/ProgressNav';
 import { TouchTrail } from './components/TouchTrail';
+import { ObservationJournal, type ByeoliJournalEntry } from './components/ObservationJournal';
 import { footsteps } from './scene/footsteps';
 import { ambience } from './audio/ambience';
 import { planetSound } from './audio/planetSound';
@@ -48,7 +49,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.44.0 · BUILD 393 · 관찰자 나레이션 — 별이의 생각과 행동을 조용히 기록';
+const BUILD_LABEL = 'v2.46.0 · BUILD 395 · 관찰일기 + 손 소품/접근 거리 교정';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -187,9 +188,14 @@ export default function App() {
   };
   const planetWalker = pSpec.walker ?? -1; // BUILD 251: 산책자는 스펙이 정한다 (발행 시 고정)
   const [planetPaused, setPlanetPaused] = useState(false); // BUILD 224: 찍기의 평화
-  // BUILD 393: 실제 상태 전환에 근거한 제3자 관찰자 나레이션.
-  const [byeoliNarration, setByeoliNarration] = useState({ text: '별이는 천천히 주변을 살피며 걷고 있다.', key: 0 });
-  const onByeoliNarration = (text: string) => setByeoliNarration({ text, key: Date.now() });
+  // BUILD 395: 티커가 아니라 누적되는 관찰일기. 새 기록은 써지고 오래된 줄은 흐려진다.
+  const [byeoliJournal, setByeoliJournal] = useState<ByeoliJournalEntry[]>([
+    { id: 1, text: '별이는 천천히 주변을 살피며 걷고 있다.', at: Date.now() },
+  ]);
+  const onByeoliNarration = (text: string) => setByeoliJournal((prev) => {
+    if (prev[prev.length - 1]?.text === text) return prev;
+    return [...prev, { id: Date.now(), text, at: Date.now() }].slice(-12);
+  });
   // BUILD 214: 소품 심기 — 접점은 PlanetWorld가 매 프레임 보고한다
   const planetContact = useRef<PlanetContact | null>(null);
   const [propPick, setPropPick] = useState('tree');
@@ -872,17 +878,7 @@ export default function App() {
             )}
           </div>
         )}
-        <div key={byeoliNarration.key} style={{
-          position: 'fixed', left: '50%', bottom: 46, transform: 'translateX(-50%)', zIndex: 6,
-          width: 'min(620px, calc(100vw - 36px))', padding: '10px 18px 11px', borderRadius: 14,
-          color: '#f2eadb', background: 'rgba(18,24,26,0.68)', border: '1px solid rgba(216,178,110,0.25)',
-          boxShadow: '0 8px 30px rgba(0,0,0,0.18)', backdropFilter: 'blur(9px)', WebkitBackdropFilter: 'blur(9px)',
-          textAlign: 'center', pointerEvents: 'none', animation: 'byeoli-narration-in 0.55s ease-out',
-        }}>
-          <style>{'@keyframes byeoli-narration-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }'}</style>
-          <div style={{ fontSize: 9.5, letterSpacing: 2.2, color: '#d8b26e', opacity: 0.82, marginBottom: 4 }}>관찰자의 기록</div>
-          <div style={{ fontSize: 13.5, lineHeight: 1.55, letterSpacing: 0.15 }}>{byeoliNarration.text}</div>
-        </div>
+        <ObservationJournal entries={byeoliJournal} />
         {flagWhisper && (
           <div key={flagWhisper + String(Date.now() % 7)} style={{
             position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 6,

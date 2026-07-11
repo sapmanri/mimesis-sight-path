@@ -907,18 +907,19 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       if (deviceHand) {
         const h = deviceHand as THREE.Object3D;
         group.updateMatrixWorld(true);
-        const ws = new THREE.Vector3(); h.getWorldScale(ws);
         const mountDevice = (kind: 'camera' | 'phone') => {
           const wrapper = new THREE.Group();
-          wrapper.scale.setScalar(1 / Math.max(ws.x, 1e-6));
+          // BUILD 395: 손 본의 자식은 이미 본 변환을 상속한다. 월드 스케일 역보정은
+          // 작은 로컬 오프셋까지 크게 증폭해 소품이 몸 주위를 공전하게 만들었다.
+          wrapper.scale.setScalar(1);
           wrapper.visible = false;
           h.add(wrapper);
           if (kind === 'camera') {
-            wrapper.position.set(0.015, -0.035, -0.035);
+            wrapper.position.set(0, -0.018, -0.01);
             wrapper.rotation.set(Math.PI / 2, 0, Math.PI);
             heldCameraRef.current = wrapper;
           } else {
-            wrapper.position.set(0.01, -0.025, -0.02);
+            wrapper.position.set(0, -0.012, -0.006);
             wrapper.rotation.set(Math.PI / 2, 0, Math.PI / 2);
             heldPhoneRef.current = wrapper;
           }
@@ -1485,7 +1486,18 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           if (!stillValid) { attractTarget.current = null; } // 에디터에서 삭제됨 → 놓는다
           else {
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(T2.d), -1, 1));
-            if (ang < 0.14) {
+            const targetProp = SP.props.find((pr) => pr.id === T2.id);
+            const arrivalAngleByObject: Record<string, number> = {
+              book: 0.034,
+              'rock-small': 0.034,
+              chair: 0.042,
+              tree: 0.055,
+              'rock-big': 0.06,
+              lighthouse: 0.085,
+            };
+            const arrivalAngle = arrivalAngleByObject[targetProp?.obj ?? ''] ?? 0.05;
+            if (ang < arrivalAngle) {
+              // BUILD 395: 책·작은 물건은 손 닿을 만큼 가까이, 큰 구조물은 적당한 감상 거리를 둔다.
               // 도착 — 소품을 바라보게 몸을 돌린다(등지고 딴 데 보는 것 방지). 그다음 욕구로 행동 선택.
               // 별이 위치 d에서 소품 d로 향하는 접선 방향으로 T를 정렬.
               const face = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d));
