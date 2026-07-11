@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.24.0 · BUILD 373 · 콤보 모션 3종(기대기·찾기) 병합 + 책장 소품 등록 — 별이 책읽기 장면';
+const BUILD_LABEL = 'v2.25.0 · BUILD 374 · 콤보 붙잡힘 버그 수정(탐색·진행 분리) + 말풍선 아이콘 확대';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

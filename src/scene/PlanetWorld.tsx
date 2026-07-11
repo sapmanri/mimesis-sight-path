@@ -1356,7 +1356,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         //   대부분은 아이콘 없는 웅얼거림, 아주 가끔 절제된 아이콘(♪ 콧노래 · ~ 느긋 · ! 발견).
         if (Math.random() < 0.4) {
           const r = Math.random();
-          const icon = r < 0.72 ? undefined : r < 0.86 ? '♪' : r < 0.94 ? '~' : '!';
+          // BUILD 374: 아이콘 풀 확대 — 같은 것만 반복되던 문제. 대부분은 무언(undefined), 나머지를 다양하게.
+          const ICONS = ['♪', '♫', '~', '!', '?', '…', '★', '☀', '☁', '❀', '✎', '♥'];
+          const icon = r < 0.7 ? undefined : ICONS[Math.floor(Math.random() * ICONS.length)];
           speak(icon, 0.85 + Math.random() * 0.35);
         }
         P.lingerLeft -= 1;
@@ -1456,14 +1458,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         roamRef.current = { d: d0, T: t0 };
       }
       const RM = roamRef.current;
-      // BUILD 371: 끌림 — Vase가 에디터에서 놓은 소품(SP.props) 중 어포던스 있는 것에 다가간다.
-      //   getNearbyObjects 계약: 맵(props)이 오브젝트를 소유, 별이는 방향·거리만 읽는다.
-      //   선택은 가끔(목표 없을 때 확률 저울질로 하나), 추구는 지속(도착·포기까지 그 목표 유지).
-      //   → 매 프레임 주사위를 다시 굴려 두 의자 사이에서 덜덜 떠는 우유부단 방지.
-      if (ATTRACT_ON && P.phase === 'walk' && MV.mode === 'walk' && moving && (SP.props?.length ?? 0) > 0) {
-        const AT = attractTarget.current;
-        // 1) 목표가 없으면 — 반경 내 후보를 점수화해 확률(가중 랜덤)로 하나 고른다(Q2=B, 변덕·사색).
-        if (!AT) {
+      // BUILD 374: 끌림 — Vase가 에디터에서 놓은 소품(SP.props) 중 어포던스 있는 것에 다가가 '장면(콤보)'을 편다.
+      //   구조: [탐색·접근]은 걷는 중에만, [콤보 진행]은 도착 후 phase와 무관하게 매 프레임.
+      //   ★ 이전 버그: 도착 시 phase를 linger로 바꿔 끌림 블록(walk 전용)에 다시 못 들어와 콤보가 멈췄다.
+      //     → 이제 도착해도 phase는 walk 유지, comboActive 플래그로 이동만 멈춘다. 콤보 진행은 아래 별도 블록.
+      const T2 = attractTarget.current;
+      // [A] 탐색·접근 — 아직 목표에 도착 전이고, 걷는 중일 때만.
+      if (ATTRACT_ON && MV.mode === 'walk' && !(T2 && T2.arrived) && (SP.props?.length ?? 0) > 0) {
+        if (!T2) {
+          // 목표 없음 → 반경 내 후보 점수화 → 가중 랜덤 하나(Q2=B, 변덕·사색).
           const cands: { d: THREE.Vector3; id: string; radius: number; combos: ComboToken[][]; score: number }[] = [];
           for (const pr of SP.props) {
             const aff = ATTRACT_AFFORDANCE[pr.obj];
@@ -1472,64 +1475,48 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             const pd = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(pd), -1, 1));
             if (ang > aff.radius) continue;
-            const score = 1 * (1 - ang / aff.radius); // 끌림세기×거리감쇠
-            cands.push({ d: pd, id: pr.id, radius: aff.radius, combos: aff.combos, score });
+            cands.push({ d: pd, id: pr.id, radius: aff.radius, combos: aff.combos, score: 1 * (1 - ang / aff.radius) });
           }
-          if (cands.length) {
+          if (cands.length && P.phase === 'walk') { // 걷는 중일 때만 새 목표를 문다
             const total = cands.reduce((s, c) => s + c.score, 0);
-            let r = Math.random() * total;
-            let pick = cands[0];
+            let r = Math.random() * total; let pick = cands[0];
             for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
-            // 이 소품의 콤보 후보 중 하나를 랜덤으로 — 같은 소품도 매번 다른 장면.
             const combo = pick.combos[Math.floor(Math.random() * pick.combos.length)].slice();
             attractTarget.current = { d: pick.d, id: pick.id, radius: pick.radius, queue: combo, step: 0, arrived: false, standing: false };
           }
-        }
-        // 2) 목표가 있으면 — 그리로 지속 추구. 도착하면 콤보 순차 실행, 다 끝나면 놓는다.
-        const T2 = attractTarget.current;
-        if (T2) {
-          const stillValid = SP.props.some((pr) => pr.id === T2.id) && (T2.arrived || (attractCooldown.current.get(T2.id) ?? 0) <= 0);
-          if (!stillValid) {
-            attractTarget.current = null; // 목표가 지워졌거나(에디터 삭제) 쿨다운 → 놓는다
-          } else if (!T2.arrived) {
+        } else {
+          const stillValid = SP.props.some((pr) => pr.id === T2.id);
+          if (!stillValid) { attractTarget.current = null; } // 에디터에서 삭제됨 → 놓는다
+          else {
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(T2.d), -1, 1));
-            const ARRIVE = 0.14;
-            if (ang < ARRIVE) {
-              // 도착 — 콤보 시작. 첫 동작을 꺼내 실행하고 그 시간을 타이머로.
+            if (ang < 0.14) {
+              // 도착 — 콤보 시작. phase는 walk 유지(★버그 수정). 이동만 멈춘다(moving=false).
               T2.arrived = true;
-              P.phase = 'linger'; P.lingerLeft = 1; P.gap = 999; P.timer = 0; P.jumpTo = -1; // 콤보가 끝날 때까지 딴짓 억제
-              attractCooldown.current.set(T2.id, 20); // 이 소품 20초 억제(콤보 도는 동안+여운)
               const first = T2.queue.shift();
               T2.step = first ? runComboToken(first) : 0;
-            } else {
-              // 접근 — 진행방향 T를 목표 쪽으로 슬며시 튼다(가까울수록 강하게).
+              attractCooldown.current.set(T2.id, 20);
+            } else if (moving) {
+              // 접근 — 진행방향 T를 목표로 슬며시 튼다.
               const toTarget = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d)).normalize();
               const pull = (1 - ang / T2.radius) * 2.2 * dt;
               RM.T.lerp(toTarget, THREE.MathUtils.clamp(pull, 0, 0.5)).normalize();
               RM.T.addScaledVector(RM.d, -RM.T.dot(RM.d)).normalize();
             }
-          } else {
-            // 도착 후 — 콤보 진행. 현재 동작 시간이 다 되면 다음 토큰으로.
-            if (T2.standing) {
-              // 종료 대기 — 일어나는 동작(standUp)이 실제로 끝날 때까지 걷지 않는다(BUILD 365 교훈: 미끄러짐 방지).
-              if (!rigRef.current?.inspecting?.()) {
-                P.phase = 'walk'; P.gap = 0; P.lingerLeft = 0; P.walkLeft = nextWalkLeft();
-                attractTarget.current = null;
-              }
-            } else {
-              T2.step -= dt;
-              // 다음 토큰은 '타이머 만료 + 현재 동작 완주' 둘 다여야 넘어간다(겹침·미끄러짐 방지).
-              if (T2.step <= 0 && !rigRef.current?.inspecting?.()) {
-                const next = T2.queue.shift();
-                if (next && next !== 'stand') {
-                  T2.step = runComboToken(next);
-                } else {
-                  // 콤보 끝 — 일어나기/물러나기 시작. 완주는 다음 프레임들에서 기다린다(즉시 걷지 않음).
-                  rigRef.current?.stopInspect?.();
-                  T2.standing = true;
-                }
-              }
-            }
+          }
+        }
+      }
+      // [B] 콤보 진행 — 도착한 목표가 있으면 phase 무관하게 매 프레임. 이동 정지.
+      if (ATTRACT_ON && T2 && T2.arrived) {
+        moving = false; // 콤보 도는 동안 별이는 제자리(장면을 편다)
+        if (T2.standing) {
+          // 종료 대기 — 물러나는 동작이 실제 끝날 때까지 기다렸다 걷기(미끄러짐 방지).
+          if (!rigRef.current?.inspecting?.()) attractTarget.current = null;
+        } else {
+          T2.step -= dt;
+          if (T2.step <= 0 && !rigRef.current?.inspecting?.()) {
+            const next = T2.queue.shift();
+            if (next && next !== 'stand') { T2.step = runComboToken(next); }
+            else { rigRef.current?.stopInspect?.(); T2.standing = true; } // 콤보 끝 → 물러나기 시작
           }
         }
       }
