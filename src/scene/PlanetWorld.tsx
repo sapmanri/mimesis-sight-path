@@ -22,6 +22,7 @@ import type { MutableRefObject } from 'react';
 import { createPropObject } from '../engine/props';
 import { loadHandLanternAsset } from '../engine/props';
 import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
+import { beginRising, beginStanding, createEncounter, shouldEndEncounter, type ByeoliEncounter } from './byeoliEncounter';
 
 // ---------- BUILD 207: 작은 행성 v7 — 스펙이 세계를 정한다 ----------
 // 에디터의 문법 이식: 세계의 모든 다이얼(테마·반지름·굴곡·안개·걸음·감김·요동·
@@ -443,7 +444,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   // ★ 별이가 지금 자기 욕구로 행동을 하나 고른다(각본 없음). 소품이 자극한 욕구 + 별이 현재 욕구 중 최강.
   //   고른 행동을 하고 그 욕구를 해소(감소). 다음엔 다른 욕구가 이길 수 있다.
-  const chooseAndActByDrive = (T2: NonNullable<typeof attractTarget.current>): { dur: number; sustained: boolean } => {
+  const chooseAndActByDrive = (T2: ByeoliEncounter): { dur: number; sustained: boolean } => {
     const stim = PROP_STIMULUS[propMap.current.get(T2.id)?.obj ?? '']?.stir ?? {};
     const D = drives.current;
     const F = driveFatigue.current;
@@ -461,12 +462,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     return r;
   };
   // 다음 행동으로. 욕구가 충분히 풀렸거나 충분히 놀았으면 콤보 종료(떠남).
-  const advanceCombo = (T2: NonNullable<typeof attractTarget.current>) => {
-    const D = drives.current;
-    const peak = Math.max(D.observe, D.record, D.rest, D.wonder);
+  const advanceCombo = (T2: ByeoliEncounter) => {
     // 3~6회 사이에서, 남은 욕구가 약하면 떠난다(각본 아니라 만족도로 끝남).
-    if (T2.acts >= 6 || (T2.acts >= 2 && peak < 0.35)) {
-      rigRef.current?.stopInspect?.(); T2.standing = true; T2.step = 1.2; return;
+    if (shouldEndEncounter(T2, drives.current)) {
+      rigRef.current?.stopInspect?.(); beginStanding(T2); return;
     }
     const r = chooseAndActByDrive(T2);
     T2.step = r.dur; T2.wasSustained = r.sustained;
@@ -1136,7 +1135,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const attractCooldown = useRef(new Map<string, number>());
   // BUILD 381: 성향 목표 — 큐(각본) 없음. 소품 곁에 머물며 별이가 욕구로 행동을 하나씩 스스로 고른다.
   //   acts=이번 만남에서 한 행동 수(적당히 하면 떠남), sustained/rising=지속자세(앉기·기대기) 처리.
-  const attractTarget = useRef<{ d: THREE.Vector3; id: string; radius: number; step: number; arrived: boolean; acts: number; standing: boolean; rising: boolean; wasSustained: boolean; restedOnce: boolean } | null>(null);
+  const attractTarget = useRef<ByeoliEncounter | null>(null);
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
@@ -1393,7 +1392,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             const total = cands.reduce((s, c) => s + c.score, 0);
             let r = Math.random() * total; let pick = cands[0];
             for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
-            attractTarget.current = { d: pick.d, id: pick.id, radius: pick.radius, step: 0, arrived: false, acts: 0, standing: false, rising: false, wasSustained: false, restedOnce: false };
+            attractTarget.current = createEncounter(pick.d, pick.id, pick.radius);
           }
         } else {
           const stillValid = SP.props.some((pr) => pr.id === T2.id);
@@ -1439,9 +1438,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           // 현재 동작의 체류 시간이 끝났다. 지속자세(앉기·기대기)였으면 일어서기 단계를 거친다.
           if (T2.wasSustained) {
             rigRef.current?.stopInspect?.(); // 일어서기 시작
-            T2.wasSustained = false;
-            T2.rising = true;
-            T2.step = 1.1; // 일어서는 데 걸리는 시간(그동안 다음 토큰 안 함)
+            beginRising(T2); // 일어서는 데 걸리는 시간(그동안 다음 토큰 안 함)
           } else {
             advanceCombo(T2); // 순간동작(관찰·적기 등)은 바로 다음
           }
