@@ -380,18 +380,37 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const onByeoliCaptureRef = useRef(onByeoliCapture);
   onByeoliCaptureRef.current = onByeoliCapture;
   const byeoliShotAt = useRef(0);
-  // 현재 화면을 찍어 App(R2+기록)으로. 연타 방지 8초. gl.render→toDataURL은 apiRef.capture와 동일 방식.
+  // BUILD 369: 셔터음 — 행성에도(별이 코어와 동일). 짧은 SFX라 HTMLAudio.
+  const shutterRef = useRef<HTMLAudioElement | null>(null);
+  if (typeof Audio !== 'undefined' && !shutterRef.current) {
+    const a = new Audio('/assets/sfx/shutter.mp3');
+    a.volume = 0.5; a.preload = 'auto';
+    shutterRef.current = a;
+  }
+  const playShutter = () => {
+    const a = shutterRef.current;
+    if (!a) return;
+    try { a.currentTime = 0; a.play().catch(() => { /* 자동재생 정책 — 조용히 */ }); } catch { /* 무시 */ }
+  };
+  // BUILD 369: 별이의 촬영 안무 — 행성으로 이식(별이 코어와 동일 철학).
+  //   찍기 = 자유(촬영허용 무관, 늘 자세+셔터+캡처). 올리기 = App이 게이트(일부만).
+  //   ① SitCamera 1~3회(고민하는 사색가) ② 셔터+캡처는 전체의 78% 지점(한참 본 뒤).
   const byeoliShot = (reason: 'stage' | 'mood' | 'event') => {
-    const cb = onByeoliCaptureRef.current;
-    if (!cb) return;
     const now = performance.now();
-    if (now - byeoliShotAt.current < 8000) return;
+    if (now - byeoliShotAt.current < 8000) return; // 찍기 자체의 연타 방지
     byeoliShotAt.current = now;
-    try {
-      gl.render(scene, camera);
-      const dataUrl = gl.domElement.toDataURL('image/jpeg', 0.6);
-      cb(dataUrl, reason);
-    } catch { /* 조용히 */ }
+    const repeats = 1 + Math.floor(Math.random() * 3); // 1~3회
+    const totalSec = rigRef.current?.playAction?.('SitCamera', repeats) ?? 0;
+    const shutterAt = Math.max(800, totalSec * 1000 * 0.78);
+    window.setTimeout(() => {
+      playShutter();
+      const cb = onByeoliCaptureRef.current;
+      try {
+        gl.render(scene, camera);
+        const dataUrl = gl.domElement.toDataURL('image/jpeg', 0.6);
+        if (cb) cb(dataUrl, reason); // 올리기 시도 — 발행 여부는 App이 결정
+      } catch { /* 조용히 */ }
+    }, shutterAt);
   };
   const rainInAt = useRef(0);
   const lastKm = useRef(0);
