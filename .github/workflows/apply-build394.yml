@@ -1,5 +1,6 @@
 name: Apply BUILD 394 observation journal
 on:
+  workflow_dispatch:
   push:
     branches: [main]
 permissions:
