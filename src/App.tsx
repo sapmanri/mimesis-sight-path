@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.32.0 · BUILD 380 · 바닥 앉기/일어서기 전환 모션 병합(Kneeling·Standing) — 툭떨어짐 해결, 자연스럽게 앉고 선다';
+const BUILD_LABEL = 'v2.33.0 · BUILD 381 · 성향 기반 전환 — 각본 폐기. 소품은 욕구 자극만, 별이가 스스로 행동 선택(관찰·기록·쉼·경탄)';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
