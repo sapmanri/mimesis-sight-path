@@ -436,31 +436,34 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   };
   const doRest = (targetId?: string, propObj?: string): { dur: number; sustained: boolean } => {
     const rig = rigRef.current; if (!rig) return { dur: 0.6, sustained: false };
-    if (Math.random() < 0.3) { const d = rig.playAction?.(Math.random() < 0.5 ? 'Leaning' : 'LeaningWall', 1) ?? 0; return { dur: (d > 0 ? d : 3) + 2 + Math.random() * 2, sustained: true }; } // 기대기
-    // 앉기 — 의자면 의자에(소품 숨김), 아니면 바닥에
-    if (propObj === 'chair' && targetId) { const rec = propMap.current.get(targetId); if (rec) rec.anchor.visible = false; rig.playInspect?.('sit'); return { dur: 6 + Math.random() * 4, sustained: true }; }
-    rig.playInspect?.('sitGround'); return { dur: 5 + Math.random() * 4, sustained: true };
+    // BUILD 383: 소품에 맞는 앉기 하나만 확정적으로(랜덤으로 기대기/바닥/의자 섞으면 모션이 덧붙어 엉킨다).
+    if (propObj === 'chair' && targetId) { const rec = propMap.current.get(targetId); if (rec) rec.anchor.visible = false; rig.playInspect?.('sit'); return { dur: 7 + Math.random() * 3, sustained: true }; } // 의자에 오래
+    rig.playInspect?.('sitGround'); return { dur: 6 + Math.random() * 3, sustained: true }; // 그 외엔 바닥에 오래
   };
   // ★ 별이가 지금 자기 욕구로 행동을 하나 고른다(각본 없음). 소품이 자극한 욕구 + 별이 현재 욕구 중 최강.
   //   고른 행동을 하고 그 욕구를 해소(감소). 다음엔 다른 욕구가 이길 수 있다.
   const chooseAndActByDrive = (T2: NonNullable<typeof attractTarget.current>): { dur: number; sustained: boolean } => {
     const stim = PROP_STIMULUS[propMap.current.get(T2.id)?.obj ?? '']?.stir ?? {};
     const D = drives.current;
-    // 각 욕구 점수 = 별이 현재값 + 소품 자극(있으면). 약간의 무작위로 매번 조금씩 다르게.
-    const scores: Record<Drive, number> = {
-      observe: D.observe + (stim.observe ?? 0) + Math.random() * 0.15,
-      record: D.record + (stim.record ?? 0) + Math.random() * 0.15,
-      rest: D.rest + (stim.rest ?? 0) + Math.random() * 0.15,
-      wonder: D.wonder + (stim.wonder ?? 0) + Math.random() * 0.15,
+    const F = driveFatigue.current;
+    const sc = (k: Drive) => {
+      const raw = D[k] + (stim[k] ?? 0);
+      const nonlinear = raw * raw;
+      const fatigue = 1 / (1 + F[k] * 2);
+      // ★ BUILD 383: 이 만남에서 이미 앉거나 기댔으면(satSat) rest를 강하게 억제 — 앉기 반복 방지.
+      //   사람도 앉았다 일어나 또 바로 안 앉는다. 지속자세는 한 만남에 한 번.
+      const restBlock = (k === 'rest' && T2.restedOnce) ? 0.05 : 1;
+      return nonlinear * PERSONALITY[k] * fatigue * restBlock * (0.85 + Math.random() * 0.3);
     };
-    // 제일 강한 욕구 선택
+    const scores: Record<Drive, number> = { observe: sc('observe'), record: sc('record'), rest: sc('rest'), wonder: sc('wonder') };
     let best: Drive = 'observe'; for (const k of Object.keys(scores) as Drive[]) if (scores[k] > scores[best]) best = k;
     T2.acts += 1;
+    F[best] = 1;
     const propObj = propMap.current.get(T2.id)?.obj;
     let r: { dur: number; sustained: boolean };
     switch (best) {
       case 'record': r = doRecord(); D.record = Math.max(0, D.record - 0.6); break;
-      case 'rest': r = doRest(T2.id, propObj); D.rest = Math.max(0, D.rest - 0.7); break;
+      case 'rest': r = doRest(T2.id, propObj); D.rest = Math.max(0, D.rest - 0.7); T2.restedOnce = true; break; // 이 만남에서 쉼 완료
       case 'wonder': r = doWonder(); D.wonder = Math.max(0, D.wonder - 0.6); break;
       default: r = doObserve(); D.observe = Math.max(0, D.observe - 0.5); break;
     }
@@ -1182,19 +1185,24 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   type Drive = 'observe' | 'record' | 'rest' | 'wonder'; // 관찰·기록·쉼·경탄
   // 별이의 현재 욕구(0~1). 시간이 지나면 서서히 차오르고, 그 행동을 하면 해소된다.
   const drives = useRef<Record<Drive, number>>({ observe: 0.3, record: 0.2, rest: 0.2, wonder: 0.25 });
-  // 소품이 자극하는 욕구(다가가 있는 동안 이 욕구들이 차오른다). radius=끌림 반경.
-  const PROP_STIMULUS: Record<string, { radius: number; stir: Partial<Record<Drive, number>> }> = {
-    chair:        { radius: 0.9,  stir: { rest: 0.8, observe: 0.2 } },              // 쉬고 싶어짐
-    book:         { radius: 0.9,  stir: { observe: 0.6, record: 0.7, rest: 0.3 } }, // 보고 적고 싶어짐(가끔 앉아)
-    'rock-small': { radius: 0.85, stir: { observe: 0.7, wonder: 0.3 } },            // 들여다보고 싶어짐
-    'rock-big':   { radius: 0.9,  stir: { wonder: 0.6, observe: 0.4, rest: 0.2 } }, // 우러러보고 살피고 싶어짐
-    tree:         { radius: 0.85, stir: { observe: 0.5, wonder: 0.4, record: 0.3 } },
-    lighthouse:   { radius: 1.0,  stir: { wonder: 0.9, record: 0.3 } },             // 경탄
+  // ★ BUILD 382: 별이의 '성격'. 심즈처럼 같은 자극이라도 성격으로 저울질이 달라진다.
+  //   별이는 사색·관찰이 존재의 핵심(인계서) → 관찰·기록에 높은 가중, 쉼은 낮게. 이게 별이를 '별이답게' 만든다.
+  const PERSONALITY: Record<Drive, number> = { observe: 1.5, record: 1.3, rest: 0.7, wonder: 1.1 };
+  // 방금 한 행동은 잠깐 억제한다(같은 동작 연발 방지 — believability의 핵심). 시간이 지나면 회복.
+  const driveFatigue = useRef<Record<Drive, number>>({ observe: 0, record: 0, rest: 0, wonder: 0 });
+  // 소품이 자극하는 욕구 + 거리 감쇠(atten: 클수록 가까이서만 끌림. 작을수록 멀리서도 방송이 들림).
+  const PROP_STIMULUS: Record<string, { radius: number; atten: number; stir: Partial<Record<Drive, number>> }> = {
+    chair:        { radius: 0.9,  atten: 1.4, stir: { rest: 0.8, observe: 0.2 } },              // 가까이서만
+    book:         { radius: 0.9,  atten: 1.6, stir: { observe: 0.6, record: 0.7, rest: 0.3 } }, // 책은 가까이서만 방송
+    'rock-small': { radius: 0.85, atten: 1.5, stir: { observe: 0.7, wonder: 0.3 } },
+    'rock-big':   { radius: 0.9,  atten: 1.0, stir: { wonder: 0.6, observe: 0.4, rest: 0.2 } }, // 큰 바위는 좀 멀리서도
+    tree:         { radius: 0.85, atten: 1.1, stir: { observe: 0.5, wonder: 0.4, record: 0.3 } },
+    lighthouse:   { radius: 1.0,  atten: 0.6, stir: { wonder: 0.9, record: 0.3 } },             // 등대는 멀리서도 우러러본다
   };
   const attractCooldown = useRef(new Map<string, number>());
   // BUILD 381: 성향 목표 — 큐(각본) 없음. 소품 곁에 머물며 별이가 욕구로 행동을 하나씩 스스로 고른다.
   //   acts=이번 만남에서 한 행동 수(적당히 하면 떠남), sustained/rising=지속자세(앉기·기대기) 처리.
-  const attractTarget = useRef<{ d: THREE.Vector3; id: string; radius: number; step: number; arrived: boolean; acts: number; standing: boolean; rising: boolean; wasSustained: boolean } | null>(null);
+  const attractTarget = useRef<{ d: THREE.Vector3; id: string; radius: number; step: number; arrived: boolean; acts: number; standing: boolean; rising: boolean; wasSustained: boolean; restedOnce: boolean } | null>(null);
   const tmp = useMemo(() => ({
     p: new THREE.Vector3(), T: new THREE.Vector3(), U: new THREE.Vector3(),
     F: new THREE.Vector3(), Z: new THREE.Vector3(), M: new THREE.Matrix4(), Q: new THREE.Quaternion(),
@@ -1273,6 +1281,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       D.record = Math.min(1, D.record + dt * 0.012);
       D.rest = Math.min(1, D.rest + dt * 0.010);
       D.wonder = Math.min(1, D.wonder + dt * 0.014);
+      // BUILD 382: 방금 한 행동 억제(fatigue)는 서서히 회복 — 시간 지나면 그 행동 다시 가능.
+      const F = driveFatigue.current;
+      for (const k of Object.keys(F) as Drive[]) F[k] = Math.max(0, F[k] - dt * 0.3);
     }
     let moving = true;
     // BUILD 224: 이동 상태기 — 지가 걷다 뛰다 탈것 탔다가 내렸다가
@@ -1512,13 +1523,15 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             const pd = new THREE.Vector3(pr.dir[0], pr.dir[1], pr.dir[2]).normalize();
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(pd), -1, 1));
             if (ang > stim.radius) continue;
-            cands.push({ d: pd, id: pr.id, radius: stim.radius, score: 1 * (1 - ang / stim.radius) });
+            // 거리 감쇠 — atten이 클수록 가까이서만 끌린다(심즈식 방송 세기).
+            const nearness = Math.pow(1 - ang / stim.radius, stim.atten);
+            cands.push({ d: pd, id: pr.id, radius: stim.radius, score: nearness });
           }
           if (cands.length && P.phase === 'walk') {
             const total = cands.reduce((s, c) => s + c.score, 0);
             let r = Math.random() * total; let pick = cands[0];
             for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
-            attractTarget.current = { d: pick.d, id: pick.id, radius: pick.radius, step: 0, arrived: false, acts: 0, standing: false, rising: false, wasSustained: false };
+            attractTarget.current = { d: pick.d, id: pick.id, radius: pick.radius, step: 0, arrived: false, acts: 0, standing: false, rising: false, wasSustained: false, restedOnce: false };
           }
         } else {
           const stillValid = SP.props.some((pr) => pr.id === T2.id);
@@ -1526,7 +1539,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           else {
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(T2.d), -1, 1));
             if (ang < 0.14) {
-              // 도착 — 별이가 자기 욕구로 첫 행동을 스스로 고른다(각본 없음).
+              // 도착 — 소품을 바라보게 몸을 돌린다(등지고 딴 데 보는 것 방지). 그다음 욕구로 행동 선택.
+              // 별이 위치 d에서 소품 d로 향하는 접선 방향으로 T를 정렬.
+              const face = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d));
+              if (face.lengthSq() > 1e-6) { RM.T.copy(face.normalize()); }
               T2.arrived = true;
               const r = chooseAndActByDrive(T2); T2.step = r.dur; T2.wasSustained = r.sustained;
             } else if (moving) {

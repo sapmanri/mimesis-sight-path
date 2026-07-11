@@ -48,7 +48,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.33.0 · BUILD 381 · 성향 기반 전환 — 각본 폐기. 소품은 욕구 자극만, 별이가 스스로 행동 선택(관찰·기록·쉼·경탄)';
+const BUILD_LABEL = 'v2.36.0 · BUILD 384 · 소품 바라보게 몸 돌림(등지고 딴데보기 해결) + 382·383 반영';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
