@@ -361,7 +361,7 @@ const FOOT_WATER = { value: false }; // BUILD 264: 발밑 물 판정
 const MOON_SUN = new THREE.Vector3(0, 1, 0); // BUILD 236: 달→태양 방향 (위상 셰이더 공유 참조)
 const PET_V = new THREE.Vector3(); // BUILD 231: 펫 위치 환산용 — PT.t2를 쓰면 yawFrom(=PT.t2 별칭)이 덮여 요가 죽는다
 
-export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, onEvent, contactRef, apiRef, onByeoliCapture }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; onEvent?: (e: PlanetEvent) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null>; onByeoliCapture?: (dataUrl: string, reason: 'stage' | 'mood' | 'event') => void }) {
+export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, onFlag, onEvent, contactRef, apiRef, onByeoliCapture, onNarration }: { spec: PlanetSpec; walkerIdx?: number; paused?: boolean; onMemory?: (m: PlanetMemory | null) => void; onFlag?: (name: string) => void; onEvent?: (e: PlanetEvent) => void; contactRef?: MutableRefObject<PlanetContact | null>; apiRef?: MutableRefObject<PlanetApi | null>; onByeoliCapture?: (dataUrl: string, reason: 'stage' | 'mood' | 'event') => void; onNarration?: (text: string) => void }) {
   const { scene, camera, gl } = useThree();
   if (!scene.fog) scene.fog = new THREE.Fog(PALETTE.fog, 9, spec.viewDist ?? 41);
   // BUILD 214: 시야 거리 다이얼 — 씬 안개 near/far 즉답 갱신
@@ -382,6 +382,24 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   // 별이 자율 촬영 — 별 종속(맵 무관). 상태머신의 자연스러운 순간에 확률로 부른다.
   const onByeoliCaptureRef = useRef(onByeoliCapture);
   onByeoliCaptureRef.current = onByeoliCapture;
+  const onNarrationRef = useRef(onNarration);
+  onNarrationRef.current = onNarration;
+  const narrationGuard = useRef({ text: '', at: 0 });
+  const narrate = (text: string, minGap = 900) => {
+    const now = performance.now();
+    const prev = narrationGuard.current;
+    if (prev.text === text && now - prev.at < 12000) return;
+    if (now - prev.at < minGap) return;
+    narrationGuard.current = { text, at: now };
+    onNarrationRef.current?.(text);
+  };
+  const propNarrationName = (id: string) => {
+    const prop = propMap.current.get(id);
+    const named = prop?.title?.trim();
+    if (named) return named;
+    const names: Record<string, string> = { chair: '의자', book: '책', 'rock-small': '작은 돌', 'rock-big': '큰 바위', tree: '나무', lighthouse: '등대' };
+    return names[prop?.obj ?? ''] ?? '눈앞의 무언가';
+  };
   const byeoliShotAt = useRef(0);
   const heldCameraRef = useRef<THREE.Group | null>(null);
   const heldPhoneRef = useRef<THREE.Group | null>(null);
@@ -419,7 +437,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     byeoliShotAt.current = now;
     const repeats = 1 + Math.floor(Math.random() * 3); // 1~3회
     const totalSec = rigRef.current?.playAction?.('SitCamera', repeats) ?? 0;
-    if (totalSec > 0) showHeldDevice('camera', totalSec);
+    if (totalSec > 0) {
+      showHeldDevice('camera', totalSec);
+      narrate('그냥 지나치기에는 아까운 장면이었는지, 별이는 카메라를 들었다.');
+    }
     const shutterAt = Math.max(800, totalSec * 1000 * 0.78);
     window.setTimeout(() => {
       playShutter();
@@ -468,6 +489,14 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
     const D = drives.current;
     const F = driveFatigue.current;
     const best = chooseDrive(D, F, stim, T2.restedOnce);
+    const place = propNarrationName(T2.id);
+    const lines: Record<Drive, string> = {
+      observe: `별이는 ${place} 앞에서 작은 부분까지 찬찬히 살펴보고 있다.`,
+      record: `별이는 ${place} 앞에서 떠오른 것을 휴대폰에 적고 있다.`,
+      rest: `별이는 ${place} 곁에서 잠시 숨을 고르기로 했다.`,
+      wonder: `${place}가 자꾸 마음에 걸리는지, 별이는 한동안 시선을 떼지 못한다.`,
+    };
+    narrate(lines[best]);
     T2.acts += 1;
     F[best] = 1;
     const propObj = propMap.current.get(T2.id)?.obj;
@@ -1449,6 +1478,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             let r = Math.random() * total; let pick = cands[0];
             for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
             attractTarget.current = createEncounter(pick.d, pick.id, pick.radius);
+            narrate(`별이는 ${propNarrationName(pick.id)} 쪽으로 천천히 발걸음을 옮겼다.`);
           }
         } else {
           const stillValid = SP.props.some((pr) => pr.id === T2.id);
@@ -1482,6 +1512,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           // 콤보 전체 종료 대기 — 마지막 일어서기 완료 후 걷기.
           if (T2.step <= 0) {
             attractCooldown.current.set(T2.id, 25); // 방금 논 소품 25초 억제(반복 방지)
+            narrate(`별이는 ${propNarrationName(T2.id)} 곁에 충분히 머문 뒤, 다시 길을 나섰다.`);
             attractTarget.current = null;
           }
         } else if (T2.rising) {
