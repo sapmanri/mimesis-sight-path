@@ -187,12 +187,15 @@ export function createClipRig(
   const sitDown = mk('Sit_Floor_Down') ?? mk('StandToSit');
   const sitIdleFloor = mk('Sit_Floor_Idle', false) ?? mk('SitGround', false); // BUILD 138: 바닥파/의자파 구분
   const sitIdle = sitIdleFloor ?? mk('Sitting', false) ?? mk('Sitting Idle', false);
+  // BUILD 364: 의자 앉기 클립 부활 — SitChair가 GLB에 있는데 안 쓰여, 의자 소환 상황(지역 캠핑)에서도
+  //   바닥 앉기(SitGround)가 나와 의자 위에 철퍼덕 앉는 문제. chair가 소환되면 이 클립을 쓴다.
+  const sitChairIdle = mk('SitChair', false) ?? mk('Sitting', false);
   const rideSeatH = sitIdle ? (sitIdleFloor ? 0.02 : 0.17) : 0; // BUILD 139: 의자파 0.3→0.17
   const standUp = mk('Sit_Floor_StandUp') ?? mk('SitToStand');
   // BUILD 146: 여분 클립 — 로코모션/제스처에 안 쓰인 나머지가 이 아이의 개성이다
   const knownNames = new Set([cWalk.name, cRun.name, cIdle.name,
     'PickUp', 'Interact', 'Pickup', 'Sit_Floor_Down', 'Sit_Floor_Idle', 'Sitting', 'Sitting Idle', 'Sit_Floor_StandUp',
-    'StandToSit', 'SitGround', 'SitToStand']); // BUILD 281: 별리 앉기 3종도 known(flourish 제외)
+    'StandToSit', 'SitGround', 'SitChair', 'SitToStand']); // BUILD 281: 별리 앉기 3종도 known(flourish 제외)
   // BUILD 281: 걷다 멈춰 하는 즉흥(flourish)은 '서서 잠깐 하는 것'만. 별리 49클립 중 배치.
   // 앉기/눕기/소품필요/로코모션 변형은 flourish에서 제외 — 캠프·전용 상황에서 명시 호출한다.
   // (제외: LayingShake=침대전용, Piano=신디사이저전용, Treadmill=러닝머신전용,
@@ -295,10 +298,11 @@ export function createClipRig(
   type Gesture = 'none' | 'pickup' | 'sitDown' | 'sit' | 'standUp' | 'flourish' | 'named'; // BUILD 146 / 283
   let gesture: Gesture = 'none';
   let namedAction: THREE.AnimationAction | null = null; // BUILD 283: 지정 클립 지속재생(캠프/prop-act)
+  let sittingOnChair = false; // BUILD 364: 이번 앉기가 의자 앉기(SitChair)인지 바닥 앉기(SitGround)인지
   let riding = false; // BUILD 136: 구름 위
   mixer.addEventListener('finished', (e) => {
     const a = (e as unknown as { action: THREE.AnimationAction }).action;
-    if (a === sitDown && gesture === 'sitDown' && sitIdle) { switchTo(sitIdle, 0.25); gesture = 'sit'; }
+    if (a === sitDown && gesture === 'sitDown' && sitIdle) { switchTo(sittingOnChair && sitChairIdle ? sitChairIdle : sitIdle, 0.25); gesture = 'sit'; }
     else if (a === standUp && gesture === 'standUp') { switchTo(idle, 0.3); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
     else if (a === pickup && gesture === 'pickup') { switchTo(idle, 0.4); gesture = 'none'; gestureGrace = 0.9; rollingMin = Infinity; }
     else if (gesture === 'flourish' && a === current && extras.includes(a)) { switchTo(idle, 0.35); gesture = 'none'; gestureGrace = 0.6; rollingMin = Infinity; } // BUILD 146 / 290: 갈아탄 옛 클립의 뒤늦은 finished는 무시
@@ -372,6 +376,8 @@ export function createClipRig(
       if (gesture !== 'none') return;
       // BUILD 105: 전원 의자 — 의자 높이 클립은 앉고, 바닥 클립은 의자 위에 양반다리로.
       // (의자파가 3/11뿐이라 열 번을 새로고침해도 의자를 못 보는 문제의 해답)
+      // BUILD 364: 의자 소환 여부로 앉기 종류를 가른다 — 의자 있으면 SitChair, 없으면 SitGround.
+      sittingOnChair = kind === 'sit' && !!chairAsset;
       if (kind === 'sit' && chairAsset && root.parent && sitIdle) {
         if (!chair) {
           chair = chairAsset;
@@ -398,8 +404,9 @@ export function createClipRig(
         feetAnchor = { x: (lx + fw.x) / 2, z: (lz + fw.z) / 2 };
       }
       if (kind === 'sit' && sitIdle) {
+        const seatIdle = sittingOnChair && sitChairIdle ? sitChairIdle : sitIdle; // BUILD 364: 의자/바닥 구분
         if (sitDown) { gesture = 'sitDown'; switchTo(sitDown, 0.35); }
-        else { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 전환 클립이 없으면 느린 페이드로
+        else { gesture = 'sit'; switchTo(seatIdle, 0.55); } // 전환 클립이 없으면 느린 페이드로
       } else if (pickup) { gesture = 'pickup'; switchTo(pickup, 0.3); }
       else if (sitIdle) { gesture = 'sit'; switchTo(sitIdle, 0.55); } // 들여다보기가 없으면 앉는다
     },
