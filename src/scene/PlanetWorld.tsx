@@ -883,10 +883,14 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       hipsPRef.current = null;
       footPRef.current = null;
       footRRef.current = null;
+      gazeHeadRef.current = null;
+      gazeNeckRef.current = null;
       group.traverse((n) => {
         if (!hipsPRef.current && /hips$/i.test(n.name)) hipsPRef.current = n;
         if (!footPRef.current && /left.*foot$/i.test(n.name)) footPRef.current = n; // 왼발
         if (!footRRef.current && /right.*foot$/i.test(n.name)) footRRef.current = n; // 오른발
+        if ((n as THREE.Bone).isBone && !gazeHeadRef.current && /head$/i.test(n.name)) gazeHeadRef.current = n;
+        if ((n as THREE.Bone).isBone && !gazeNeckRef.current && /neck$/i.test(n.name)) gazeNeckRef.current = n;
       });
       // 왼발 못 찾으면(이름 체계 다름) 아무 foot이나
       if (!footPRef.current) group.traverse((n) => { if (!footPRef.current && /foot$/i.test(n.name)) footPRef.current = n; });
@@ -901,34 +905,35 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         ?? createWalkerRig(group, animations, 0.72);
       // BUILD 387: 의자 앉기 폐기 — rig에 의자 자산 세팅 안 함. 앉기는 바닥 앉기(sitGround)만.
       //   (의자 소환 방식이 계속 뺑뺑이 유발 → 통째로 걷어냄. 훗날 필요하면 위치정합부터 처음 설계.)
-      // BUILD 398: 손 본의 자식으로 직접 붙이면 일부 GLB의 본 스케일이 소품을 우주로 날린다.
-      // 장면 루트에 두고 매 프레임 손의 월드 변환만 추적한다.
+      // BUILD 399: 랜턴이 안정적으로 달린 바로 그 오른손/손목 앵커를 카메라와 휴대폰도 공유한다.
+      // 본의 월드 스케일만 상쇄하고 위치는 손목 원점에서 잡는다. 별도 scene 추적은 쓰지 않는다.
       let deviceHand: THREE.Object3D | null = null;
-      const rightHand = /(?:^|[_:])(?:mixamorig)?right(?:_)?hand$|RightHand$/i;
-      const leftHand = /(?:^|[_:])(?:mixamorig)?left(?:_)?hand$|LeftHand$/i;
-      group.traverse((n) => { if ((n as THREE.Bone).isBone && rightHand.test(n.name) && !deviceHand) deviceHand = n; });
-      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && leftHand.test(n.name) && !deviceHand) deviceHand = n; });
+      group.traverse((n) => { if ((n as THREE.Bone).isBone && /RightHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
+      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
       if (deviceHand) {
-        heldDeviceHandRef.current = deviceHand as THREE.Object3D;
-        const deviceRoot = new THREE.Group();
-        deviceRoot.visible = true;
-        scene.add(deviceRoot);
-        heldDeviceRootRef.current = deviceRoot;
+        const h = deviceHand as THREE.Object3D;
+        group.updateMatrixWorld(true);
+        const ws = new THREE.Vector3();
+        h.getWorldScale(ws);
+        const invHandScale = 1 / Math.max(ws.x, 1e-6);
         const mountDevice = (kind: 'camera' | 'phone') => {
           const wrapper = new THREE.Group();
+          wrapper.scale.setScalar(invHandScale);
           wrapper.visible = false;
-          deviceRoot.add(wrapper);
+          h.add(wrapper);
           if (kind === 'camera') {
-            wrapper.position.set(0.018, -0.025, -0.055);
+            wrapper.position.set(0, -0.012, -0.008);
             wrapper.rotation.set(Math.PI / 2, 0, Math.PI);
             heldCameraRef.current = wrapper;
           } else {
-            wrapper.position.set(0.012, -0.018, -0.035);
+            wrapper.position.set(0, -0.01, -0.004);
             wrapper.rotation.set(Math.PI / 2, 0, Math.PI / 2);
             heldPhoneRef.current = wrapper;
           }
           void loadHeldDeviceAsset(kind).then((device) => {
             if (!alive) return;
+            // 랜턴의 손목 위치를 기준으로 손바닥 안쪽에 올린다.
+            device.position.set(kind === 'camera' ? 0.015 : 0.01, kind === 'camera' ? -0.035 : -0.025, kind === 'camera' ? -0.02 : -0.012);
             wrapper.add(device);
           }).catch(() => { /* 소품이 없으면 동작만 유지 */ });
         };
@@ -967,6 +972,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       heldDeviceHandRef.current = null;
       heldCameraRef.current = null;
       heldPhoneRef.current = null;
+      gazeHeadRef.current = null;
+      gazeNeckRef.current = null;
+      gazeState.current = { mode: 'none', until: 0, next: 3, blend: 0 };
     };
   }, [holder, walkerIdx]);
 
@@ -1203,6 +1211,10 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const hipsPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 140): 골반 뼈
   const footPRef = useRef<THREE.Object3D | null>(null); // BUILD 231(본토 142): 발 뼈 (왼발)
   const footRRef = useRef<THREE.Object3D | null>(null); // BUILD 275: 오른발 뼈
+  // BUILD 399: 별이의 눈 — 머리/목이 실제 관심 대상을 먼저 따라간다.
+  const gazeHeadRef = useRef<THREE.Object3D | null>(null);
+  const gazeNeckRef = useRef<THREE.Object3D | null>(null);
+  const gazeState = useRef({ mode: 'none' as 'none' | 'prop' | 'pet' | 'sky', until: 0, next: 3, blend: 0 });
   // BUILD 230: 부양의 진범 — 리프트가 릭 소유의 루트 y(침하 시스템의 자리)를 매 프레임 덮어썼다.
   // 릭의 침하는 기억 기반이라 밟히면 발이 클립 여유고만큼 영구히 뜬다. 리프트는 별도 부모로 분리.
   const liftGroup = useMemo(() => new THREE.Group(), []);
@@ -1597,7 +1609,58 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
     rigRef.current?.update(dt, MV.mode === 'run' ? 0.9 : 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * spdMul * dt : 0);
-    // BUILD 398: 소품 루트는 scene 좌표에서 손의 실제 월드 위치·회전을 추적한다.
+    // BUILD 399: 별이의 눈. 접근 목표는 걷기 전부터 보고, 목표가 없을 때는 가끔 반려동물이나 하늘을 본다.
+    {
+      const gazeBone = gazeHeadRef.current ?? gazeNeckRef.current;
+      const GS = gazeState.current;
+      let gazeTarget: THREE.Vector3 | null = null;
+      const encounter = attractTarget.current;
+      if (encounter) {
+        const rec = propMap.current.get(encounter.id);
+        if (rec) {
+          gazeTarget = new THREE.Vector3();
+          rec.anchor.getWorldPosition(gazeTarget);
+          GS.mode = 'prop';
+          GS.until = el + 0.4;
+        }
+      } else {
+        if (el >= GS.next && el >= GS.until) {
+          const canSeePet = !!petRef.current;
+          GS.mode = canSeePet && Math.random() < 0.48 ? 'pet' : 'sky';
+          GS.until = el + 2.2 + Math.random() * 3.2;
+          GS.next = GS.until + 5 + Math.random() * 9;
+          if (GS.mode === 'sky') narrate('별이는 문득 하늘을 올려다보았다.', 2500);
+        }
+        if (el < GS.until && GS.mode === 'pet' && petRef.current) {
+          gazeTarget = new THREE.Vector3();
+          petRef.current.pet.group.getWorldPosition(gazeTarget);
+          gazeTarget.y += 0.12;
+        } else if (el < GS.until && GS.mode === 'sky' && gazeBone) {
+          gazeTarget = new THREE.Vector3();
+          gazeBone.getWorldPosition(gazeTarget);
+          gazeTarget.add(new THREE.Vector3(0.25, 3.2, -0.8));
+        } else if (el >= GS.until) {
+          GS.mode = 'none';
+        }
+      }
+      if (gazeBone && walkerGroupRef.current && gazeTarget) {
+        const headWorld = new THREE.Vector3();
+        gazeBone.getWorldPosition(headWorld);
+        const localDir = gazeTarget.sub(headWorld);
+        const groupQ = new THREE.Quaternion();
+        walkerGroupRef.current.getWorldQuaternion(groupQ);
+        localDir.applyQuaternion(groupQ.invert()).normalize();
+        const yaw = THREE.MathUtils.clamp(Math.atan2(localDir.x, localDir.z), -0.65, 0.65);
+        const pitch = THREE.MathUtils.clamp(-Math.atan2(localDir.y, Math.hypot(localDir.x, localDir.z)), -0.34, 0.30);
+        GS.blend += (1 - GS.blend) * Math.min(1, dt * 4.5);
+        const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw * 0.42 * GS.blend);
+        const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), pitch * 0.36 * GS.blend);
+        gazeBone.quaternion.multiply(qYaw).multiply(qPitch);
+      } else {
+        GS.blend += (0 - GS.blend) * Math.min(1, dt * 3.5);
+      }
+    }
+    // BUILD 398의 월드 추적은 폐기. 손 소품은 랜턴과 같은 손목 본의 자식으로 움직인다.
     const heldHand = heldDeviceHandRef.current;
     const heldRoot = heldDeviceRootRef.current;
     if (heldHand && heldRoot) {
