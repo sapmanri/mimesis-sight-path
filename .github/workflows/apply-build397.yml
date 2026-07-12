@@ -1,0 +1,33 @@
+name: Apply BUILD 397 unified mobile UI
+
+on:
+  push:
+    paths:
+      - '.build397-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Patch unified mobile UI
+        run: python3 scripts/apply-build397.py
+      - name: Build check
+        run: npm ci && npm run build
+      - name: Commit BUILD 397
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-build397.yml .build397-trigger scripts/apply-build397.py
+          git add -A
+          git commit -m "BUILD 397: unify passport thread and editor on mobile"
+          git push
