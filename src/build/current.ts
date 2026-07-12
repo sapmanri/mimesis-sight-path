@@ -10,10 +10,10 @@ export type BuildInfo = {
  * Future builds update this file instead of patching App.tsx.
  */
 export const CURRENT_BUILD: BuildInfo = {
-  version: '2.54.0',
-  number: 403,
-  title: 'Becoming Byeoli',
-  subtitle: '별이는 조금씩 별이가 되어갑니다',
+  version: '2.55.0',
+  number: 404,
+  title: 'Living Motion',
+  subtitle: '발이 움직일 때만 세계를 걷습니다',
 };
 
 export const BUILD_LABEL = `v${CURRENT_BUILD.version} · BUILD ${CURRENT_BUILD.number} · ${CURRENT_BUILD.title} — ${CURRENT_BUILD.subtitle}`;
