@@ -53,7 +53,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.47.0 · BUILD 396 · 모바일 에디터 접기 — 화면을 가리지 않는 슬라이더';
+const BUILD_LABEL = 'v2.48.0 · BUILD 397 · 모바일 UI 레일 — 여권·기록·에디터를 한 형식으로';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -94,6 +94,12 @@ export default function App() {
   const [planetMode] = useState(() => new URLSearchParams(window.location.search).has('planet'));
   const [planetEdit] = useState(() => new URLSearchParams(window.location.search).has('edit'));
   const [planetEditorOpen, setPlanetEditorOpen] = useState(() => window.innerWidth > 760); // BUILD 396: 모바일 기본 접힘
+  const [compactUI, setCompactUI] = useState(() => window.innerWidth <= 760);
+  useEffect(() => {
+    const onResize = () => setCompactUI(window.innerWidth <= 760);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   // BUILD 285: ?theatre=1 — 그림자 극장(페러럴). &edit=1 — 극장 에디터.
   const [theatreMode] = useState(() => new URLSearchParams(window.location.search).has('theatre'));
   const [tSpec, setTSpec] = useState<TheatreSpec>(() => {
@@ -795,10 +801,11 @@ export default function App() {
         <div className="atmosphere-grain" aria-hidden="true" />
         {passportOpen && (
           <div style={{
-            position: 'fixed', top: 76, right: planetEdit ? 318 : 18, width: 250, zIndex: 6,
-            padding: '14px 16px', borderRadius: 14, color: '#e8dcc2',
-            background: 'rgba(18,24,26,0.9)', border: '1px solid rgba(216,178,110,0.3)',
-            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            position: 'fixed', top: compactUI ? 0 : 76, right: compactUI ? 0 : (planetEditorOpen ? 318 : 18), bottom: compactUI ? 0 : 'auto',
+            width: compactUI ? 'min(300px, 84vw)' : 250, maxHeight: compactUI ? 'none' : '78vh', zIndex: 7, overflowY: 'auto',
+            padding: compactUI ? '70px 14px calc(24px + env(safe-area-inset-bottom))' : '14px 16px', borderRadius: compactUI ? 0 : 14, color: '#e8dcc2',
+            background: 'rgba(18,24,26,0.95)', border: '1px solid rgba(216,178,110,0.3)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', WebkitOverflowScrolling: 'touch',
           }}>
             <div style={{ fontSize: 12, color: '#d8b26e', letterSpacing: 2, marginBottom: 8 }}>여권 — 오늘의 우연</div>
             {passport.length > 0 && (
@@ -826,10 +833,11 @@ export default function App() {
         )}
         {threadOpen && (
           <div style={{
-            position: 'fixed', top: 76, right: planetEdit ? 318 : 18, width: 300, maxHeight: '78vh', zIndex: 7, overflowY: 'auto',
-            padding: '14px 14px', borderRadius: 16, color: '#e8dcc2',
-            background: 'rgba(16,20,24,0.94)', border: '1px solid rgba(216,178,110,0.3)',
-            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            position: 'fixed', top: compactUI ? 0 : 76, right: compactUI ? 0 : (planetEditorOpen ? 318 : 18), bottom: compactUI ? 0 : 'auto',
+            width: compactUI ? 'min(300px, 84vw)' : 300, maxHeight: compactUI ? 'none' : '78vh', zIndex: 7, overflowY: 'auto',
+            padding: compactUI ? '70px 14px calc(24px + env(safe-area-inset-bottom))' : '14px 14px', borderRadius: compactUI ? 0 : 16, color: '#e8dcc2',
+            background: 'rgba(16,20,24,0.95)', border: '1px solid rgba(216,178,110,0.3)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', WebkitOverflowScrolling: 'touch',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ fontSize: 13, color: '#d8b26e', letterSpacing: 1 }}>기록 · @she_walks_slow</span>
@@ -883,7 +891,7 @@ export default function App() {
             )}
           </div>
         )}
-        <ObservationJournal entries={byeoliJournal} />
+        {(!compactUI || !(planetEditorOpen || passportOpen || threadOpen)) && <ObservationJournal entries={byeoliJournal} />}
         {flagWhisper && (
           <div key={flagWhisper + String(Date.now() % 7)} style={{
             position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 6,
@@ -918,22 +926,27 @@ export default function App() {
             <div style={{ fontSize: 12.5, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{memCard.text}</div>
           </div>
         )}
-        <div style={{ position: 'fixed', top: 18, right: planetEdit ? 318 : 18, display: 'flex', gap: 10, zIndex: 6 }}>
+        <div style={{
+          position: 'fixed', top: compactUI ? 76 : 18,
+          right: compactUI && (planetEditorOpen || passportOpen || threadOpen) ? 'calc(min(300px, 84vw) + 8px)' : (compactUI ? 12 : (planetEditorOpen ? 318 : 18)),
+          display: 'flex', flexDirection: compactUI ? 'column' : 'row', gap: 10, zIndex: 10,
+        }}>
           {(([
-            // 에디터 전용 — 세계를 바꾸거나 동기를 깨는 도구는 방문자에게 숨긴다 (BUILD 249)
             ...(planetEdit ? [
+              ['⚙️', () => { const opening = !planetEditorOpen; setPlanetEditorOpen(opening); if (opening) { setPassportOpen(false); setThreadOpen(false); } }, false],
+            ] as [string, () => void, boolean][] : []),
+            ...((planetEdit && !compactUI) ? [
               ['🪐', () => updSpec((s) => ({ ...s, theme: (['earth', 'luna', 'moon', 'desert'] as const)[((['earth', 'luna', 'moon', 'desert'] as const).indexOf(s.theme) + 1) % 4] })), false],
               ['🚶', () => updSpec((s) => ({ ...s, walker: (((s.walker ?? -1) + 2) % (walkerCount() + 1)) - 1 })), false],
               [planetPaused ? '▶' : '⏸', () => setPlanetPaused((v) => !v), false],
             ] as [string, () => void, boolean][] : []),
-            // 방문자도 함께 — 세계를 바꾸지 않는 '구경' 도구. 세 번째 = 안 읽음 빨간점.
-            ['🛂', () => { setPassportOpen((v) => !v); setPassportSeenN(passport.length); try { localStorage.setItem('mimesis.passportSeenN', String(passport.length)); } catch { /* 조용히 */ } }, passport.length > passportSeenN],
-            ['📖', () => { setThreadOpen((v) => !v); const t = feed[0]?.t ?? 0; setThreadSeenT(t); try { localStorage.setItem('mimesis.threadSeenT', String(t)); } catch { /* 조용히 */ } }, (feed[0]?.t ?? 0) > threadSeenT],
+            ['🛂', () => { const opening = !passportOpen; setPassportOpen(opening); if (opening) { setThreadOpen(false); setPlanetEditorOpen(false); } setPassportSeenN(passport.length); try { localStorage.setItem('mimesis.passportSeenN', String(passport.length)); } catch { /* 조용히 */ } }, passport.length > passportSeenN],
+            ['📖', () => { const opening = !threadOpen; setThreadOpen(opening); if (opening) { setPassportOpen(false); setPlanetEditorOpen(false); } const t = feed[0]?.t ?? 0; setThreadSeenT(t); try { localStorage.setItem('mimesis.threadSeenT', String(t)); } catch { /* 조용히 */ } }, (feed[0]?.t ?? 0) > threadSeenT],
           ]) as [string, () => void, boolean][]).map(([label, fn, dot]) => (
             <button key={label} type="button" onClick={fn} style={{
               width: 46, height: 46, borderRadius: 999, fontSize: 20, cursor: 'pointer', position: 'relative',
-              border: '1px solid rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.10)',
-              backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff',
+              border: '1px solid rgba(216,178,110,0.45)', background: 'rgba(18,24,26,0.82)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.22)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff',
             }}>{label}
               {dot && (<span style={{
                 position: 'absolute', top: 4, right: 4, width: 10, height: 10, borderRadius: 999,
@@ -942,9 +955,9 @@ export default function App() {
             </button>
           ))}
         </div>
-        {planetEdit && (
+        {planetEdit && !compactUI && (
           <div style={{
-            position: 'fixed', top: 70, right: 318, zIndex: 6,
+            position: 'fixed', top: 70, right: planetEditorOpen ? 318 : 18, zIndex: 6,
             background: 'rgba(18,24,26,0.75)', color: '#d8b26e', fontSize: 11.5,
             padding: '4px 10px', borderRadius: 8, letterSpacing: 0.5,
             border: '1px solid rgba(216,178,110,0.3)', backdropFilter: 'blur(8px)',
@@ -953,14 +966,6 @@ export default function App() {
             {/* BUILD 273: 현재 캐릭터 파일명·인덱스 — Vase가 정확히 짚어줄 수 있게 */}
             🚶 idx {planetWalker}{planetWalker < 0 ? ' (랜덤)' : ` · ${WALKER_ROSTER[planetWalker]?.file ?? '?'}`}
           </div>
-        )}
-        {planetEdit && (
-          <button type="button" onClick={() => setPlanetEditorOpen((v) => !v)} aria-label={planetEditorOpen ? '에디터 접기' : '에디터 펼치기'} style={{
-            position: 'fixed', top: 76, right: planetEditorOpen ? 'min(312px, 84vw)' : 12, zIndex: 9,
-            width: 44, height: 44, borderRadius: 999, cursor: 'pointer', fontSize: 18,
-            color: '#e8dcc2', background: 'rgba(18,24,26,0.92)', border: '1px solid rgba(216,178,110,0.42)',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.24)', backdropFilter: 'blur(8px)',
-          }}>{planetEditorOpen ? '×' : '⚙️'}</button>
         )}
         {planetEdit && planetEditorOpen && (
           <aside style={{
