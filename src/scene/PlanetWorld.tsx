@@ -20,7 +20,7 @@ import { planetSound } from '../audio/planetSound';
 import type { PlanetSpec, PlanetMemory, PlanetContact, PlanetApi, PlanetProp } from './planetSpec';
 import type { MutableRefObject } from 'react';
 import { createPropObject, createPropAnimated } from '../engine/props';
-import { ROAMING_ANIMALS, animalTemperament, chooseAnimalGoal, makeAnimalState, mapAnimalClips, playAnimalMode, type AnimalLifeState } from '../mimesis/runtime';
+import { ROAMING_ANIMALS, animalTemperament, attachHandProp, chooseAnimalGoal, makeAnimalState, mapAnimalClips, playAnimalMode, type AnimalLifeState } from '../mimesis/runtime';
 import { loadHandLanternAsset } from '../engine/props';
 import { loadHeldDeviceAsset } from './heldDevices';
 import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
@@ -907,64 +907,29 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         ?? createWalkerRig(group, animations, 0.72);
       // BUILD 387: 의자 앉기 폐기 — rig에 의자 자산 세팅 안 함. 앉기는 바닥 앉기(sitGround)만.
       //   (의자 소환 방식이 계속 뺑뺑이 유발 → 통째로 걷어냄. 훗날 필요하면 위치정합부터 처음 설계.)
-      // BUILD 399: 랜턴이 안정적으로 달린 바로 그 오른손/손목 앵커를 카메라와 휴대폰도 공유한다.
-      // 본의 월드 스케일만 상쇄하고 위치는 손목 원점에서 잡는다. 별도 scene 추적은 쓰지 않는다.
-      let deviceHand: THREE.Object3D | null = null;
-      group.traverse((n) => { if ((n as THREE.Bone).isBone && /RightHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
-      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
-      if (deviceHand) {
-        const h = deviceHand as THREE.Object3D;
-        group.updateMatrixWorld(true);
-        const ws = new THREE.Vector3();
-        h.getWorldScale(ws);
-        const invHandScale = 1 / Math.max(ws.x, 1e-6);
-        const mountDevice = (kind: 'camera' | 'phone') => {
-          const wrapper = new THREE.Group();
-          wrapper.scale.setScalar(invHandScale);
-          wrapper.visible = false;
-          h.add(wrapper);
-          if (kind === 'camera') {
-            // BUILD 402: 손바닥 중심에 카메라 그립이 오도록 손목 기준 재보정.
-            wrapper.position.set(0.004, -0.018, -0.012);
-            wrapper.rotation.set(Math.PI / 2, -0.08, Math.PI);
-            heldCameraRef.current = wrapper;
-          } else {
-            // 화면이 얼굴 쪽을 향하고 손가락 안쪽에 놓이도록 세로 그립 보정.
-            wrapper.position.set(0.003, -0.015, -0.006);
-            wrapper.rotation.set(Math.PI / 2, 0.12, Math.PI / 2);
-            heldPhoneRef.current = wrapper;
-          }
-          void loadHeldDeviceAsset(kind).then((device) => {
-            if (!alive) return;
-            // 랜턴의 손목 위치를 기준으로 손바닥 안쪽에 올린다.
-            device.position.set(kind === 'camera' ? 0.008 : 0.004, kind === 'camera' ? -0.024 : -0.018, kind === 'camera' ? -0.012 : -0.006);
-            wrapper.add(device);
-          }).catch(() => { /* 소품이 없으면 동작만 유지 */ });
-        };
-        mountDevice('camera');
-        mountDevice('phone');
-      }
-      // BUILD 258: 밤 랜턴 — 본토 방식(손 뼈 진자 매달기)을 행성 캐릭터에 이식. 랜덤으로 이 산책자가 든다.
+      // BUILD 404: 랜턴·카메라·휴대폰은 MIMESIS 공통 손목 마운트만 사용한다.
+      // 손뼈 탐색·월드 스케일 상쇄·소품별 자세는 handMount.ts의 단일 기준값이다.
+      const mountHeldDevice = (kind: 'camera' | 'phone') => {
+        void loadHeldDeviceAsset(kind).then((device) => {
+          if (!alive) return;
+          const mount = attachHandProp(group, device, kind, 'right');
+          if (!mount) return;
+          mount.visible = false;
+          if (kind === 'camera') heldCameraRef.current = mount;
+          else heldPhoneRef.current = mount;
+        }).catch(() => { /* 소품이 없으면 동작만 유지 */ });
+      };
+      mountHeldDevice('camera');
+      mountHeldDevice('phone');
+
       if (lanternOnRef.current) {
-        let hand: THREE.Object3D | null = null;
-        group.traverse((n) => { if ((n as THREE.Bone).isBone && /RightHand$/i.test(n.name) && !hand) hand = n; });
-        if (!hand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name) && !hand) hand = n; });
-        if (!hand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /hand/i.test(n.name) && !hand) hand = n; });
-        if (hand) {
-          const h = hand as THREE.Object3D;
-          group.updateMatrixWorld(true);
-          const ws = new THREE.Vector3(); h.getWorldScale(ws);
-          const wrapper = new THREE.Group();
-          wrapper.scale.setScalar(1 / Math.max(ws.x, 1e-6));
-          wrapper.visible = false; // 밤에만 켠다 (프레임 루프에서 dl로 제어)
-          h.add(wrapper);
-          lanternRef.current = wrapper;
-          void loadHandLanternAsset().then((lantern) => {
-            if (!alive) return;
-            lantern.position.y = -0.17;
-            wrapper.add(lantern);
-          }).catch(() => { /* 랜턴 없으면 조용히 */ });
-        }
+        void loadHandLanternAsset().then((lantern) => {
+          if (!alive) return;
+          const mount = attachHandProp(group, lantern, 'lantern', 'right');
+          if (!mount) return;
+          mount.visible = false; // 밤에만 프레임 루프에서 켠다.
+          lanternRef.current = mount;
+        }).catch(() => { /* 랜턴 없으면 조용히 */ });
       }
     }).catch(() => { /* 조용한 행성 */ });
     return () => {
@@ -1727,13 +1692,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         GS.blend += (0 - GS.blend) * Math.min(1, dt * 3.5);
       }
     }
-    // BUILD 398의 월드 추적은 폐기. 손 소품은 랜턴과 같은 손목 본의 자식으로 움직인다.
-    const heldHand = heldDeviceHandRef.current;
-    const heldRoot = heldDeviceRootRef.current;
-    if (heldHand && heldRoot) {
-      heldHand.getWorldPosition(heldRoot.position);
-      heldHand.getWorldQuaternion(heldRoot.quaternion);
-    }
+    // BUILD 404: 손 소품은 손뼈 자식이므로 별도 월드 추적이 필요 없다.
     PLANET_CENTER.copy(built.planet.position);
     // BUILD 234: 하늘 — 자유 구름과 방사형 비·눈
     if (skyRef.current) {
