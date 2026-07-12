@@ -1,0 +1,33 @@
+name: Apply BUILD 401 Interaction Library
+
+on:
+  push:
+    paths:
+      - '.build401-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Patch Interaction Library integration
+        run: python3 scripts/apply-build401.py
+      - name: Build check
+        run: npm ci && npm run build
+      - name: Commit BUILD 401
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-build401.yml .build401-trigger scripts/apply-build401.py
+          git add -A
+          git commit -m "BUILD 401: Interaction Library — objects offer action seeds"
+          git push
