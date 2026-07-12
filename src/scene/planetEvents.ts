@@ -22,10 +22,11 @@ export type PlanetEventKind =
   // BUILD 360: 지역(World/본토) 이벤트 — 세 무대 공유 시스템에 지역을 마저 배선.
   | 'region_arrive'  // 기억 앞에 닿았다 (data: memory = 장면 제목)
   | 'mail'           // 우체통에서 편지를 받았다 (data: memory = 편지 첫 구절, 있으면)
-  | 'campfire';      // 모닥불 앞에 쉬어갔다
+  | 'campfire'       // 모닥불 앞에 쉬어갔다
+  | 'interaction';   // BUILD 401: 오브젝트와 실제로 만났다
 
 export type PlanetEvent = {
   kind: PlanetEventKind;
-  data?: { country?: string; kind?: string; meters?: number; seconds?: number; phase?: string; km?: number; village?: string; stage?: string; memory?: string };
+  data?: { country?: string; kind?: string; meters?: number; seconds?: number; phase?: string; km?: number; village?: string; stage?: string; memory?: string; object?: string; objectId?: string; label?: string; seeds?: string[]; interactionPhase?: 'start' | 'end' };
   t: number; // performance.now()
 };

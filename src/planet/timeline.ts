@@ -69,6 +69,11 @@ export function eventToEntry(e: PlanetEvent): TimelineEntry | null {
     }
     case 'campfire':
       return { id, icon: '🔥', text: '모닥불 앞에 앉아 잠시 쉬어갔다', t: e.t, kind: e.kind };
+    case 'interaction': {
+      const label = e.data?.label ?? e.data?.object ?? '무언가';
+      const phase = e.data?.interactionPhase ?? 'start';
+      return { id, icon: '🌱', text: phase === 'start' ? `별이는 ${label} 앞에 멈춰 섰다` : `별이는 ${label} 곁에서 다시 길을 나섰다`, t: e.t, kind: `${e.kind}_${e.data?.objectId ?? label}_${phase}` };
+    }
     default:
       return null;
   }

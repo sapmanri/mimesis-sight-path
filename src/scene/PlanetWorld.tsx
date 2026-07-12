@@ -24,6 +24,7 @@ import { loadHandLanternAsset } from '../engine/props';
 import { loadHeldDeviceAsset } from './heldDevices';
 import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
 import { beginRising, beginStanding, createEncounter, shouldEndEncounter, type ByeoliEncounter } from './byeoliEncounter';
+import { getInteraction, interactionApproachText, interactionObservationText } from '../life/interactionLibrary';
 
 // ---------- BUILD 207: 작은 행성 v7 — 스펙이 세계를 정한다 ----------
 // 에디터의 문법 이식: 세계의 모든 다이얼(테마·반지름·굴곡·안개·걸음·감김·요동·
@@ -1498,7 +1499,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
             let r = Math.random() * total; let pick = cands[0];
             for (const c of cands) { r -= c.score; if (r <= 0) { pick = c; break; } }
             attractTarget.current = createEncounter(pick.d, pick.id, pick.radius);
-            narrate(`별이는 ${propNarrationName(pick.id)} 쪽으로 천천히 발걸음을 옮겼다.`);
+            const pickedObject = SP.props.find((pr) => pr.id === pick.id)?.obj ?? 'unknown';
+            narrate(interactionApproachText(pickedObject));
           }
         } else {
           const stillValid = SP.props.some((pr) => pr.id === T2.id);
@@ -1506,15 +1508,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           else {
             const ang = Math.acos(THREE.MathUtils.clamp(RM.d.dot(T2.d), -1, 1));
             const targetProp = SP.props.find((pr) => pr.id === T2.id);
-            const arrivalAngleByObject: Record<string, number> = {
-              book: 0.034,
-              'rock-small': 0.034,
-              chair: 0.042,
-              tree: 0.055,
-              'rock-big': 0.06,
-              lighthouse: 0.085,
-            };
-            const arrivalAngle = arrivalAngleByObject[targetProp?.obj ?? ''] ?? 0.05;
+            const interaction = getInteraction(targetProp?.obj ?? 'unknown');
+            const arrivalAngle = interaction.arrivalAngle;
             if (ang < arrivalAngle) {
               // BUILD 395: 책·작은 물건은 손 닿을 만큼 가까이, 큰 구조물은 적당한 감상 거리를 둔다.
               // 도착 — 소품을 바라보게 몸을 돌린다(등지고 딴 데 보는 것 방지). 그다음 욕구로 행동 선택.
@@ -1522,6 +1517,11 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
               const face = tmp.at.copy(T2.d).addScaledVector(RM.d, -T2.d.dot(RM.d));
               if (face.lengthSq() > 1e-6) { RM.T.copy(face.normalize()); }
               T2.arrived = true;
+              narrate(interactionObservationText(targetProp?.obj ?? 'unknown'));
+              emit('interaction', {
+                object: targetProp?.obj ?? 'unknown', objectId: T2.id, label: interaction.label,
+                seeds: interaction.seeds, interactionPhase: 'start',
+              });
               const r = chooseAndActByDrive(T2); T2.step = r.dur; T2.wasSustained = r.sustained;
             } else if (moving) {
               // 접근 — 진행방향 T를 목표로 슬며시 튼다.
@@ -1543,7 +1543,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           // 콤보 전체 종료 대기 — 마지막 일어서기 완료 후 걷기.
           if (T2.step <= 0) {
             attractCooldown.current.set(T2.id, 25); // 방금 논 소품 25초 억제(반복 방지)
-            narrate(`별이는 ${propNarrationName(T2.id)} 곁에 충분히 머문 뒤, 다시 길을 나섰다.`);
+            const finishedProp = SP.props.find((pr) => pr.id === T2.id);
+            const finishedInteraction = getInteraction(finishedProp?.obj ?? 'unknown');
+            narrate(`별이는 ${finishedInteraction.label} 곁에 충분히 머문 뒤, 다시 길을 나섰다.`);
+            emit('interaction', {
+              object: finishedProp?.obj ?? 'unknown', objectId: T2.id, label: finishedInteraction.label,
+              seeds: finishedInteraction.seeds, interactionPhase: 'end',
+            });
             attractTarget.current = null;
           }
         } else if (T2.rising) {

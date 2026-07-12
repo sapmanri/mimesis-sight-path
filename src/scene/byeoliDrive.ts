@@ -2,9 +2,11 @@
 // 이 파일은 Three.js, React, 리그를 모른다. 값의 증가·피로 회복·행동 점수만 책임진다.
 // 행동 실행과 목적지 이동은 PlanetWorld가 계속 소유한다.
 
+import { getAttractableStimuli, type InteractionStimulus } from '../life/interactionLibrary';
+
 export type Drive = 'observe' | 'record' | 'rest' | 'wonder';
 export type DriveState = Record<Drive, number>;
-export type DriveStimulus = Partial<Record<Drive, number>>;
+export type DriveStimulus = InteractionStimulus;
 
 export const INITIAL_DRIVES: DriveState = {
   observe: 0.3,
@@ -31,14 +33,7 @@ export const PROP_STIMULUS: Record<string, {
   radius: number;
   atten: number;
   stir: DriveStimulus;
-}> = {
-  chair:        { radius: 0.9,  atten: 1.4, stir: { observe: 0.6, wonder: 0.2 } },
-  book:         { radius: 0.9,  atten: 1.6, stir: { observe: 0.6, record: 0.7, rest: 0.3 } },
-  'rock-small': { radius: 0.85, atten: 1.5, stir: { observe: 0.7, wonder: 0.3 } },
-  'rock-big':   { radius: 0.9,  atten: 1.0, stir: { wonder: 0.6, observe: 0.4, rest: 0.2 } },
-  tree:         { radius: 0.85, atten: 1.1, stir: { observe: 0.5, wonder: 0.4, record: 0.3 } },
-  lighthouse:   { radius: 1.0,  atten: 0.6, stir: { wonder: 0.9, record: 0.3 } },
-};
+}> = getAttractableStimuli();
 
 export function tickDrives(drives: DriveState, fatigue: DriveState, dt: number): void {
   drives.observe = Math.min(1, drives.observe + dt * 0.018);

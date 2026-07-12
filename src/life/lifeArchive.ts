@@ -263,7 +263,7 @@ export function remember(input: MemoryInput): LifeMemory {
 }
 
 export function rememberPlanetEvent(event: PlanetEvent, journal: string | null, planet: string): LifeMemory {
-  const target = event.data?.country ?? event.data?.village ?? event.data?.memory ?? event.data?.stage ?? event.data?.kind ?? null;
+  const target = event.data?.object ?? event.data?.country ?? event.data?.village ?? event.data?.memory ?? event.data?.stage ?? event.data?.kind ?? null;
   const weather = event.kind.startsWith('rain') ? 'rain' : event.kind.startsWith('snow') ? 'snow' : 'clear';
   return remember({
     action: event.kind,
