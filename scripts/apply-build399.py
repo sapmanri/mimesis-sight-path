@@ -54,6 +54,82 @@ if old not in s:
     raise SystemExit('walker traverse anchor not found')
 s = s.replace(old, new, 1)
 
+# BUILD 398의 월드 추적 장치를 버리고, 이미 안정적으로 달랑거리는 랜턴과 같은 손목 앵커를 쓴다.
+old = """      // BUILD 398: 손 본의 자식으로 직접 붙이면 일부 GLB의 본 스케일이 소품을 우주로 날린다.
+      // 장면 루트에 두고 매 프레임 손의 월드 변환만 추적한다.
+      let deviceHand: THREE.Object3D | null = null;
+      const rightHand = /(?:^|[_:])(?:mixamorig)?right(?:_)?hand$|RightHand$/i;
+      const leftHand = /(?:^|[_:])(?:mixamorig)?left(?:_)?hand$|LeftHand$/i;
+      group.traverse((n) => { if ((n as THREE.Bone).isBone && rightHand.test(n.name) && !deviceHand) deviceHand = n; });
+      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && leftHand.test(n.name) && !deviceHand) deviceHand = n; });
+      if (deviceHand) {
+        heldDeviceHandRef.current = deviceHand as THREE.Object3D;
+        const deviceRoot = new THREE.Group();
+        deviceRoot.visible = true;
+        scene.add(deviceRoot);
+        heldDeviceRootRef.current = deviceRoot;
+        const mountDevice = (kind: 'camera' | 'phone') => {
+          const wrapper = new THREE.Group();
+          wrapper.visible = false;
+          deviceRoot.add(wrapper);
+          if (kind === 'camera') {
+            wrapper.position.set(0.018, -0.025, -0.055);
+            wrapper.rotation.set(Math.PI / 2, 0, Math.PI);
+            heldCameraRef.current = wrapper;
+          } else {
+            wrapper.position.set(0.012, -0.018, -0.035);
+            wrapper.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+            heldPhoneRef.current = wrapper;
+          }
+          void loadHeldDeviceAsset(kind).then((device) => {
+            if (!alive) return;
+            wrapper.add(device);
+          }).catch(() => { /* 소품이 없으면 동작만 유지 */ });
+        };
+        mountDevice('camera');
+        mountDevice('phone');
+      }
+"""
+new = """      // BUILD 399: 랜턴이 안정적으로 달린 바로 그 오른손/손목 앵커를 카메라와 휴대폰도 공유한다.
+      // 본의 월드 스케일만 상쇄하고 위치는 손목 원점에서 잡는다. 별도 scene 추적은 쓰지 않는다.
+      let deviceHand: THREE.Object3D | null = null;
+      group.traverse((n) => { if ((n as THREE.Bone).isBone && /RightHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
+      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
+      if (deviceHand) {
+        const h = deviceHand as THREE.Object3D;
+        group.updateMatrixWorld(true);
+        const ws = new THREE.Vector3();
+        h.getWorldScale(ws);
+        const invHandScale = 1 / Math.max(ws.x, 1e-6);
+        const mountDevice = (kind: 'camera' | 'phone') => {
+          const wrapper = new THREE.Group();
+          wrapper.scale.setScalar(invHandScale);
+          wrapper.visible = false;
+          h.add(wrapper);
+          if (kind === 'camera') {
+            wrapper.position.set(0, -0.012, -0.008);
+            wrapper.rotation.set(Math.PI / 2, 0, Math.PI);
+            heldCameraRef.current = wrapper;
+          } else {
+            wrapper.position.set(0, -0.01, -0.004);
+            wrapper.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+            heldPhoneRef.current = wrapper;
+          }
+          void loadHeldDeviceAsset(kind).then((device) => {
+            if (!alive) return;
+            // 랜턴의 손목 위치를 기준으로 손바닥 안쪽에 올린다.
+            device.position.set(kind === 'camera' ? 0.015 : 0.01, kind === 'camera' ? -0.035 : -0.025, kind === 'camera' ? -0.02 : -0.012);
+            wrapper.add(device);
+          }).catch(() => { /* 소품이 없으면 동작만 유지 */ });
+        };
+        mountDevice('camera');
+        mountDevice('phone');
+      }
+"""
+if old not in s:
+    raise SystemExit('held device mount anchor not found')
+s = s.replace(old, new, 1)
+
 old = """    rigRef.current?.update(dt, MV.mode === 'run' ? 0.9 : 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * spdMul * dt : 0);
     // BUILD 398: 소품 루트는 scene 좌표에서 손의 실제 월드 위치·회전을 추적한다.
 """
@@ -109,7 +185,7 @@ new = """    rigRef.current?.update(dt, MV.mode === 'run' ? 0.9 : 0.5, moving, s
         GS.blend += (0 - GS.blend) * Math.min(1, dt * 3.5);
       }
     }
-    // BUILD 398: 소품 루트는 scene 좌표에서 손의 실제 월드 위치·회전을 추적한다.
+    // BUILD 398의 월드 추적은 폐기. 손 소품은 랜턴과 같은 손목 본의 자식으로 움직인다.
 """
 if old not in s:
     raise SystemExit('rig update anchor not found')
