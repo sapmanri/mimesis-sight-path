@@ -42,6 +42,7 @@ import { eventToEntry, type TimelineEntry } from './planet/timeline';
 import { ACHIEVEMENTS, evaluateAchievements } from './planet/achievements';
 import { makeComments, makeLikes, type FeedComment } from './planet/thread';
 import type { PlanetEvent } from './scene/planetEvents';
+import { getArchiveMode, getPublication, rememberCapture, rememberPlanetEvent, setArchiveMode, shouldStoreCapture, type ArchiveMode } from './life/lifeArchive';
 import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
 
@@ -53,7 +54,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.50.0 · BUILD 399 · 별이의 눈 — 먼저 바라보고, 그다음 다가간다';
+const BUILD_LABEL = 'v2.51.0 · BUILD 400 · Life Archive — 별이는 오늘부터 하루를 기록하기 시작합니다';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -181,21 +182,18 @@ export default function App() {
       }
     } catch { setPubState('err'); setTimeout(() => setPubState('idle'), 3000); }
   };
-  // BUILD 361: 촬영 허용 — 발행(세계 방송)과 완전히 별개.
-  //   별이가 찍은 사진을 R2에 올리려면 이 세션에 촬영키(=발행키와 같은 PUBLISH_KEY)가 있어야 한다.
-  //   세계를 KV에 발행하는 publishLive와 달리, 여기선 오직 키를 세션에 저장할 뿐 아무것도 방송하지 않는다.
-  const [captureAllowed, setCaptureAllowed] = useState<boolean>(() => !!sessionStorage.getItem('mimesis.publishKey'));
-  const grantCapture = () => {
-    if (sessionStorage.getItem('mimesis.publishKey')) {
-      // 이미 있으면 해제(토글) — 잘못 넣었을 때 다시 넣게
-      sessionStorage.removeItem('mimesis.publishKey');
-      setCaptureAllowed(false);
-      return;
+  // BUILD 400: R2는 촬영 허용 스위치가 아니라 Memory Archive 정책을 따른다.
+  // OFF = Memory만 남기고 이미지 보관 안 함 / SMART = 의미 있는 순간만 / ALL = 모든 사진 보관.
+  const [archiveMode, setArchiveModeState] = useState<ArchiveMode>(() => getArchiveMode());
+  const cycleArchiveMode = () => {
+    const next: ArchiveMode = archiveMode === 'OFF' ? 'SMART' : archiveMode === 'SMART' ? 'ALL' : 'OFF';
+    if (next !== 'OFF' && !sessionStorage.getItem('mimesis.publishKey')) {
+      const key = window.prompt('Memory Archive 키를 입력하세요 (선별된 별이 사진을 R2에 저장)') || '';
+      if (!key) return;
+      sessionStorage.setItem('mimesis.publishKey', key);
     }
-    const key = window.prompt('촬영 허용 키를 입력하세요 (별이 사진을 R2에 저장)') || '';
-    if (!key) return;
-    sessionStorage.setItem('mimesis.publishKey', key);
-    setCaptureAllowed(true);
+    setArchiveMode(next);
+    setArchiveModeState(next);
   };
   const planetWalker = pSpec.walker ?? -1; // BUILD 251: 산책자는 스펙이 정한다 (발행 시 고정)
   const [planetPaused, setPlanetPaused] = useState(false); // BUILD 224: 찍기의 평화
@@ -325,47 +323,58 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [timeline]);
 
-  // BUILD 356: 별이 스스로 찍은 순간 — R2 업로드 후 기록에 남긴다. 성취와 별개, 별의 자율 촬영.
+  // BUILD 400: 촬영도 먼저 Memory가 되고, R2와 Thread는 그 Memory에서 파생된다.
   const byeoliShotAt = useRef(0);
   const onByeoliCapture = (dataUrl: string, reason: 'stage' | 'mood' | 'event') => {
-    // BUILD 367: 여기는 '올리기'다. 찍기는 이미 별이가 코어에서 자유롭게 끝냈다(자세·셔터·캡처).
-    //   찍은 것 '중 일부만' SNS로 올린다 — 별이가 남기고 싶은 몇 장. 나머지는 그냥 흘러간다.
-    if (!isSapmanri) return; // 발행 권한 세션만 올린다(방문자 화면은 오염 안 시킴). 찍긴 이미 찍었다.
-    if (Math.random() > 0.4) return; // 찍은 것 중 ~40%만 올라간다 (별이가 고른 몇 장)
+    if (!isSapmanri) return;
     const now = Date.now();
-    if (now - byeoliShotAt.current < 8000) return; // 발행 연타 방지(최소 8초 간격)
+    if (now - byeoliShotAt.current < 3000) return;
     byeoliShotAt.current = now;
     const key = sessionStorage.getItem('mimesis.publishKey');
-    if (!key) return;
     const curMap = planetMode ? 'planet' : theatreMode ? 'theatre' : 'region';
     const cap = BYEOLI_SHOT_TEXT[reason];
     const text = cap[Math.floor(Math.random() * cap.length)];
-    const publishShot = (img: string | null) => {
-      const post: FeedPost = { id: `byeoli-${now}`, achId: `byeoli_${reason}`, icon: '📷', title: '', text, img, likes: makeLikes(), comments: makeComments('night_owl', 1 + Math.floor(Math.random() * 2)), t: now };
+    const mode = getArchiveMode();
+    const storeImage = Boolean(key) && shouldStoreCapture(mode, reason, text);
+
+    const finalizeMemory = (img: string | null) => {
+      const memory = rememberCapture({ planet: curMap, reason, image: img, caption: text, archiveMode: mode });
+      const publication = getPublication(memory.id);
+      if (!publication?.threadReady || Math.random() > 0.4) return;
+      const post: FeedPost = { id: `byeoli-${now}`, achId: `memory_${memory.id}`, icon: '📷', title: '', text, img, likes: makeLikes(), comments: makeComments('night_owl', 1 + Math.floor(Math.random() * 2)), t: now };
       setFeed((prev) => {
         const next = [post, ...prev].slice(0, 60);
         try { localStorage.setItem(FEED_KEY, JSON.stringify({ date: new Date().toDateString(), items: next })); } catch { /* 조용히 */ }
         return next;
       });
-      fetch('/api/feed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
-        body: JSON.stringify({ title: post.title, text: post.text, img: post.img, icon: post.icon, likes: post.likes, comments: post.comments }),
-      }).catch(() => { /* 조용히 */ });
+      if (key) {
+        fetch('/api/feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
+          body: JSON.stringify({ title: post.title, text: post.text, img: post.img, icon: post.icon, likes: post.likes, comments: post.comments, memoryId: memory.id }),
+        }).catch(() => { /* 발행 실패는 Memory를 바꾸지 않는다 */ });
+      }
     };
+
+    if (!storeImage) {
+      finalizeMemory(null);
+      return;
+    }
     fetch('/api/upload-capture', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key },
+      headers: { 'Content-Type': 'application/json', 'X-Publish-Key': key! },
       body: JSON.stringify({ map: curMap, dataUrl }),
     })
       .then((r) => r.json())
-      .then((res: { ok?: boolean; url?: string }) => publishShot(res.ok && res.url ? res.url : null))
-      .catch(() => publishShot(null));
+      .then((res: { ok?: boolean; url?: string }) => finalizeMemory(res.ok && res.url ? res.url : null))
+      .catch(() => finalizeMemory(null));
   };
 
   const onPlanetEvent = (e: PlanetEvent) => {
     const entry = eventToEntry(e);
     if (!entry) return;
+    // BUILD 400: Timeline보다 먼저가 아니라, Timeline과 같은 사건에서 불변 Memory를 만든다.
+    rememberPlanetEvent(e, entry.text, planetMode ? 'planet' : theatreMode ? 'theatre' : 'region');
     // 같은 종류 연타 방지 (밤낮·비 등): 8초 내 같은 kind는 무시
     const L = lastEntryKind.current;
     if (L.kind === entry.kind && e.t - L.t < 8000) return;
@@ -567,17 +576,18 @@ export default function App() {
   const captureGrantUI = isSapmanri ? (
     <button
       type="button"
-      onClick={grantCapture}
-      title={captureAllowed ? '촬영 허용됨 — 별이 사진이 R2에 저장된다 (눌러서 해제)' : '촬영 허용 — 키를 넣으면 별이 사진이 R2에 저장된다'}
+      onClick={cycleArchiveMode}
+      title={archiveMode === 'OFF' ? 'Memory는 남기고 사진 파일은 보관하지 않음' : archiveMode === 'SMART' ? 'AI 편집장이 의미 있는 Memory 사진만 R2에 보관' : '모든 Memory 사진을 R2에 보관'}
       style={{
         position: 'fixed', bottom: 18, left: 18, zIndex: 9,
         padding: '8px 12px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-        border: '1px solid ' + (captureAllowed ? '#355743' : '#5a5346'),
-        background: captureAllowed ? 'rgba(53,87,67,0.92)' : 'rgba(24,26,25,0.86)',
-        color: captureAllowed ? '#eaf5ec' : '#d8cdb6',
+        border: '1px solid ' + (archiveMode === 'SMART' ? '#6d7652' : archiveMode === 'ALL' ? '#355743' : '#5a5346'),
+        background: archiveMode === 'SMART' ? 'rgba(79,86,57,0.92)' : archiveMode === 'ALL' ? 'rgba(53,87,67,0.92)' : 'rgba(24,26,25,0.86)',
+        color: '#eaf5ec',
       }}
-    >{captureAllowed ? '📷 촬영 허용됨 ✓' : '📷 촬영 허용'}</button>
+    >🗃 Memory Archive · {archiveMode}</button>
   ) : null;
+
   const passportFeedUI = (
     <>
       {passportOpen && (
