@@ -1,0 +1,43 @@
+name: Finalize BUILD 398 journal
+
+on:
+  push:
+    paths:
+      - '.build398-trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Update BUILD label
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/App.tsx')
+          s = p.read_text()
+          old = "const BUILD_LABEL = 'v2.48.0 · BUILD 397 · 모바일 UI 레일 — 여권·기록·에디터를 한 형식으로';"
+          new = "const BUILD_LABEL = 'v2.49.0 · BUILD 398 · 관찰일기 정리 — 접기·최신순·8줄 기록';"
+          if old not in s:
+              raise SystemExit('BUILD 397 label not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Build check
+        run: npm ci && npm run build
+      - name: Commit BUILD 398
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/apply-build398-label.yml .build398-trigger
+          git add -A
+          git commit -m "BUILD 398: polish collapsible newest-first observation journal"
+          git push
