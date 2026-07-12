@@ -45,6 +45,7 @@ import type { PlanetEvent } from './scene/planetEvents';
 import { getArchiveMode, getPublication, rememberCapture, rememberPlanetEvent, setArchiveMode, shouldStoreCapture, type ArchiveMode } from './life/lifeArchive';
 import { JEJU_SPEC, type WorldSpec } from './engine/worldSpec';
 import './photo-depth-road.css';
+import { BUILD_LABEL } from './build/current';
 
 const AUTO_RESUME_MS = 12000; // BUILD 101: 탭으로 머문 뒤 12초면 다시 저절로 걷는다
 // BUILD 356: 별이 사진 올릴 때 붙이는 한마디 — 이유(스테이지/무드/사건)별. 반말·툭·여백.
@@ -54,7 +55,6 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.54.0 · BUILD 403 · Becoming Byeoli — 별이는 조금씩 별이가 되어갑니다';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

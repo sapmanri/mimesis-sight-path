@@ -20,7 +20,7 @@ import { planetSound } from '../audio/planetSound';
 import type { PlanetSpec, PlanetMemory, PlanetContact, PlanetApi, PlanetProp } from './planetSpec';
 import type { MutableRefObject } from 'react';
 import { createPropObject, createPropAnimated } from '../engine/props';
-import { ROAMING_ANIMALS, animalTemperament, chooseAnimalGoal, makeAnimalState, mapAnimalClips, playAnimalMode, type AnimalLifeState } from '../life/animalLife';
+import { ROAMING_ANIMALS, animalTemperament, chooseAnimalGoal, makeAnimalState, mapAnimalClips, playAnimalMode, type AnimalLifeState } from '../mimesis/runtime';
 import { loadHandLanternAsset } from '../engine/props';
 import { loadHeldDeviceAsset } from './heldDevices';
 import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
