@@ -19,7 +19,8 @@ import { ambience } from '../audio/ambience';
 import { planetSound } from '../audio/planetSound';
 import type { PlanetSpec, PlanetMemory, PlanetContact, PlanetApi, PlanetProp } from './planetSpec';
 import type { MutableRefObject } from 'react';
-import { createPropObject } from '../engine/props';
+import { createPropObject, createPropAnimated } from '../engine/props';
+import { ROAMING_ANIMALS, animalTemperament, chooseAnimalGoal, makeAnimalState, mapAnimalClips, playAnimalMode, type AnimalLifeState } from '../life/animalLife';
 import { loadHandLanternAsset } from '../engine/props';
 import { loadHeldDeviceAsset } from './heldDevices';
 import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
@@ -923,18 +924,20 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
           wrapper.visible = false;
           h.add(wrapper);
           if (kind === 'camera') {
-            wrapper.position.set(0, -0.012, -0.008);
-            wrapper.rotation.set(Math.PI / 2, 0, Math.PI);
+            // BUILD 402: 손바닥 중심에 카메라 그립이 오도록 손목 기준 재보정.
+            wrapper.position.set(0.004, -0.018, -0.012);
+            wrapper.rotation.set(Math.PI / 2, -0.08, Math.PI);
             heldCameraRef.current = wrapper;
           } else {
-            wrapper.position.set(0, -0.01, -0.004);
-            wrapper.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+            // 화면이 얼굴 쪽을 향하고 손가락 안쪽에 놓이도록 세로 그립 보정.
+            wrapper.position.set(0.003, -0.015, -0.006);
+            wrapper.rotation.set(Math.PI / 2, 0.12, Math.PI / 2);
             heldPhoneRef.current = wrapper;
           }
           void loadHeldDeviceAsset(kind).then((device) => {
             if (!alive) return;
             // 랜턴의 손목 위치를 기준으로 손바닥 안쪽에 올린다.
-            device.position.set(kind === 'camera' ? 0.015 : 0.01, kind === 'camera' ? -0.035 : -0.025, kind === 'camera' ? -0.02 : -0.012);
+            device.position.set(kind === 'camera' ? 0.008 : 0.004, kind === 'camera' ? -0.024 : -0.018, kind === 'camera' ? -0.012 : -0.006);
             wrapper.add(device);
           }).catch(() => { /* 소품이 없으면 동작만 유지 */ });
         };
@@ -1015,7 +1018,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   // 모델 재로드 없이 변환만 갱신한다. 앵커(up=dir) 안에 inner(yaw·tilt·scale)를 태우는 2단 구조.
   const propsKey = JSON.stringify(spec.props ?? []);
   const propsRoot = useRef<THREE.Group | null>(null);
-  const propMap = useRef(new Map<string, { anchor: THREE.Group; obj: string; title: string; flag?: { v: number; base: number; dir: [number, number, number] } }>());
+  const propMap = useRef(new Map<string, { anchor: THREE.Group; obj: string; title: string; flag?: { v: number; base: number; dir: [number, number, number] }; animal?: AnimalLifeState }>());
   useEffect(() => {
     if (!built) return undefined;
     const g = new THREE.Group();
@@ -1068,7 +1071,7 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       }
       if (rec) { g.remove(rec.anchor); propMap.current.delete(pr.id); }
       const anchor = new THREE.Group();
-      const newRec: { anchor: THREE.Group; obj: string; title: string; flag?: { v: number; base: number; dir: [number, number, number] } } = { anchor, obj: pr.obj, title };
+      const newRec: { anchor: THREE.Group; obj: string; title: string; flag?: { v: number; base: number; dir: [number, number, number] }; animal?: AnimalLifeState } = { anchor, obj: pr.obj, title };
       propMap.current.set(pr.id, newRec);
       g.add(anchor);
       applyXform(anchor, pr);
@@ -1083,13 +1086,28 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       }
       let seed = 7;
       for (const ch of pr.id) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
-      void createPropObject(pr.obj, seed || 7).then((obj) => {
+      const mountStatic = () => void createPropObject(pr.obj, seed || 7).then((obj) => {
         const cur = propMap.current.get(pr.id);
         if (!obj || !cur || cur.anchor !== anchor) return;
         dressUp(obj);
         anchor.add(obj);
         applyXform(anchor, pr);
       });
+      if (ROAMING_ANIMALS.has(pr.obj)) {
+        void createPropAnimated(pr.obj).then((loaded) => {
+          const cur = propMap.current.get(pr.id);
+          if (!cur || cur.anchor !== anchor) return;
+          if (!loaded) { mountStatic(); return; }
+          dressUp(loaded.group);
+          anchor.add(loaded.group);
+          const animal = makeAnimalState(pr.obj, new THREE.Vector3(...pr.dir), seed || 7);
+          animal.mixer = new THREE.AnimationMixer(loaded.group);
+          animal.clips = mapAnimalClips(animal.mixer, loaded.animations);
+          cur.animal = animal;
+          playAnimalMode(animal, 'idle');
+          applyXform(anchor, pr);
+        }).catch(mountStatic);
+      } else mountStatic();
     }
   }, [built, propsKey]);
 
@@ -1615,6 +1633,49 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
     rigRef.current?.update(dt, MV.mode === 'run' ? 0.9 : 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * spdMul * dt : 0);
+    // BUILD 402: 배치된 동물들의 자유 로밍. 각자의 집 반경 안에서 쉬고, 걷고, 뛰며 별이에 반응한다.
+    for (const rec of propMap.current.values()) {
+      const A = rec.animal;
+      if (!A || !built) continue;
+      A.mixer?.update(dt);
+      A.timer -= dt;
+      const cfg = animalTemperament(A.kind);
+      const byeoliDir = roamRef.current?.d ?? p.clone().normalize();
+      const distToByeoli = Math.acos(THREE.MathUtils.clamp(A.dir.dot(byeoliDir), -1, 1));
+      if (cfg.approachDistance > 0 && distToByeoli < cfg.approachDistance) {
+        A.goal.copy(byeoliDir);
+      } else if (cfg.fleeDistance > 0 && distToByeoli < cfg.fleeDistance) {
+        const away = A.dir.clone().sub(byeoliDir).add(A.dir).normalize();
+        A.goal.copy(away);
+      } else if (A.timer <= 0 && A.dir.angleTo(A.goal) < 0.012) {
+        chooseAnimalGoal(A);
+        playAnimalMode(A, 'idle');
+      }
+      const angGoal = A.dir.angleTo(A.goal);
+      if (A.timer <= 0 && angGoal > 0.008) {
+        const urgent = distToByeoli < cfg.fleeDistance || (cfg.approachDistance > 0 && distToByeoli < cfg.approachDistance);
+        playAnimalMode(A, urgent ? 'run' : 'walk');
+        const speed = urgent ? cfg.runSpeed : cfg.speed;
+        const axis = new THREE.Vector3().crossVectors(A.dir, A.goal);
+        if (axis.lengthSq() > 1e-8) {
+          axis.normalize();
+          A.dir.applyAxisAngle(axis, Math.min(angGoal, speed * dt)).normalize();
+          const tangent = new THREE.Vector3().crossVectors(axis, A.dir).normalize();
+          A.tangent.lerp(tangent, Math.min(1, dt * 5)).normalize();
+        }
+      } else if (A.timer > 0) {
+        playAnimalMode(A, 'idle');
+      }
+      const rr = built.surfaceR(A.dir) - 0.02;
+      rec.anchor.position.copy(A.dir).multiplyScalar(rr);
+      rec.anchor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), A.dir);
+      const inner = rec.anchor.children[0];
+      if (inner) {
+        const forward = A.tangent.clone();
+        const localForward = forward.applyQuaternion(rec.anchor.quaternion.clone().invert());
+        inner.rotation.y = Math.atan2(localForward.x, localForward.z);
+      }
+    }
     // BUILD 399: 별이의 눈. 접근 목표는 걷기 전부터 보고, 목표가 없을 때는 가끔 반려동물이나 하늘을 본다.
     {
       const gazeBone = gazeHeadRef.current ?? gazeNeckRef.current;

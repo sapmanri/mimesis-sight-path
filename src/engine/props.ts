@@ -22,7 +22,7 @@ export type PlacedProp = {
 export type PropDef = { id: string; label: string; cat: string };
 
 /** BUILD 109: 애니메이션이 있는 배치물 — 로밍 AI를 켤 수 있다 (동물들이 오면 여기 등록) */
-export const ANIMATED_PROPS = new Set(['rogue', 'scavenger', 'cow']);
+export const ANIMATED_PROPS = new Set(['rogue', 'scavenger', 'cow', 'dog', 'duck', 'chicky', 'horse', 'piggy', 'bear', 'deer', 'boar', 'wolf', 'rabbit']);
 
 function makeStreetlamp(rnd: () => number) {
   const g = new THREE.Group();
@@ -412,7 +412,7 @@ export async function createPropAnimated(
   try {
     if (objId === 'rogue') return await loadKitModelWithClips('rogue', loadModel);
     if (objId === 'scavenger') return await loadKitModelWithClips('scavenger', loadModel);
-    if (objId === 'cow') return await loadKitModelWithClips('cow', loadModel); // BUILD 110
+    if (['cow', 'dog', 'duck', 'chicky', 'horse', 'piggy', 'bear', 'deer', 'boar', 'wolf', 'rabbit'].includes(objId)) return await loadKitModelWithClips(objId, loadModel); // BUILD 402
     return null;
   } catch {
     return null;
