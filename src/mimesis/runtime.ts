@@ -3,7 +3,15 @@ import { bootstrapMimesisModules } from './modules/bootstrap';
 bootstrapMimesisModules();
 
 export { runMemoryProcessors, registeredMemoryModules } from './moduleRegistry';
-export { createHandMount, findHandBone, type HandSide } from './modules/handMount';
+export {
+  attachHandProp,
+  createHandMount,
+  findHandBone,
+  HAND_PROP_POSES,
+  type HandPropKind,
+  type HandPropPose,
+  type HandSide,
+} from './modules/handMount';
 export {
   ROAMING_ANIMALS,
   animalTemperament,
