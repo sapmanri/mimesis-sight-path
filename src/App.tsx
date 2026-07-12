@@ -54,7 +54,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.52.0 · BUILD 401 · Interaction Library — 사물마다 행동의 씨앗이 생겼습니다';
+const BUILD_LABEL = 'v2.54.0 · BUILD 403 · Becoming Byeoli — 별이는 조금씩 별이가 되어갑니다';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);

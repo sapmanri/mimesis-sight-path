@@ -1,4 +1,5 @@
 import type { PlanetEvent } from '../scene/planetEvents';
+import { saveBecomingByeoli } from './becomingByeoli';
 
 export type ArchiveMode = 'OFF' | 'SMART' | 'ALL';
 export type PublicationMetadata = {
@@ -258,6 +259,8 @@ export function remember(input: MemoryInput): LifeMemory {
   };
   const archive = immutableAppend(loadLifeArchive(), memory);
   saveLifeArchive(archive);
+  // BUILD 403: 원본 Memory를 건드리지 않고 반복에서 별이다움을 다시 계산한다.
+  saveBecomingByeoli(archive.memories);
   window.dispatchEvent(new CustomEvent('mimesis:memory-created', { detail: memory }));
   return memory;
 }
