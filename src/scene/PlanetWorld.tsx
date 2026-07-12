@@ -403,6 +403,8 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
   const byeoliShotAt = useRef(0);
   const heldCameraRef = useRef<THREE.Group | null>(null);
   const heldPhoneRef = useRef<THREE.Group | null>(null);
+  const heldDeviceHandRef = useRef<THREE.Object3D | null>(null);
+  const heldDeviceRootRef = useRef<THREE.Group | null>(null);
   const heldDeviceTimer = useRef<number | null>(null);
   const showHeldDevice = (kind: 'camera' | 'phone', durationSec: number) => {
     const cameraProp = heldCameraRef.current;
@@ -899,27 +901,29 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
         ?? createWalkerRig(group, animations, 0.72);
       // BUILD 387: 의자 앉기 폐기 — rig에 의자 자산 세팅 안 함. 앉기는 바닥 앉기(sitGround)만.
       //   (의자 소환 방식이 계속 뺑뺑이 유발 → 통째로 걷어냄. 훗날 필요하면 위치정합부터 처음 설계.)
-      // BUILD 392: 사진/글쓰기 동작의 빈손 해결 — 오른손 뼈에 카메라·휴대폰을 미리 달고, 해당 동작 중에만 보인다.
+      // BUILD 398: 손 본의 자식으로 직접 붙이면 일부 GLB의 본 스케일이 소품을 우주로 날린다.
+      // 장면 루트에 두고 매 프레임 손의 월드 변환만 추적한다.
       let deviceHand: THREE.Object3D | null = null;
-      group.traverse((n) => { if ((n as THREE.Bone).isBone && /RightHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
-      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /LeftHand$/i.test(n.name) && !deviceHand) deviceHand = n; });
-      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && /hand/i.test(n.name) && !deviceHand) deviceHand = n; });
+      const rightHand = /(?:^|[_:])(?:mixamorig)?right(?:_)?hand$|RightHand$/i;
+      const leftHand = /(?:^|[_:])(?:mixamorig)?left(?:_)?hand$|LeftHand$/i;
+      group.traverse((n) => { if ((n as THREE.Bone).isBone && rightHand.test(n.name) && !deviceHand) deviceHand = n; });
+      if (!deviceHand) group.traverse((n) => { if ((n as THREE.Bone).isBone && leftHand.test(n.name) && !deviceHand) deviceHand = n; });
       if (deviceHand) {
-        const h = deviceHand as THREE.Object3D;
-        group.updateMatrixWorld(true);
+        heldDeviceHandRef.current = deviceHand as THREE.Object3D;
+        const deviceRoot = new THREE.Group();
+        deviceRoot.visible = true;
+        scene.add(deviceRoot);
+        heldDeviceRootRef.current = deviceRoot;
         const mountDevice = (kind: 'camera' | 'phone') => {
           const wrapper = new THREE.Group();
-          // BUILD 395: 손 본의 자식은 이미 본 변환을 상속한다. 월드 스케일 역보정은
-          // 작은 로컬 오프셋까지 크게 증폭해 소품이 몸 주위를 공전하게 만들었다.
-          wrapper.scale.setScalar(1);
           wrapper.visible = false;
-          h.add(wrapper);
+          deviceRoot.add(wrapper);
           if (kind === 'camera') {
-            wrapper.position.set(0, -0.018, -0.01);
+            wrapper.position.set(0.018, -0.025, -0.055);
             wrapper.rotation.set(Math.PI / 2, 0, Math.PI);
             heldCameraRef.current = wrapper;
           } else {
-            wrapper.position.set(0, -0.012, -0.006);
+            wrapper.position.set(0.012, -0.018, -0.035);
             wrapper.rotation.set(Math.PI / 2, 0, Math.PI / 2);
             heldPhoneRef.current = wrapper;
           }
@@ -958,6 +962,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       alive = false;
       if (heldDeviceTimer.current !== null) window.clearTimeout(heldDeviceTimer.current);
       heldDeviceTimer.current = null;
+      if (heldDeviceRootRef.current) scene.remove(heldDeviceRootRef.current);
+      heldDeviceRootRef.current = null;
+      heldDeviceHandRef.current = null;
       heldCameraRef.current = null;
       heldPhoneRef.current = null;
     };
@@ -1590,6 +1597,13 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       built.planet.position.y += (-p.length() - built.planet.position.y) * k;
     }
     rigRef.current?.update(dt, MV.mode === 'run' ? 0.9 : 0.5, moving, state.clock.elapsedTime, moving ? SP.walkSpeed * spdMul * dt : 0);
+    // BUILD 398: 소품 루트는 scene 좌표에서 손의 실제 월드 위치·회전을 추적한다.
+    const heldHand = heldDeviceHandRef.current;
+    const heldRoot = heldDeviceRootRef.current;
+    if (heldHand && heldRoot) {
+      heldHand.getWorldPosition(heldRoot.position);
+      heldHand.getWorldQuaternion(heldRoot.quaternion);
+    }
     PLANET_CENTER.copy(built.planet.position);
     // BUILD 234: 하늘 — 자유 구름과 방사형 비·눈
     if (skyRef.current) {

@@ -53,7 +53,7 @@ const BYEOLI_SHOT_TEXT: Record<'stage' | 'mood' | 'event', string[]> = {
   event: ['방금 이런 일이.', '봤어? 이거.', '놓치기 싫었어.', '오늘은 이런 걸 만났다.'],
 };
 
-const BUILD_LABEL = 'v2.48.0 · BUILD 397 · 모바일 UI 레일 — 여권·기록·에디터를 한 형식으로';
+const BUILD_LABEL = 'v2.49.0 · BUILD 398 · 관찰일기 정리 + 손 소품 월드 추적 교정';
 
 export default function App() {
   const [activeIndex, setActiveIndex] = useState(0);
