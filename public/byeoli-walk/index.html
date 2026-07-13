@@ -112,7 +112,7 @@
 </div>
 
 <script type="module">
-import { HabitEngine, HABIT_BIAS_MAX, capCombinedBias, createLocalHabitStorage } from '/byeoli-walk/brain.js';
+import { HABIT_BIAS_MAX, capCombinedBias, createSharedHabitEngine, byeoliDayEpoch, formatByeoliDate } from '/byeoli-walk/brain.js';
 /* ---- inlined catalog.mjs ---- */
 // TownObject 카탈로그 24종 (Holmes BUILD 확장 스펙)
 // stimulus/interactionTags/journalTags/rarity 제공. Brain이 Intent 결정.
@@ -238,10 +238,9 @@ function stimOf(item){
    habitBias max +0.15 · combinedBias(habit+personality) max +0.18
    Memory는 불변, Habit strength만 산책 루프 단위로 감쇠.
    ===================================================================== */
-let loopCount=0;   // 산책 루프 수 = Habit 감쇠의 시간 단위
-const habitEngine = new HabitEngine(
-  createLocalHabitStorage('mimesis.byeoli.walk.habits.v1')
-);
+let loopCount=0;   // 2D 산책 연출용 루프 수(취향 시간과 분리)
+const habitEpoch=()=>byeoliDayEpoch();
+const habitEngine=createSharedHabitEngine(habitEpoch());
 
 const brain={
   drive:{observe:.30,rest:.22,record:.26,wonder:.34},
@@ -257,7 +256,7 @@ const brain={
     let best=null,bestScore=-1,bestParts=null;
     for(const d of DRIVES){
       const cur=this.drive[d], objectStimulus=stim[d]||0;
-      const habitBias = item.rare?0:habitEngine.bias(type,d,loopCount);
+      const habitBias = item.rare?0:habitEngine.bias(type,d,habitEpoch());
       const personalityBias=0;   // 405-C 자리
       const combined=capCombinedBias(habitBias,personalityBias);
       const score=cur+objectStimulus+combined-this.fatigue+rand;
@@ -269,7 +268,7 @@ const brain={
     if(!passed){ this.drive[best]=clamp(this.drive[best]-0.45,0,1);
                  this.fatigue=clamp(this.fatigue-0.16,0,1);
                  // 취향 기록: 행동한 것만 (pass는 취향 아님)
-                 habitEngine.record(type,best,loopCount); }
+                 habitEngine.record(type,best,habitEpoch()); }
     const intent={
       id:'intent-'+(intentCounter++),
       action: passed?'pass':best,
@@ -644,16 +643,16 @@ const tasteListEl=document.getElementById('tasteList');
 const tasteHintEl=document.getElementById('tasteHint');
 const prevStrength={};   // 감쇠 방향 감지용
 function renderTaste(){
-  const rows=habitEngine.list(loopCount).filter(r=>r.strength>=0.02);
+  const rows=habitEngine.list(habitEpoch()).filter(r=>r.strength>=0.02);
   const top=rows.slice(0,4);
   if(top.length===0){ tasteHintEl.textContent='— 아직 없음'; tasteListEl.innerHTML=''; return; }
-  tasteHintEl.textContent = `취향 ${rows.length}개 형성 중`;
+  tasteHintEl.textContent = `${formatByeoliDate()} · 취향 ${rows.length}개 형성 중`;
   tasteListEl.innerHTML = top.map(r=>{
     const def=CATALOG[r.targetType]||RARE[r.targetType]||{emoji:'·',ko:r.targetType};
     const decaying = (prevStrength[r.key]!==undefined && r.strength < prevStrength[r.key]-0.001);
     prevStrength[r.key]=r.strength;
     const meta = r.inactiveLoops===0 ? `count ${r.count} · 방금`
-      : `count ${r.count} · ${r.inactiveLoops}루프 전${decaying?' · 옅어지는 중':''}`;
+      : `count ${r.count} · ${r.inactiveLoops}별이일 전${decaying?' · 옅어지는 중':''}`;
     return `<div class="trow">
       <span class="tk"><span class="em">${def.emoji}</span>${def.ko} <span style="color:var(--dim)">${actKo(r.drive)}</span></span>
       <span class="ttrack"><span class="tfill ${decaying?'decay':''}" style="width:${(r.strength*100)|0}%"></span></span>
