@@ -333,8 +333,9 @@ const Sound={
     setTimeout(()=>this.blip(1400,0.04,'square',0.08),40);
   },
   step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리
-  act(drive){ const f={observe:520,rest:330,record:0,wonder:700}[drive];
-    if(drive==='record'){ this.shutter(); } else if(f) this.blip(f,0.12,'triangle',0.08); },
+  act(drive){ // record는 여기서 소리 안 냄 (startAction이 셔터음 전담)
+    const f={observe:520,rest:330,wonder:700}[drive];
+    if(f) this.blip(f,0.12,'triangle',0.08); },
   rain(){ /* 빗소리는 루프 노이즈로 별도 */ },
   weatherLoop:null,
   startWeather(kind){
@@ -423,28 +424,34 @@ const sky={
     });
   },
   updateParticles(dt){
-    const bY=GROUND_Y, GRAV=420;
+    const bY=GROUND_Y, GRAV=520;
     const bx=byeoli.screenX, byTop=bY-27, byBot=bY, half=7;
     for(const p of this.particles){
-      // 튕긴 뒤(bounce>0)에는 중력 적용 → 다시 떨어짐
-      if(p.bounce>0) p.vy += GRAV*dt;
+      const isRain=p.kind==='rain';
+      // 중력: 비는 튕긴 뒤, 눈은 항상 약하게 (부유감)
+      if(isRain){ if(p.bounce>0) p.vy += GRAV*dt; }
+      else { p.vy += 40*dt; }   // 눈은 늘 살살 내려앉음
       p.x+=p.vx*dt;
-      if(p.kind==='snow'&&p.bounce===0){ p.sway+=dt*3; p.x+=Math.sin(p.sway)*0.4; }
+      if(!isRain && p.bounce===0){ p.sway+=dt*3; p.x+=Math.sin(p.sway)*0.4; }
       p.y+=p.vy*dt;
-      // 캐릭터 충돌 → 옆/아래로 튕김 (위로 세게 X)
+      // 캐릭터 충돌
       if(p.bounce<2 && p.x>bx-half && p.x<bx+half && p.y>byTop && p.y<byBot && p.vy>0){
-        p.vy = -Math.abs(p.vy)*0.28;               // 살짝만 튀어오름
-        p.vx = (p.x<bx?-1:1)*(30+rng()*30);        // 옆으로 튕겨나감
-        p.bounce++; p.life-=0.15;
+        if(isRain){
+          p.vy = -Math.abs(p.vy)*0.28;                 // 비: 살짝 튀어오름
+          p.vx = (p.x<bx?-1:1)*(30+rng()*30);
+        } else {
+          p.vy = Math.abs(p.vy)*0.3;                   // 눈: 위로 안 감. 속도만 죽임
+          p.vx = (p.x<bx?-1:1)*(12+rng()*10);          // 옆으로 스르륵
+        }
+        p.bounce++; p.life-=0.12;
       }
-      // 바닥 충돌 → 통통
+      // 바닥 충돌
       if(p.y>=bY){
-        if(p.bounce<2 && Math.abs(p.vy)>40){
-          p.vy=-Math.abs(p.vy)*(p.kind==='rain'?0.3:0.2); p.vx*=0.4; p.bounce++; p.y=bY-1;
-        } else { p.y=bY; p.vy=0; p.vx=0; p.life-=dt*(p.kind==='rain'?4:2.5); }
+        if(isRain && p.bounce<2 && Math.abs(p.vy)>40){
+          p.vy=-Math.abs(p.vy)*0.3; p.vx*=0.4; p.bounce++; p.y=bY-1;   // 비만 통통
+        } else { p.y=bY; p.vy=0; p.vx=0; p.life-=dt*(isRain?4:2.5); }  // 눈은 쌓였다 사라짐
       }
     }
-    // 화면 위로 나가거나(안전장치) 수명 다하면 제거
     this.particles=this.particles.filter(p=>p.life>0 && p.y<H+10 && p.y>-20);
     if(this.particles.length>200) this.particles.splice(0, this.particles.length-200);
   }
