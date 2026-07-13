@@ -1,0 +1,42 @@
+interface Env {
+  /**
+   * Cloudflare Pages service binding.
+   * Target service: mimesis-byeoli-authority
+   *
+   * 공개 소비자는 기존 mimesis-sight-path.pages.dev origin만 사용한다.
+   * Authority의 workers.dev 주소를 직접 알 필요가 없다.
+   */
+  BYEOLI_AUTHORITY: Fetcher;
+}
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Cache-Control': 'no-store',
+};
+
+export const onRequestOptions: PagesFunction<Env> = async () =>
+  new Response(null, { status: 204, headers: CORS });
+
+export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+  if (!env.BYEOLI_AUTHORITY) {
+    return new Response(JSON.stringify({ error: 'authority_service_binding_missing' }), {
+      status: 503,
+      headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' },
+    });
+  }
+
+  const upstream = await env.BYEOLI_AUTHORITY.fetch('https://authority.internal/api/byeoli/state', {
+    method: 'GET',
+    headers: { accept: 'application/json' },
+  });
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      ...CORS,
+      'Content-Type': upstream.headers.get('Content-Type') ?? 'application/json; charset=utf-8',
+    },
+  });
+};
