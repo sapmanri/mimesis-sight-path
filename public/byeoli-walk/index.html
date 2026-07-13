@@ -292,9 +292,10 @@ const Sound={
   init(){
     if(!this.ctx){ try{ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
     if(!this.ctx) return;
-    if(this.ctx.state==='suspended') this.ctx.resume();
+    // ⚠ iOS 핵심: 'suspended'뿐 아니라 'interrupted' 상태도 resume해야 소리가 난다.
+    // (3D ambience.ts에서 검증된 방식 — state!=='running' 전체를 잡는다)
+    if(this.ctx.state!=='running') this.ctx.resume();
     // iOS 잠금 해제: 무음 버퍼를 한 번 재생해야 오디오 경로가 실제로 열린다.
-    // (AudioContext 생성/resume만으로는 iOS Safari에서 소리가 안 남)
     if(!this._unlocked){
       try{
         const buf=this.ctx.createBuffer(1,1,22050);
@@ -304,9 +305,12 @@ const Sound={
         this._unlocked=true;
       }catch(e){}
     }
+    return this.ctx.state==='running';
   },
+  // 소리 내기 직전 ctx가 running인지 보장 (iOS는 언제든 interrupted 될 수 있음)
+  _ready(){ if(!this.ctx) return false; if(this.ctx.state!=='running') this.ctx.resume(); return this.ctx.state==='running'; },
   blip(freq, dur, type='square', vol=0.12){
-    if(!this.on||!this.ctx) return;
+    if(!this.on||!this._ready()) return;
     const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
     o.type=type; o.frequency.setValueAtTime(freq,t);
     g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
@@ -314,7 +318,7 @@ const Sound={
   },
   // 카메라 셔터: 짧은 노이즈 클릭 + 고음 → "찰칵"
   shutter(){
-    if(!this.on||!this.ctx) return;
+    if(!this.on||!this._ready()) return;
     const t=this.ctx.currentTime;
     // 찰-칵: 두 번의 짧은 노이즈 클릭만 (톤음 없음 → 이벤트음처럼 안 들림)
     const click=(when,vol)=>{
@@ -335,7 +339,7 @@ const Sound={
   rain(){ /* 빗소리는 루프 노이즈로 별도 */ },
   weatherLoop:null,
   startWeather(kind){
-    if(!this.on||!this.ctx) return; this.stopWeather();
+    if(!this.on||!this._ready()) return; this.stopWeather();
     // 화이트노이즈 루프 (비=쏴, 눈=거의 무음이라 생략)
     if(kind!=='rain') return;
     const bufSize=2*this.ctx.sampleRate, buf=this.ctx.createBuffer(1,bufSize,this.ctx.sampleRate), d=buf.getChannelData(0);
