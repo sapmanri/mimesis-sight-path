@@ -1,0 +1,64 @@
+name: Hotfix iOS silent loop audio regression
+
+on:
+  push:
+    branches: [hotfix-disable-2d-footsteps]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix-disable-2d-footsteps
+      - name: Restore proven footstep and restrict legacy media loop
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('public/byeoli-walk/index.html')
+          s=p.read_text()
+          marker="const Sound={\n  ctx:null, on:false, _silentEl:null, _listenersInstalled:false,   // on:false로 시작 (버튼 🔇와 일치)"
+          if 'const IS_IOS=' not in s:
+              s=s.replace(marker,"const IS_IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);\n"+marker,1)
+          old="""    try{ const nav=navigator; if(nav.audioSession) nav.audioSession.type='playback'; }catch(e){}
+    // ② 구형 커버: 무음 <audio> 루프가 세션을 미디어로 끌어올림
+    // ⚠ 소리가 켜진 경우에만 루프 유지. (전역 제스처 리스너가 매 클릭 wake를 부르므로,
+    //    on 가드 없으면 소리 꺼도 아무 탭에서 무음 루프가 되살아나 \"안 꺼지는\" 증상이 됨)
+    if(this.on){
+      if(!this._silentEl){
+        try{ this._silentEl=new Audio(SILENT_WAV); this._silentEl.loop=true; this._silentEl.playsInline=true; }catch(e){ this._silentEl=null; }
+      }
+      if(this._silentEl && this._silentEl.paused) { this._silentEl.play().catch(()=>{}); }
+    }"""
+          new="""    let hasAudioSession=false;
+    try{ const nav=navigator; if(nav.audioSession){ nav.audioSession.type='playback'; hasAudioSession=true; } }catch(e){}
+    // 초단 무음 WAV 무한 loop는 일부 브라우저에서 loop 경계 클릭을 반복해
+    // 발소리처럼 들린다. 현대 iOS는 audioSession을 쓰고, 구형 iOS만 fallback.
+    const needsLegacyMediaLoop=IS_IOS&&!hasAudioSession;
+    if(this.on&&needsLegacyMediaLoop){
+      if(!this._silentEl){
+        try{ this._silentEl=new Audio(SILENT_WAV); this._silentEl.loop=true; this._silentEl.playsInline=true; }catch(e){ this._silentEl=null; }
+      }
+      if(this._silentEl&&this._silentEl.paused) this._silentEl.play().catch(()=>{});
+    } else if(this._silentEl&&!this._silentEl.paused){
+      try{ this._silentEl.pause(); this._silentEl.currentTime=0; }catch(e){}
+    }"""
+          if old not in s: raise SystemExit('wake block not found')
+          s=s.replace(old,new,1)
+          if '  _lastStepAt:0,' in s:
+              start=s.index('  _lastStepAt:0,')
+              end=s.index('  act(drive)',start)
+              s=s[:start]+"  step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리: BUILD 405+ 검증 리듬\n"+s[end:]
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add public/byeoli-walk/index.html
+          git commit -m "fix(2d): isolate legacy silent media loop to old iOS"
+          git push
