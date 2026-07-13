@@ -1,0 +1,37 @@
+name: Migrate Byeoli Walk to shared brain
+
+on:
+  push:
+    paths:
+      - '.github/byeoli-walk-shared-brain.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply migration
+        run: python3 scripts/migrate-byeoli-walk-shared-brain.py
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Verify shared bundle
+        run: test -f dist/byeoli-walk/brain.js
+      - name: Commit migrated prototype
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/byeoli-walk/index.html
+          git diff --cached --quiet || git commit -m "BUILD 405: make Byeoli Walk consume shared HabitEngine"
+          git push
