@@ -111,6 +111,14 @@
   <div id="stream"></div>
 </div>
 
+<!-- BUILD 410-C2: Full Page World Event Stage (평소 display:none) -->
+<div id="world-event-stage" style="display:none;position:fixed;left:0;top:0;width:100%;height:100dvh;z-index:999999;background:#000;overflow:hidden">
+  <canvas id="worldEventCanvas"></canvas>
+  <div id="we-live" style="position:absolute;left:14px;top:12px;font:bold 13px system-ui,sans-serif;color:#ff4a3a;letter-spacing:.05em">🔴 LIVE EVENT</div>
+  <div id="we-title" style="position:absolute;right:14px;top:13px;font:600 11px system-ui,sans-serif;color:#c9c9c9;letter-spacing:.1em"></div>
+  <div id="we-caption" style="position:absolute;left:0;right:0;bottom:8%;text-align:center;font:500 15px system-ui,sans-serif;color:#e8e4d8;opacity:0;transition:opacity .8s"></div>
+</div>
+
 <script type="module">
 import { HABIT_BIAS_MAX, capCombinedBias, createSharedHabitEngine, byeoliDayEpoch, formatByeoliDate } from '/byeoli-walk/brain.js';
 /* ---- inlined catalog.mjs ---- */
@@ -1236,141 +1244,179 @@ function drawByeoli(byeoli){
 const WORLD_EVENT_DEFS = {
   godzilla: { journalLines:['산인 줄 알았는데, 산이 걸어갔다.','오늘은 먼 산이 잠깐 움직였다.'] },
 };
-const WorldEventPlayer = {
-  active: null,               // ActiveWorldEvent | null
-  scheduledInstanceId: null,  // 사운드 중복 예약 방지
-  loggedInstanceIds: new Set(),
-  start(eventEnvelope){ this.active = eventEnvelope || null; },
-  stop(){ this.active = null; },
-  step(dt){ /* renderer clock only. Authority/로컬이 만료 관리, 로컬 두뇌 실행 안 함 */
-    if(this.active && this.active.endsAt && Date.now()>=this.active.endsAt){
-      this._finish(this.active); this.stop();
+/* ===== BUILD 410-C2: Full Page World Event Stage ==========================
+   평소 방송을 잠시 끊고, 페이지 전체를 이벤트 전용 방송 화면으로 전환한다.
+   같은 DOM 안 overlay만 켠다 (새 페이지/route/새로고침 없음). 앞으로 모든 대형
+   이벤트(유성우·UFO·화산...)가 이 무대를 공유한다. epoch 시간축·사운드·로그는
+   410-C 로직 유지. 별이 state/Brain/발소리/creature flyby 안 건드림. */
+const WorldEventStage = {
+  active:null, scheduledInstanceId:null, loggedInstanceIds:new Set(),
+  _stageEl:null, _cv:null, _cx:null, _raf:null, _running:false,
+  _init(){
+    if(this._stageEl) return;
+    this._stageEl=document.getElementById('world-event-stage');
+    this._cv=document.getElementById('worldEventCanvas');
+    if(this._cv) this._cx=this._cv.getContext('2d');
+  },
+  start(envelope){
+    this._init(); this.active=envelope||null;
+    if(!this.active){ return; }
+    this._open();
+  },
+  stop(){ this._close(); this.active=null; },
+  step(){ /* renderer clock only. 만료는 자체 rAF에서 처리 */ },
+  _progress(a){ if(!a||!a.endsAt||a.endsAt<=a.startedAt) return 0;
+    return Math.max(0,Math.min(1,(Date.now()-a.startedAt)/(a.endsAt-a.startedAt))); },
+
+  _open(){
+    if(this._running) return;
+    this._init(); if(!this._stageEl||!this._cx){ return; }
+    // 평소 UI 숨김 (레이아웃 보존 위해 visibility 대신 display)
+    const app=document.getElementById('app'); if(app) app.style.display='none';
+    this._stageEl.style.display='block';
+    this._resize(); window.addEventListener('resize', this._onResize=()=>this._resize());
+    // 타이틀
+    const tt=document.getElementById('we-title'); if(tt) tt.textContent = (this.active.eventId==='godzilla'?'GODZILLA':this.active.eventId.toUpperCase());
+    const cap=document.getElementById('we-caption'); if(cap){ cap.style.opacity='0'; cap.textContent=''; }
+    this._running=true;
+    const loop=()=>{
+      if(!this._running) return;
+      const p=this._progress(this.active);
+      this.scheduleGodzillaSound(this.active);   // 새 인스턴스면 1회 예약 (410-C 로직)
+      this._draw(p);
+      if(Date.now()>=this.active.endsAt){ this._finish(this.active); this.stop(); return; }
+      this._raf=requestAnimationFrame(loop);
+    };
+    this._raf=requestAnimationFrame(loop);
+  },
+  _close(){
+    this._running=false;
+    if(this._raf) cancelAnimationFrame(this._raf), this._raf=null;
+    if(this._onResize) window.removeEventListener('resize', this._onResize), this._onResize=null;
+    if(this._stageEl) this._stageEl.style.display='none';
+    const app=document.getElementById('app'); if(app) app.style.display='';   // 스크롤 위치는 유지됨
+  },
+  _resize(){
+    const dpr=Math.min(2, window.devicePixelRatio||1);
+    const w=this._stageEl.clientWidth, h=this._stageEl.clientHeight;
+    this._cv.width=w*dpr; this._cv.height=h*dpr; this._cv.style.width=w+'px'; this._cv.style.height=h+'px';
+    this._cx.setTransform(dpr,0,0,dpr,0,0); this._W=w; this._H=h;
+  },
+
+  // 전체 새 그림 — "잠시 다른 방송". 산책 배경 재사용 안 함.
+  _draw(p){
+    const cx=this._cx, W=this._W, H=this._H;
+    // 타임라인: 0~1 암전 / 1~4 거대한 발+흔들림 / 4~8 몸통+등가시 / 8~10 얼굴 / 10~12 꼬리+정적+문장
+    // 카메라 흔들림 1px (stomp 창)
+    const stompWin = (p>0.08&&p<0.34) && (((Date.now()/220)|0)&1)===0;
+    const shX = stompWin? ((((Date.now()/110)|0)&1)?1:-1):0;
+    const shY = stompWin?1:0;
+    cx.save(); cx.translate(shX,shY);
+    // ── 하늘 (먹구름 그라디언트) ──
+    const g=cx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#0a0e12'); g.addColorStop(0.55,'#131a20'); g.addColorStop(1,'#1c2530');
+    cx.fillStyle=g; cx.fillRect(-2,-2,W+4,H+4);
+    // 암전 인트로/아웃트로
+    let black=0;
+    if(p<0.08) black=1-(p/0.08); else if(p>0.92) black=(p-0.92)/0.08;
+    // ── 먼 산 실루엣 ──
+    cx.fillStyle='#0c1116';
+    const hy=H*0.62;
+    cx.beginPath(); cx.moveTo(0,hy);
+    for(let x=0;x<=W;x+=40){ cx.lineTo(x, hy - 24*Math.abs(Math.sin(x*0.007+2)) - 10); }
+    cx.lineTo(W,H); cx.lineTo(0,H); cx.closePath(); cx.fill();
+    // ── 안개 띠 ──
+    cx.fillStyle='rgba(120,130,140,0.06)'; cx.fillRect(0,hy-20,W,50);
+    // ── 새 떼 (1~3초, 급히 이탈) ──
+    if(p>0.08&&p<0.30){ const k=(p-0.08)/0.22; cx.fillStyle='rgba(20,24,30,0.85)';
+      for(let i=0;i<6;i++){ const bx=W-k*(W+80)-i*22; const by=H*0.25+(i*17)%60+Math.sin(k*6+i)*3;
+        cx.fillRect(bx,by,5,2); cx.fillRect(bx-3,by-2,3,2); cx.fillRect(bx+5,by-2,3,2); } }
+    // ── 거대 괴수 (화면 대부분을 차지) ──
+    this._drawBeast(cx,W,H,p);
+    cx.restore();
+    // ── 암전 오버레이 ──
+    if(black>0){ cx.fillStyle='rgba(0,0,0,'+black.toFixed(3)+')'; cx.fillRect(0,0,W,H); }
+    // ── 문장 (10초부터) ──
+    const cap=document.getElementById('we-caption');
+    if(cap){ if(p>=0.83 && !cap.textContent){ const def=(typeof WORLD_EVENT_DEFS!=='undefined')?WORLD_EVENT_DEFS[this.active.eventId]:null;
+        const lines=(def&&def.journalLines)||['산이 움직였다.']; cap.textContent=lines[((this.active.sequence||0)>>>0)%lines.length]; cap.style.opacity='1'; }
+      if(p<0.83 && cap.textContent){ cap.textContent=''; cap.style.opacity='0'; } }
+  },
+
+  // 거대 도마뱀형 괴수 — 화면 중앙~오른쪽. 특정 영화 복제 아님. 타임라인 따라 부위 강조.
+  _drawBeast(cx,W,H,p){
+    const cxc=W*0.52, groundY=H*0.92;
+    const scale=Math.min(W,H)/230;           // 화면 크기에 비례
+    const bob=(p>0.08&&p<0.34)&&(((Date.now()/220)|0)&1)?1:0;
+    const S=(v)=>v*scale;
+    const body='#0c1215', edge='#05090b', eye='#ff5a3a';
+    cx.fillStyle=body;
+    // 등장 진행: 0~0.08 안보임 / 커지며 등장
+    let rise=0;
+    if(p<0.08) return;
+    else if(p<0.34) rise=(p-0.08)/0.26;      // 발→몸통 서서히 올라옴
+    else rise=1;
+    const topY=groundY - S(150)*rise;
+    // 다리 두 개 (거대한 발)
+    cx.fillRect(cxc-S(55), groundY-S(70), S(34), S(70)+bob);
+    cx.fillRect(cxc+S(18), groundY-S(70), S(34), S(70)-bob);
+    if(p>0.30){
+      // 몸통
+      cx.fillRect(cxc-S(58), topY+S(48), S(120), S(74));
+      // 굽은 등 상부
+      cx.fillRect(cxc-S(40), topY+S(30), S(90), S(26));
+      // 등가시
+      cx.fillStyle=edge;
+      for(let i=0;i<7;i++){ const sx=cxc-S(46)+i*S(15); const hh=S(18)-(i===3?S(4):0);
+        cx.beginPath(); cx.moveTo(sx,topY+S(34)); cx.lineTo(sx+S(7),topY+S(34)-hh); cx.lineTo(sx+S(14),topY+S(34)); cx.closePath(); cx.fill(); }
+      cx.fillStyle=body;
+    }
+    if(p>0.62){
+      // 목 + 머리 (8초 얼굴 강조)
+      cx.fillRect(cxc+S(30), topY+S(6), S(26), S(46));   // 목
+      cx.fillRect(cxc+S(48), topY-S(14), S(40), S(30));  // 머리
+      cx.fillRect(cxc+S(84), topY-S(8), S(16), S(16));   // 주둥이
+      // 눈 (붉은, 얼굴 구간에 발광)
+      const eg=(p>0.62&&p<0.85); cx.fillStyle=eg?eye:'#7a2018';
+      cx.fillRect(cxc+S(70), topY-S(4), S(7), S(6));
+      cx.fillStyle=body;
+    }
+    // 꼬리 (10초부터 뒤로 길게)
+    if(p>0.30){
+      const tk=Math.min(1,(p-0.30)/0.5);
+      cx.fillRect(cxc-S(58)-S(70)*tk, topY+S(96), S(80)*tk, S(16));
+      cx.fillRect(cxc-S(58)-S(100)*tk, topY+S(106), S(46)*tk, S(10));
     }
   },
-  // 0~1 진행률 — 모든 시청자 공통 (epoch 기준). 중간 접속도 같은 지점.
-  _progress(a){
-    if(!a || !a.endsAt || a.endsAt<=a.startedAt) return 0;
-    return Math.max(0, Math.min(1, (Date.now()-a.startedAt)/(a.endsAt-a.startedAt)));
-  },
-  _isGodzilla(){ return this.active && this.active.eventId==='godzilla'; },
 
-  // ── 레이어1: 지평선 뒤 (언덕 앞, props 뒤) — 고질라 실루엣 ──
-  renderHorizon(ctx, state){
-    if(!this._isGodzilla()) return;
-    const p=this._progress(this.active);
-    this.scheduleGodzillaSound(this.active);      // 새 인스턴스면 여기서 1회 예약
-    this.renderGodzilla(ctx, state, p);
-  },
-  // ── 레이어2: 전경 (별이 위) — dim, 새떼, 카메라 overlay, 별이 반응, 로그 ──
-  renderForeground(ctx, state){
-    if(!this._isGodzilla()) return;
-    const p=this._progress(this.active);
-    // 배경 어둡게 (dimBackground 0.12, 3초 페이드 인/아웃)
-    const dimK = Math.min(1, p<0.1? p/0.1 : p>0.87? (1-p)/0.13 : 1);
-    ctx.fillStyle='rgba(10,14,15,'+(0.12*dimK).toFixed(3)+')'; ctx.fillRect(0,0,W,H);
-    this.renderGodzillaBirds(ctx, p);
-    this.renderByeoliReaction(ctx, state, p);
-    if(p>=0.86) this._maybeLog(this.active);      // 잔상 구간에서 로그 1회
-  },
-
-  // 거대 도마뱀형 괴수 실루엣 (특정 영화 복제 아님). 언덕 뒤에서 좌→우(dir).
-  renderGodzilla(ctx, state, p){
-    // 본체 통과 구간 3.0~8.5초 = progress 0.25~0.71. 그 밖엔 화면 밖.
-    const enter=0.25, exit=0.71;
-    const dir = (this.active.payload && this.active.payload.dir) || 1;
-    // 진행에 따라 x 이동 (화면 밖→밖). 언덕 뒤라 다리 아래는 언덕에 가림.
-    let gx;
-    if(p<enter) gx = dir>0? -120 : W+120;
-    else if(p>exit) gx = dir>0? W+120 : -120;
-    else { const k=(p-enter)/(exit-enter); gx = dir>0? -120+k*(W+240) : W+120-k*(W+240); }
-    const baseY=GROUND_Y-6;               // 언덕 능선 근처
-    // 쿵 걸음: 본체 구간에서 약 1.4초마다. stomp 창일 때 몸 1px 내려앉음.
-    const stompPhase=(p*12)%1.4;          // 12초 * ... 대략적 걸음
-    const stomp = (p>=enter && p<=exit && stompPhase<0.12);
-    const bob = stomp?1:0;
-    const gy = baseY - 46 + bob;          // 등 상단 기준
-    const night = state.sky.phase==='night' || state.sky.phase==='dusk';
-    const body = night? '#12191b' : '#1c2724';
-    const edge = night? '#0c1113' : '#141d1a';
-    // 폭 ~150px, 높이 ~78px. 좌우 반전은 dir로.
-    const s = dir>0?1:-1;
-    const X=(dx)=> (gx + s*dx)|0;
-    // 꼬리 (뒤쪽, 길게)
-    px(X(-58), gy+34, 40, 7, body); px(X(-72), gy+40, 22, 6, body); px(X(-84), gy+45, 14, 5, edge);
-    // 굽은 등 + 몸통
-    px(X(-30), gy+14, 56, 34, body);      // 몸통 덩어리
-    px(X(-20), gy+6, 40, 12, body);       // 등 상부(굽음)
-    // 등가시 여러 개 (톱니)
-    for(let i=0;i<6;i++){ const sx2=X(-24+i*9); px(sx2, gy+2 - (i===2||i===3?2:0), 4, 7, edge); }
-    // 두꺼운 목 + 작은 머리 (진행 방향)
-    px(X(20), gy+2, 12, 20, body);        // 목
-    px(X(30), gy-6, 16, 12, body);        // 머리
-    px(X(42), gy-4, 6, 6, body);          // 주둥이
-    // 눈 (밤에 또렷한 붉은 점)
-    px(X(38), gy-3, 2, 2, night? '#ff5a4a':'#c23a2a');
-    // 굵은 다리 두 개 (언덕에 하반신 가림 → 위쪽만 보임)
-    px(X(-14), gy+44, 10, 8+bob, body); px(X(8), gy+44, 10, 8-bob, edge);
-  },
-
-  // World Event 전용 새 떼 — 결정론적, sky.flybys 안 건드림. 두번째 진동 구간에 급히 이탈.
-  renderGodzillaBirds(ctx, p){
-    if(p<0.1 || p>0.32) return;           // 1.2~3.0초 무렵만
-    const k=(p-0.1)/0.22;                 // 0~1
-    const dir=(this.active.payload && this.active.payload.dir)||1;
-    const n=5;
-    ctx.fillStyle='rgba(30,34,40,0.8)';
-    for(let i=0;i<n;i++){
-      const seed=i*53.7;
-      // 고질라 반대방향으로 급히. 위쪽 하늘.
-      const bx = (dir>0? W - k*(W+40) : k*(W+40)) - dir*(i*14) ;
-      const by = 20 + (seed%22) + Math.sin(k*6+i)*2;
-      ctx.fillRect(bx|0, by|0, 2,1); ctx.fillRect((bx-1)|0,(by-1)|0,1,1); ctx.fillRect((bx+2)|0,(by-1)|0,1,1);
-    }
-  },
-
-  // 별이 반응 — state 수정 없이 렌더 override만. 얼굴 위 '...'와 위 응시 표식.
-  renderByeoliReaction(ctx, state, p){
-    if(p<0.05 || p>0.98) return;
-    const bx=state.byeoli.screenX, by=GROUND_Y;
-    // 머리 위 작은 표식 (놀람/응시). 3초부터 '...' → 이후 '?'
-    ctx.fillStyle = state.sky.phase==='night'? '#f4d06a':'#5c5448';
-    const ty=by-40;
-    if(p<0.25){ px(bx-2,ty,1,1); px(bx,ty,1,1); px(bx+2,ty,1,1); }  // ...
-    else { px(bx-1,ty-2,3,1); px(bx+1,ty-1,1,2); px(bx,ty+1,1,1); px(bx,ty+3,1,1); } // ?
-  },
-
-  // Web Audio 저주파 쿵 3회 합성. 기존 Sound.ctx 재사용. 새 인스턴스일 때만 1회 예약.
+  // 저주파 쿵 3회 — 410-C 로직 그대로 (성공 후 기록, startedAt 기준 절대시각, 지난 쿵 생략)
   scheduleGodzillaSound(active){
     if(this.scheduledInstanceId===active.eventInstanceId) return;
-    const S=(typeof Sound!=='undefined')?Sound:null;
-    if(!S || !S.on || !S._ready()) return;    // iOS unlock 전: 기록 안 함, 잠금 풀리면 재시도
-    const ctxA=S.ctx; if(!ctxA) return;
-    const STOMP_OFFSETS=[0.0, 1.2, 2.4];      // 사건 시작(epoch) 기준 각 쿵 절대 오프셋(초)
-    const elapsed=(Date.now()-active.startedAt)/1000;
-    for(const off of STOMP_OFFSETS){
-      const rel=off-elapsed;                  // 지금으로부터 몇 초 뒤
-      if(rel < -0.05) continue;               // 이미 지나간 쿵 생략 (중간 접속 동기화)
-      const t=ctxA.currentTime + Math.max(0, rel);
+    const Sd=(typeof Sound!=='undefined')?Sound:null;
+    if(!Sd || !Sd.on || !Sd._ready()) return;
+    const ctxA=Sd.ctx; if(!ctxA) return;
+    const OFF=[0.0,1.2,2.4]; const elapsed=(Date.now()-active.startedAt)/1000;
+    for(const off of OFF){ const rel=off-elapsed; if(rel<-0.05) continue;
+      const t=ctxA.currentTime+Math.max(0,rel);
       const o=ctxA.createOscillator(), g=ctxA.createGain();
-      o.type='sine'; o.frequency.setValueAtTime(72, t); o.frequency.exponentialRampToValueAtTime(48, t+0.3);
-      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.32, t+0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t+0.4);
-      o.connect(g); g.connect(ctxA.destination); o.start(t); o.stop(t+0.42);
-    }
-    this.scheduledInstanceId=active.eventInstanceId;   // 예약 성공 후에만 기록
+      o.type='sine'; o.frequency.setValueAtTime(72,t); o.frequency.exponentialRampToValueAtTime(48,t+0.3);
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.32,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.4);
+      o.connect(g); g.connect(ctxA.destination); o.start(t); o.stop(t+0.42); }
+    this.scheduledInstanceId=active.eventInstanceId;
   },
-
-  // 로그 1회 — eventInstanceId별 한 번. journalLines를 sequence로 결정론적 선택.
   _maybeLog(active){
     if(this.loggedInstanceIds.has(active.eventInstanceId)) return;
     this.loggedInstanceIds.add(active.eventInstanceId);
-    const def=(typeof WORLD_EVENT_DEFS!=='undefined')? WORLD_EVENT_DEFS[active.eventId] : null;
+    const def=(typeof WORLD_EVENT_DEFS!=='undefined')?WORLD_EVENT_DEFS[active.eventId]:null;
     const lines=(def&&def.journalLines)||['산인 줄 알았는데, 산이 걸어갔다.'];
-    const idx=((active.sequence||0)>>>0)%lines.length;   // 모든 시청자 동일 문장
-    if(typeof pushMsg==='function') pushMsg('diary', '🌑 '+lines[idx], null);
+    const idx=((active.sequence||0)>>>0)%lines.length;
+    if(typeof pushMsg==='function') pushMsg('diary','🌑 '+lines[idx],null);
   },
-  _finish(active){ /* 만료 시: 로그 보정(놓쳤으면) 후 정리 */ this._maybeLog(active); },
+  _finish(active){ this._maybeLog(active); },
 };
+const WorldEventPlayer = WorldEventStage;  // 하위 호환 별칭 (기존 참조 유지)
+
 // Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla[&eventOffset=초]
 // ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
 let SANDBOX_EVENT_DEBUG=false;
@@ -1389,15 +1435,12 @@ try{
 function render(state){
   AMB.t=performance.now();   // BUILD 410-A: ambient 시간축 (state 불변, 시각 효과 전용)
   drawBackground(state.sky, state.camera);
-  WorldEventPlayer.step(0);
-  WorldEventPlayer.renderHorizon(ctx, state);   // 410-C: 고질라 실루엣 (언덕 앞, props 뒤)
   const camShift=state.camera.camShift;
   for(const p of state.props){ const sx=p.x-camShift; if(sx>-30&&sx<W+30) drawProp(p,sx); }
   drawPpae(state.ppae);
   drawByeoli(state.byeoli);
   drawWeather(state.sky);
   drawFlash(state.flash);
-  WorldEventPlayer.renderForeground(ctx, state); // 410-C: dim·새떼·별이반응·로그 (전경)
 }
 // 빼콩이 — 흰 고양이 도트
 function drawPpae(ppae){
