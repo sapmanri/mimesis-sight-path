@@ -323,8 +323,10 @@ const Sound={
     if(this._silentEl && !this._silentEl.paused){ try{ this._silentEl.pause(); }catch(e){} }
     this.stopWeather();
   },
-  // 소리 재생 직전: resume 요청만 (동기 state 검사로 첫 소리를 버리지 않는다 — iOS resume은 비동기)
-  _ready(){ if(!this.ctx) return false; if(this.ctx.state!=='running') this.ctx.resume(); return true; },
+  // 소리 재생 직전: 이미 running이면 아무것도 안 한다 (매 발소리마다 resume을 때리면
+  // 데스크톱에서 스케줄링이 꼬여 발소리가 빨라짐 — 아이폰 작업 전엔 없던 회귀).
+  // suspended일 때만 resume 요청하고, running일 때만 true → 소리는 컨텍스트 열린 뒤부터 정상.
+  _ready(){ if(!this.ctx) return false; if(this.ctx.state==='suspended') this.ctx.resume(); return this.ctx.state==='running'; },
   installGestureUnlock(){
     if(this._listenersInstalled) return;
     this._listenersInstalled=true;
@@ -340,10 +342,7 @@ const Sound={
     });
   },
   blip(freq, dur, type='square', vol=0.12){
-    if(!this.on||!this._ready()) return;
-    // 컨텍스트가 아직 안 열렸으면(resume 비동기) 스케줄하지 않는다.
-    // → suspended 동안 쌓인 오실레이터가 running 순간 한꺼번에 터지는 "다다다다" 폭주 차단.
-    if(this.ctx.state!=='running') return;
+    if(!this.on||!this._ready()) return;   // _ready는 running일 때만 true
     const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
     o.type=type; o.frequency.setValueAtTime(freq,t);
     g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
