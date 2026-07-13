@@ -89,6 +89,7 @@
       <span>🌿 <b>Byeoli Walk</b></span>
       <span id="daytag" style="pointer-events:none">별이력 9075.4.11</span>
     </div>
+    <div id="stepDiag" style="position:fixed;top:2px;left:2px;z-index:9999;background:#c00;color:#fff;font:bold 12px monospace;padding:2px 6px;pointer-events:none">발소리/초: 측정중…</div>
     <div class="ctrls">
       <button id="soundBtn">🔇</button>
       <button id="speedBtn">1×</button>
@@ -767,7 +768,14 @@ function update(dt){
   byeoli.walkPhase+=dt*8;
   // 발소리: 실제 걸음 간격(약 0.42초마다 한 걸음). 배속 1일 때만.
   stepTimer-=dt;
-  if(stepTimer<=0){ if(speedMul===1) Sound.step(); stepTimer=0.42; }
+  if(stepTimer<=0){ if(speedMul===1){ Sound.step(); window.__stepDiag=(window.__stepDiag||0)+1; } stepTimer=0.42; }
+  // [임시 진단] 최근 1초 발소리 호출 횟수를 화면에 표시 (원인 확인용, 확인 후 제거)
+  window.__stepDiagT=(window.__stepDiagT||0)+dt;
+  if(window.__stepDiagT>=1){
+    const el=document.getElementById('stepDiag');
+    if(el) el.textContent='발소리/초: '+(window.__stepDiag||0)+' | dt='+dt.toFixed(3)+' | spd='+speedMul;
+    window.__stepDiag=0; window.__stepDiagT=0;
+  }
   if(byeoli.worldX>worldLen){
     byeoli.worldX=0; loopCount++;
     for(const p of props){ p.phase='unseen'; p.reactedThisPass=false; }
