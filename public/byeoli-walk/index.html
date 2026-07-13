@@ -1087,6 +1087,32 @@ function drawProp(p,sx){
   else if(t==='dewgrass'){ for(let i=-5;i<=5;i+=2)px(sx+i,y-6,1,6,'#7a9068'); px(sx-3,y-6,1,1,'#c3d6e0'); px(sx+2,y-7,1,1,'#c3d6e0'); px(sx,y-5,1,1,'#d6e4ec'); }
   else if(t==='spiderweb'){ px(sx-8,y-20,1,16,'#b8bcb2'); px(sx+8,y-20,1,16,'#b8bcb2'); px(sx-8,y-20,16,1,'#b8bcb2'); px(sx-6,y-14,12,1,'#a4a89f'); px(sx,y-20,1,16,'#a4a89f'); }
   else if(t==='birdnest'){ px(sx-5,y-4,10,4,'#8a6f4a'); px(sx-5,y-5,10,1,'#9c7f5a'); px(sx-2,y-3,2,2,'#a9c4d6'); px(sx+1,y-3,2,2,'#c9d6b0'); }
+  // ==== BUILD 409-B: 생활 흔적과 시골 사물 25종 ====
+  else if(t==='teakettle'){ px(sx-5,y-8,10,7,'#a9b0a6'); px(sx-6,y-11,3,3,'#8a9088'); px(sx+4,y-10,3,2,'#8a9088'); px(sx-2,y-11,4,2,'#8a9088'); }
+  else if(t==='enamelpot'){ px(sx-6,y-6,12,6,'#c4c9c2'); px(sx-6,y-7,12,1,'#dfe4dd'); px(sx-8,y-5,2,2,'#8a9088'); px(sx+6,y-5,2,2,'#8a9088'); }
+  else if(t==='washbasin'){ px(sx-7,y-5,14,5,'#c25a4a'); px(sx-7,y-6,14,1,'#d96a5a'); px(sx-5,y-3,10,2,'#9a4438'); }
+  else if(t==='clothespins'){ px(sx-8,y-16,16,1,'#8a7f6a'); px(sx-5,y-15,2,4,'#d98a4a'); px(sx,y-15,2,4,'#4a8ac9'); px(sx+5,y-15,2,4,'#d9c04a'); }
+  else if(t==='apron'){ px(sx-5,y-14,10,3,'#c98a9a'); px(sx-6,y-11,12,10,'#d99aaa'); px(sx-4,y-8,3,3,'#c07888'); px(sx+2,y-8,3,3,'#c07888'); }
+  else if(t==='strawhat'){ px(sx-8,y-4,16,2,'#d9b86a'); px(sx-4,y-9,8,5,'#c9a85a'); px(sx-3,y-10,6,2,'#b5945a'); }
+  else if(t==='gloves'){ px(sx-5,y-6,5,6,'#b5a074'); px(sx-5,y-9,1,3,'#b5a074'); px(sx-3,y-9,1,3,'#b5a074'); px(sx+1,y-5,4,5,'#a59064'); }
+  else if(t==='shovel'){ px(sx,y-22,2,18,'#8a6f52'); px(sx-3,y-6,8,6,'#9aa0a6'); px(sx-2,y-1,6,2,'#8a9096'); }
+  else if(t==='hoe'){ px(sx+2,y-16,2,14,'#8a6f52'); px(sx+2,y-16,2,3,'#7a5f42'); px(sx-3,y-4,6,2,'#7a8086'); px(sx-3,y-4,2,4,'#7a8086'); }
+  else if(t==='rake'){ px(sx,y-22,2,20,'#8a6f52'); px(sx-6,y-4,12,1,'#7a8086'); for(let i=-6;i<=6;i+=3)px(sx+i,y-4,1,4,'#7a8086'); }
+  else if(t==='wheelbarrow'){ px(sx-8,y-8,12,5,'#6a8a86'); px(sx+3,y-8,6,2,'#5a7a76'); px(sx-6,y-4,4,4,'#3a4a46'); px(sx-9,y-9,2,7,'#5a6a66'); }
+  else if(t==='fertilizerbag'){ px(sx-5,y-12,10,12,'#c9c0a6'); px(sx-5,y-12,10,2,'#a59a7a'); px(sx-3,y-8,6,3,'#8a8060'); }
+  else if(t==='ricebag'){ px(sx-5,y-13,10,13,'#d9d0b6'); px(sx-4,y-14,8,2,'#b5a880'); px(sx-3,y-14,1,2,'#8a7f5a'); px(sx+2,y-14,1,2,'#8a7f5a'); }
+  else if(t==='flowerpot'){ px(sx-4,y-6,8,6,'#c47a4a'); px(sx-4,y-7,8,1,'#d98a5a'); px(sx-2,y-11,4,5,'#6a8560'); px(sx-1,y-13,2,2,'#d98aa0'); }
+  else if(t==='brokenpot'){ px(sx-4,y-5,6,5,'#c47a4a'); px(sx+2,y-3,3,3,'#b56a3a'); px(sx-5,y-1,10,1,'#7a5230'); px(sx-2,y-3,2,2,'#5c4030'); }
+  else if(t==='wateringhose'){ px(sx-6,y-3,12,3,'#4a7a4a'); px(sx-6,y-5,8,2,'#5a8a5a'); px(sx-2,y-6,5,2,'#4a7a4a'); }
+  else if(t==='gardenbasket'){ px(sx-6,y-6,12,6,'#b5945a'); ctx.fillStyle='#9a7a44'; for(let i=-6;i<6;i+=2)px(sx+i,y-6,1,6,'#9a7a44'); px(sx-6,y-8,12,2,'#a5854a'); }
+  else if(t==='woodsign'){ px(sx-1,y-16,2,16,'#7a5f42'); px(sx-8,y-16,16,7,'#b5985f'); px(sx-6,y-13,12,1,'#8a7550'); px(sx-6,y-11,8,1,'#8a7550'); }
+  else if(t==='newspaper'){ px(sx-6,y-4,12,4,'#e4e0d4'); px(sx-6,y-4,12,1,'#c9c4b6'); px(sx-4,y-3,8,1,'#9a9488'); px(sx-4,y-2,5,1,'#9a9488'); }
+  else if(t==='umbrella'){ px(sx-1,y-16,2,16,'#5a6a66'); px(sx-7,y-18,14,3,'#4a7ac9'); px(sx-5,y-20,10,2,'#5a8ad9'); px(sx-1,y-2,3,2,'#5a6a66'); }
+  else if(t==='raincoat'){ px(sx-5,y-14,10,3,'#d9c04a'); px(sx-6,y-11,12,11,'#e6cd5a'); px(sx-6,y-14,3,3,'#d9c04a'); px(sx+3,y-14,3,3,'#d9c04a'); }
+  else if(t==='thermos'){ px(sx-3,y-14,6,14,'#4a7a76'); px(sx-3,y-14,6,3,'#5a8a86'); px(sx-3,y-4,6,1,'#3a6a66'); }
+  else if(t==='radio'){ px(sx-6,y-9,12,9,'#8a7f6a'); px(sx-4,y-7,5,5,'#5c5448'); px(sx+2,y-7,3,1,'#c9c0a6'); px(sx+2,y-5,3,1,'#c9c0a6'); px(sx+4,y-13,1,4,'#6a5f4a'); }
+  else if(t==='stool'){ px(sx-5,y-6,10,3,'#c98a4a'); px(sx-4,y-3,2,3,'#a56a3a'); px(sx+3,y-3,2,3,'#a56a3a'); }
+  else if(t==='doormat'){ px(sx-8,y-2,16,3,'#9a7f5a'); px(sx-8,y-2,16,1,'#a58f6a'); ctx.fillStyle='#7a6244'; for(let i=-8;i<8;i+=3)px(sx+i,y-1,1,2,'#7a6244'); }
   else { px(sx-3,y-6,6,6,'#8a8f88'); } // fallback
 
   // 단계 오라(개발 표시)
