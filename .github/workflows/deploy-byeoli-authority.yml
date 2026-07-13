@@ -1,0 +1,101 @@
+name: Deploy Byeoli Authority
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'authority/**'
+      - '.github/workflows/deploy-byeoli-authority.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: authority/package-lock.json
+
+      - name: Install Authority dependencies
+        working-directory: authority
+        run: npm install
+
+      - name: Typecheck Authority
+        working-directory: authority
+        run: npm run typecheck
+
+      - name: Deploy Authority Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: authority
+          command: deploy
+
+      - name: Bind Authority service to Pages production and preview
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/pages-binding.json
+          import json
+          print(json.dumps({
+            "deployment_configs": {
+              "production": {
+                "services": {
+                  "BYEOLI_AUTHORITY": {
+                    "service": "mimesis-byeoli-authority",
+                    "environment": "production"
+                  }
+                }
+              },
+              "preview": {
+                "services": {
+                  "BYEOLI_AUTHORITY": {
+                    "service": "mimesis-byeoli-authority",
+                    "environment": "production"
+                  }
+                }
+              }
+            }
+          }))
+          PY
+
+          response=$(curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/mimesis-sight-path" \
+            --header "Authorization: Bearer ${CF_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data @/tmp/pages-binding.json)
+
+          python - "$response" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          if not data.get('success'):
+              raise SystemExit('Cloudflare Pages binding update failed: '+json.dumps(data.get('errors', data)))
+          print('BYEOLI_AUTHORITY service binding configured for production and preview')
+          PY
+
+      - name: Verify public Authority endpoints
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            state_code=$(curl -sS -o /tmp/state.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/byeoli/state || true)
+            health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/byeoli/health || true)
+            if [ "$state_code" = "200" ] && [ "$health_code" = "200" ]; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 6
+          done
+          echo 'STATE:'; cat /tmp/state.json || true
+          echo 'HEALTH:'; cat /tmp/health.json || true
+          exit 1
