@@ -1061,6 +1061,32 @@ function drawProp(p,sx){
   else if(t==='oldchair'){ px(sx-5,y-9,3,9,'#8a6f52'); px(sx+3,y-9,3,9,'#8a6f52'); px(sx-5,y-10,10,2,'#9c7f5f'); px(sx-5,y-16,2,7,'#8a6f52'); px(sx-5,y-16,7,2,'#9c7f5f'); }
   else if(t==='bucket'){ px(sx-5,y-8,10,8,'#7a8a86'); px(sx-5,y-9,10,1,'#8a9a96'); px(sx-4,y-12,8,1,'#6a746f'); px(sx-3,y-6,6,4,'#6a7a76'); }
   else if(t==='windchime'){ px(sx-4,y-22,8,2,'#8a6f52'); px(sx-1,y-20,2,6,'#c9b06a'); px(sx-1,y-13,2,3,'#d9c07a'); px(sx-3,y-9,4,2,'#b5945a'); }
+  // ==== BUILD 409-A: 길가 식물과 작은 자연 25종 ====
+  else if(t==='azalea'){ px(sx-1,y-7,2,7,'#4f6b4f'); const c='#d97a9a'; px(sx-5,y-11,4,4,c); px(sx+1,y-11,4,4,c); px(sx-2,y-13,3,3,'#e094ac'); }
+  else if(t==='forsythia'){ px(sx-1,y-9,2,9,'#5c6b4a'); for(let i=0;i<5;i++){ px(sx-5+i*2,y-12-((i%2)?2:0),2,2,'#e6c24a'); } }
+  else if(t==='lilac'){ px(sx-1,y-13,2,13,'#5c6b4a'); px(sx-3,y-18,6,6,'#b09ac9'); px(sx-2,y-20,4,3,'#c4b0d9'); }
+  else if(t==='sunflower'){ px(sx-1,y-20,2,20,'#4a5838'); px(sx-4,y-25,8,6,'#e6b83a'); px(sx-2,y-23,4,3,'#7a5230'); }
+  else if(t==='marigold'){ px(sx-1,y-8,2,8,'#4f6b4f'); px(sx-4,y-12,8,4,'#e69a3a'); px(sx-2,y-11,3,2,'#d97e2a'); }
+  else if(t==='morningglory'){ px(sx-8,y-16,2,16,'#5e7a54'); for(let i=0;i<4;i++)px(sx-8+i,y-14+i*3,2,2,'#6a8560'); px(sx-9,y-17,5,4,'#8a7ac9'); px(sx-8,y-16,2,2,'#c4b0d9'); }
+  else if(t==='chrysanthemum'){ px(sx-1,y-9,2,9,'#4a5838'); px(sx-4,y-13,8,5,'#e6c24a'); px(sx-5,y-11,2,2,'#d9b03a'); px(sx+3,y-11,2,2,'#d9b03a'); }
+  else if(t==='lavender'){ for(let i=-4;i<=4;i+=4){ px(sx+i,y-14,1,14,'#6a7a52'); px(sx+i-1,y-18,3,5,'#9a8ac4'); } }
+  else if(t==='wildrose'){ px(sx-1,y-9,2,9,'#4f6b4f'); px(sx-4,y-12,4,4,'#f0ece0'); px(sx+1,y-11,3,3,'#f0ece0'); px(sx-2,y-11,2,2,'#e6d98a'); }
+  else if(t==='bamboo'){ for(let i=-5;i<=5;i+=5){ px(sx+i,y-30,2,30,'#7a9060'); px(sx+i,y-22,2,1,'#5c7048'); px(sx+i,y-14,2,1,'#5c7048'); } px(sx+6,y-26,4,2,'#8ba270'); }
+  else if(t==='pinecone'){ px(sx-3,y-6,6,6,'#8a6f52'); px(sx-3,y-6,2,2,'#6f5540'); px(sx+1,y-4,2,2,'#6f5540'); px(sx-1,y-2,2,2,'#6f5540'); }
+  else if(t==='acornpile'){ px(sx-5,y-4,4,4,'#9c7f4f'); px(sx,y-4,4,4,'#8a6f3f'); px(sx-2,y-7,4,3,'#9c7f4f'); px(sx-5,y-4,4,1,'#6f5530'); px(sx,y-4,4,1,'#6f5530'); }
+  else if(t==='mushroom'){ px(sx-1,y-5,2,5,'#e8e2d2'); px(sx-4,y-8,8,3,'#c24a4a'); px(sx-3,y-9,5,1,'#d95a5a'); px(sx-2,y-7,1,1,'#f0ece0'); }
+  else if(t==='mushroomring'){ px(sx-8,y-4,2,4,'#e8e2d2'); px(sx-9,y-6,4,2,'#c24a4a'); px(sx-1,y-5,2,5,'#e8e2d2'); px(sx-2,y-7,4,2,'#c24a4a'); px(sx+6,y-4,2,4,'#e8e2d2'); px(sx+5,y-6,4,2,'#c24a4a'); }
+  else if(t==='cattail'){ for(let i=-4;i<=4;i+=4){ px(sx+i,y-18,1,18,'#8a9068'); px(sx+i-1,y-20,3,5,'#7a5a3a'); } }
+  else if(t==='lotusleaf'){ px(sx-9,y-2,18,2,'#6a8560'); px(sx-7,y-3,14,1,'#7a9670'); px(sx-1,y-4,2,2,'#8ba680'); }
+  else if(t==='waterlily'){ px(sx-8,y-2,16,2,'#5e7a54'); px(sx-3,y-4,6,3,'#f0ece0'); px(sx-1,y-5,2,2,'#e6d98a'); }
+  else if(t==='wildgrass'){ for(let i=-6;i<=6;i+=2)px(sx+i,y-6-((i%4)?2:0),1,6+((i%4)?2:0),'#7a9068'); }
+  else if(t==='thornbush'){ px(sx-7,y-8,14,8,'#5c6b4a'); px(sx-8,y-9,2,2,'#8a9068'); px(sx+6,y-10,2,2,'#8a9068'); px(sx-2,y-11,2,2,'#8a9068'); }
+  else if(t==='fallenbranch'){ px(sx-9,y-2,18,2,'#7a5a3a'); px(sx-4,y-4,5,2,'#8a6a4a'); px(sx+3,y-4,3,2,'#8a6a4a'); }
+  else if(t==='tree-stump'){ px(sx-6,y-6,12,6,'#8a6f52'); px(sx-6,y-7,12,2,'#9c7f5f'); px(sx-2,y-6,4,2,'#7a5f42'); px(sx-1,y-5,2,1,'#6f5540'); }
+  else if(t==='pebblepile'){ px(sx-6,y-3,4,3,'#9a9188'); px(sx-1,y-3,4,3,'#8b8f88'); px(sx+3,y-3,3,2,'#a4a89f'); px(sx-3,y-5,4,2,'#9a9188'); }
+  else if(t==='dewgrass'){ for(let i=-5;i<=5;i+=2)px(sx+i,y-6,1,6,'#7a9068'); px(sx-3,y-6,1,1,'#c3d6e0'); px(sx+2,y-7,1,1,'#c3d6e0'); px(sx,y-5,1,1,'#d6e4ec'); }
+  else if(t==='spiderweb'){ px(sx-8,y-20,1,16,'#b8bcb2'); px(sx+8,y-20,1,16,'#b8bcb2'); px(sx-8,y-20,16,1,'#b8bcb2'); px(sx-6,y-14,12,1,'#a4a89f'); px(sx,y-20,1,16,'#a4a89f'); }
+  else if(t==='birdnest'){ px(sx-5,y-4,10,4,'#8a6f4a'); px(sx-5,y-5,10,1,'#9c7f5a'); px(sx-2,y-3,2,2,'#a9c4d6'); px(sx+1,y-3,2,2,'#c9d6b0'); }
   else { px(sx-3,y-6,6,6,'#8a8f88'); } // fallback
 
   // 단계 오라(개발 표시)
