@@ -8,7 +8,7 @@ import {
 import { advanceCanaryRuntime, authorityTickMs, createGenesis, toEnvelope } from './runtime';
 
 interface Env {
-  BYEOLI_AUTHORITY: DurableObjectNamespace<ByeoliAuthority>;
+  BYEOLI_AUTHORITY: DurableObjectNamespace;
 }
 
 const STORAGE_KEY = 'authority-v1';
@@ -101,6 +101,10 @@ export default {
     // 단 하나의 고정 이름만 사용한다. 사용자·탭·viewer별 DO 생성 금지.
     const stub = env.BYEOLI_AUTHORITY.getByName(AUTHORITY_NAME);
     const internalPath = route.endsWith('/health') ? '/health' : '/state';
-    return stub.fetch(new Request(`https://byeoli-authority.internal${internalPath}`, request));
+    const internalRequest = new Request(`https://byeoli-authority.internal${internalPath}`, {
+      method: 'GET',
+      headers: request.headers,
+    });
+    return stub.fetch(internalRequest);
   },
 } satisfies ExportedHandler<Env>;
