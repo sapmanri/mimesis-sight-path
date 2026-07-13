@@ -26,6 +26,7 @@ import { loadHeldDeviceAsset } from './heldDevices';
 import { chooseDrive, INITIAL_DRIVES, INITIAL_FATIGUE, PROP_STIMULUS, scorePropAttraction, tickDrives, type Drive } from './byeoliDrive';
 import { beginRising, beginStanding, createEncounter, shouldEndEncounter, type ByeoliEncounter } from './byeoliEncounter';
 import { getInteraction, interactionApproachText, interactionObservationText } from '../life/interactionLibrary';
+import { recordPlanetHabitShadow } from '../brain/planetHabitShadow';
 
 // ---------- BUILD 207: 작은 행성 v7 — 스펙이 세계를 정한다 ----------
 // 에디터의 문법 이식: 세계의 모든 다이얼(테마·반지름·굴곡·안개·걸음·감김·요동·
@@ -511,6 +512,9 @@ export function PlanetWorld({ spec, walkerIdx = -1, paused = false, onMemory, on
       case 'wonder': r = doWonder(); D.wonder = Math.max(0, D.wonder - 0.6); break;
       default: r = doObserve(); D.observe = Math.max(0, D.observe - 0.5); break;
     }
+    // BUILD 405-D1 Shadow Mode: successful 3D actions build Habit state,
+    // but the calculated bias is deliberately NOT applied to chooseDrive yet.
+    if (propObj) recordPlanetHabitShadow(propObj, best);
     return r;
   };
   // 다음 행동으로. 욕구가 충분히 풀렸거나 충분히 놀았으면 콤보 종료(떠남).
