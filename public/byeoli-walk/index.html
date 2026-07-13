@@ -306,13 +306,22 @@ const Sound={
     // ② 세션 승격 (iOS 16.4+): Web Audio를 '벨소리'가 아닌 '미디어' 채널로 → 무음 스위치 무시
     try{ const nav=navigator; if(nav.audioSession) nav.audioSession.type='playback'; }catch(e){}
     // ② 구형 커버: 무음 <audio> 루프가 세션을 미디어로 끌어올림
-    if(!this._silentEl){
-      try{ this._silentEl=new Audio(SILENT_WAV); this._silentEl.loop=true; this._silentEl.playsInline=true; }catch(e){ this._silentEl=null; }
+    // ⚠ 소리가 켜진 경우에만 루프 유지. (전역 제스처 리스너가 매 클릭 wake를 부르므로,
+    //    on 가드 없으면 소리 꺼도 아무 탭에서 무음 루프가 되살아나 "안 꺼지는" 증상이 됨)
+    if(this.on){
+      if(!this._silentEl){
+        try{ this._silentEl=new Audio(SILENT_WAV); this._silentEl.loop=true; this._silentEl.playsInline=true; }catch(e){ this._silentEl=null; }
+      }
+      if(this._silentEl && this._silentEl.paused) { this._silentEl.play().catch(()=>{}); }
     }
-    if(this._silentEl && this._silentEl.paused) { this._silentEl.play().catch(()=>{}); }
     // ③ 빈 버퍼 의식 + 컨텍스트 resume (제스처 안에서)
     this.ensure();
     this._blipEmpty();
+  },
+  // 소리 끌 때: 무음 미디어 루프를 멈춰 세션 점유 해제 (안 그러면 "꺼도 안 꺼진" 느낌 + 컨텍스트가 계속 살아있음)
+  sleep(){
+    if(this._silentEl && !this._silentEl.paused){ try{ this._silentEl.pause(); }catch(e){} }
+    this.stopWeather();
   },
   // 소리 재생 직전: resume 요청만 (동기 state 검사로 첫 소리를 버리지 않는다 — iOS resume은 비동기)
   _ready(){ if(!this.ctx) return false; if(this.ctx.state!=='running') this.ctx.resume(); return true; },
@@ -332,6 +341,9 @@ const Sound={
   },
   blip(freq, dur, type='square', vol=0.12){
     if(!this.on||!this._ready()) return;
+    // 컨텍스트가 아직 안 열렸으면(resume 비동기) 스케줄하지 않는다.
+    // → suspended 동안 쌓인 오실레이터가 running 순간 한꺼번에 터지는 "다다다다" 폭주 차단.
+    if(this.ctx.state!=='running') return;
     const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
     o.type=type; o.frequency.setValueAtTime(freq,t);
     g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
@@ -1130,10 +1142,13 @@ function boot(){
 document.getElementById('pauseBtn').onclick=e=>{ paused=!paused; e.target.textContent=paused?'▶':'⏸'; };
 document.getElementById('speedBtn').onclick=e=>{ speedMul = speedMul===1?2:speedMul===2?4:1; e.target.textContent=speedMul+'×'; };
 document.getElementById('soundBtn').onclick=e=>{
-  Sound.wake();                          // 제스처 안에서 3중 자물쇠 먼저 (iOS 필수)
   Sound.on=!Sound.on;
-  if(Sound.on){ if(sky.weather==='rain') Sound.startWeather('rain'); }
-  else { Sound.stopWeather(); }
+  if(Sound.on){
+    Sound.wake();                        // 켤 때만 제스처 안에서 3중 자물쇠 (iOS 필수)
+    if(sky.weather==='rain') Sound.startWeather('rain');
+  } else {
+    Sound.sleep();                       // 끌 때: 무음 루프+날씨 루프 정지 → 확실히 조용
+  }
   e.target.textContent=Sound.on?'🔊':'🔇';
 };
 // 첫 사용자 제스처에서 오디오 잠금 해제 (touchend/click/pointerup이 진짜 열쇠 + visibility 복구)
