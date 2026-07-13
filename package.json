@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "validate:objects": "node scripts/validate-object-registry.mjs",
-    "build": "npm run validate:objects && vite build",
+    "validate:world-events": "node scripts/validate-world-events.mjs",
+    "build": "npm run validate:objects && npm run validate:world-events && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
