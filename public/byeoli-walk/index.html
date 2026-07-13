@@ -303,15 +303,17 @@ const Sound={
   shutter(){
     if(!this.on||!this.ctx) return;
     const t=this.ctx.currentTime;
-    // 클릭(노이즈)
-    const buf=this.ctx.createBuffer(1,441,44100), d=buf.getChannelData(0);
-    for(let i=0;i<441;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/441,3);
-    const n=this.ctx.createBufferSource(); n.buffer=buf;
-    const ng=this.ctx.createGain(); ng.gain.value=0.18;
-    n.connect(ng); ng.connect(this.ctx.destination); n.start(t);
-    // 셔터 고음 틱
-    this.blip(2200,0.03,'square',0.10);
-    setTimeout(()=>this.blip(1400,0.04,'square',0.08),40);
+    // 찰-칵: 두 번의 짧은 노이즈 클릭만 (톤음 없음 → 이벤트음처럼 안 들림)
+    const click=(when,vol)=>{
+      const buf=this.ctx.createBuffer(1,300,44100), d=buf.getChannelData(0);
+      for(let i=0;i<300;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/300,4);
+      const n=this.ctx.createBufferSource(); n.buffer=buf;
+      const g=this.ctx.createGain(); g.gain.value=vol;
+      const f=this.ctx.createBiquadFilter(); f.type='highpass'; f.frequency.value=2000;
+      n.connect(f); f.connect(g); g.connect(this.ctx.destination); n.start(when);
+    };
+    click(t,0.20);           // 찰
+    click(t+0.06,0.14);      // 칵
   },
   step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리
   act(drive){ // record는 여기서 소리 안 냄 (startAction이 셔터음 전담)
