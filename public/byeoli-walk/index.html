@@ -337,8 +337,8 @@ const Sound={
 
 /* ---- 카메라 플래시 ---- */
 const flash={ on:false, timer:0, trigger(){ this.on=true; this.timer=0.18; } };
-function drawFlash(){
-  if(!flash.on) return;
+function drawFlash(flash){
+  if(!flash || !flash.on) return;
   const a=clamp(flash.timer/0.18,0,1);
   ctx.fillStyle=`rgba(255,255,255,${a*0.7})`;
   ctx.fillRect(0,0,W,GROUND_Y+ (H-GROUND_Y));
@@ -706,45 +706,47 @@ function updateDayTag(){ document.getElementById('daytag').textContent=formatBye
    Authority가 나오면 provider만 교체하면 되고 render()는 안 바뀐다.
    ===================================================================== */
 
-// 현재 세계를 하나의 스냅샷으로 묶는다 (별이 + 빼콩이 + 날씨 전부)
+// 현재 세계를 하나의 완결 스냅샷으로 묶는다 (렌더러가 요구하는 모든 값 포함).
+// renderer는 이 스냅샷 외의 전역을 절대 읽지 않는다 → 전역 fallback 금지.
+// 방송에서 "모두 같은 순간"이 되려면 action 종류뿐 아니라 애니메이션 프레임까지 담아야 한다.
 function snapshotByeoliState(){
+  const camShift = byeoli.worldX - byeoli.screenX;
   return {
     byeoli: {
       worldX:byeoli.worldX, screenX:byeoli.screenX,
-      state:byeoli.state, actAction:byeoli.actAction, actTarget:byeoli.actTarget,
-      walkPhase:byeoli.walkPhase,
+      state:byeoli.state,                 // walk | acting
+      actAction:byeoli.actAction,         // observe/rest/record/wonder | null
+      actTarget:byeoli.actTarget,         // 현재 행동 대상 id
+      actTimer:byeoli.actTimer,           // 행동 남은 시간(종료 시각)
+      speed:byeoli.speed,
+      walkPhase:byeoli.walkPhase,         // 걷기 애니메이션 프레임
     },
     ppae: { x:ppae.x, y:ppae.y, facing:ppae.facing, phase:ppae.phase, mode:ppae.mode },
     sky: { t:sky.t, phase:sky.phase, weather:sky.weather, clouds:sky.clouds,
            cloudDark:sky.cloudDark, particles:sky.particles },
-    props, camShift: byeoli.worldX - byeoli.screenX,
-    flash: { on:flash.on, timer:flash.timer },
-    epoch: byeoliDayEpoch(),
+    props,                                // 소품 배치·type·rare·phase·variant
+    camera: { camShift, worldX:byeoli.worldX, screenX:byeoli.screenX, worldLen },
+    flash: { on:flash.on, timer:flash.timer },  // 카메라 플래시
+    speedMul,                             // 배속(연출 맥락)
+    epoch: byeoliDayEpoch(),              // 별이력 시각
+    updatedAt: Date.now(),
   };
 }
 
 const LocalStateProvider = {
   mode:'sandbox',
-  step(dt){ update(dt); },                 // 로컬 두뇌로 세계를 진행 (전역 직접 변이)
+  step(dt){ update(dt); },                 // 로컬 두뇌로 세계를 진행 (전역 변이는 여기 내부에서만)
   getCurrentByeoliState(){ return snapshotByeoliState(); },
-  applyToWorld(){ /* sandbox는 전역이 곧 진실이므로 반영 불필요 */ },
 };
 
 // live 모드용 — 지금은 인터페이스만. Authority(/api/byeoli/state) 나오면 채운다.
+// ⚠ step()은 절대 update()/brain.decide()를 부르지 않는다. 오직 서버 상태 수신만.
 const RemoteStateProvider = {
   mode:'live',
   _last:null,
-  step(dt){ /* TODO(407): fetch/구독으로 _last 갱신. 지금은 no-op */ },
-  getCurrentByeoliState(){ return this._last || snapshotByeoliState(); },
-  // 서버 state를 전역 렌더 소스에 부어넣는다 → draw 함수는 한 줄도 안 바뀜
-  applyToWorld(s){
-    if(!s) return;
-    Object.assign(byeoli, s.byeoli);
-    Object.assign(ppae, s.ppae);
-    sky.t=s.sky.t; sky.phase=s.sky.phase; sky.weather=s.sky.weather;
-    sky.clouds=s.sky.clouds; sky.cloudDark=s.sky.cloudDark; sky.particles=s.sky.particles;
-    flash.on=s.flash.on; flash.timer=s.flash.timer;
-  },
+  step(dt){ /* TODO(407): fetch/구독으로 this._last 갱신. 로컬 두뇌 실행 금지. */ },
+  setState(s){ this._last = s; },          // (테스트/구독) 서버 스냅샷 주입
+  getCurrentByeoliState(){ return this._last; },  // 전역 fallback 없음 — 받은 state만
 };
 
 // 현재 활성 provider (기본 sandbox). Authority 준비되면 여기만 바꾼다.
@@ -762,7 +764,7 @@ const SKY_COLORS={
   dusk:  { bands:['#3f4a6a','#7a5f78','#c47a6a','#e0a06a'], sun:'#f0a45a', tone:0.72 },
   night: { bands:['#0e1526','#141d33','#1c2740','#26324d'], sun:'#e8ecff', tone:0.5 },
 };
-function drawBackground(){
+function drawBackground(sky, camera){
   const S=SKY_COLORS[sky.phase];
   const bandH=Math.ceil(GROUND_Y/S.bands.length);
   for(let i=0;i<S.bands.length;i++) px(0,i*bandH,W,bandH,S.bands[i]);
@@ -798,7 +800,7 @@ function drawBackground(){
     cloud(c.x, c.y, c.w, col);
   }
 
-  const cam=byeoli.worldX;
+  const cam=camera.worldX;
   // 먼 언덕 (밤엔 어둡게)
   const hillCol = shade('#b7c6ad', S.tone);
   const o1=-(cam*0.15)%180; ctx.fillStyle=hillCol;
@@ -822,7 +824,7 @@ function cloud(x,y,w,col){ ctx.fillStyle=col; const h=w*0.4;
   px(x,y,w,h,col); px(x+w*0.2,y-h*0.5,w*0.5,h*0.7,col); px(x+w*0.5,y-h*0.3,w*0.4,h*0.6,col); }
 
 // 강수 파티클 렌더
-function drawWeather(){
+function drawWeather(sky){
   for(const p of sky.particles){
     if(p.kind==='rain'){
       ctx.fillStyle=`rgba(160,190,210,${0.5*p.life})`;
@@ -891,7 +893,7 @@ function drawProp(p,sx){
 }
 function aura(x,y,c){ ctx.fillStyle=c; px(x-1,y,3,1,c); px(x,y-1,1,3,c); }
 
-function drawByeoli(){
+function drawByeoli(byeoli){
   const x=byeoli.screenX, y=GROUND_Y, acting=byeoli.state==='acting';
   const bob=acting?0:Math.round(Math.sin(byeoli.walkPhase));
   const legF=Math.floor(byeoli.walkPhase)%2, yy=y+bob;
@@ -917,17 +919,17 @@ function drawByeoli(){
   if(acting){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
     px(x-2,yy-36,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-34,3,2,ic); }
 }
-function render(){
-  drawBackground();
-  const camShift=byeoli.worldX-byeoli.screenX;
-  for(const p of props){ const sx=p.x-camShift; if(sx>-30&&sx<W+30) drawProp(p,sx); }
-  drawPpae();
-  drawByeoli();
-  drawWeather();
-  drawFlash();
+function render(state){
+  drawBackground(state.sky, state.camera);
+  const camShift=state.camera.camShift;
+  for(const p of state.props){ const sx=p.x-camShift; if(sx>-30&&sx<W+30) drawProp(p,sx); }
+  drawPpae(state.ppae);
+  drawByeoli(state.byeoli);
+  drawWeather(state.sky);
+  drawFlash(state.flash);
 }
 // 빼콩이 — 흰 고양이 도트
-function drawPpae(){
+function drawPpae(ppae){
   const x=Math.round(ppae.x), y=Math.round(ppae.y), f=ppae.facing;
   const bounce=ppae.mode==='dash'?Math.round(Math.sin(ppae.phase)*1.5):Math.round(Math.abs(Math.sin(ppae.phase))*1);
   const yy=y-bounce;
@@ -965,9 +967,10 @@ function loop(t){
   if(!paused){
     acc+=dt;
     while(acc>=FRAME){ for(let s=0;s<speedMul;s++) stateProvider.step(FRAME/1000); acc-=FRAME; }
-    // provider가 만든/받은 현재 상태를 렌더 소스에 반영 (sandbox는 no-op, live는 전역 주입)
-    stateProvider.applyToWorld(stateProvider.getCurrentByeoliState());
-    render(); renderDrives(); renderTaste();
+    // provider가 만든/받은 완결 스냅샷만 렌더로 넘긴다. 전역 주입 없음.
+    const state = stateProvider.getCurrentByeoliState();
+    if(state) render(state);
+    renderDrives(); renderTaste();   // Observatory/sandbox UI — 캔버스 렌더 경로와 분리 (live: TODO authority telemetry)
   }
   requestAnimationFrame(loop);
 }
@@ -1025,7 +1028,10 @@ document.addEventListener('visibilitychange', ()=>{
     sky.t=skyProgressNow();
     sky.phase = sky.t<0.15?'dawn' : sky.t<0.5?'day' : sky.t<0.62?'dusk' : 'night';
     updateDayTag();
-    render(); renderDrives(); renderTaste();
+    // 복귀 즉시 1프레임 다시 그림 (provider 스냅샷 기준)
+    const state = stateProvider.getCurrentByeoliState();
+    if(state) render(state);
+    renderDrives(); renderTaste();
     // 복귀 연출: 별이력으로 며칠 흘렀으면 알려준다 (Memory는 안 만듦)
     if(daysPassed>=1){
       pushMsg('day', `— ${formatByeoliDate()} · 그새 ${daysPassed}일이 흘렀다 —`, null);
