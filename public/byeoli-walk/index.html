@@ -350,9 +350,13 @@ function drawFlash(){
    동기화 시 sky.phase / sky.t 를 외부 시계로 주입하면 됨.
    ===================================================================== */
 const SKY_PHASES=['dawn','day','dusk','night'];
+// 별이력 하루 = 현실 60초 (byeoliTime.ts의 BYEOLI_DAY_SECONDS와 일치, 연출용 상수).
+// 하늘은 자체 시계가 아니라 '현재 별이력 시각'을 따라간다 → 탭을 내렸다 열어도
+// rAF와 무관하게 항상 올바른 시간대가 즉시 나온다(절대시간 동기화).
+const BYEOLI_DAY_MS=60*1000;
+function skyProgressNow(){ return ((Date.now()%BYEOLI_DAY_MS)/BYEOLI_DAY_MS); } // 0~1 하루 진행도
 const sky={
-  t:0,               // 0~1 하루 진행도
-  daySpeed:1/90,     // 한 '하루' = 약 90초 (배속 영향 받음)
+  t:0,               // 0~1 하루 진행도 (skyProgressNow로 매 tick 재계산)
   phase:'day',
   cloudDark:false,   // 먹구름 여부
   clouds:[],
@@ -360,13 +364,13 @@ const sky={
   weatherTimer:12,   // 다음 날씨 전환까지(초)
   particles:[],      // 비/눈 입자
   reset(){
-    this.t=rng(); this.daySpeed=1/90; this.cloudDark=false;
+    this.t=skyProgressNow(); this.cloudDark=false;
     this.weather='clear'; this.weatherTimer=8+rng()*12; this.particles=[];
     this.clouds=[];
     for(let i=0;i<4;i++) this.clouds.push({x:rng()*W, y:8+rng()*30, w:20+rng()*24, spd:2+rng()*4, dark:false});
   },
   tick(dt){
-    this.t=(this.t+this.daySpeed*dt)%1;
+    this.t=skyProgressNow();   // 자체 증가가 아니라 절대시간에서 읽음
     // phase 판정
     this.phase = this.t<0.15?'dawn' : this.t<0.5?'day' : this.t<0.62?'dusk' : 'night';
     // 구름 이동
@@ -597,7 +601,7 @@ function diaryFor(intent, item, def, meta){
   }
   pushMsg('diary', line, null);
   tally.diary++;
-  archive.unshift({ line, intent }); // Life Archive (계약 원본 보관)
+  archive.unshift({ line, intent, date:formatByeoliDate(), epoch:byeoliDayEpoch() }); // Life Archive(별이력 날짜 포함)
   updateTally();
 }
 const archive=[];
@@ -687,11 +691,11 @@ function update(dt){
     for(const p of props){ p.phase='unseen'; p.reactedThisPass=false; }
     seenKindsToday.clear();
     updateDayTag();
-    pushMsg('day', `— 별이력 9075.4.${11+loopCount} · 새로운 하루 —`, null);
+    pushMsg('day', `— ${formatByeoliDate()} · 동네 한 바퀴 —`, null);
   }
   updateEncounters(dt);
 }
-function updateDayTag(){ document.getElementById('daytag').textContent=`별이력 9075.4.${11+loopCount}`; }
+function updateDayTag(){ document.getElementById('daytag').textContent=formatByeoliDate(); }
 
 /* =====================================================================
    RENDER (도트)
@@ -927,7 +931,7 @@ function boot(){
   seenKindsToday.clear(); currentTarget=null;
   streamEl.innerHTML='';
   buildWorld(); sky.reset(); ppae.reset(); Sound.stopWeather(); updateDayTag(); updateTally(); fitCanvas();
-  pushMsg('day', `— 별이력 9075.4.11 · 산책 시작 (seed ${SEED}) —`, null);
+  pushMsg('day', `— ${formatByeoliDate()} · 산책 시작 —`, null);
 }
 document.getElementById('pauseBtn').onclick=e=>{ paused=!paused; e.target.textContent=paused?'▶':'⏸'; };
 document.getElementById('speedBtn').onclick=e=>{ speedMul = speedMul===1?2:speedMul===2?4:1; e.target.textContent=speedMul+'×'; };
@@ -941,6 +945,34 @@ document.getElementById('soundBtn').onclick=e=>{
 // 첫 탭/클릭에서 오디오 컨텍스트 깨우기 (브라우저 정책)
 window.addEventListener('pointerdown',()=>Sound.init(),{once:true});
 document.getElementById('reseedBtn').onclick=()=>{ SEED=(Math.random()*1e9)|0; boot(); };
+
+/* =====================================================================
+   탭 복귀 처리 (BUILD 405-E 연출)
+   - 별이력·Habit 감쇠는 절대시간(Date.now)이라 탭 상태와 무관하게 이미 흘렀다.
+   - 여기서는 '며칠 흘렀는지' 연출과 하늘/화면 재동기화만 한다.
+   - ⚠ 백그라운드 동안의 행동·Memory는 소급 생성하지 않는다(시간만 흐르고 삶은 멈춰 있었다).
+   ===================================================================== */
+let awayEpoch=byeoliDayEpoch();       // 탭을 떠날 때의 별이력 일수
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){
+    awayEpoch=byeoliDayEpoch();        // 떠나는 순간 기록
+  } else {
+    const now=byeoliDayEpoch();
+    const daysPassed=now-awayEpoch;
+    // rAF가 멈춰있던 시간을 dt로 잘못 소비하지 않도록 시계 리셋
+    lastT=0; acc=0;
+    // 하늘·날씨·날짜 즉시 재동기화 (절대시간 기준으로 다시 그림)
+    sky.t=skyProgressNow();
+    sky.phase = sky.t<0.15?'dawn' : sky.t<0.5?'day' : sky.t<0.62?'dusk' : 'night';
+    updateDayTag();
+    render(); renderDrives(); renderTaste();
+    // 복귀 연출: 별이력으로 며칠 흘렀으면 알려준다 (Memory는 안 만듦)
+    if(daysPassed>=1){
+      pushMsg('day', `— ${formatByeoliDate()} · 그새 ${daysPassed}일이 흘렀다 —`, null);
+      if(daysPassed>=3) pushMsg('diary', `🌙 오랜만이다. 별이는 그동안 조용히 지냈다`, null);
+    }
+  }
+});
 boot();
 requestAnimationFrame(loop);
 </script>
