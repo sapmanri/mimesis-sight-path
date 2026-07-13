@@ -288,7 +288,7 @@ const brain={
    SOUND — WebAudio 코드 생성음 (파일 없음, 8비트 톤)
    ===================================================================== */
 const Sound={
-  ctx:null, on:true, _unlocked:false,
+  ctx:null, on:false, _unlocked:false,   // on:false로 시작 (버튼 🔇와 일치). 버튼 누르면 켜짐
   init(){
     if(!this.ctx){ try{ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
     if(!this.ctx) return;
@@ -1109,11 +1109,14 @@ function boot(){
 document.getElementById('pauseBtn').onclick=e=>{ paused=!paused; e.target.textContent=paused?'▶':'⏸'; };
 document.getElementById('speedBtn').onclick=e=>{ speedMul = speedMul===1?2:speedMul===2?4:1; e.target.textContent=speedMul+'×'; };
 document.getElementById('soundBtn').onclick=e=>{
-  Sound.init();
   Sound.on=!Sound.on;
+  if(Sound.on){
+    Sound.init();                       // 제스처 안에서 AudioContext 생성/resume (iOS 필수)
+    if(sky.weather==='rain') Sound.startWeather('rain');
+  } else {
+    Sound.stopWeather();
+  }
   e.target.textContent=Sound.on?'🔊':'🔇';
-  if(!Sound.on) Sound.stopWeather();
-  else if(sky.weather==='rain') Sound.startWeather('rain');
 };
 // 첫 사용자 제스처에서 오디오 잠금 해제 (iOS Safari는 touchend에서 확실히 열림).
 // once가 아니라, 실제로 unlock될 때까지 여러 제스처에서 재시도.
