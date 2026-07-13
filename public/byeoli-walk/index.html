@@ -851,6 +851,19 @@ let stateProvider = LocalStateProvider;
    RENDER (도트)
    ===================================================================== */
 function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,w|0,h|0); }
+/* ===== BUILD 410-A: Ambient Motion =====================================
+   순수 시각 효과. state(스냅샷)·Brain·발소리·오디오 전혀 안 건드림.
+   render() 시작에서 AMB.t를 performance.now()로 한 번 갱신, draw들이 읽음.
+   전부 정수 픽셀 오프셋, sin 기반. 오브젝트마다 위치로 phase를 어긋냄. */
+const AMB={
+  t:0,
+  // 1px(또는 amp px) 좌우/상하 흔들림. speed 느림, x로 위상 분산.
+  sway(x,speed,amp){ return Math.round(Math.sin(this.t*speed + x*0.013)*amp); },
+  // 느린 0~1 밝기용 삼각 (깜빡임 아님)
+  glow(x,speed){ return Math.sin(this.t*speed + x*0.02)*0.5+0.5; },
+};
+// 라이트 밝기 2단계 교차용 색 보간 (밤/저녁에만 체감)
+function ambLight(base,bright,k){ return k>0.5?bright:base; }
 // 시간대별 하늘 팔레트 (위→아래 4밴드) + 지상 톤 배율
 const SKY_COLORS={
   dawn:  { bands:['#e9c9a8','#e4c2b0','#dcc6c0','#d2cfc4'], sun:'#f3d19a', tone:0.86 },
@@ -892,6 +905,18 @@ function drawBackground(sky, camera){
   for(const c of sky.clouds){
     const col = c.dark? (isNight?'#2a2f42':'#8a8f9a') : (isNight?'#3a4560':'#f2f0e8');
     cloud(c.x, c.y, c.w, col);
+  }
+  // ---- BUILD 410-A: 먼지·꽃가루 드리프트 (날씨와 무관, 렌더 전용, 배열 미생성) ----
+  // 6개 고정 mote를 performance.now 기반 결정론적 위치로. 매우 느림. 맑을 때만.
+  if(sky.weather==='clear'){
+    const mc = isNight?'rgba(200,205,225,0.35)':'rgba(240,236,214,0.5)';
+    ctx.fillStyle=mc;
+    for(let i=0;i<6;i++){
+      const seed=i*97.3;
+      const mx=((AMB.t*0.006 + seed*7) % (W+20)) - 10;
+      const my=40 + ((seed*13)%80) + Math.sin(AMB.t*0.0008 + i)*4;
+      ctx.fillRect(mx|0, my|0, 1, (i%3===0)?2:1);
+    }
   }
   // ---- 하늘 이벤트: 비행기/새/헬기 (하늘에) ----
   if(sky.flybys) for(const f of sky.flybys){ if(f.kind!=='godzilla') drawFlyby(f, isNight); }
@@ -1009,10 +1034,11 @@ function drawProp(p,sx){
     if(t==='flowerbed'){ px(sx-6,y-8,3,3,'#d98aa0'); px(sx+4,y-9,3,3,'#e6b36a'); }
   } else if(t==='sapling'||t==='oldtree'){
     const big=t==='oldtree';
+    const w=AMB.sway(p.x, big?0.0009:0.0013, 1);   // 나무 캐노피 상단만 1px 흔들림
     px(sx-1,y-(big?16:9),2,(big?16:9),'#5c4a38');
     ctx.fillStyle='#7e9a7c';
-    if(big){ px(sx-9,y-28,20,13,'#7e9a7c'); px(sx-6,y-34,14,8,'#8ba286'); }
-    else { px(sx-5,y-15,10,7,'#8ba286'); }
+    if(big){ px(sx-9,y-28,20,13,'#7e9a7c'); px(sx-6+w,y-34,14,8,'#8ba286'); }
+    else { px(sx-5,y-15,10,7,'#8ba286'); px(sx-3+w,y-17,6,3,'#8ba286'); }
   } else if(t==='leaves'){ px(sx-6,y-3,12,3,'#b5843f'); px(sx-3,y-5,7,2,'#c99a52'); }
   else if(t==='puddle'){ px(sx-8,y-1,16,2,'#9fb8c9'); px(sx-5,y-2,8,1,'#c3d6e0'); }
   else if(t==='stone'){ px(sx-4,y-4,8,4,'#8b8f88'); px(sx-3,y-5,5,1,'#a4a89f'); }
@@ -1036,22 +1062,22 @@ function drawProp(p,sx){
   else if(t==='board'){ px(sx-8,y-16,16,11,'#8a7f6a'); px(sx-6,y-14,5,3,'#f4f0e7'); px(sx+1,y-14,5,3,'#f4f0e7'); }
   else if(t==='bicycle'){ px(sx-7,y-4,4,4,'#4a5450'); px(sx+3,y-4,4,4,'#4a5450'); px(sx-5,y-10,10,1,'#6a746f'); px(sx,y-11,1,7,'#6a746f'); }
   else if(t==='window'){ px(sx-7,y-24,14,14,'#7a8a86'); px(sx-5,y-22,10,10, t==='window'&&rng()<0.5?'#e6d98a':'#3a4a52'); }
-  else if(t==='lamp'){ px(sx-1,y-26,2,26,'#4a5450'); px(sx-3,y-28,6,4,'#e6d98a'); }
+  else if(t==='lamp'){ px(sx-1,y-26,2,26,'#4a5450'); px(sx-3,y-28,6,4, ambLight('#e6d98a','#f4ecab',AMB.glow(p.x,0.0018))); }
   else if(t==='rainbow'){ const cs=['#e0748a','#e6a94a','#e6d98a','#8ba286','#7a9ac9']; for(let i=0;i<cs.length;i++){ ctx.fillStyle=cs[i]; ctx.fillRect((sx-16+i)|0,(y-30+i*2)|0,32-i*2,2);} }
   else if(t==='shootstar'){ px(sx,y-30,2,2,'#f4f0e7'); px(sx-4,y-27,3,1,'#e6d98a'); px(sx-8,y-25,3,1,'#c9b76a'); }
   // ---- BUILD 408-B: 식물 10종 ----
   else if(t==='hydrangea'){ px(sx-1,y-8,2,8,'#4f6b4f'); const c='#9aa8c9'; px(sx-5,y-13,10,6,c); px(sx-3,y-15,6,3,c); px(sx-4,y-12,2,2,'#b3bcd6'); px(sx+2,y-11,2,2,'#b3bcd6'); }
-  else if(t==='hollyhock'){ px(sx-1,y-20,2,20,'#5c6b4a'); px(sx-3,y-18,3,3,'#d98aa0'); px(sx+1,y-14,3,3,'#e0a0b0'); px(sx-3,y-10,3,3,'#d98aa0'); }
+  else if(t==='hollyhock'){ const w=AMB.sway(p.x,0.0013,1); px(sx-1,y-20,2,20,'#5c6b4a'); px(sx-3+w,y-18,3,3,'#d98aa0'); px(sx+1+w,y-14,3,3,'#e0a0b0'); px(sx-3,y-10,3,3,'#d98aa0'); }
   else if(t==='fern'){ ctx.fillStyle='#6a8560'; for(let i=0;i<4;i++){ px(sx-8+i*4,y-2-i,2,2+i,'#6a8560'); px(sx+7-i*4,y-2-i,2,2+i,'#7a9670'); } px(sx-1,y-6,2,6,'#5c7452'); }
   else if(t==='ivy'){ px(sx-9,y-16,2,16,'#7a8a86'); for(let i=0;i<5;i++){ px(sx-9+((i%2)?2:-2),y-14+i*3,3,2,'#5e7a54'); } px(sx-6,y-8,3,2,'#6a8560'); }
-  else if(t==='reed'){ for(let i=-6;i<=6;i+=4){ px(sx+i,y-18,1,18,'#8a9068'); px(sx+i-1,y-20,3,3,'#b5a06a'); } }
-  else if(t==='cosmos'){ px(sx-1,y-14,2,14,'#5c6b4a'); const c='#e0a0b0'; px(sx-4,y-17,3,3,c); px(sx+1,y-17,3,3,c); px(sx-2,y-19,3,3,c); px(sx-1,y-16,2,2,'#e6d98a'); }
+  else if(t==='reed'){ const w=AMB.sway(p.x,0.0016,1); for(let i=-6;i<=6;i+=4){ px(sx+i,y-18,1,18,'#8a9068'); px(sx+i-1+w,y-20,3,3,'#b5a06a'); } }
+  else if(t==='cosmos'){ const w=AMB.sway(p.x,0.0015,1); px(sx-1,y-14,2,14,'#5c6b4a'); const c='#e0a0b0'; px(sx-4+w,y-17,3,3,c); px(sx+1+w,y-17,3,3,c); px(sx-2+w,y-19,3,3,c); px(sx-1+w,y-16,2,2,'#e6d98a'); }
   else if(t==='camellia'){ px(sx-1,y-10,2,10,'#4a5838'); px(sx-4,y-9,4,3,'#3a5230'); px(sx-4,y-15,7,6,'#b5424a'); px(sx-1,y-13,2,2,'#e6d98a'); px(sx-6,y-2,3,2,'#8f3038'); }
   else if(t==='clover'){ px(sx-1,y-4,2,4,'#5c7452'); px(sx-3,y-7,3,3,'#6a8560'); px(sx+1,y-7,3,3,'#6a8560'); px(sx-1,y-9,2,2,'#7a9670'); }
   else if(t==='mossrock'){ px(sx-6,y-5,12,5,'#8b8f88'); px(sx-5,y-6,7,1,'#a4a89f'); px(sx-6,y-3,12,2,'#6a8560'); px(sx-3,y-6,3,1,'#7a9670'); }
   else if(t==='seedhead'){ px(sx-1,y-10,2,10,'#8a9068'); px(sx-3,y-13,6,6,'#e6e2d2'); px(sx-4,y-14,1,1,'#f2eeda'); px(sx+3,y-12,1,1,'#f2eeda'); px(sx-5,y-10,1,1,'#f2eeda'); }
   // ---- BUILD 408-B: 생활 사물 10종 ----
-  else if(t==='laundryline'){ px(sx-11,y-20,22,1,'#8a7f6a'); px(sx-7,y-19,5,7,'#d9d2c2'); px(sx+2,y-19,5,6,'#c9d2d6'); px(sx-8,y-20,1,2,'#6f5540'); px(sx+6,y-20,1,2,'#6f5540'); }
+  else if(t==='laundryline'){ const w1=AMB.sway(p.x,0.0011,1), w2=AMB.sway(p.x+40,0.0011,1); px(sx-11,y-20,22,1,'#8a7f6a'); px(sx-7+w1,y-19,5,7,'#d9d2c2'); px(sx+2+w2,y-19,5,6,'#c9d2d6'); px(sx-8,y-20,1,2,'#6f5540'); px(sx+6,y-20,1,2,'#6f5540'); }
   else if(t==='wateringcan'){ px(sx-5,y-9,9,9,'#7a8a86'); px(sx+3,y-11,4,2,'#6a746f'); px(sx+6,y-12,3,1,'#8a9a96'); px(sx-6,y-7,2,4,'#6a746f'); }
   else if(t==='rubberboots'){ px(sx-6,y-9,4,9,'#c9b04a'); px(sx-6,y-3,6,3,'#c9b04a'); px(sx,y-9,4,9,'#d9c05a'); px(sx,y-3,6,3,'#d9c05a'); }
   else if(t==='milkcrate'){ px(sx-6,y-7,12,7,'#b5544a'); ctx.fillStyle='#8f3f38'; for(let i=-6;i<6;i+=3)px(sx+i,y-7,1,7,'#8f3f38'); px(sx-6,y-4,12,1,'#8f3f38'); }
@@ -1060,31 +1086,31 @@ function drawProp(p,sx){
   else if(t==='woodpile'){ px(sx-8,y-4,16,4,'#8a6f52'); px(sx-6,y-8,13,4,'#9c7f5f'); ctx.fillStyle='#6f5540'; for(let i=-8;i<8;i+=3){ px(sx+i,y-4,1,1,'#c9a86a'); } px(sx-6,y-8,1,1,'#c9a86a'); }
   else if(t==='oldchair'){ px(sx-5,y-9,3,9,'#8a6f52'); px(sx+3,y-9,3,9,'#8a6f52'); px(sx-5,y-10,10,2,'#9c7f5f'); px(sx-5,y-16,2,7,'#8a6f52'); px(sx-5,y-16,7,2,'#9c7f5f'); }
   else if(t==='bucket'){ px(sx-5,y-8,10,8,'#7a8a86'); px(sx-5,y-9,10,1,'#8a9a96'); px(sx-4,y-12,8,1,'#6a746f'); px(sx-3,y-6,6,4,'#6a7a76'); }
-  else if(t==='windchime'){ px(sx-4,y-22,8,2,'#8a6f52'); px(sx-1,y-20,2,6,'#c9b06a'); px(sx-1,y-13,2,3,'#d9c07a'); px(sx-3,y-9,4,2,'#b5945a'); }
+  else if(t==='windchime'){ const w=AMB.sway(p.x,0.0016,1), w2=AMB.sway(p.x+20,0.0016,1); px(sx-4,y-22,8,2,'#8a6f52'); px(sx-1+w,y-20,2,6,'#c9b06a'); px(sx-1+w,y-13,2,3,'#d9c07a'); px(sx-3+w+w2,y-9,4,2,'#b5945a'); }
   // ==== BUILD 409-A: 길가 식물과 작은 자연 25종 ====
   else if(t==='azalea'){ px(sx-1,y-7,2,7,'#4f6b4f'); const c='#d97a9a'; px(sx-5,y-11,4,4,c); px(sx+1,y-11,4,4,c); px(sx-2,y-13,3,3,'#e094ac'); }
-  else if(t==='forsythia'){ px(sx-1,y-9,2,9,'#5c6b4a'); for(let i=0;i<5;i++){ px(sx-5+i*2,y-12-((i%2)?2:0),2,2,'#e6c24a'); } }
+  else if(t==='forsythia'){ const w=AMB.sway(p.x,0.0014,1); px(sx-1,y-9,2,9,'#5c6b4a'); for(let i=0;i<5;i++){ px(sx-5+i*2+w,y-12-((i%2)?2:0),2,2,'#e6c24a'); } }
   else if(t==='lilac'){ px(sx-1,y-13,2,13,'#5c6b4a'); px(sx-3,y-18,6,6,'#b09ac9'); px(sx-2,y-20,4,3,'#c4b0d9'); }
-  else if(t==='sunflower'){ px(sx-1,y-20,2,20,'#4a5838'); px(sx-4,y-25,8,6,'#e6b83a'); px(sx-2,y-23,4,3,'#7a5230'); }
+  else if(t==='sunflower'){ const w=AMB.sway(p.x,0.0011,1); px(sx-1,y-20,2,20,'#4a5838'); px(sx-4+w,y-25,8,6,'#e6b83a'); px(sx-2+w,y-23,4,3,'#7a5230'); }
   else if(t==='marigold'){ px(sx-1,y-8,2,8,'#4f6b4f'); px(sx-4,y-12,8,4,'#e69a3a'); px(sx-2,y-11,3,2,'#d97e2a'); }
   else if(t==='morningglory'){ px(sx-8,y-16,2,16,'#5e7a54'); for(let i=0;i<4;i++)px(sx-8+i,y-14+i*3,2,2,'#6a8560'); px(sx-9,y-17,5,4,'#8a7ac9'); px(sx-8,y-16,2,2,'#c4b0d9'); }
   else if(t==='chrysanthemum'){ px(sx-1,y-9,2,9,'#4a5838'); px(sx-4,y-13,8,5,'#e6c24a'); px(sx-5,y-11,2,2,'#d9b03a'); px(sx+3,y-11,2,2,'#d9b03a'); }
-  else if(t==='lavender'){ for(let i=-4;i<=4;i+=4){ px(sx+i,y-14,1,14,'#6a7a52'); px(sx+i-1,y-18,3,5,'#9a8ac4'); } }
+  else if(t==='lavender'){ const w=AMB.sway(p.x,0.0015,1); for(let i=-4;i<=4;i+=4){ px(sx+i,y-14,1,14,'#6a7a52'); px(sx+i-1+w,y-18,3,5,'#9a8ac4'); } }
   else if(t==='wildrose'){ px(sx-1,y-9,2,9,'#4f6b4f'); px(sx-4,y-12,4,4,'#f0ece0'); px(sx+1,y-11,3,3,'#f0ece0'); px(sx-2,y-11,2,2,'#e6d98a'); }
-  else if(t==='bamboo'){ for(let i=-5;i<=5;i+=5){ px(sx+i,y-30,2,30,'#7a9060'); px(sx+i,y-22,2,1,'#5c7048'); px(sx+i,y-14,2,1,'#5c7048'); } px(sx+6,y-26,4,2,'#8ba270'); }
+  else if(t==='bamboo'){ const w=AMB.sway(p.x,0.0012,1); for(let i=-5;i<=5;i+=5){ px(sx+i,y-30,2,30,'#7a9060'); px(sx+i,y-22,2,1,'#5c7048'); px(sx+i,y-14,2,1,'#5c7048'); } px(sx+6+w,y-26,4,2,'#8ba270'); }
   else if(t==='pinecone'){ px(sx-3,y-6,6,6,'#8a6f52'); px(sx-3,y-6,2,2,'#6f5540'); px(sx+1,y-4,2,2,'#6f5540'); px(sx-1,y-2,2,2,'#6f5540'); }
   else if(t==='acornpile'){ px(sx-5,y-4,4,4,'#9c7f4f'); px(sx,y-4,4,4,'#8a6f3f'); px(sx-2,y-7,4,3,'#9c7f4f'); px(sx-5,y-4,4,1,'#6f5530'); px(sx,y-4,4,1,'#6f5530'); }
   else if(t==='mushroom'){ px(sx-1,y-5,2,5,'#e8e2d2'); px(sx-4,y-8,8,3,'#c24a4a'); px(sx-3,y-9,5,1,'#d95a5a'); px(sx-2,y-7,1,1,'#f0ece0'); }
   else if(t==='mushroomring'){ px(sx-8,y-4,2,4,'#e8e2d2'); px(sx-9,y-6,4,2,'#c24a4a'); px(sx-1,y-5,2,5,'#e8e2d2'); px(sx-2,y-7,4,2,'#c24a4a'); px(sx+6,y-4,2,4,'#e8e2d2'); px(sx+5,y-6,4,2,'#c24a4a'); }
-  else if(t==='cattail'){ for(let i=-4;i<=4;i+=4){ px(sx+i,y-18,1,18,'#8a9068'); px(sx+i-1,y-20,3,5,'#7a5a3a'); } }
+  else if(t==='cattail'){ const w=AMB.sway(p.x,0.0015,1); for(let i=-4;i<=4;i+=4){ px(sx+i,y-18,1,18,'#8a9068'); px(sx+i-1+w,y-20,3,5,'#7a5a3a'); } }
   else if(t==='lotusleaf'){ px(sx-9,y-2,18,2,'#6a8560'); px(sx-7,y-3,14,1,'#7a9670'); px(sx-1,y-4,2,2,'#8ba680'); }
   else if(t==='waterlily'){ px(sx-8,y-2,16,2,'#5e7a54'); px(sx-3,y-4,6,3,'#f0ece0'); px(sx-1,y-5,2,2,'#e6d98a'); }
-  else if(t==='wildgrass'){ for(let i=-6;i<=6;i+=2)px(sx+i,y-6-((i%4)?2:0),1,6+((i%4)?2:0),'#7a9068'); }
+  else if(t==='wildgrass'){ const w=AMB.sway(p.x,0.0018,1); for(let i=-6;i<=6;i+=2){ const hh=6+((i%4)?2:0); px(sx+i,y-hh,1,hh,'#7a9068'); if(w)px(sx+i+w,y-hh,1,1,'#8aa078'); } }
   else if(t==='thornbush'){ px(sx-7,y-8,14,8,'#5c6b4a'); px(sx-8,y-9,2,2,'#8a9068'); px(sx+6,y-10,2,2,'#8a9068'); px(sx-2,y-11,2,2,'#8a9068'); }
   else if(t==='fallenbranch'){ px(sx-9,y-2,18,2,'#7a5a3a'); px(sx-4,y-4,5,2,'#8a6a4a'); px(sx+3,y-4,3,2,'#8a6a4a'); }
   else if(t==='tree-stump'){ px(sx-6,y-6,12,6,'#8a6f52'); px(sx-6,y-7,12,2,'#9c7f5f'); px(sx-2,y-6,4,2,'#7a5f42'); px(sx-1,y-5,2,1,'#6f5540'); }
   else if(t==='pebblepile'){ px(sx-6,y-3,4,3,'#9a9188'); px(sx-1,y-3,4,3,'#8b8f88'); px(sx+3,y-3,3,2,'#a4a89f'); px(sx-3,y-5,4,2,'#9a9188'); }
-  else if(t==='dewgrass'){ for(let i=-5;i<=5;i+=2)px(sx+i,y-6,1,6,'#7a9068'); px(sx-3,y-6,1,1,'#c3d6e0'); px(sx+2,y-7,1,1,'#c3d6e0'); px(sx,y-5,1,1,'#d6e4ec'); }
+  else if(t==='dewgrass'){ const w=AMB.sway(p.x,0.0012,1); for(let i=-5;i<=5;i+=2)px(sx+i,y-6,1,6,'#7a9068'); px(sx-3+w,y-6,1,1,'#c3d6e0'); px(sx+2+w,y-7,1,1,'#c3d6e0'); px(sx+w,y-5,1,1,'#d6e4ec'); }
   else if(t==='spiderweb'){ px(sx-8,y-20,1,16,'#b8bcb2'); px(sx+8,y-20,1,16,'#b8bcb2'); px(sx-8,y-20,16,1,'#b8bcb2'); px(sx-6,y-14,12,1,'#a4a89f'); px(sx,y-20,1,16,'#a4a89f'); }
   else if(t==='birdnest'){ px(sx-5,y-4,10,4,'#8a6f4a'); px(sx-5,y-5,10,1,'#9c7f5a'); px(sx-2,y-3,2,2,'#a9c4d6'); px(sx+1,y-3,2,2,'#c9d6b0'); }
   // ==== BUILD 409-B: 생활 흔적과 시골 사물 25종 ====
@@ -1150,7 +1176,7 @@ function drawProp(p,sx){
   else if(t==='telephonepole'){ px(sx-1,y-36,3,36,'#7a6a52'); px(sx-6,y-32,14,2,'#6a5a42'); px(sx-8,y-28,18,1,'#6a5a42'); px(sx-6,y-33,1,2,'#4a4030'); px(sx+5,y-33,1,2,'#4a4030'); }
   else if(t==='powerbox'){ px(sx-4,y-12,8,12,'#5a7a5a'); px(sx-4,y-12,8,2,'#6a8a6a'); px(sx-3,y-8,4,3,'#e8e4d8'); px(sx+2,y-6,1,2,'#3a4a3a'); }
   else if(t==='bus-sign'){ px(sx-1,y-24,2,24,'#8a9a96'); px(sx-6,y-24,12,6,'#4a6a9a'); px(sx-4,y-22,8,1,'#e8e4d8'); px(sx-4,y-20,5,1,'#e8e4d8'); }
-  else if(t==='vendingmachine'){ px(sx-6,y-20,12,20,'#c23a3a'); px(sx-4,y-18,8,7,'#3a4a52'); px(sx-4,y-17,3,2,'#e8d84a'); px(sx,y-17,3,2,'#4a9ad9'); px(sx-4,y-8,8,2,'#e8e4d8'); px(sx+2,y-5,2,2,'#2b2b2b'); }
+  else if(t==='vendingmachine'){ px(sx-6,y-20,12,20,'#c23a3a'); px(sx-4,y-18,8,7,'#3a4a52'); px(sx-4,y-17,3,2, ambLight('#e8d84a','#f4e46a',AMB.glow(p.x,0.002))); px(sx,y-17,3,2, ambLight('#4a9ad9','#5aabe9',AMB.glow(p.x+15,0.002))); px(sx-4,y-8,8,2,'#e8e4d8'); px(sx+2,y-5,2,2,'#2b2b2b'); }
   else if(t==='shed'){ px(sx-9,y-14,18,14,'#8a8478'); px(sx-11,y-16,22,3,'#6a6458'); px(sx-3,y-10,6,10,'#5c5448'); px(sx-1,y-6,1,1,'#2b2b2b'); }
   else if(t==='greenhouse'){ px(sx-11,y-15,22,15,'#c9dad0'); px(sx-11,y-18,22,4,'#b9cac0'); ctx.fillStyle='#a9bab0'; for(let i=-11;i<11;i+=4)px(sx+i,y-15,1,15,'#a9bab0'); px(sx-11,y-15,22,1,'#8fa896'); }
   else if(t==='well'){ px(sx-6,y-8,12,8,'#8a7f6a'); ctx.fillStyle='#6a5f4a'; for(let i=-6;i<6;i+=3)px(sx+i,y-8,1,8,'#6a5f4a'); px(sx-7,y-16,1,8,'#7a6a52'); px(sx+6,y-16,1,8,'#7a6a52'); px(sx-7,y-17,14,2,'#5c4c38'); px(sx-4,y-8,8,1,'#3a4a52'); }
@@ -1175,7 +1201,9 @@ function aura(x,y,c){ ctx.fillStyle=c; px(x-1,y,3,1,c); px(x,y-1,1,3,c); }
 
 function drawByeoli(byeoli){
   const x=byeoli.screenX, y=GROUND_Y, acting=byeoli.state==='acting';
-  const bob=acting?0:Math.round(Math.sin(byeoli.walkPhase));
+  // BUILD 410-A: 별이 숨쉬기 — 멈춰 있을 때만 2~3초 주기 1px 상하. 걷기 bob은 그대로.
+  const breathe=acting? -(Math.sin(AMB.t*0.0022)>0.6?1:0) : 0;
+  const bob=(acting?0:Math.round(Math.sin(byeoli.walkPhase)))+breathe;
   const legF=Math.floor(byeoli.walkPhase)%2, yy=y+bob;
   ctx.fillStyle='rgba(20,30,24,.25)'; ctx.fillRect(x-6,y-1,14,2);
   const cloth='#5b6f57',cloth2='#6f8469',skin='#e8c9a8',hair='#3a2c22',leg='#3f4a3a';
@@ -1200,6 +1228,7 @@ function drawByeoli(byeoli){
     px(x-2,yy-36,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-34,3,2,ic); }
 }
 function render(state){
+  AMB.t=performance.now();   // BUILD 410-A: ambient 시간축 (state 불변, 시각 효과 전용)
   drawBackground(state.sky, state.camera);
   const camShift=state.camera.camShift;
   for(const p of state.props){ const sx=p.x-camShift; if(sx>-30&&sx<W+30) drawProp(p,sx); }
