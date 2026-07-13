@@ -44,6 +44,20 @@
   .fatline{padding:3px 9px 0;font-size:9px;color:var(--dim);display:flex;justify-content:space-between;background:var(--panel)}
   .fatline .fv{color:var(--petal)}
 
+  /* ---- 별이의 취향 (BUILD 405 Habit) ---- */
+  .taste{padding:5px 9px 6px;background:var(--panel);}
+  .taste-head{font-size:9px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:4px;
+    display:flex;justify-content:space-between}
+  .taste-head #tasteHint{color:var(--sage);text-transform:none;letter-spacing:0}
+  .trow{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;margin:3px 0;font-size:10px}
+  .trow .tk{color:var(--ink)}
+  .trow .tk .em{margin-right:3px}
+  .ttrack{height:5px;background:#080a07;border:1px solid var(--line);position:relative;overflow:hidden}
+  .tfill{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#6c8a72,#A7B49A);width:0;transition:width .3s ease}
+  .tfill.decay{background:linear-gradient(90deg,#7a6f52,#b89a6a)}
+  .trow .tb{color:var(--sage);font-variant-numeric:tabular-nums;font-size:9px}
+  .trow .tmeta{grid-column:1/-1;font-size:8px;color:var(--dim);margin:-1px 0 2px 2px}
+
   /* ---- 스트림 (두뇌활동 + 일기 통합, 채팅 시절) ---- */
   .stream-head{padding:6px 9px 4px;background:var(--panel);font-size:9px;
     letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
@@ -76,6 +90,7 @@
       <span id="daytag" style="pointer-events:none">별이력 9075.4.11</span>
     </div>
     <div class="ctrls">
+      <button id="speedBtn">1×</button>
       <button id="pauseBtn">⏸</button>
       <button id="reseedBtn">↻</button>
     </div>
@@ -83,6 +98,10 @@
 
   <div class="drives" id="driveBars"></div>
   <div class="fatline"><span>피로</span><span class="fv" id="fatVal">0.05</span></div>
+  <div class="taste" id="taste">
+    <div class="taste-head">별이의 취향 <span id="tasteHint">— 아직 없음</span></div>
+    <div id="tasteList"></div>
+  </div>
 
   <div class="stream-head">
     <span>별이의 산책</span>
@@ -210,6 +229,38 @@ function stimOf(item){
   if(item.rare) return RARE[item.type].stim;
   return CATALOG[item.type].stim;
 }
+
+/* =====================================================================
+   HABIT ENGINE — BUILD 405-A(축적) / 405-B(감쇠)
+   key = targetType:drive · strength = repetition × recency × consistency
+   habitBias max +0.15 · combinedBias(habit+personality) max +0.18
+   Memory는 불변, Habit strength만 산책 루프 단위로 감쇠.
+   ===================================================================== */
+const HABIT_BIAS_MAX=0.15, COMBINED_BIAS_MAX=0.18;
+let loopCount=0;   // 산책 루프 수 = Habit 감쇠의 시간 단위
+const habitEngine={
+  habits:{}, typeEnc:{},
+  key(type,drive){ return type+':'+drive; },
+  repCurve(count){ return count<3?0:clamp(1-Math.exp(-(count-2)/3.2),0,1); },
+  record(type, drive, loop){
+    this.typeEnc[type]=(this.typeEnc[type]||0)+1;
+    const k=this.key(type,drive);
+    if(!this.habits[k]) this.habits[k]={type,drive,count:0,lastLoop:loop,chosen:0,prevStrength:0};
+    const h=this.habits[k]; h.count++; h.chosen++; h.lastLoop=loop;
+  },
+  strength(type, drive, loop){
+    const k=this.key(type,drive), h=this.habits[k]; if(!h) return 0;
+    const rep=this.repCurve(h.count);
+    const inactive=loop-h.lastLoop;
+    const recency=clamp(Math.exp(-inactive/4.5),0,1);
+    const typeTotal=this.typeEnc[h.type]||h.chosen;
+    const consistency=clamp(h.chosen/Math.max(typeTotal,h.chosen),0.3,1);
+    return clamp(rep*recency*consistency,0,1);
+  },
+  bias(type, drive, loop){ return this.strength(type,drive,loop)*HABIT_BIAS_MAX; },
+  reset(){ this.habits={}; this.typeEnc={}; },
+};
+
 const brain={
   drive:{observe:.30,rest:.22,record:.26,wonder:.34},
   fatigue:.05,
@@ -220,25 +271,32 @@ const brain={
   decide(item){
     const stim=stimOf(item);
     const rand=(rng()-0.5)*0.16;
-    const habitBias=0, personalityBias=0;   // BUILD 405 자리
-    let best=null,bestScore=-1;
+    const type=item.type;
+    let best=null,bestScore=-1,bestParts=null;
     for(const d of DRIVES){
-      const score=this.drive[d]+(stim[d]||0)+habitBias+personalityBias-this.fatigue+rand;
-      if(score>bestScore){bestScore=score;best=d;}
+      const cur=this.drive[d], objectStimulus=stim[d]||0;
+      const habitBias = item.rare?0:habitEngine.bias(type,d,loopCount);
+      const personalityBias=0;   // 405-C 자리
+      const combined=Math.min(habitBias+personalityBias, COMBINED_BIAS_MAX);
+      const score=cur+objectStimulus+combined-this.fatigue+rand;
+      if(score>bestScore){ bestScore=score; best=d;
+        bestParts={cur,objectStimulus,habitBias,personalityBias,combined}; }
     }
-    // 희귀는 문턱 낮춰 거의 항상 반응(Signature Moment)
     const thr = item.rare ? 0.30 : THRESHOLD;
     const passed = bestScore<thr;
     if(!passed){ this.drive[best]=clamp(this.drive[best]-0.45,0,1);
-                 this.fatigue=clamp(this.fatigue-0.16,0,1); }
+                 this.fatigue=clamp(this.fatigue-0.16,0,1);
+                 // 취향 기록: 행동한 것만 (pass는 취향 아님)
+                 habitEngine.record(type,best,loopCount); }
     const intent={
       id:'intent-'+(intentCounter++),
       action: passed?'pass':best,
-      targetId:item.id, targetType:item.type,
+      targetId:item.id, targetType:type,
       duration: passed?0:+(1.8+this.drive[best]*2.6+rng()*1.2).toFixed(1),
       drive:best, score:+bestScore.toFixed(3),
-      reason:{ currentDrive:+this.drive[best].toFixed(3), objectStimulus:+(stim[best]||0).toFixed(3),
-        habitBias, personalityBias, fatiguePenalty:+this.fatigue.toFixed(3), randomness:+rand.toFixed(3) },
+      reason:{ currentDrive:+bestParts.cur.toFixed(3), objectStimulus:+bestParts.objectStimulus.toFixed(3),
+        habitBias:+bestParts.habitBias.toFixed(4), personalityBias:bestParts.personalityBias,
+        fatiguePenalty:+this.fatigue.toFixed(3), randomness:+rand.toFixed(3) },
       context:{ worldType:'town-2d', timestamp:Date.now(), seed:SEED },
     };
     return { intent, passed, bestScore, best };
@@ -253,13 +311,13 @@ function buildWorld(){
   const t=buildTown(rng); props=t.items; worldLen=t.worldLen; rareRef=t.rareItem;
 }
 
-const byeoli={ worldX:0, screenX:90, speed:44, baseSpeed:44,
+const byeoli={ worldX:0, screenX:90, speed:62, baseSpeed:62,
   state:'walk', actAction:null, actTarget:null, actTimer:0, walkPhase:0 };
 
 const SEEN_D=190, INTEREST_D=110, ENCOUNTER_D=42;
 let currentTarget=null, lastWinDrive=null;
 const seenKindsToday=new Set();
-let walkClock=0, lastDiaryAt=-999, dayNum=0;
+let walkClock=0, lastDiaryAt=-999;
 const tally={ memories:0, diary:0 };
 
 function updateEncounters(dt){
@@ -388,10 +446,42 @@ function renderDrives(){
   fatVal.textContent=brain.fatigue.toFixed(2);
 }
 
+/* ---- 별이의 취향 (Habit strength 상위 표시) ---- */
+const tasteListEl=document.getElementById('tasteList');
+const tasteHintEl=document.getElementById('tasteHint');
+const prevStrength={};   // 감쇠 방향 감지용
+function renderTaste(){
+  // 모든 habit의 현재 strength 계산 → 상위 4개
+  const rows=[];
+  for(const k in habitEngine.habits){
+    const h=habitEngine.habits[k];
+    const s=habitEngine.strength(h.type,h.drive,loopCount);
+    if(s<0.02) continue;
+    rows.push({k,h,s,bias:s*HABIT_BIAS_MAX,inactive:loopCount-h.lastLoop});
+  }
+  rows.sort((a,b)=>b.s-a.s);
+  const top=rows.slice(0,4);
+  if(top.length===0){ tasteHintEl.textContent='— 아직 없음'; tasteListEl.innerHTML=''; return; }
+  tasteHintEl.textContent = `취향 ${rows.length}개 형성 중`;
+  tasteListEl.innerHTML = top.map(r=>{
+    const def=CATALOG[r.h.type]||RARE[r.h.type]||{emoji:'·',ko:r.h.type};
+    const decaying = (prevStrength[r.k]!==undefined && r.s < prevStrength[r.k]-0.001);
+    prevStrength[r.k]=r.s;
+    const meta = r.inactive===0 ? `count ${r.h.count} · 방금`
+      : `count ${r.h.count} · ${r.inactive}루프 전${decaying?' · 옅어지는 중':''}`;
+    return `<div class="trow">
+      <span class="tk"><span class="em">${def.emoji}</span>${def.ko} <span style="color:var(--dim)">${actKo(r.h.drive)}</span></span>
+      <span class="ttrack"><span class="tfill ${decaying?'decay':''}" style="width:${(r.s*100)|0}%"></span></span>
+      <span class="tb">+${r.bias.toFixed(3)}</span>
+      <span class="tmeta">${meta}</span>
+    </div>`;
+  }).join('');
+}
+
 /* =====================================================================
    UPDATE
    ===================================================================== */
-let paused=false,lastT=0,acc=0;
+let paused=false,lastT=0,acc=0,speedMul=1;
 function update(dt){
   if(byeoli.state==='acting'){
     byeoli.actTimer-=dt; brain.tick(dt,false);
@@ -403,15 +493,15 @@ function update(dt){
   byeoli.worldX+=byeoli.speed*dt;
   byeoli.walkPhase+=dt*8;
   if(byeoli.worldX>worldLen){
-    byeoli.worldX=0; dayNum++;
+    byeoli.worldX=0; loopCount++;
     for(const p of props){ p.phase='unseen'; p.reactedThisPass=false; }
     seenKindsToday.clear();
     updateDayTag();
-    pushMsg('day', `— 별이력 9075.4.${11+dayNum} · 새로운 하루 —`, null);
+    pushMsg('day', `— 별이력 9075.4.${11+loopCount} · 새로운 하루 —`, null);
   }
   updateEncounters(dt);
 }
-function updateDayTag(){ document.getElementById('daytag').textContent=`별이력 9075.4.${11+dayNum}`; }
+function updateDayTag(){ document.getElementById('daytag').textContent=`별이력 9075.4.${11+loopCount}`; }
 
 /* =====================================================================
    RENDER (도트)
@@ -525,7 +615,7 @@ const FPS=14, FRAME=1000/FPS;
 function loop(t){
   if(!lastT)lastT=t; let dt=t-lastT; lastT=t;
   if(dt>200)dt=FRAME;
-  if(!paused){ acc+=dt; while(acc>=FRAME){ update(FRAME/1000); acc-=FRAME; } render(); renderDrives(); }
+  if(!paused){ acc+=dt; while(acc>=FRAME){ for(let s=0;s<speedMul;s++) update(FRAME/1000); acc-=FRAME; } render(); renderDrives(); renderTaste(); }
   requestAnimationFrame(loop);
 }
 
@@ -542,7 +632,8 @@ function boot(){
   rng=makeRNG(SEED);
   brain.drive={observe:.30,rest:.22,record:.26,wonder:.34}; brain.fatigue=.05;
   byeoli.worldX=0; byeoli.state='walk'; byeoli.speed=byeoli.baseSpeed;
-  walkClock=0; lastDiaryAt=-999; dayNum=0;
+  walkClock=0; lastDiaryAt=-999; loopCount=0;
+  habitEngine.reset();
   tally.memories=0; tally.diary=0; archive.length=0;
   seenKindsToday.clear(); currentTarget=null;
   streamEl.innerHTML='';
@@ -550,6 +641,7 @@ function boot(){
   pushMsg('day', `— 별이력 9075.4.11 · 산책 시작 (seed ${SEED}) —`, null);
 }
 document.getElementById('pauseBtn').onclick=e=>{ paused=!paused; e.target.textContent=paused?'▶':'⏸'; };
+document.getElementById('speedBtn').onclick=e=>{ speedMul = speedMul===1?2:speedMul===2?4:1; e.target.textContent=speedMul+'×'; };
 document.getElementById('reseedBtn').onclick=()=>{ SEED=(Math.random()*1e9)|0; boot(); };
 boot();
 requestAnimationFrame(loop);
