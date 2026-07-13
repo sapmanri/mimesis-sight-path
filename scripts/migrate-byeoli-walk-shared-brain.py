@@ -1,67 +1,37 @@
 from pathlib import Path
-import re
 
 path = Path('public/byeoli-walk/index.html')
 text = path.read_text(encoding='utf-8')
 
-# The prototype remains a static page, but its inline code becomes an ES module
-# so it can consume the shared browser bundle emitted by Vite.
-old_script = '<script>\n/* ---- inlined catalog.mjs ---- */'
-new_script = """<script type=\"module\">\nimport { HabitEngine, HABIT_BIAS_MAX, capCombinedBias, createLocalHabitStorage } from '/byeoli-walk/brain.js';\n/* ---- inlined catalog.mjs ---- */"""
-if old_script in text:
-    text = text.replace(old_script, new_script, 1)
-elif "from '/byeoli-walk/brain.js'" not in text:
-    raise SystemExit('Byeoli Walk script anchor not found')
+old_import = "import { HabitEngine, HABIT_BIAS_MAX, capCombinedBias, createLocalHabitStorage } from '/byeoli-walk/brain.js';"
+new_import = "import { HABIT_BIAS_MAX, capCombinedBias, createSharedHabitEngine, byeoliDayEpoch, formatByeoliDate } from '/byeoli-walk/brain.js';"
+if old_import in text:
+    text = text.replace(old_import, new_import, 1)
+elif new_import not in text:
+    raise SystemExit('shared brain import anchor not found')
 
-habit_pattern = re.compile(
-    r"const HABIT_BIAS_MAX=0\.15, COMBINED_BIAS_MAX=0\.18;[\s\S]*?\n\};\n\nconst brain=\{",
-    re.MULTILINE,
-)
-habit_replacement = """let loopCount=0;   // 산책 루프 수 = Habit 감쇠의 시간 단위
+old_engine = """let loopCount=0;   // 산책 루프 수 = Habit 감쇠의 시간 단위
 const habitEngine = new HabitEngine(
   createLocalHabitStorage('mimesis.byeoli.walk.habits.v1')
-);
+);"""
+new_engine = """let loopCount=0;   // 2D 산책 연출용 루프 수(취향 시간과 분리)
+const habitEpoch=()=>byeoliDayEpoch();
+const habitEngine=createSharedHabitEngine(habitEpoch());"""
+if old_engine in text:
+    text = text.replace(old_engine, new_engine, 1)
+elif 'createSharedHabitEngine(' not in text:
+    raise SystemExit('2D HabitEngine construction anchor not found')
 
-const brain={"""
-text, count = habit_pattern.subn(habit_replacement, text, count=1)
-if count != 1 and 'new HabitEngine(' not in text:
-    raise SystemExit(f'inline HabitEngine block not found: {count}')
+text = text.replace('habitEngine.bias(type,d,loopCount)', 'habitEngine.bias(type,d,habitEpoch())')
+text = text.replace('habitEngine.record(type,best,loopCount)', 'habitEngine.record(type,best,habitEpoch())')
+text = text.replace('habitEngine.list(loopCount)', 'habitEngine.list(habitEpoch())')
+text = text.replace("${r.inactiveLoops}루프 전", "${r.inactiveLoops}별이일 전")
 
-text = text.replace(
-    'const combined=Math.min(habitBias+personalityBias, COMBINED_BIAS_MAX);',
-    'const combined=capCombinedBias(habitBias,personalityBias);',
-    1,
-)
-
-render_pattern = re.compile(
-    r"function renderTaste\(\)\{[\s\S]*?\n\}\n\n/\* =====================================================================\n   UPDATE",
-    re.MULTILINE,
-)
-render_replacement = """function renderTaste(){
-  const rows=habitEngine.list(loopCount).filter(r=>r.strength>=0.02);
-  const top=rows.slice(0,4);
-  if(top.length===0){ tasteHintEl.textContent='— 아직 없음'; tasteListEl.innerHTML=''; return; }
-  tasteHintEl.textContent = `취향 ${rows.length}개 형성 중`;
-  tasteListEl.innerHTML = top.map(r=>{
-    const def=CATALOG[r.targetType]||RARE[r.targetType]||{emoji:'·',ko:r.targetType};
-    const decaying = (prevStrength[r.key]!==undefined && r.strength < prevStrength[r.key]-0.001);
-    prevStrength[r.key]=r.strength;
-    const meta = r.inactiveLoops===0 ? `count ${r.count} · 방금`
-      : `count ${r.count} · ${r.inactiveLoops}루프 전${decaying?' · 옅어지는 중':''}`;
-    return `<div class=\"trow\">
-      <span class=\"tk\"><span class=\"em\">${def.emoji}</span>${def.ko} <span style=\"color:var(--dim)\">${actKo(r.drive)}</span></span>
-      <span class=\"ttrack\"><span class=\"tfill ${decaying?'decay':''}\" style=\"width:${(r.strength*100)|0}%\"></span></span>
-      <span class=\"tb\">+${r.bias.toFixed(3)}</span>
-      <span class=\"tmeta\">${meta}</span>
-    </div>`;
-  }).join('');
-}
-
-/* =====================================================================
-   UPDATE"""
-text, count = render_pattern.subn(render_replacement, text, count=1)
-if count != 1 and 'habitEngine.list(loopCount)' not in text:
-    raise SystemExit(f'renderTaste block not found: {count}')
+# Observatory에서 현재 공통 별이력도 확인할 수 있게 취향 헤더에 표시한다.
+old_hint = "tasteHintEl.textContent = `취향 ${rows.length}개 형성 중`;"
+new_hint = "tasteHintEl.textContent = `${formatByeoliDate()} · 취향 ${rows.length}개 형성 중`;"
+if old_hint in text:
+    text = text.replace(old_hint, new_hint, 1)
 
 path.write_text(text, encoding='utf-8')
-print('Byeoli Walk now consumes the shared HabitEngine browser bundle')
+print('Byeoli Walk now shares Habit storage and Byeoli calendar with 3D')
