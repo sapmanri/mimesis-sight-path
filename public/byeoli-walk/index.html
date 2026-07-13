@@ -364,7 +364,19 @@ const Sound={
     click(t,0.20);           // 찰
     click(t+0.06,0.14);      // 칵
   },
-  step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리
+  _lastStepAt:0,
+  step(){
+    if(!this.on||!this.ctx||this.ctx.state!=='running') return;
+    const now=performance.now();
+    if(now-this._lastStepAt<360) return;
+    this._lastStepAt=now;
+    const t=this.ctx.currentTime, n=220, buf=this.ctx.createBuffer(1,n,this.ctx.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++){ const env=1-i/n; d[i]=(Math.random()*2-1)*env*env; }
+    const src=this.ctx.createBufferSource(), low=this.ctx.createBiquadFilter(), g=this.ctx.createGain();
+    src.buffer=buf; low.type='lowpass'; low.frequency.setValueAtTime(260+rng()*70,t); low.Q.value=0.7;
+    g.gain.setValueAtTime(0.028,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.045);
+    src.connect(low); low.connect(g); g.connect(this.ctx.destination); src.start(t); src.stop(t+0.05);
+  },       // 발소리: 짧은 저역 노이즈 한 번. tone 반복/중첩 금지
   act(drive){ // record는 여기서 소리 안 냄 (startAction이 셔터음 전담)
     const f={observe:520,rest:330,wonder:700}[drive];
     if(f) this.blip(f,0.12,'triangle',0.08); },
