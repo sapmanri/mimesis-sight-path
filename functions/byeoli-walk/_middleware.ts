@@ -20,6 +20,73 @@ export const onRequest: PagesFunction = async (context) => {
   html = html.replace(/const RARE = \{[\s\S]*?\n\};\n\n\/\/ 배치 비율/, `const RARE = ${JSON.stringify(twoD.rare)};\n\n// 배치 비율`);
   html = html.replace(/const PLAN = \{[\s\S]*?\n\};\n\nfunction buildTown/, `const PLAN = ${JSON.stringify(twoD.plan)};\n\nfunction buildTown`);
 
+  // BUILD 409-E — category-balanced, weighted subset per walk.
+  // Before this, every PLAN entry was expanded into every town, so high weights such as
+  // flower:6 or bicycle:3 created visible repetition and the 100 new objects made each
+  // world unnecessarily long. A town now draws a unique weighted subset from each category.
+  html = html.replace(
+    /function buildTown\(rng\)\{[\s\S]*?return \{ items, worldLen:x\+200, rareItem \};\n\}/,
+    `const SPAWN_BUDGET = { nature:22, thing:20, animal:12, rest:8 };
+
+function pickWeightedUnique(types,count,rng){
+  const candidates=types.filter((type)=>CATALOG[type]&&(PLAN[type]??0)>0);
+  const picked=[];
+  while(picked.length<count&&candidates.length){
+    let total=0;
+    for(const type of candidates){
+      const rarity=CATALOG[type].rarity;
+      const rarityFactor=rarity==='uncommon'?0.72:rarity==='rare'?0.2:1;
+      total+=(PLAN[type]??1)*rarityFactor;
+    }
+    let roll=rng()*total, chosen=0;
+    for(let i=0;i<candidates.length;i++){
+      const type=candidates[i], rarity=CATALOG[type].rarity;
+      const rarityFactor=rarity==='uncommon'?0.72:rarity==='rare'?0.2:1;
+      roll-=(PLAN[type]??1)*rarityFactor;
+      if(roll<=0){ chosen=i; break; }
+    }
+    picked.push(candidates.splice(chosen,1)[0]);
+  }
+  return picked;
+}
+
+function buildTown(rng){
+  const items=[];
+  const pool=[];
+  for(const cat of ['nature','thing','animal','rest']){
+    pool.push(...pickWeightedUnique(CATS[cat]??[],SPAWN_BUDGET[cat]??0,rng));
+  }
+  // Category quotas are fixed, but the final route order remains different for every seed.
+  for(let i=pool.length-1;i>0;i--){ const j=(rng()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
+
+  let x=150, idx=0;
+  for(const type of pool){
+    const def=CATALOG[type];
+    const gap = def.cat==='animal' ? 300 + (rng()*160|0)
+              : def.rarity==='uncommon' ? 160 + (rng()*100|0)
+              : 100 + (rng()*70|0);
+    x += gap;
+    const vs=VARIANTS[type]; const variant = vs ? vs[(rng()*vs.length)|0] : '';
+    items.push({
+      id:\`${'${type}'}-${'${variant||\'a\'}'}-${'${idx}'}\`, type, variant,
+      x, layer: def.cat==='thing'||type==='oldtree'?'middle':'front',
+      phase:'unseen', reactedThisPass:false,
+    });
+    idx++;
+  }
+  // 희귀 이벤트: 5% 확률로 1개 삽입
+  let rareItem=null;
+  if(rng()<0.05){
+    const keys=Object.keys(RARE); const rk=keys[(rng()*keys.length)|0];
+    const rx=200+(rng()*(x-400))|0;
+    rareItem={ id:\`rare-${'${rk}'}-${'${idx}'}\`, type:rk, variant:'', x:rx, layer:'middle',
+      phase:'unseen', reactedThisPass:false, rare:true };
+    items.push(rareItem); items.sort((a,b)=>a.x-b.x);
+  }
+  return { items, worldLen:x+200, rareItem };
+}`,
+  );
+
   // iOS audio unlock patch introduced a tiny silent WAV loop on every platform.
   // Some browsers emit a click at each loop boundary, which sounds exactly like
   // the old rapid-fire footstep regression. Only old iOS needs this fallback.
