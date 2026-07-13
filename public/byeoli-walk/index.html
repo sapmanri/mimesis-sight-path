@@ -433,7 +433,7 @@ function drawBackground(){
   const o3=-(cam*1.0)%8; ctx.fillStyle='#365040';
   for(let bx=o3;bx<W;bx+=8){ px(bx,GROUND_Y+7,2,2,'#365040'); px(bx+4,GROUND_Y+14,2,2,'#2f4738'); }
 }
-function hill(cx,by,w,h){ for(let i=0;i<h;i++){const ww=w*(1-i/h); ctx.fillRect((cx-ww/2)|0,(by-h+i)|0,ww|0,1);} }
+function hill(cx,by,w,h){ for(let i=0;i<h;i++){const ww=w*(i/h); ctx.fillRect((cx-ww/2)|0,(by-h+i)|0,ww|0,1);} }
 function tree(x,by,c){ px(x-1,by-11,2,11,'#5c4a38'); ctx.fillStyle=c; px(x-6,by-20,13,8,c); px(x-4,by-25,9,6,c); }
 function house(x,by){ px(x-10,by-14,20,14,'#c9b79c'); px(x-10,by-14,20,2,'#a58e70');
   ctx.fillStyle='#7d5a44'; for(let i=0;i<7;i++) ctx.fillRect((x-12+i)|0,(by-14-7+i)|0,(24-i*2)|0,1);
