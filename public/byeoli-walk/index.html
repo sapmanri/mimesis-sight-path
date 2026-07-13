@@ -425,7 +425,7 @@ const sky={
   weather:'clear',   // clear | rain | snow
   weatherTimer:12,   // 다음 날씨 전환까지(초)
   particles:[],      // 비/눈 입자
-  flybys:[],         // 하늘 이벤트 (비행기/새떼/헬기/고질라)
+  flybys:[],         // 하늘 이벤트 (비행기/새떼/헬기/괴생명체)
   flybyTimer:6,      // 다음 이벤트까지(초)
   reset(){
     this.t=skyProgressNow(); this.cloudDark=false;
@@ -462,20 +462,20 @@ const sky={
       for(let i=0;i<rate;i++) if(rng()<0.9) this.spawnDrop();
     }
     this.updateParticles(dt);
-    // 하늘 이벤트 (비행기/새/헬기/고질라)
+    // 하늘 이벤트 (비행기/새/헬기/괴생명체)
     this.flybyTimer-=dt;
     if(this.flybyTimer<=0){ this.spawnFlyby(); this.flybyTimer=8+rng()*14; }
     for(const f of this.flybys){
       f.x+=f.vx*dt; f.phase+=dt*f.flap;
-      if(f.kind==='godzilla') f.stompT=(f.stompT||0)+dt;  // 걸음 타이밍
+      if(f.kind==='creature') f.stompT=(f.stompT||0)+dt;  // 걸음 타이밍
     }
     // 화면 밖으로 나간 것 제거 (방향에 따라)
     this.flybys=this.flybys.filter(f=> f.vx<0 ? f.x>-f.w-20 : f.x<W+f.w+20 );
   },
   spawnFlyby(){
     const roll=rng();
-    // 확률: 새떼 40% / 비행기 28% / 헬기 22% / 고질라 10% (고질라는 레어)
-    let kind = roll<0.40?'birds' : roll<0.68?'plane' : roll<0.90?'heli' : 'godzilla';
+    // 확률: 새떼 40% / 비행기 28% / 헬기 22% / 괴생명체 10% (괴생명체는 레어)
+    let kind = roll<0.40?'birds' : roll<0.68?'plane' : roll<0.90?'heli' : 'creature';
     const dir = rng()<0.5?-1:1;                 // 진행 방향
     const fromX = dir<0 ? W+30 : -30;
     if(kind==='birds'){
@@ -489,8 +489,8 @@ const sky={
     } else if(kind==='heli'){
       this.flybys.push({ kind:'heli', x:fromX, y:16+rng()*22, vx:dir*(30+rng()*10), w:16, phase:0, flap:40, dir });
     } else {
-      // 고질라: 지평선 뒤로 큼직하게, 느리게. (희귀 이벤트)
-      this.flybys.push({ kind:'godzilla', x:fromX, y:GROUND_Y, vx:dir*(14+rng()*6), w:34, phase:0, flap:0, dir, stompT:0 });
+      // 괴생명체: 지평선 뒤로 큼직하게, 느리게. (희귀 이벤트)
+      this.flybys.push({ kind:'creature', x:fromX, y:GROUND_Y, vx:dir*(14+rng()*6), w:34, phase:0, flap:0, dir, stompT:0 });
     }
   },
   spawnDrop(){
@@ -919,15 +919,15 @@ function drawBackground(sky, camera){
     }
   }
   // ---- 하늘 이벤트: 비행기/새/헬기 (하늘에) ----
-  if(sky.flybys) for(const f of sky.flybys){ if(f.kind!=='godzilla') drawFlyby(f, isNight); }
+  if(sky.flybys) for(const f of sky.flybys){ if(f.kind!=='creature') drawFlyby(f, isNight); }
 
   const cam=camera.worldX;
   // 먼 언덕 (밤엔 어둡게)
   const hillCol = shade('#b7c6ad', S.tone);
   const o1=-(cam*0.15)%180; ctx.fillStyle=hillCol;
   for(let bx=o1-180;bx<W+180;bx+=180){ hill(bx+45,GROUND_Y,90,22); hill(bx+130,GROUND_Y,64,16); }
-  // ---- 고질라 (지평선 뒤, 언덕과 나무 사이) ----
-  if(sky.flybys) for(const f of sky.flybys){ if(f.kind==='godzilla') drawFlyby(f, isNight); }
+  // ---- 괴생명체 (지평선 뒤, 언덕과 나무 사이) ----
+  if(sky.flybys) for(const f of sky.flybys){ if(f.kind==='creature') drawFlyby(f, isNight); }
   // 중간 나무/집
   const o2=-(cam*0.4)%150;
   for(let bx=o2-150;bx<W+150;bx+=150){ tree(bx+26,GROUND_Y-2,shade('#8ba286',S.tone)); house(bx+86,GROUND_Y-2); }
@@ -978,8 +978,8 @@ function drawFlyby(f, isNight){
     const spin=Math.floor(f.phase)%2;
     if(spin) ctx.fillRect(x-8,y-2,16,1); else ctx.fillRect(x-4,y-2,8,1);
     ctx.fillRect(x-1,y-2,2,2);        // 로터축
-  } else if(f.kind==='godzilla'){
-    // 고질라 — 지평선 뒤로 큼직한 실루엣, 쿵쿵 걸음
+  } else if(f.kind==='creature'){
+    // 괴생명체 — 지평선 뒤로 큼직한 실루엣, 쿵쿵 걸음
     const bob=Math.round(Math.sin(f.stompT*3)*1.5);
     const gy=y-28-bob;                // 등 높이
     ctx.fillStyle=isNight?'#1a2422':'#2b3a33';  // 어두운 실루엣
@@ -1227,6 +1227,39 @@ function drawByeoli(byeoli){
   if(acting){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
     px(x-2,yy-36,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-34,3,2,ic); }
 }
+/* ===== BUILD 410-B: World Event 연결 훅 (뼈대만) ==========================
+   World Event는 일반 prop이 아니라 세계에서 한 번 발생하는 화면 전체 사건이다.
+   이 PR은 받을 수 있는 인터페이스만 둔다. 실제 실루엣/사운드는 410-C+.
+   구조는 Authority가 보내는 ActiveWorldEvent를 그대로 받도록 열어둔다. */
+const WorldEventPlayer = {
+  active: null,        // ActiveWorldEvent | null
+  start(eventEnvelope){ this.active = eventEnvelope || null; /* TODO(410-C+): 연출 시작 */ },
+  step(dt){ /* renderer clock only — Authority/로컬이 만료를 관리. 로컬 두뇌 실행 금지 */
+    // ActiveWorldEvent.startedAt/endsAt는 Unix epoch ms (Authority 시계). Date.now()로 비교.
+    if(this.active && this.active.endsAt && Date.now()>=this.active.endsAt) this.stop();
+  },
+  render(ctx){
+    if(!this.active) return;
+    // TODO(410-C+): 실제 화면 전체 연출. 지금은 debug placeholder만.
+    if(SANDBOX_EVENT_DEBUG){
+      ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,14);
+      ctx.fillStyle='#f4d06a'; ctx.font='bold 10px monospace';
+      ctx.fillText('WORLD EVENT READY: '+this.active.eventId, 4, 11);
+    }
+  },
+  stop(){ this.active = null; },
+};
+// Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla → debug 표시만.
+// ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
+let SANDBOX_EVENT_DEBUG=false;
+try{
+  const q=new URLSearchParams(location.search).get('event');
+  if(q && stateProvider.mode!=='live'){ SANDBOX_EVENT_DEBUG=true;
+    const now=Date.now();   // ActiveWorldEvent는 Unix epoch ms 기준
+    WorldEventPlayer.start({ eventId:q, eventInstanceId:'sandbox-'+q, startedAt:now, endsAt:0, sequence:0 });
+  }
+}catch(e){}
+
 function render(state){
   AMB.t=performance.now();   // BUILD 410-A: ambient 시간축 (state 불변, 시각 효과 전용)
   drawBackground(state.sky, state.camera);
@@ -1236,6 +1269,7 @@ function render(state){
   drawByeoli(state.byeoli);
   drawWeather(state.sky);
   drawFlash(state.flash);
+  WorldEventPlayer.step(0); WorldEventPlayer.render(ctx);   // 410-B: 훅만, 실제 연출 없음
 }
 // 빼콩이 — 흰 고양이 도트
 function drawPpae(ppae){
