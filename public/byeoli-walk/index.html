@@ -1235,7 +1235,8 @@ const WorldEventPlayer = {
   active: null,        // ActiveWorldEvent | null
   start(eventEnvelope){ this.active = eventEnvelope || null; /* TODO(410-C+): 연출 시작 */ },
   step(dt){ /* renderer clock only — Authority/로컬이 만료를 관리. 로컬 두뇌 실행 금지 */
-    if(this.active && this.active.endsAt && performance.now()>=this.active.endsAt) this.stop();
+    // ActiveWorldEvent.startedAt/endsAt는 Unix epoch ms (Authority 시계). Date.now()로 비교.
+    if(this.active && this.active.endsAt && Date.now()>=this.active.endsAt) this.stop();
   },
   render(ctx){
     if(!this.active) return;
@@ -1249,12 +1250,13 @@ const WorldEventPlayer = {
   stop(){ this.active = null; },
 };
 // Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla → debug 표시만.
-// ⚠ Production Live에서 query가 Authority보다 우선하면 안 됨 (여기선 표시 전용).
+// ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
 let SANDBOX_EVENT_DEBUG=false;
 try{
   const q=new URLSearchParams(location.search).get('event');
-  if(q){ SANDBOX_EVENT_DEBUG=true;
-    WorldEventPlayer.start({ eventId:q, eventInstanceId:'sandbox-'+q, startedAt:performance.now(), endsAt:0, sequence:0 });
+  if(q && stateProvider.mode!=='live'){ SANDBOX_EVENT_DEBUG=true;
+    const now=Date.now();   // ActiveWorldEvent는 Unix epoch ms 기준
+    WorldEventPlayer.start({ eventId:q, eventInstanceId:'sandbox-'+q, startedAt:now, endsAt:0, sequence:0 });
   }
 }catch(e){}
 
