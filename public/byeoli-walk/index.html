@@ -89,7 +89,6 @@
       <span>🌿 <b>Byeoli Walk</b></span>
       <span id="daytag" style="pointer-events:none">별이력 9075.4.11</span>
     </div>
-    <div id="stepDiag" style="position:fixed;top:2px;left:2px;z-index:9999;background:#c00;color:#fff;font:bold 12px monospace;padding:2px 6px;pointer-events:none">발소리/초: 측정중…</div>
     <div class="ctrls">
       <button id="soundBtn">🔇</button>
       <button id="speedBtn">1×</button>
@@ -344,7 +343,6 @@ const Sound={
   },
   blip(freq, dur, type='square', vol=0.12){
     if(!this.on||!this._ready()) return;   // _ready는 running일 때만 true
-    window.__blipCount=(window.__blipCount||0)+1;   // [진단] 실제 오실레이터 생성 횟수
     const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
     o.type=type; o.frequency.setValueAtTime(freq,t);
     g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
@@ -366,7 +364,15 @@ const Sound={
     click(t,0.20);           // 찰
     click(t+0.06,0.14);      // 칵
   },
-  step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리
+  _lastStepAt:0,
+  step(){
+    // 소리 겹침 방지: iOS 미디어 세션에선 발소리 꼬리가 길어져 겹치면 '따발총'처럼 들림.
+    // 실제 시각 기준 최소 0.3초 간격 보장 (걸음 간격 0.42초보다 짧아 정상 걸음은 안 막힘).
+    const now=(typeof performance!=='undefined'?performance.now():Date.now());
+    if(now-this._lastStepAt<300) return;
+    this._lastStepAt=now;
+    this.blip(120+rng()*30,0.04,'sine',0.014);   // 볼륨↓ (iOS 세션 승격으로 커진 만큼 상쇄)
+  },
   act(drive){ // record는 여기서 소리 안 냄 (startAction이 셔터음 전담)
     const f={observe:520,rest:330,wonder:700}[drive];
     if(f) this.blip(f,0.12,'triangle',0.08); },
@@ -769,14 +775,7 @@ function update(dt){
   byeoli.walkPhase+=dt*8;
   // 발소리: 실제 걸음 간격(약 0.42초마다 한 걸음). 배속 1일 때만.
   stepTimer-=dt;
-  if(stepTimer<=0){ if(speedMul===1){ Sound.step(); window.__stepDiag=(window.__stepDiag||0)+1; } stepTimer=0.42; }
-  // [임시 진단] 최근 1초 발소리 호출 횟수를 화면에 표시 (원인 확인용, 확인 후 제거)
-  window.__stepDiagT=(window.__stepDiagT||0)+dt;
-  if(window.__stepDiagT>=1){
-    const el=document.getElementById('stepDiag');
-    if(el) el.textContent='step호출:'+(window.__stepDiag||0)+' | blip재생:'+(window.__blipCount||0)+' | loop:'+(window.__loopCount||0)+' | dt='+dt.toFixed(3)+' | spd='+speedMul;
-    window.__stepDiag=0; window.__stepDiagT=0; window.__blipCount=0; window.__loopCount=0;
-  }
+  if(stepTimer<=0){ if(speedMul===1) Sound.step(); stepTimer=0.42; }
   if(byeoli.worldX>worldLen){
     byeoli.worldX=0; loopCount++;
     for(const p of props){ p.phase='unseen'; p.reactedThisPass=false; }
@@ -1113,7 +1112,6 @@ function drawPpae(ppae){
    ===================================================================== */
 const FPS=14, FRAME=1000/FPS;
 function loop(t){
-  window.__loopCount=(window.__loopCount||0)+1;   // [진단] rAF 루프 실행 횟수
   if(!lastT)lastT=t; let dt=t-lastT; lastT=t;
   if(dt>200)dt=FRAME;
   if(!paused){
