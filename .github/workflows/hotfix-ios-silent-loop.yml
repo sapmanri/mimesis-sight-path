@@ -2,7 +2,7 @@ name: Hotfix iOS silent loop audio regression
 
 on:
   push:
-    branches: [hotfix-disable-2d-footsteps]
+    branches: [hotfix-2d-ios-loop-regression]
 
 permissions:
   contents: write
@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: hotfix-disable-2d-footsteps
+          ref: hotfix-2d-ios-loop-regression
       - name: Restore proven footstep and restrict legacy media loop
         run: |
           python - <<'PY'
