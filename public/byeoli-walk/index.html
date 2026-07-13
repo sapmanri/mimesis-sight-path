@@ -50,12 +50,12 @@
     display:flex;justify-content:space-between;border-top:1px solid var(--line);}
   .stream-head .tally{color:var(--sage)}
   #stream{flex:1 1 auto;overflow:hidden;background:var(--panel);
-    padding:2px 9px 10px;display:flex;flex-direction:column-reverse;gap:0;
-    -webkit-mask-image:linear-gradient(to top,#000 62%,transparent 100%);
-            mask-image:linear-gradient(to top,#000 62%,transparent 100%);}
-  /* column-reverse: 최신이 아래. 위로 갈수록 mask로 희미 */
+    padding:2px 9px 10px;display:flex;flex-direction:column;gap:0;
+    -webkit-mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);
+            mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);}
+  /* 최신이 위(맨 앞). 아래로 갈수록 mask로 희미 */
   .msg{font-size:12px;line-height:1.5;padding:2px 0;animation:pop .25s ease;}
-  @keyframes pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @keyframes pop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
   .msg .em{margin-right:5px}
   .msg.act{color:var(--ink)}
   .msg.act .k{color:var(--sage)}
