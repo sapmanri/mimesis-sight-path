@@ -698,6 +698,60 @@ function update(dt){
 function updateDayTag(){ document.getElementById('daytag').textContent=formatByeoliDate(); }
 
 /* =====================================================================
+   BUILD 406 — State Provider (Brain ↔ Renderer 분리)
+   ---------------------------------------------------------------------
+   렌더러는 "누가 상태를 만드는지" 모른다. state 스냅샷만 그린다.
+   - LocalStateProvider(sandbox): 내부에서 로컬 두뇌(update)를 돌려 state 생성
+   - RemoteStateProvider(live)  : 나중에 /api/byeoli/state 구독 (지금은 stub)
+   Authority가 나오면 provider만 교체하면 되고 render()는 안 바뀐다.
+   ===================================================================== */
+
+// 현재 세계를 하나의 스냅샷으로 묶는다 (별이 + 빼콩이 + 날씨 전부)
+function snapshotByeoliState(){
+  return {
+    byeoli: {
+      worldX:byeoli.worldX, screenX:byeoli.screenX,
+      state:byeoli.state, actAction:byeoli.actAction, actTarget:byeoli.actTarget,
+      walkPhase:byeoli.walkPhase,
+    },
+    ppae: { x:ppae.x, y:ppae.y, facing:ppae.facing, phase:ppae.phase, mode:ppae.mode },
+    sky: { t:sky.t, phase:sky.phase, weather:sky.weather, clouds:sky.clouds,
+           cloudDark:sky.cloudDark, particles:sky.particles },
+    props, camShift: byeoli.worldX - byeoli.screenX,
+    flash: { on:flash.on, timer:flash.timer },
+    epoch: byeoliDayEpoch(),
+  };
+}
+
+const LocalStateProvider = {
+  mode:'sandbox',
+  step(dt){ update(dt); },                 // 로컬 두뇌로 세계를 진행 (전역 직접 변이)
+  getCurrentByeoliState(){ return snapshotByeoliState(); },
+  applyToWorld(){ /* sandbox는 전역이 곧 진실이므로 반영 불필요 */ },
+};
+
+// live 모드용 — 지금은 인터페이스만. Authority(/api/byeoli/state) 나오면 채운다.
+const RemoteStateProvider = {
+  mode:'live',
+  _last:null,
+  step(dt){ /* TODO(407): fetch/구독으로 _last 갱신. 지금은 no-op */ },
+  getCurrentByeoliState(){ return this._last || snapshotByeoliState(); },
+  // 서버 state를 전역 렌더 소스에 부어넣는다 → draw 함수는 한 줄도 안 바뀜
+  applyToWorld(s){
+    if(!s) return;
+    Object.assign(byeoli, s.byeoli);
+    Object.assign(ppae, s.ppae);
+    sky.t=s.sky.t; sky.phase=s.sky.phase; sky.weather=s.sky.weather;
+    sky.clouds=s.sky.clouds; sky.cloudDark=s.sky.cloudDark; sky.particles=s.sky.particles;
+    flash.on=s.flash.on; flash.timer=s.flash.timer;
+  },
+};
+
+// 현재 활성 provider (기본 sandbox). Authority 준비되면 여기만 바꾼다.
+let stateProvider = LocalStateProvider;
+
+
+/* =====================================================================
    RENDER (도트)
    ===================================================================== */
 function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,w|0,h|0); }
@@ -908,7 +962,13 @@ const FPS=14, FRAME=1000/FPS;
 function loop(t){
   if(!lastT)lastT=t; let dt=t-lastT; lastT=t;
   if(dt>200)dt=FRAME;
-  if(!paused){ acc+=dt; while(acc>=FRAME){ for(let s=0;s<speedMul;s++) update(FRAME/1000); acc-=FRAME; } render(); renderDrives(); renderTaste(); }
+  if(!paused){
+    acc+=dt;
+    while(acc>=FRAME){ for(let s=0;s<speedMul;s++) stateProvider.step(FRAME/1000); acc-=FRAME; }
+    // provider가 만든/받은 현재 상태를 렌더 소스에 반영 (sandbox는 no-op, live는 전역 주입)
+    stateProvider.applyToWorld(stateProvider.getCurrentByeoliState());
+    render(); renderDrives(); renderTaste();
+  }
   requestAnimationFrame(loop);
 }
 
