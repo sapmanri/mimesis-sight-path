@@ -288,11 +288,29 @@ const brain={
    SOUND — WebAudio 코드 생성음 (파일 없음, 8비트 톤)
    ===================================================================== */
 const Sound={
-  ctx:null, on:true,
-  init(){ if(!this.ctx){ try{ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } 
-    if(this.ctx&&this.ctx.state==='suspended') this.ctx.resume(); },
+  ctx:null, on:true, _unlocked:false,
+  init(){
+    if(!this.ctx){ try{ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    if(!this.ctx) return;
+    // ⚠ iOS 핵심: 'suspended'뿐 아니라 'interrupted' 상태도 resume해야 소리가 난다.
+    // (3D ambience.ts에서 검증된 방식 — state!=='running' 전체를 잡는다)
+    if(this.ctx.state!=='running') this.ctx.resume();
+    // iOS 잠금 해제: 무음 버퍼를 한 번 재생해야 오디오 경로가 실제로 열린다.
+    if(!this._unlocked){
+      try{
+        const buf=this.ctx.createBuffer(1,1,22050);
+        const src=this.ctx.createBufferSource();
+        src.buffer=buf; src.connect(this.ctx.destination);
+        (src.start||src.noteOn).call(src,0);
+        this._unlocked=true;
+      }catch(e){}
+    }
+    return this.ctx.state==='running';
+  },
+  // 소리 내기 직전 ctx가 running인지 보장 (iOS는 언제든 interrupted 될 수 있음)
+  _ready(){ if(!this.ctx) return false; if(this.ctx.state!=='running') this.ctx.resume(); return this.ctx.state==='running'; },
   blip(freq, dur, type='square', vol=0.12){
-    if(!this.on||!this.ctx) return;
+    if(!this.on||!this._ready()) return;
     const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
     o.type=type; o.frequency.setValueAtTime(freq,t);
     g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
@@ -300,7 +318,7 @@ const Sound={
   },
   // 카메라 셔터: 짧은 노이즈 클릭 + 고음 → "찰칵"
   shutter(){
-    if(!this.on||!this.ctx) return;
+    if(!this.on||!this._ready()) return;
     const t=this.ctx.currentTime;
     // 찰-칵: 두 번의 짧은 노이즈 클릭만 (톤음 없음 → 이벤트음처럼 안 들림)
     const click=(when,vol)=>{
@@ -321,7 +339,7 @@ const Sound={
   rain(){ /* 빗소리는 루프 노이즈로 별도 */ },
   weatherLoop:null,
   startWeather(kind){
-    if(!this.on||!this.ctx) return; this.stopWeather();
+    if(!this.on||!this._ready()) return; this.stopWeather();
     // 화이트노이즈 루프 (비=쏴, 눈=거의 무음이라 생략)
     if(kind!=='rain') return;
     const bufSize=2*this.ctx.sampleRate, buf=this.ctx.createBuffer(1,bufSize,this.ctx.sampleRate), d=buf.getChannelData(0);
@@ -363,10 +381,12 @@ const sky={
   weather:'clear',   // clear | rain | snow
   weatherTimer:12,   // 다음 날씨 전환까지(초)
   particles:[],      // 비/눈 입자
+  flybys:[],         // 하늘 이벤트 (비행기/새떼/헬기/고질라)
+  flybyTimer:6,      // 다음 이벤트까지(초)
   reset(){
     this.t=skyProgressNow(); this.cloudDark=false;
     this.weather='clear'; this.weatherTimer=8+rng()*12; this.particles=[];
-    this.clouds=[];
+    this.clouds=[]; this.flybys=[]; this.flybyTimer=5+rng()*8;
     for(let i=0;i<4;i++) this.clouds.push({x:rng()*W, y:8+rng()*30, w:20+rng()*24, spd:2+rng()*4, dark:false});
   },
   tick(dt){
@@ -398,6 +418,36 @@ const sky={
       for(let i=0;i<rate;i++) if(rng()<0.9) this.spawnDrop();
     }
     this.updateParticles(dt);
+    // 하늘 이벤트 (비행기/새/헬기/고질라)
+    this.flybyTimer-=dt;
+    if(this.flybyTimer<=0){ this.spawnFlyby(); this.flybyTimer=8+rng()*14; }
+    for(const f of this.flybys){
+      f.x+=f.vx*dt; f.phase+=dt*f.flap;
+      if(f.kind==='godzilla') f.stompT=(f.stompT||0)+dt;  // 걸음 타이밍
+    }
+    // 화면 밖으로 나간 것 제거 (방향에 따라)
+    this.flybys=this.flybys.filter(f=> f.vx<0 ? f.x>-f.w-20 : f.x<W+f.w+20 );
+  },
+  spawnFlyby(){
+    const roll=rng();
+    // 확률: 새떼 40% / 비행기 28% / 헬기 22% / 고질라 10% (고질라는 레어)
+    let kind = roll<0.40?'birds' : roll<0.68?'plane' : roll<0.90?'heli' : 'godzilla';
+    const dir = rng()<0.5?-1:1;                 // 진행 방향
+    const fromX = dir<0 ? W+30 : -30;
+    if(kind==='birds'){
+      // 새떼는 여러 마리를 살짝 흩어서
+      const n=3+((rng()*4)|0), baseY=14+rng()*26;
+      for(let i=0;i<n;i++) this.flybys.push({
+        kind:'bird', x:fromX - dir*(i*10+rng()*8), y:baseY+(rng()*10-5),
+        vx:dir*(26+rng()*10), w:6, phase:rng()*6, flap:9+rng()*4, dir });
+    } else if(kind==='plane'){
+      this.flybys.push({ kind:'plane', x:fromX, y:12+rng()*18, vx:dir*(42+rng()*14), w:22, phase:0, flap:0, dir, trail:[] });
+    } else if(kind==='heli'){
+      this.flybys.push({ kind:'heli', x:fromX, y:16+rng()*22, vx:dir*(30+rng()*10), w:16, phase:0, flap:40, dir });
+    } else {
+      // 고질라: 지평선 뒤로 큼직하게, 느리게. (희귀 이벤트)
+      this.flybys.push({ kind:'godzilla', x:fromX, y:GROUND_Y, vx:dir*(14+rng()*6), w:34, phase:0, flap:0, dir, stompT:0 });
+    }
   },
   spawnDrop(){
     const rainy=this.weather==='rain';
@@ -723,7 +773,7 @@ function snapshotByeoliState(){
     },
     ppae: { x:ppae.x, y:ppae.y, facing:ppae.facing, phase:ppae.phase, mode:ppae.mode },
     sky: { t:sky.t, phase:sky.phase, weather:sky.weather, clouds:sky.clouds,
-           cloudDark:sky.cloudDark, particles:sky.particles },
+           cloudDark:sky.cloudDark, particles:sky.particles, flybys:sky.flybys },
     props,                                // 소품 배치·type·rare·phase·variant
     camera: { camShift, worldX:byeoli.worldX, screenX:byeoli.screenX, worldLen },
     flash: { on:flash.on, timer:flash.timer },  // 카메라 플래시
@@ -799,12 +849,16 @@ function drawBackground(sky, camera){
     const col = c.dark? (isNight?'#2a2f42':'#8a8f9a') : (isNight?'#3a4560':'#f2f0e8');
     cloud(c.x, c.y, c.w, col);
   }
+  // ---- 하늘 이벤트: 비행기/새/헬기 (하늘에) ----
+  if(sky.flybys) for(const f of sky.flybys){ if(f.kind!=='godzilla') drawFlyby(f, isNight); }
 
   const cam=camera.worldX;
   // 먼 언덕 (밤엔 어둡게)
   const hillCol = shade('#b7c6ad', S.tone);
   const o1=-(cam*0.15)%180; ctx.fillStyle=hillCol;
   for(let bx=o1-180;bx<W+180;bx+=180){ hill(bx+45,GROUND_Y,90,22); hill(bx+130,GROUND_Y,64,16); }
+  // ---- 고질라 (지평선 뒤, 언덕과 나무 사이) ----
+  if(sky.flybys) for(const f of sky.flybys){ if(f.kind==='godzilla') drawFlyby(f, isNight); }
   // 중간 나무/집
   const o2=-(cam*0.4)%150;
   for(let bx=o2-150;bx<W+150;bx+=150){ tree(bx+26,GROUND_Y-2,shade('#8ba286',S.tone)); house(bx+86,GROUND_Y-2); }
@@ -822,6 +876,62 @@ function shade(hex, tone){
 function disc(cx,cy,r){ for(let y=-r;y<=r;y++){ const w=Math.sqrt(r*r-y*y)|0; ctx.fillRect((cx-w)|0,(cy+y)|0,w*2,1); } }
 function cloud(x,y,w,col){ ctx.fillStyle=col; const h=w*0.4;
   px(x,y,w,h,col); px(x+w*0.2,y-h*0.5,w*0.5,h*0.7,col); px(x+w*0.5,y-h*0.3,w*0.4,h*0.6,col); }
+
+// 하늘 이벤트 도트 렌더 (state slice f만 읽음 — 전역 참조 없음)
+function drawFlyby(f, isNight){
+  const x=Math.round(f.x), y=Math.round(f.y), d=f.dir;
+  if(f.kind==='bird'){
+    // 갈매기 — 날갯짓 V자
+    const up=Math.sin(f.phase)>0;
+    ctx.fillStyle=isNight?'#2b3550':'#404a44';
+    if(up){ px(x-2,y-1,2,1); px(x,y,1,1); px(x+1,y-1,2,1); }
+    else  { px(x-2,y,2,1); px(x,y-1,1,1); px(x+1,y,2,1); }
+  } else if(f.kind==='plane'){
+    // 비행기 — 몸통 + 꼬리 + 비행운
+    const body=isNight?'#8890a0':'#e8ebf0', wing=isNight?'#6a7284':'#c2c8d2';
+    // 진행 반대쪽으로 비행운
+    ctx.fillStyle='rgba(255,255,255,.5)';
+    for(let i=1;i<=6;i++) ctx.fillRect(x - d*(f.w*0.5 + i*4), y+1, 2, 1);
+    px(x-6,y,14,3,body);              // 몸통
+    px(x + (d>0?8:-2), y-1, 2, 2, body);  // 기수
+    px(x-1,y-3,4,3,wing);             // 수직날개
+    px(x-3,y+1,7,2,wing);             // 주날개
+  } else if(f.kind==='heli'){
+    // 헬기 — 몸통 + 회전 로터(깜빡)
+    const body=isNight?'#3a4250':'#5a6472';
+    px(x-5,y,10,4,body);              // 몸통
+    px(x + (d>0?-7:5), y+1, 2, 2, body);  // 꼬리쪽
+    px(x + (d>0?4:-6), y-1, 3, 2, body);  // 앞
+    // 꼬리붐
+    px(x - d*9, y+1, d>0?5:5, 1, body);
+    // 로터 (빠른 회전 = 가로선 깜빡)
+    ctx.fillStyle=isNight?'#6a7280':'#8a94a2';
+    const spin=Math.floor(f.phase)%2;
+    if(spin) ctx.fillRect(x-8,y-2,16,1); else ctx.fillRect(x-4,y-2,8,1);
+    ctx.fillRect(x-1,y-2,2,2);        // 로터축
+  } else if(f.kind==='godzilla'){
+    // 고질라 — 지평선 뒤로 큼직한 실루엣, 쿵쿵 걸음
+    const bob=Math.round(Math.sin(f.stompT*3)*1.5);
+    const gy=y-28-bob;                // 등 높이
+    ctx.fillStyle=isNight?'#1a2422':'#2b3a33';  // 어두운 실루엣
+    // 몸통
+    px(x-7, gy+6, 14, 20);
+    // 목/머리 (진행방향)
+    const hx = d>0 ? x+5 : x-11;
+    px(hx, gy-2, 7, 9);              // 머리
+    px(x + (d>0?2:-4), gy+2, 4, 8);  // 목
+    // 등 지느러미 (톱니)
+    for(let i=0;i<4;i++) px(x-5+i*3, gy+2+ (i%2), 2, 3);
+    // 꼬리 (반대쪽)
+    px(x - d*10, gy+16, 8, 4);
+    px(x - d*15, gy+18, 6, 3);
+    // 다리
+    px(x-5, gy+24, 4, 6+bob); px(x+2, gy+24, 4, 6-bob);
+    // 눈 (빨강, 밤엔 더 또렷)
+    ctx.fillStyle=isNight?'#ff5a4a':'#d84438';
+    px(hx + (d>0?4:1), gy+1, 1, 1);
+  }
+}
 
 // 강수 파티클 렌더
 function drawWeather(sky){
@@ -1005,8 +1115,10 @@ document.getElementById('soundBtn').onclick=e=>{
   if(!Sound.on) Sound.stopWeather();
   else if(sky.weather==='rain') Sound.startWeather('rain');
 };
-// 첫 탭/클릭에서 오디오 컨텍스트 깨우기 (브라우저 정책)
-window.addEventListener('pointerdown',()=>Sound.init(),{once:true});
+// 첫 사용자 제스처에서 오디오 잠금 해제 (iOS Safari는 touchend에서 확실히 열림).
+// once가 아니라, 실제로 unlock될 때까지 여러 제스처에서 재시도.
+function unlockAudio(){ Sound.init(); if(Sound._unlocked){ ['touchend','touchstart','pointerdown','click'].forEach(ev=>window.removeEventListener(ev,unlockAudio)); } }
+['touchend','touchstart','pointerdown','click'].forEach(ev=>window.addEventListener(ev,unlockAudio,{passive:true}));
 document.getElementById('reseedBtn').onclick=()=>{ SEED=(Math.random()*1e9)|0; boot(); };
 
 /* =====================================================================
