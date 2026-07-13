@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "validate:objects": "node scripts/validate-object-registry.mjs",
+    "build": "npm run validate:objects && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
