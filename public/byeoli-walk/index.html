@@ -344,6 +344,7 @@ const Sound={
   },
   blip(freq, dur, type='square', vol=0.12){
     if(!this.on||!this._ready()) return;   // _ready는 running일 때만 true
+    window.__blipCount=(window.__blipCount||0)+1;   // [진단] 실제 오실레이터 생성 횟수
     const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
     o.type=type; o.frequency.setValueAtTime(freq,t);
     g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
@@ -773,8 +774,8 @@ function update(dt){
   window.__stepDiagT=(window.__stepDiagT||0)+dt;
   if(window.__stepDiagT>=1){
     const el=document.getElementById('stepDiag');
-    if(el) el.textContent='발소리/초: '+(window.__stepDiag||0)+' | dt='+dt.toFixed(3)+' | spd='+speedMul;
-    window.__stepDiag=0; window.__stepDiagT=0;
+    if(el) el.textContent='step호출:'+(window.__stepDiag||0)+' | blip재생:'+(window.__blipCount||0)+' | loop:'+(window.__loopCount||0)+' | dt='+dt.toFixed(3)+' | spd='+speedMul;
+    window.__stepDiag=0; window.__stepDiagT=0; window.__blipCount=0; window.__loopCount=0;
   }
   if(byeoli.worldX>worldLen){
     byeoli.worldX=0; loopCount++;
@@ -1112,6 +1113,7 @@ function drawPpae(ppae){
    ===================================================================== */
 const FPS=14, FRAME=1000/FPS;
 function loop(t){
+  window.__loopCount=(window.__loopCount||0)+1;   // [진단] rAF 루프 실행 횟수
   if(!lastT)lastT=t; let dt=t-lastT; lastT=t;
   if(dt>200)dt=FRAME;
   if(!paused){
