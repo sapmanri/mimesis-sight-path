@@ -111,8 +111,7 @@
   <div id="stream"></div>
 </div>
 
-<script type="module">
-import { HabitEngine, HABIT_BIAS_MAX, capCombinedBias, createLocalHabitStorage } from '/byeoli-walk/brain.js';
+<script>
 /* ---- inlined catalog.mjs ---- */
 // TownObject 카탈로그 24종 (Holmes BUILD 확장 스펙)
 // stimulus/interactionTags/journalTags/rarity 제공. Brain이 Intent 결정.
@@ -238,10 +237,30 @@ function stimOf(item){
    habitBias max +0.15 · combinedBias(habit+personality) max +0.18
    Memory는 불변, Habit strength만 산책 루프 단위로 감쇠.
    ===================================================================== */
+const HABIT_BIAS_MAX=0.15, COMBINED_BIAS_MAX=0.18;
 let loopCount=0;   // 산책 루프 수 = Habit 감쇠의 시간 단위
-const habitEngine = new HabitEngine(
-  createLocalHabitStorage('mimesis.byeoli.walk.habits.v1')
-);
+const habitEngine={
+  habits:{}, typeEnc:{},
+  key(type,drive){ return type+':'+drive; },
+  repCurve(count){ return count<3?0:clamp(1-Math.exp(-(count-2)/3.2),0,1); },
+  record(type, drive, loop){
+    this.typeEnc[type]=(this.typeEnc[type]||0)+1;
+    const k=this.key(type,drive);
+    if(!this.habits[k]) this.habits[k]={type,drive,count:0,lastLoop:loop,chosen:0,prevStrength:0};
+    const h=this.habits[k]; h.count++; h.chosen++; h.lastLoop=loop;
+  },
+  strength(type, drive, loop){
+    const k=this.key(type,drive), h=this.habits[k]; if(!h) return 0;
+    const rep=this.repCurve(h.count);
+    const inactive=loop-h.lastLoop;
+    const recency=clamp(Math.exp(-inactive/4.5),0,1);
+    const typeTotal=this.typeEnc[h.type]||h.chosen;
+    const consistency=clamp(h.chosen/Math.max(typeTotal,h.chosen),0.3,1);
+    return clamp(rep*recency*consistency,0,1);
+  },
+  bias(type, drive, loop){ return this.strength(type,drive,loop)*HABIT_BIAS_MAX; },
+  reset(){ this.habits={}; this.typeEnc={}; },
+};
 
 const brain={
   drive:{observe:.30,rest:.22,record:.26,wonder:.34},
@@ -259,7 +278,7 @@ const brain={
       const cur=this.drive[d], objectStimulus=stim[d]||0;
       const habitBias = item.rare?0:habitEngine.bias(type,d,loopCount);
       const personalityBias=0;   // 405-C 자리
-      const combined=capCombinedBias(habitBias,personalityBias);
+      const combined=Math.min(habitBias+personalityBias, COMBINED_BIAS_MAX);
       const score=cur+objectStimulus+combined-this.fatigue+rand;
       if(score>bestScore){ bestScore=score; best=d;
         bestParts={cur,objectStimulus,habitBias,personalityBias,combined}; }
@@ -404,27 +423,30 @@ const sky={
     });
   },
   updateParticles(dt){
-    const bY=GROUND_Y;
-    // 별이 충돌 박스 (화면좌표)
+    const bY=GROUND_Y, GRAV=420;
     const bx=byeoli.screenX, byTop=bY-27, byBot=bY, half=7;
     for(const p of this.particles){
-      p.x+=p.vx*dt; 
-      if(p.kind==='snow'){ p.sway+=dt*3; p.x+=Math.sin(p.sway)*0.4; }
+      // 튕긴 뒤(bounce>0)에는 중력 적용 → 다시 떨어짐
+      if(p.bounce>0) p.vy += GRAV*dt;
+      p.x+=p.vx*dt;
+      if(p.kind==='snow'&&p.bounce===0){ p.sway+=dt*3; p.x+=Math.sin(p.sway)*0.4; }
       p.y+=p.vy*dt;
-      // 캐릭터 충돌 → 튕김
-      if(p.bounce<2 && p.x>bx-half && p.x<bx+half && p.y>byTop && p.y<byBot){
-        p.vy = -Math.abs(p.vy)*0.45; p.vx += (p.x<bx?-1:1)*(20+rng()*20); p.bounce++;
-        p.y=byTop;
+      // 캐릭터 충돌 → 옆/아래로 튕김 (위로 세게 X)
+      if(p.bounce<2 && p.x>bx-half && p.x<bx+half && p.y>byTop && p.y<byBot && p.vy>0){
+        p.vy = -Math.abs(p.vy)*0.28;               // 살짝만 튀어오름
+        p.vx = (p.x<bx?-1:1)*(30+rng()*30);        // 옆으로 튕겨나감
+        p.bounce++; p.life-=0.15;
       }
-      // 바닥 충돌 → 튕김
+      // 바닥 충돌 → 통통
       if(p.y>=bY){
-        if(p.bounce<1){ p.vy=-Math.abs(p.vy)*(p.kind==='rain'?0.35:0.25); p.vx*=0.5; p.bounce++; p.y=bY-1; }
-        else { p.life-=dt*3; if(p.kind==='snow') p.life-=dt*2; }
+        if(p.bounce<2 && Math.abs(p.vy)>40){
+          p.vy=-Math.abs(p.vy)*(p.kind==='rain'?0.3:0.2); p.vx*=0.4; p.bounce++; p.y=bY-1;
+        } else { p.y=bY; p.vy=0; p.vx=0; p.life-=dt*(p.kind==='rain'?4:2.5); }
       }
-      if(p.y>bY+4) p.life-=dt*4;
     }
-    this.particles=this.particles.filter(p=>p.life>0 && p.y<H+10);
-    if(this.particles.length>240) this.particles.splice(0, this.particles.length-240);
+    // 화면 위로 나가거나(안전장치) 수명 다하면 제거
+    this.particles=this.particles.filter(p=>p.life>0 && p.y<H+10 && p.y>-20);
+    if(this.particles.length>200) this.particles.splice(0, this.particles.length-200);
   }
 };
 
@@ -438,6 +460,55 @@ function buildWorld(){
 
 const byeoli={ worldX:0, screenX:90, speed:62, baseSpeed:62,
   state:'walk', actAction:null, actTarget:null, actTimer:0, walkPhase:0 };
+
+/* =====================================================================
+   빼콩이 — 흰 고양이 companion. 자유 로밍.
+   별이 근처를 앞뒤로 마구 돌아다니다, 가끔 별이를 따라 걷다가, 또 제멋대로.
+   화면좌표계에서 별이(screenX) 기준 상대 위치로 산다.
+   ===================================================================== */
+const ppae={
+  x:130, y:GROUND_Y,        // 화면좌표
+  vx:0, vy:0,
+  facing:1, phase:0,
+  mode:'roam',              // roam | follow | idle | dash
+  modeTimer:1.5,
+  targetX:130, targetY:GROUND_Y,
+  reset(){ this.x=byeoli.screenX+40; this.y=GROUND_Y; this.mode='roam'; this.modeTimer=1+rng()*2; this.pickTarget(); },
+  pickTarget(){
+    const bx=byeoli.screenX;
+    if(this.mode==='follow'){ this.targetX=bx-10-rng()*20; this.targetY=GROUND_Y; }
+    else if(this.mode==='dash'){ this.targetX=clamp(bx + (rng()<0.5?-1:1)*(50+rng()*70), 20, W-20); this.targetY=GROUND_Y; }
+    else if(this.mode==='idle'){ this.targetX=this.x; this.targetY=GROUND_Y; }
+    else { // roam: 별이 주변 아무데나 (앞뒤, 살짝 위아래=폴짝)
+      this.targetX=clamp(bx + (rng()*160-80), 20, W-20);
+      this.targetY=GROUND_Y - (rng()<0.3?(8+rng()*12):0); // 가끔 폴짝
+    }
+  },
+  tick(dt){
+    this.modeTimer-=dt;
+    if(this.modeTimer<=0){
+      // 모드 전환: 고양이답게 변덕
+      const r=rng();
+      this.mode = r<0.34?'roam' : r<0.55?'follow' : r<0.72?'idle' : 'dash';
+      this.modeTimer = this.mode==='idle'?(0.6+rng()*1.4)
+                     : this.mode==='dash'?(0.3+rng()*0.4)
+                     : (0.8+rng()*1.8);
+      this.pickTarget();
+    }
+    // 목표로 이동 (dash는 빠르게)
+    const sp = this.mode==='dash'?150 : this.mode==='follow'?70 : 48;
+    const dx=this.targetX-this.x, dy=this.targetY-this.y;
+    if(Math.abs(dx)>1) this.x += Math.sign(dx)*Math.min(Math.abs(dx), sp*dt), this.facing=dx<0?-1:1;
+    // 위아래 폴짝 (부드럽게 복귀)
+    if(Math.abs(dy)>0.5) this.y += Math.sign(dy)*Math.min(Math.abs(dy), 60*dt);
+    else this.y += (GROUND_Y-this.y)*Math.min(1,dt*6);
+    // 목표 도달하면 roam은 새 목표
+    if(this.mode==='roam' && Math.abs(dx)<3 && rng()<0.04) this.pickTarget();
+    // 별이한테서 너무 멀어지면 따라오기
+    if(Math.abs(this.x-byeoli.screenX)>150){ this.mode='follow'; this.pickTarget(); }
+    this.phase+=dt*(this.mode==='dash'?16:8);
+  }
+};
 
 const SEEN_D=190, INTEREST_D=110, ENCOUNTER_D=42;
 let currentTarget=null, lastWinDrive=null;
@@ -583,19 +654,27 @@ const tasteListEl=document.getElementById('tasteList');
 const tasteHintEl=document.getElementById('tasteHint');
 const prevStrength={};   // 감쇠 방향 감지용
 function renderTaste(){
-  const rows=habitEngine.list(loopCount).filter(r=>r.strength>=0.02);
+  // 모든 habit의 현재 strength 계산 → 상위 4개
+  const rows=[];
+  for(const k in habitEngine.habits){
+    const h=habitEngine.habits[k];
+    const s=habitEngine.strength(h.type,h.drive,loopCount);
+    if(s<0.02) continue;
+    rows.push({k,h,s,bias:s*HABIT_BIAS_MAX,inactive:loopCount-h.lastLoop});
+  }
+  rows.sort((a,b)=>b.s-a.s);
   const top=rows.slice(0,4);
   if(top.length===0){ tasteHintEl.textContent='— 아직 없음'; tasteListEl.innerHTML=''; return; }
   tasteHintEl.textContent = `취향 ${rows.length}개 형성 중`;
   tasteListEl.innerHTML = top.map(r=>{
-    const def=CATALOG[r.targetType]||RARE[r.targetType]||{emoji:'·',ko:r.targetType};
-    const decaying = (prevStrength[r.key]!==undefined && r.strength < prevStrength[r.key]-0.001);
-    prevStrength[r.key]=r.strength;
-    const meta = r.inactiveLoops===0 ? `count ${r.count} · 방금`
-      : `count ${r.count} · ${r.inactiveLoops}루프 전${decaying?' · 옅어지는 중':''}`;
+    const def=CATALOG[r.h.type]||RARE[r.h.type]||{emoji:'·',ko:r.h.type};
+    const decaying = (prevStrength[r.k]!==undefined && r.s < prevStrength[r.k]-0.001);
+    prevStrength[r.k]=r.s;
+    const meta = r.inactive===0 ? `count ${r.h.count} · 방금`
+      : `count ${r.h.count} · ${r.inactive}루프 전${decaying?' · 옅어지는 중':''}`;
     return `<div class="trow">
-      <span class="tk"><span class="em">${def.emoji}</span>${def.ko} <span style="color:var(--dim)">${actKo(r.drive)}</span></span>
-      <span class="ttrack"><span class="tfill ${decaying?'decay':''}" style="width:${(r.strength*100)|0}%"></span></span>
+      <span class="tk"><span class="em">${def.emoji}</span>${def.ko} <span style="color:var(--dim)">${actKo(r.h.drive)}</span></span>
+      <span class="ttrack"><span class="tfill ${decaying?'decay':''}" style="width:${(r.s*100)|0}%"></span></span>
       <span class="tb">+${r.bias.toFixed(3)}</span>
       <span class="tmeta">${meta}</span>
     </div>`;
@@ -605,9 +684,10 @@ function renderTaste(){
 /* =====================================================================
    UPDATE
    ===================================================================== */
-let paused=false,lastT=0,acc=0,speedMul=1;
+let paused=false,lastT=0,acc=0,speedMul=1,stepTimer=0.42;
 function update(dt){
   sky.tick(dt);            // 시간·날씨는 별이가 뭘 하든 흐른다
+  ppae.tick(dt);           // 빼콩이도 항상 제멋대로 돌아다닌다
   if(flash.on) flash.timer-=dt, flash.timer<=0 && (flash.on=false);
   if(byeoli.state==='acting'){
     byeoli.actTimer-=dt; brain.tick(dt,false);
@@ -616,11 +696,11 @@ function update(dt){
   }
   brain.tick(dt,true);
   walkClock+=dt;
-  const prevPhase=byeoli.walkPhase;
   byeoli.worldX+=byeoli.speed*dt;
   byeoli.walkPhase+=dt*8;
-  // 발소리: walkPhase가 정수 넘을 때 (한 걸음)
-  if(Math.floor(byeoli.walkPhase)>Math.floor(prevPhase) && speedMul<=2) Sound.step();
+  // 발소리: 실제 걸음 간격(약 0.42초마다 한 걸음). 배속 1일 때만.
+  stepTimer-=dt;
+  if(stepTimer<=0){ if(speedMul===1) Sound.step(); stepTimer=0.42; }
   if(byeoli.worldX>worldLen){
     byeoli.worldX=0; loopCount++;
     for(const p of props){ p.phase='unseen'; p.reactedThisPass=false; }
@@ -802,10 +882,39 @@ function render(){
   drawBackground();
   const camShift=byeoli.worldX-byeoli.screenX;
   for(const p of props){ const sx=p.x-camShift; if(sx>-30&&sx<W+30) drawProp(p,sx); }
+  drawPpae();
   drawByeoli();
   drawWeather();
   drawFlash();
 }
+// 빼콩이 — 흰 고양이 도트
+function drawPpae(){
+  const x=Math.round(ppae.x), y=Math.round(ppae.y), f=ppae.facing;
+  const bounce=ppae.mode==='dash'?Math.round(Math.sin(ppae.phase)*1.5):Math.round(Math.abs(Math.sin(ppae.phase))*1);
+  const yy=y-bounce;
+  // 그림자
+  ctx.fillStyle='rgba(20,30,24,.2)'; ctx.fillRect(x-6,y-1,13,2);
+  const c='#ecebe6', cs='#d6d4cc';   // 흰색 몸/그늘
+  // 몸
+  px(x-6,yy-6,12,6,c);
+  // 머리 (진행방향)
+  const hx = f>0 ? x+4 : x-10;
+  px(hx,yy-9,7,6,c);
+  px(hx+ (f>0?4:0),yy-11,2,3,c); px(hx+(f>0?0:4),yy-11,2,3,c); // 귀 두 개
+  // 눈
+  px(hx+(f>0?4:1),yy-7,1,1,'#8fbf6f');
+  // 꼬리 (반대쪽, 위로 살랑)
+  const tx = f>0 ? x-7 : x+6;
+  const tphase=Math.sin(ppae.phase*0.7)*2;
+  px(tx,yy-8-Math.abs(tphase),2,6,c);
+  // 다리 (움직임)
+  const legF=Math.floor(ppae.phase)%2;
+  if(ppae.mode!=='idle'){
+    px(x-4,yy,2,2,cs); px(x+3,yy,2,2,cs);
+    if(legF) px(x-5,yy,2,1,cs); else px(x+4,yy,2,1,cs);
+  } else { px(x-4,yy,2,2,cs); px(x+3,yy,2,2,cs); }
+}
+
 
 /* =====================================================================
    LOOP
@@ -836,7 +945,7 @@ function boot(){
   tally.memories=0; tally.diary=0; archive.length=0;
   seenKindsToday.clear(); currentTarget=null;
   streamEl.innerHTML='';
-  buildWorld(); sky.reset(); Sound.stopWeather(); updateDayTag(); updateTally(); fitCanvas();
+  buildWorld(); sky.reset(); ppae.reset(); Sound.stopWeather(); updateDayTag(); updateTally(); fitCanvas();
   pushMsg('day', `— 별이력 9075.4.11 · 산책 시작 (seed ${SEED}) —`, null);
 }
 document.getElementById('pauseBtn').onclick=e=>{ paused=!paused; e.target.textContent=paused?'▶':'⏸'; };
