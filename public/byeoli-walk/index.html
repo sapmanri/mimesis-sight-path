@@ -90,6 +90,7 @@
       <span id="daytag" style="pointer-events:none">별이력 9075.4.11</span>
     </div>
     <div class="ctrls">
+      <button id="soundBtn">🔇</button>
       <button id="speedBtn">1×</button>
       <button id="pauseBtn">⏸</button>
       <button id="reseedBtn">↻</button>
@@ -304,6 +305,149 @@ const brain={
 };
 
 /* =====================================================================
+   SOUND — WebAudio 코드 생성음 (파일 없음, 8비트 톤)
+   ===================================================================== */
+const Sound={
+  ctx:null, on:true,
+  init(){ if(!this.ctx){ try{ this.ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } 
+    if(this.ctx&&this.ctx.state==='suspended') this.ctx.resume(); },
+  blip(freq, dur, type='square', vol=0.12){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime, o=this.ctx.createOscillator(), g=this.ctx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t);
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t+dur);
+  },
+  // 카메라 셔터: 짧은 노이즈 클릭 + 고음 → "찰칵"
+  shutter(){
+    if(!this.on||!this.ctx) return;
+    const t=this.ctx.currentTime;
+    // 클릭(노이즈)
+    const buf=this.ctx.createBuffer(1,441,44100), d=buf.getChannelData(0);
+    for(let i=0;i<441;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/441,3);
+    const n=this.ctx.createBufferSource(); n.buffer=buf;
+    const ng=this.ctx.createGain(); ng.gain.value=0.18;
+    n.connect(ng); ng.connect(this.ctx.destination); n.start(t);
+    // 셔터 고음 틱
+    this.blip(2200,0.03,'square',0.10);
+    setTimeout(()=>this.blip(1400,0.04,'square',0.08),40);
+  },
+  step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리
+  act(drive){ const f={observe:520,rest:330,record:0,wonder:700}[drive];
+    if(drive==='record'){ this.shutter(); } else if(f) this.blip(f,0.12,'triangle',0.08); },
+  rain(){ /* 빗소리는 루프 노이즈로 별도 */ },
+  weatherLoop:null,
+  startWeather(kind){
+    if(!this.on||!this.ctx) return; this.stopWeather();
+    // 화이트노이즈 루프 (비=쏴, 눈=거의 무음이라 생략)
+    if(kind!=='rain') return;
+    const bufSize=2*this.ctx.sampleRate, buf=this.ctx.createBuffer(1,bufSize,this.ctx.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<bufSize;i++) d[i]=(Math.random()*2-1)*0.5;
+    const src=this.ctx.createBufferSource(); src.buffer=buf; src.loop=true;
+    const filt=this.ctx.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=1200;
+    const g=this.ctx.createGain(); g.gain.value=0.05;
+    src.connect(filt); filt.connect(g); g.connect(this.ctx.destination); src.start();
+    this.weatherLoop={src,g};
+  },
+  stopWeather(){ if(this.weatherLoop){ try{this.weatherLoop.src.stop();}catch(e){} this.weatherLoop=null; } },
+};
+
+/* ---- 카메라 플래시 ---- */
+const flash={ on:false, timer:0, trigger(){ this.on=true; this.timer=0.18; } };
+function drawFlash(){
+  if(!flash.on) return;
+  const a=clamp(flash.timer/0.18,0,1);
+  ctx.fillStyle=`rgba(255,255,255,${a*0.7})`;
+  ctx.fillRect(0,0,W,GROUND_Y+ (H-GROUND_Y));
+}
+
+/* =====================================================================
+   SKY & WEATHER — 임시 랜덤 순환.
+   ⚠ 시간체계(별이력)는 나중에 3D와 동기화 예정. 지금은 이 블록만 랜덤.
+   동기화 시 sky.phase / sky.t 를 외부 시계로 주입하면 됨.
+   ===================================================================== */
+const SKY_PHASES=['dawn','day','dusk','night'];
+const sky={
+  t:0,               // 0~1 하루 진행도
+  daySpeed:1/90,     // 한 '하루' = 약 90초 (배속 영향 받음)
+  phase:'day',
+  cloudDark:false,   // 먹구름 여부
+  clouds:[],
+  weather:'clear',   // clear | rain | snow
+  weatherTimer:12,   // 다음 날씨 전환까지(초)
+  particles:[],      // 비/눈 입자
+  reset(){
+    this.t=rng(); this.daySpeed=1/90; this.cloudDark=false;
+    this.weather='clear'; this.weatherTimer=8+rng()*12; this.particles=[];
+    this.clouds=[];
+    for(let i=0;i<4;i++) this.clouds.push({x:rng()*W, y:8+rng()*30, w:20+rng()*24, spd:2+rng()*4, dark:false});
+  },
+  tick(dt){
+    this.t=(this.t+this.daySpeed*dt)%1;
+    // phase 판정
+    this.phase = this.t<0.15?'dawn' : this.t<0.5?'day' : this.t<0.62?'dusk' : 'night';
+    // 구름 이동
+    for(const c of this.clouds){ c.x-=c.spd*dt; if(c.x<-c.w-10){ c.x=W+10; c.y=8+rng()*30; c.w=20+rng()*24; c.dark=this.cloudDark&&rng()<0.6; } }
+    // 날씨 전환 (랜덤)
+    this.weatherTimer-=dt;
+    if(this.weatherTimer<=0){
+      const r=rng();
+      if(this.weather==='clear'){
+        // 맑음 → 가끔 비/눈. 밤/추운 느낌이면 눈 확률 ↑ (임시로 랜덤)
+        if(r<0.28){ this.weather = rng()<0.5?'rain':'snow'; this.cloudDark = this.weather==='rain';
+                    for(const c of this.clouds) c.dark=this.cloudDark&&rng()<0.7;
+                    Sound.startWeather(this.weather); }
+        this.weatherTimer=10+rng()*14;
+      }else{
+        this.weather='clear'; this.cloudDark=false;
+        for(const c of this.clouds) c.dark=false;
+        Sound.stopWeather();
+        this.weatherTimer=12+rng()*16;
+      }
+    }
+    // 강수 입자 생성
+    if(this.weather!=='clear'){
+      const rate = this.weather==='rain'?3:1.6;
+      for(let i=0;i<rate;i++) if(rng()<0.9) this.spawnDrop();
+    }
+    this.updateParticles(dt);
+  },
+  spawnDrop(){
+    const rainy=this.weather==='rain';
+    this.particles.push({
+      x:rng()*(W+40)-20, y:-4,
+      vx: rainy? -18 : -6-rng()*6,
+      vy: rainy? 150+rng()*40 : 34+rng()*16,
+      kind: rainy?'rain':'snow', life:1, bounce:0,
+      sway: rng()*Math.PI*2,
+    });
+  },
+  updateParticles(dt){
+    const bY=GROUND_Y;
+    // 별이 충돌 박스 (화면좌표)
+    const bx=byeoli.screenX, byTop=bY-27, byBot=bY, half=7;
+    for(const p of this.particles){
+      p.x+=p.vx*dt; 
+      if(p.kind==='snow'){ p.sway+=dt*3; p.x+=Math.sin(p.sway)*0.4; }
+      p.y+=p.vy*dt;
+      // 캐릭터 충돌 → 튕김
+      if(p.bounce<2 && p.x>bx-half && p.x<bx+half && p.y>byTop && p.y<byBot){
+        p.vy = -Math.abs(p.vy)*0.45; p.vx += (p.x<bx?-1:1)*(20+rng()*20); p.bounce++;
+        p.y=byTop;
+      }
+      // 바닥 충돌 → 튕김
+      if(p.y>=bY){
+        if(p.bounce<1){ p.vy=-Math.abs(p.vy)*(p.kind==='rain'?0.35:0.25); p.vx*=0.5; p.bounce++; p.y=bY-1; }
+        else { p.life-=dt*3; if(p.kind==='snow') p.life-=dt*2; }
+      }
+      if(p.y>bY+4) p.life-=dt*4;
+    }
+    this.particles=this.particles.filter(p=>p.life>0 && p.y<H+10);
+    if(this.particles.length>240) this.particles.splice(0, this.particles.length-240);
+  }
+};
+
+/* =====================================================================
    WORLD
    ===================================================================== */
 let props=[], worldLen=1400, rareRef=null;
@@ -367,8 +511,15 @@ function updateEncounters(dt){
 function startAction(intent){
   byeoli.state='acting'; byeoli.actAction=intent.action;
   byeoli.actTarget=intent.targetId; byeoli.actTimer=intent.duration;
+  // 사운드 + 카메라
+  if(intent.action==='record'){
+    // 별이는 사진 찍는 걸 좋아한다 — 잠깐 뜸 들였다 번쩍+찰칵
+    setTimeout(()=>{ flash.trigger(); Sound.shutter(); }, 260);
+  } else {
+    Sound.act(intent.action);
+  }
 }
-const actKo=a=>({observe:'관찰',rest:'쉼',record:'기록',wonder:'궁금'}[a]||a);
+const actKo=a=>({observe:'관찰',rest:'쉼',record:'사진',wonder:'궁금'}[a]||a);
 
 /* =====================================================================
    DIARY — 채팅 시절 톤. 짧게 + 이모지.
@@ -377,7 +528,7 @@ const actKo=a=>({observe:'관찰',rest:'쉼',record:'기록',wonder:'궁금'}[a]
 const D={
   observe:['한참 봄','오래 들여다봄','가만히 봤다','눈이 갔다'],
   rest:['잠깐 앉음','쉬어감','다리 쉬었다','좀 앉았다'],
-  record:['한 장 찍음','남겨둠','적어둠','찰칵'],
+  record:['찰칵 📸','한 장 찍음','사진에 담음','번쩍, 찍었다','이건 남겨야 해'],
   wonder:['뭐지 싶었다','궁금','신기하다','어디서 왔지'],
 };
 function pickA(a){ return a[(rng()*a.length)|0]; }
@@ -483,6 +634,8 @@ function renderTaste(){
    ===================================================================== */
 let paused=false,lastT=0,acc=0,speedMul=1;
 function update(dt){
+  sky.tick(dt);            // 시간·날씨는 별이가 뭘 하든 흐른다
+  if(flash.on) flash.timer-=dt, flash.timer<=0 && (flash.on=false);
   if(byeoli.state==='acting'){
     byeoli.actTimer-=dt; brain.tick(dt,false);
     if(byeoli.actTimer<=0){ byeoli.state='walk'; byeoli.actAction=null; }
@@ -490,8 +643,11 @@ function update(dt){
   }
   brain.tick(dt,true);
   walkClock+=dt;
+  const prevPhase=byeoli.walkPhase;
   byeoli.worldX+=byeoli.speed*dt;
   byeoli.walkPhase+=dt*8;
+  // 발소리: walkPhase가 정수 넘을 때 (한 걸음)
+  if(Math.floor(byeoli.walkPhase)>Math.floor(prevPhase) && speedMul<=2) Sound.step();
   if(byeoli.worldX>worldLen){
     byeoli.worldX=0; loopCount++;
     for(const p of props){ p.phase='unseen'; p.reactedThisPass=false; }
@@ -507,21 +663,83 @@ function updateDayTag(){ document.getElementById('daytag').textContent=`별이�
    RENDER (도트)
    ===================================================================== */
 function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,w|0,h|0); }
+// 시간대별 하늘 팔레트 (위→아래 4밴드) + 지상 톤 배율
+const SKY_COLORS={
+  dawn:  { bands:['#e9c9a8','#e4c2b0','#dcc6c0','#d2cfc4'], sun:'#f3d19a', tone:0.86 },
+  day:   { bands:['#cfe0d8','#d7e1cf','#dfe7d8','#e4ebdd'], sun:'#fbf3d0', tone:1.0 },
+  dusk:  { bands:['#3f4a6a','#7a5f78','#c47a6a','#e0a06a'], sun:'#f0a45a', tone:0.72 },
+  night: { bands:['#0e1526','#141d33','#1c2740','#26324d'], sun:'#e8ecff', tone:0.5 },
+};
 function drawBackground(){
-  const sky=['#e4ebdd','#dfe7d8','#d7e1cf','#cfdac6'];
-  for(let i=0;i<sky.length;i++) px(0,i*8,W,8,sky[i]);
-  px(0,sky.length*8,W,GROUND_Y-sky.length*8,'#cfdac6');
+  const S=SKY_COLORS[sky.phase];
+  const bandH=Math.ceil(GROUND_Y/S.bands.length);
+  for(let i=0;i<S.bands.length;i++) px(0,i*bandH,W,bandH,S.bands[i]);
+  const isNight=sky.phase==='night', isDusk=sky.phase==='dusk';
+
+  // ---- 별 (밤/노을) ----
+  if(isNight||isDusk){
+    // 결정적 별 배치 (반짝임만 시간에)
+    for(let i=0;i<40;i++){
+      const sx=((i*79+13)%W), sy=(i*53+7)%(GROUND_Y-40);
+      const tw=(Math.sin(sky.t*40+i)*0.5+0.5);
+      if(tw>0.35){ ctx.fillStyle=isNight?`rgba(255,255,255,${0.4+tw*0.6})`:`rgba(255,240,220,${tw*0.4})`;
+        ctx.fillRect(sx, sy, 1, 1); if(tw>0.8) ctx.fillRect(sx, sy, tw>0.9?2:1, 1); }
+    }
+  }
+  // ---- 해 / 달 (t로 궤도) ----
+  const arcX = 30 + sky.t*(W-60);
+  const arcY = 44 - Math.sin(sky.t*Math.PI)*30;   // 낮에 높이
+  if(sky.phase==='day'||sky.phase==='dawn'){
+    // 해
+    ctx.fillStyle=S.sun; disc(arcX, arcY, 7);
+    ctx.fillStyle='rgba(251,243,208,.35)'; disc(arcX, arcY, 10);
+  } else if(isNight){
+    // 달 (초승 표현)
+    const mx=W-40 - (sky.t-0.62)/0.38*(W-80), my=30+Math.sin((sky.t-0.62)/0.38*Math.PI)*-14+30;
+    ctx.fillStyle='#e8ecff'; disc(mx, my, 6);
+    ctx.fillStyle=S.bands[1]; disc(mx+2.5, my-1.5, 6); // 그믐 깎기
+  }
+
+  // ---- 구름 (흰/먹) ----
+  for(const c of sky.clouds){
+    const col = c.dark? (isNight?'#2a2f42':'#8a8f9a') : (isNight?'#3a4560':'#f2f0e8');
+    cloud(c.x, c.y, c.w, col);
+  }
+
   const cam=byeoli.worldX;
-  // 먼 언덕
-  const o1=-(cam*0.15)%180; ctx.fillStyle='#b7c6ad';
+  // 먼 언덕 (밤엔 어둡게)
+  const hillCol = shade('#b7c6ad', S.tone);
+  const o1=-(cam*0.15)%180; ctx.fillStyle=hillCol;
   for(let bx=o1-180;bx<W+180;bx+=180){ hill(bx+45,GROUND_Y,90,22); hill(bx+130,GROUND_Y,64,16); }
   // 중간 나무/집
   const o2=-(cam*0.4)%150;
-  for(let bx=o2-150;bx<W+150;bx+=150){ tree(bx+26,GROUND_Y-2,'#8ba286'); house(bx+86,GROUND_Y-2); }
+  for(let bx=o2-150;bx<W+150;bx+=150){ tree(bx+26,GROUND_Y-2,shade('#8ba286',S.tone)); house(bx+86,GROUND_Y-2); }
   // 땅
-  px(0,GROUND_Y,W,H-GROUND_Y,'#3f5a45'); px(0,GROUND_Y,W,2,'#4d6b52');
-  const o3=-(cam*1.0)%8; ctx.fillStyle='#365040';
-  for(let bx=o3;bx<W;bx+=8){ px(bx,GROUND_Y+7,2,2,'#365040'); px(bx+4,GROUND_Y+14,2,2,'#2f4738'); }
+  px(0,GROUND_Y,W,H-GROUND_Y,shade('#3f5a45',S.tone)); px(0,GROUND_Y,W,2,shade('#4d6b52',S.tone));
+  const o3=-(cam*1.0)%8; 
+  for(let bx=o3;bx<W;bx+=8){ px(bx,GROUND_Y+7,2,2,shade('#365040',S.tone)); px(bx+4,GROUND_Y+14,2,2,shade('#2f4738',S.tone)); }
+}
+// 색을 tone배율로 어둡게 (밤 표현)
+function shade(hex, tone){
+  if(tone>=1) return hex;
+  const r=parseInt(hex.slice(1,3),16)*tone|0, g=parseInt(hex.slice(3,5),16)*tone|0, b=parseInt(hex.slice(5,7),16)*tone|0;
+  return `rgb(${r},${g},${b})`;
+}
+function disc(cx,cy,r){ for(let y=-r;y<=r;y++){ const w=Math.sqrt(r*r-y*y)|0; ctx.fillRect((cx-w)|0,(cy+y)|0,w*2,1); } }
+function cloud(x,y,w,col){ ctx.fillStyle=col; const h=w*0.4;
+  px(x,y,w,h,col); px(x+w*0.2,y-h*0.5,w*0.5,h*0.7,col); px(x+w*0.5,y-h*0.3,w*0.4,h*0.6,col); }
+
+// 강수 파티클 렌더
+function drawWeather(){
+  for(const p of sky.particles){
+    if(p.kind==='rain'){
+      ctx.fillStyle=`rgba(160,190,210,${0.5*p.life})`;
+      ctx.fillRect(p.x|0, p.y|0, 1, p.bounce?1:3);
+    } else {
+      ctx.fillStyle=`rgba(245,248,255,${0.85*p.life})`;
+      ctx.fillRect(p.x|0, p.y|0, 2, 2);
+    }
+  }
 }
 function hill(cx,by,w,h){ for(let i=0;i<h;i++){const ww=w*(i/h); ctx.fillRect((cx-ww/2)|0,(by-h+i)|0,ww|0,1);} }
 function tree(x,by,c){ px(x-1,by-11,2,11,'#5c4a38'); ctx.fillStyle=c; px(x-6,by-20,13,8,c); px(x-4,by-25,9,6,c); }
@@ -591,7 +809,13 @@ function drawByeoli(){
     if(legF)px(x-4,yy-1,3,1,leg); else px(x+2,yy-1,3,1,leg); }
   else { px(x-3,yy-6,3,6,leg); px(x+1,yy-6,3,6,leg); }
   px(x-5,yy-18,11,12,cloth); px(x-5,yy-18,11,2,cloth2);
-  if(acting&&byeoli.actAction==='record'){ px(x+5,yy-16,3,5,cloth); px(x+7,yy-18,3,3,'#222'); }
+  if(acting&&byeoli.actAction==='record'){
+    // 카메라를 두 손으로 얼굴 앞에 들기
+    px(x+3,yy-20,7,5,'#2b2b2b');          // 카메라 몸체
+    px(x+9,yy-19,2,3,'#4a4a4a');          // 렌즈
+    px(x+4,yy-21,3,2,'#555');             // 상단
+    px(x-3,yy-17,4,3,cloth); px(x+3,yy-17,4,3,cloth); // 양팔
+  }
   else if(acting&&byeoli.actAction==='wonder'){ px(x+5,yy-21,3,6,cloth); px(x+7,yy-24,2,2,'#f4d06a'); }
   else if(acting&&byeoli.actAction==='rest'){ px(x-5,yy-13,11,7,cloth); }
   else { px(x-7,yy-17,3,7,cloth); px(x+5,yy-17,3,7,cloth); }
@@ -606,6 +830,8 @@ function render(){
   const camShift=byeoli.worldX-byeoli.screenX;
   for(const p of props){ const sx=p.x-camShift; if(sx>-30&&sx<W+30) drawProp(p,sx); }
   drawByeoli();
+  drawWeather();
+  drawFlash();
 }
 
 /* =====================================================================
@@ -637,11 +863,20 @@ function boot(){
   tally.memories=0; tally.diary=0; archive.length=0;
   seenKindsToday.clear(); currentTarget=null;
   streamEl.innerHTML='';
-  buildWorld(); updateDayTag(); updateTally(); fitCanvas();
+  buildWorld(); sky.reset(); Sound.stopWeather(); updateDayTag(); updateTally(); fitCanvas();
   pushMsg('day', `— 별이력 9075.4.11 · 산책 시작 (seed ${SEED}) —`, null);
 }
 document.getElementById('pauseBtn').onclick=e=>{ paused=!paused; e.target.textContent=paused?'▶':'⏸'; };
 document.getElementById('speedBtn').onclick=e=>{ speedMul = speedMul===1?2:speedMul===2?4:1; e.target.textContent=speedMul+'×'; };
+document.getElementById('soundBtn').onclick=e=>{
+  Sound.init();
+  Sound.on=!Sound.on;
+  e.target.textContent=Sound.on?'🔊':'🔇';
+  if(!Sound.on) Sound.stopWeather();
+  else if(sky.weather==='rain') Sound.startWeather('rain');
+};
+// 첫 탭/클릭에서 오디오 컨텍스트 깨우기 (브라우저 정책)
+window.addEventListener('pointerdown',()=>Sound.init(),{once:true});
 document.getElementById('reseedBtn').onclick=()=>{ SEED=(Math.random()*1e9)|0; boot(); };
 boot();
 requestAnimationFrame(loop);
