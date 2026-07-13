@@ -1,0 +1,38 @@
+name: Object Registry Check
+
+on:
+  pull_request:
+    paths:
+      - 'src/objects/objectRegistry.ts'
+      - 'public/byeoli-walk/index.html'
+      - 'functions/byeoli-walk/_middleware.ts'
+      - 'scripts/validate-object-registry.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/object-registry-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/objects/objectRegistry.ts'
+      - 'public/byeoli-walk/index.html'
+      - 'functions/byeoli-walk/_middleware.ts'
+      - 'scripts/validate-object-registry.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/object-registry-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run validate:objects
+      - run: npm run build
