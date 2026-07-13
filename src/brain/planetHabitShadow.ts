@@ -1,23 +1,15 @@
 import type { ByeoliDrive } from './actionIntent';
-import { HabitEngine, createLocalHabitStorage, type HabitSnapshot } from './habitEngine';
-import { worldTime } from '../scene/skyClock';
-
-const SECONDS_PER_WORLD_DAY = 86_400;
+import { type HabitSnapshot } from './habitEngine';
+import { byeoliDayEpoch } from './byeoliTime';
+import { createSharedHabitEngine } from './sharedHabit';
 
 /**
- * BUILD 405-D1: 3D Shadow Mode.
+ * BUILD 405-D1/E: 3D Shadow Mode on the shared Byeoli timeline.
  *
- * The planet records successful object actions into the shared HabitEngine,
- * but the resulting bias is NOT fed back into action selection yet.
- * Replace only worldDayEpoch() when the formal Byeoli calendar is introduced.
+ * The planet records successful object actions into the same HabitEngine used by 2D.
+ * The resulting bias is still NOT fed back into 3D action selection yet.
  */
-export function worldDayEpoch(nowMs: number = Date.now()): number {
-  return Math.floor(worldTime(nowMs) / SECONDS_PER_WORLD_DAY);
-}
-
-const engine = new HabitEngine(
-  createLocalHabitStorage('mimesis.byeoli.planet.habits.v1'),
-);
+const engine = createSharedHabitEngine();
 
 export type PlanetHabitShadowResult = {
   epoch: number;
@@ -30,7 +22,7 @@ export function peekPlanetHabit(
   drive: ByeoliDrive,
   nowMs: number = Date.now(),
 ): HabitSnapshot | null {
-  return engine.snapshot(targetType, drive, worldDayEpoch(nowMs));
+  return engine.snapshot(targetType, drive, byeoliDayEpoch(nowMs));
 }
 
 export function recordPlanetHabitShadow(
@@ -38,12 +30,11 @@ export function recordPlanetHabitShadow(
   drive: ByeoliDrive,
   nowMs: number = Date.now(),
 ): PlanetHabitShadowResult {
-  const epoch = worldDayEpoch(nowMs);
+  const epoch = byeoliDayEpoch(nowMs);
   const before = engine.snapshot(targetType, drive, epoch);
   engine.record(targetType, drive, epoch);
   const after = engine.snapshot(targetType, drive, epoch);
 
-  // Shadow observability only. Never interrupt or steer the life loop.
   try {
     console.debug('[Byeoli Habit Shadow]', {
       key: `${targetType}:${drive}`,
@@ -52,6 +43,7 @@ export function recordPlanetHabitShadow(
       strength: after?.strength ?? 0,
       bias: after?.bias ?? 0,
       appliedToDecision: false,
+      sharedStorage: true,
     });
   } catch {
     // Console availability must not affect Byeoli's life.
@@ -61,5 +53,5 @@ export function recordPlanetHabitShadow(
 }
 
 export function listPlanetHabitShadow(nowMs: number = Date.now()): HabitSnapshot[] {
-  return engine.list(worldDayEpoch(nowMs));
+  return engine.list(byeoliDayEpoch(nowMs));
 }
