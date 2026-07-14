@@ -45,6 +45,10 @@ npm run deploy
 
 Durable Object는 Vite 정적 Pages 배포와 별도 Worker로 배포한다. 이후 Pages의 `/api/byeoli/*`를 이 Worker에 route하거나, 2D `RemoteStateProvider`가 Worker URL을 사용하도록 연결한다.
 
+### 최초 배포 트리거
+
+`Deploy Byeoli Authority` 워크플로우는 `authority/**` 변경이 `main`에 들어오면 실행된다. 이 문서 변경은 기존 Authority 코드를 수정하지 않고 최초 Worker 배포와 Pages 서비스 바인딩 자동화를 발화하기 위한 안전한 부트스트랩 트리거다.
+
 ## Canary 검증
 
 1. `/health`의 `sequence`가 증가하는지 확인
