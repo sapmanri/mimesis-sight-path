@@ -91,10 +91,48 @@ jobs:
           print('BYEOLI_AUTHORITY service binding configured for production and preview')
           PY
 
+      - name: Retry latest Pages production deployment with the new binding
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          deployments=$(curl --fail-with-body --silent --show-error \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/mimesis-sight-path/deployments?env=production&per_page=1" \
+            --header "Authorization: Bearer ${CF_API_TOKEN}")
+
+          deployment_id=$(python - "$deployments" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          if not data.get('success'):
+              raise SystemExit('Could not list Pages deployments: '+json.dumps(data.get('errors', data)))
+          result=data.get('result') or []
+          if not result:
+              raise SystemExit('No production Pages deployment found to retry')
+          print(result[0]['id'])
+          PY
+          )
+
+          echo "Retrying Pages production deployment ${deployment_id} after binding update"
+          retry=$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/mimesis-sight-path/deployments/${deployment_id}/retry" \
+            --header "Authorization: Bearer ${CF_API_TOKEN}" \
+            --header "Content-Type: application/json")
+
+          python - "$retry" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          if not data.get('success'):
+              raise SystemExit('Pages deployment retry failed: '+json.dumps(data.get('errors', data)))
+          result=data.get('result') or {}
+          print('Pages redeployment started:', result.get('id', 'unknown'))
+          PY
+
       - name: Verify public Authority endpoints
         run: |
           set -euo pipefail
-          for i in $(seq 1 20); do
+          for i in $(seq 1 40); do
             state_code=$(curl -sS -o /tmp/state.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/byeoli/state || true)
             health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/byeoli/health || true)
             if [ "$state_code" = "200" ] && [ "$health_code" = "200" ]; then
