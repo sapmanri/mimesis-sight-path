@@ -93,6 +93,7 @@ const script = String.raw`(function(){
     visual=clone(authority);
     if(!visual) return;
     visual.flash={on:false,timer:0};
+    visual.byeoli.speed=62;
     if(visual.byeoli.state==='acting'&&Number(visual.byeoli.actTimer||0)>0){
       const now=performance.now();
       visualAction={
@@ -110,8 +111,11 @@ const script = String.raw`(function(){
     if(!visual){ seedVisual(authority); return; }
     const worldLen=Number(authority.camera&&authority.camera.worldLen||visual.camera.worldLen||4000);
     const delta=wrapDelta(Number(visual.byeoli.worldX||0),Number(authority.byeoli.worldX||0),worldLen);
-    // Authority는 방향을 잡고 Viewer는 연속 재생한다. 큰 순간이동도 한 프레임에 붙잡지 않는다.
-    visual.byeoli.worldX=wrap(Number(visual.byeoli.worldX||0)+delta*.12,worldLen);
+    // 싱글과 같은 속도를 우선하고, 큰 위치 이탈만 부드럽게 교정한다.
+    if(Math.abs(delta)>180){
+      visual.byeoli.worldX=wrap(Number(visual.byeoli.worldX||0)+delta*.18,worldLen);
+    }
+    visual.byeoli.speed=62;
     visual.camera.worldLen=worldLen;
     visual.props=clone(authority.props)||visual.props;
     visual.telemetry=clone(authority.telemetry)||visual.telemetry;
@@ -157,6 +161,10 @@ const script = String.raw`(function(){
     return state;
   };
 
+  // 기존 1초 poll을 250ms로 교체해 행동·찰칵 시작 지연을 줄인다.
+  if(provider._timer){ clearInterval(provider._timer); provider._timer=null; }
+  provider._timer=setInterval(function(){ provider.poll(); },250);
+
   provider.step=function(dt){
     if(!visual) return;
     dt=Math.max(0,Math.min(Number(dt)||0,.12));
@@ -179,7 +187,7 @@ const script = String.raw`(function(){
 
     if(visual.byeoli.state==='walk'){
       const worldLen=Number(visual.camera.worldLen||4000);
-      visual.byeoli.worldX=wrap(Number(visual.byeoli.worldX||0)+Number(visual.byeoli.speed||18)*dt,worldLen);
+      visual.byeoli.worldX=wrap(Number(visual.byeoli.worldX||0)+62*dt,worldLen);
       visual.byeoli.walkPhase=Number(visual.byeoli.walkPhase||0)+dt*8;
       if(now-lastFootstepAt>=330){
         lastFootstepAt=now;
@@ -190,7 +198,7 @@ const script = String.raw`(function(){
     visual.camera.worldX=visual.byeoli.worldX;
     visual.camera.camShift=visual.byeoli.worldX-visual.byeoli.screenX;
 
-    visual.ppae.phase=Number(visual.ppae.phase||0)+dt*5;
+    visual.ppae.phase=Number(visual.ppae.phase||0)+dt*8;
     visual.ppae.x=Number(visual.ppae.x||0)+Number(visual.ppae.facing||1)*48*dt;
     if(visual.ppae.x>280){ visual.ppae.x=280; visual.ppae.facing=-1; }
     if(visual.ppae.x<110){ visual.ppae.x=110; visual.ppae.facing=1; }
