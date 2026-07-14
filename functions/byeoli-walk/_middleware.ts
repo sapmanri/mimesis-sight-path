@@ -90,7 +90,7 @@ function buildTown(rng){
     "  step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리: BUILD 405+ 검증 리듬\n",
   );
 
-  // BUILD 410-F — resilient live provider + screen wake lock.
+  // BUILD 410-F/K1 — resilient live provider + Wake Lock + snapshot interpolation.
   html = html.replace(
     /\/\/ live 모드용 — 지금은 인터페이스만\.[\s\S]*?let stateProvider = LocalStateProvider;/,
     `// live 모드용 — Single Byeoli Authority의 완결 snapshot만 읽는다.
@@ -142,12 +142,49 @@ const WakeLockManager = {
   async release(){ const s=this.sentinel; this.sentinel=null; if(s&&!s.released){ try{ await s.release(); }catch{} } },
 };
 
+function liveLerp(a,b,t){ return a+(b-a)*t; }
+function liveLerpWrap(a,b,t,span){
+  let d=b-a;
+  if(d>span/2)d-=span; else if(d<-span/2)d+=span;
+  let v=a+d*t;
+  while(v<0)v+=span; while(v>=span)v-=span;
+  return v;
+}
+function interpolateLiveState(a,b,t){
+  if(!a||!b) return b||a;
+  const s=structuredClone(b);
+  const worldLen=(b.camera&&b.camera.worldLen)||4000;
+  s.byeoli.worldX=liveLerpWrap(a.byeoli.worldX,b.byeoli.worldX,t,worldLen);
+  s.byeoli.walkPhase=liveLerp(a.byeoli.walkPhase,b.byeoli.walkPhase,t);
+  s.byeoli.actTimer=liveLerp(a.byeoli.actTimer||0,b.byeoli.actTimer||0,t);
+  s.ppae.x=liveLerp(a.ppae.x,b.ppae.x,t);
+  s.ppae.y=liveLerp(a.ppae.y,b.ppae.y,t);
+  s.ppae.phase=liveLerp(a.ppae.phase,b.ppae.phase,t);
+  s.sky.t=liveLerpWrap(a.sky.t,b.sky.t,t,1);
+  if(Array.isArray(a.sky.clouds)&&Array.isArray(b.sky.clouds)){
+    s.sky.clouds=b.sky.clouds.map((c,i)=>{
+      const p=a.sky.clouds[i];
+      return p?{...c,x:liveLerp(p.x,c.x,t),y:liveLerp(p.y,c.y,t)}:c;
+    });
+  }
+  s.camera.worldX=s.byeoli.worldX;
+  s.camera.camShift=s.byeoli.worldX-s.byeoli.screenX;
+  s.updatedAt=liveLerp(a.updatedAt||0,b.updatedAt||0,t);
+  return s;
+}
+
 const RemoteStateProvider = {
   mode:'live',
-  _last:null, _timer:null, _inFlight:false, _epoch:null, _sequence:-1,
+  _last:null, _from:null, _to:null, _receivedAt:0, _blendMs:1000,
+  _timer:null, _inFlight:false, _epoch:null, _sequence:-1,
   _error:null, _errorCode:null, _stale:true, _lastSeenAt:0,
   step(dt){},
-  getCurrentByeoliState(){ return this._last; },
+  getCurrentByeoliState(){
+    if(!this._to) return this._last;
+    if(!this._from) return this._to;
+    const t=Math.max(0,Math.min(1,(performance.now()-this._receivedAt)/this._blendMs));
+    return interpolateLiveState(this._from,this._to,t);
+  },
   status(){ return { error:this._error, errorCode:this._errorCode, stale:this._stale, sequence:this._sequence, epoch:this._epoch }; },
   validate(v){
     if(!v||typeof v!=='object') throw new Error('invalid_envelope');
@@ -168,7 +205,12 @@ const RemoteStateProvider = {
       if(!r.ok){ const code=body&&body.error?body.error:('authority_http_'+r.status); throw new Error(code); }
       const v=this.validate(body);
       if(this._epoch===v.instanceEpoch && v.sequence<=this._sequence) return;
-      this._epoch=v.instanceEpoch; this._sequence=v.sequence; this._last=v.state;
+      const current=this.getCurrentByeoliState();
+      const previousUpdatedAt=this._to&&this._to.updatedAt;
+      this._epoch=v.instanceEpoch; this._sequence=v.sequence;
+      this._from=current||v.state; this._to=v.state; this._last=v.state;
+      const serverGap=previousUpdatedAt?Math.max(700,Math.min(1400,v.state.updatedAt-previousUpdatedAt)):1000;
+      this._blendMs=serverGap; this._receivedAt=performance.now();
       this._lastSeenAt=Date.now(); this._stale=false; this._error=null; this._errorCode=null;
       document.getElementById('daytag').textContent='LIVE · '+v.authorityId+' · #'+v.sequence;
       document.getElementById('tasteHint').textContent='— LIVE: Authority 읽기 전용';
