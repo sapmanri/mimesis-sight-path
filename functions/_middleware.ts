@@ -8,9 +8,13 @@ export const onRequest: PagesFunction = async (context) => {
   }
 
   let html = await response.text();
-  const tag = '<script src="/byeoli-walk/live-parity.js" defer></script>';
-  if (!html.includes(tag)) {
-    html = html.replace('</body>', `${tag}\n</body>`);
+  html = html.replace('<script src="/byeoli-walk/live-parity.js" defer></script>\n', '');
+
+  if (url.searchParams.get('mode') === 'live') {
+    const tag = '<script src="/byeoli-walk/live-sync.js" defer></script>';
+    if (!html.includes(tag)) {
+      html = html.replace('</body>', `${tag}\n</body>`);
+    }
   }
 
   const headers = new Headers(response.headers);
