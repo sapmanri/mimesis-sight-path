@@ -7,6 +7,7 @@ const script = String.raw`(function(){
   let lastEventId=null;
   let flashUntil=0;
   let lastFootstepAt=0;
+  let lastVisualStepAt=0;
   let visual=null;
   let visualAction=null;
 
@@ -89,11 +90,21 @@ const script = String.raw`(function(){
     if(event.action) startLocalAction(event);
   }
 
+  function normalizeClouds(state){
+    if(!state||!state.sky||!Array.isArray(state.sky.clouds)) return;
+    state.sky.clouds.forEach(function(cloud,index){
+      cloud.spd=Math.max(.8,Math.min(3.2,Math.abs(Number(cloud.spd)||2)));
+      cloud._liveIndex=index;
+    });
+  }
+
   function seedVisual(authority){
     visual=clone(authority);
     if(!visual) return;
     visual.flash={on:false,timer:0};
     visual.byeoli.speed=62;
+    normalizeClouds(visual);
+    lastVisualStepAt=performance.now();
     if(visual.byeoli.state==='acting'&&Number(visual.byeoli.actTimer||0)>0){
       const now=performance.now();
       visualAction={
@@ -111,7 +122,6 @@ const script = String.raw`(function(){
     if(!visual){ seedVisual(authority); return; }
     const worldLen=Number(authority.camera&&authority.camera.worldLen||visual.camera.worldLen||4000);
     const delta=wrapDelta(Number(visual.byeoli.worldX||0),Number(authority.byeoli.worldX||0),worldLen);
-    // 싱글과 같은 속도를 우선하고, 큰 위치 이탈만 부드럽게 교정한다.
     if(Math.abs(delta)>180){
       visual.byeoli.worldX=wrap(Number(visual.byeoli.worldX||0)+delta*.18,worldLen);
     }
@@ -161,14 +171,15 @@ const script = String.raw`(function(){
     return state;
   };
 
-  // 기존 1초 poll을 250ms로 교체해 행동·찰칵 시작 지연을 줄인다.
   if(provider._timer){ clearInterval(provider._timer); provider._timer=null; }
   provider._timer=setInterval(function(){ provider.poll(); },250);
 
-  provider.step=function(dt){
+  provider.step=function(){
     if(!visual) return;
-    dt=Math.max(0,Math.min(Number(dt)||0,.12));
     const now=performance.now();
+    let dt=lastVisualStepAt?(now-lastVisualStepAt)/1000:0;
+    lastVisualStepAt=now;
+    dt=Math.max(0,Math.min(dt,.5));
 
     if(visualAction){
       const left=Math.max(0,(visualAction.endsAt-now)/1000);
@@ -204,9 +215,11 @@ const script = String.raw`(function(){
     if(visual.ppae.x<110){ visual.ppae.x=110; visual.ppae.facing=1; }
 
     if(visual.sky&&Array.isArray(visual.sky.clouds)){
-      visual.sky.clouds.forEach(function(cloud){
-        cloud.x=Number(cloud.x)-Number(cloud.spd||0)*dt;
-        if(cloud.x<-Number(cloud.w||0)-10) cloud.x=370;
+      visual.sky.clouds.forEach(function(cloud,index){
+        const speed=Math.max(.8,Math.min(3.2,Math.abs(Number(cloud.spd)||2)));
+        cloud.spd=speed;
+        cloud.x=Number(cloud.x)-speed*dt;
+        if(cloud.x<-Number(cloud.w||0)-20) cloud.x=410+index*65;
       });
     }
   };
