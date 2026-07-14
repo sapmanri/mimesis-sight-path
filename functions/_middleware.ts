@@ -11,6 +11,13 @@ export const onRequest: PagesFunction = async (context) => {
   html = html.replace('<script src="/byeoli-walk/live-parity.js" defer></script>\n', '');
 
   if (url.searchParams.get('mode') === 'live') {
+    // Live keeps the exact single-player runtime and renderer.
+    // Authority data is read only by the background sync script below.
+    html = html.replace(
+      'let stateProvider = LIVE_MODE ? RemoteStateProvider : LocalStateProvider;',
+      'let stateProvider = LocalStateProvider;',
+    );
+
     const tag = '<script src="/byeoli-walk/live-sync.js" defer></script>';
     if (!html.includes(tag)) {
       html = html.replace('</body>', `${tag}\n</body>`);
