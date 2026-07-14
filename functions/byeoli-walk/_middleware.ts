@@ -8,8 +8,6 @@ export const onRequest: PagesFunction = async (context) => {
   let html = await response.text();
 
   // BUILD 408-A — one object identity source.
-  // The static catalog remains an offline fallback, but every deployed 2D page receives
-  // catalog/variants/rare/spawn plan generated from src/objects/objectRegistry.ts.
   const registryErrors = validateObjectRegistry();
   if (registryErrors.length) {
     return new Response(`Object registry invalid:\n${registryErrors.join('\n')}`, { status: 500 });
@@ -21,9 +19,6 @@ export const onRequest: PagesFunction = async (context) => {
   html = html.replace(/const PLAN = \{[\s\S]*?\n\};\n\nfunction buildTown/, `const PLAN = ${JSON.stringify(twoD.plan)};\n\nfunction buildTown`);
 
   // BUILD 409-E — category-balanced, weighted subset per walk.
-  // Before this, every PLAN entry was expanded into every town, so high weights such as
-  // flower:6 or bicycle:3 created visible repetition and the 100 new objects made each
-  // world unnecessarily long. A town now draws a unique weighted subset from each category.
   html = html.replace(
     /function buildTown\(rng\)\{[\s\S]*?return \{ items, worldLen:x\+200, rareItem \};\n\}/,
     `const SPAWN_BUDGET = { nature:22, thing:20, animal:12, rest:8 };
@@ -56,7 +51,6 @@ function buildTown(rng){
   for(const cat of ['nature','thing','animal','rest']){
     pool.push(...pickWeightedUnique(CATS[cat]??[],SPAWN_BUDGET[cat]??0,rng));
   }
-  // Category quotas are fixed, but the final route order remains different for every seed.
   for(let i=pool.length-1;i>0;i--){ const j=(rng()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
 
   let x=150, idx=0;
@@ -74,7 +68,6 @@ function buildTown(rng){
     });
     idx++;
   }
-  // 희귀 이벤트: 5% 확률로 1개 삽입
   let rareItem=null;
   if(rng()<0.05){
     const keys=Object.keys(RARE); const rk=keys[(rng()*keys.length)|0];
@@ -87,67 +80,111 @@ function buildTown(rng){
 }`,
   );
 
-  // iOS audio unlock patch introduced a tiny silent WAV loop on every platform.
-  // Some browsers emit a click at each loop boundary, which sounds exactly like
-  // the old rapid-fire footstep regression. Only old iOS needs this fallback.
+  // iOS audio unlock / footstep regression fixes.
   html = html.replace(
     "if(this.on){\n      if(!this._silentEl){",
     "if(this.on && (/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)) && !navigator.audioSession){\n      if(!this._silentEl){",
   );
-
-  // Restore the previously verified BUILD 405+ footstep generator. The cadence
-  // remains controlled by the existing 0.42 second step timer.
   html = html.replace(
     /  _lastStepAt:0,[\s\S]*?  },       \/\/ 발소리: 짧은 저역 노이즈 한 번\. tone 반복\/중첩 금지\n/,
     "  step(){ this.blip(120+rng()*30,0.05,'sine',0.04); },       // 발소리: BUILD 405+ 검증 리듬\n",
   );
 
-  // BUILD 407-A3 — 2D canary live provider.
+  // BUILD 410-F — resilient live provider + screen wake lock.
   html = html.replace(
     /\/\/ live 모드용 — 지금은 인터페이스만\.[\s\S]*?let stateProvider = LocalStateProvider;/,
     `// live 모드용 — Single Byeoli Authority의 완결 snapshot만 읽는다.
-// ⚠ step()은 절대 update()/brain.decide()를 부르지 않는다.
+const LiveUi = {
+  badge:null,
+  ensure(){
+    if(this.badge) return this.badge;
+    const el=document.createElement('div');
+    el.id='liveStatusBadge';
+    el.style.cssText='position:fixed;right:8px;bottom:8px;z-index:50;padding:5px 7px;border:1px solid #4f5d4f;background:rgba(10,18,11,.88);color:#b9c7b5;font:10px ui-monospace,monospace;letter-spacing:.03em;pointer-events:none';
+    document.body.appendChild(el); this.badge=el; return el;
+  },
+  set(text,warning=false){ const el=this.ensure(); el.textContent=text; el.style.color=warning?'#e9b0a8':'#b9c7b5'; },
+  showAuthorityError(code){
+    const map={
+      authority_service_binding_missing:'LIVE 오류 · Authority 서비스 연결 없음',
+      schema_mismatch:'LIVE 오류 · 상태 형식 불일치',
+      snapshot_incomplete:'LIVE 오류 · 상태 데이터 불완전',
+    };
+    const msg=map[code]||('LIVE 연결 오류 · '+code);
+    document.getElementById('daytag').textContent=msg;
+    document.getElementById('tasteHint').textContent='— '+msg;
+  },
+};
+
+const WakeLockManager = {
+  sentinel:null, enabled:false, retryBound:false,
+  async acquire(){
+    if(!this.enabled || document.visibilityState!=='visible') return;
+    if(!('wakeLock' in navigator)){ LiveUi.set('⚠ 화면 자동 잠금 가능',true); return; }
+    try{
+      if(this.sentinel && !this.sentinel.released) return;
+      this.sentinel=await navigator.wakeLock.request('screen');
+      LiveUi.set('🔋 화면 유지 중');
+      this.sentinel.addEventListener('release',()=>{ this.sentinel=null; if(this.enabled) LiveUi.set('⚠ 화면 유지 해제됨',true); });
+    }catch(e){ LiveUi.set('⚠ 화면 자동 잠금 가능',true); }
+  },
+  start(){
+    if(this.enabled) return; this.enabled=true; this.acquire();
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') this.acquire(); });
+    window.addEventListener('pageshow',()=>this.acquire());
+    window.addEventListener('pagehide',()=>this.release());
+    if(!this.retryBound){
+      const retry=()=>this.acquire();
+      window.addEventListener('pointerdown',retry,{passive:true});
+      window.addEventListener('keydown',retry); this.retryBound=true;
+    }
+  },
+  async release(){ const s=this.sentinel; this.sentinel=null; if(s&&!s.released){ try{ await s.release(); }catch{} } },
+};
+
 const RemoteStateProvider = {
   mode:'live',
   _last:null, _timer:null, _inFlight:false, _epoch:null, _sequence:-1,
-  _error:null, _stale:true, _lastSeenAt:0,
-  step(dt){ /* renderer clock only — authority가 세계를 진행한다 */ },
+  _error:null, _errorCode:null, _stale:true, _lastSeenAt:0,
+  step(dt){},
   getCurrentByeoliState(){ return this._last; },
-  status(){ return { error:this._error, stale:this._stale, sequence:this._sequence, epoch:this._epoch }; },
+  status(){ return { error:this._error, errorCode:this._errorCode, stale:this._stale, sequence:this._sequence, epoch:this._epoch }; },
   validate(v){
-    if(!v||typeof v!=='object') throw new Error('invalid envelope');
-    if(v.schemaVersion!==1) throw new Error('schema mismatch');
-    if(typeof v.authorityId!=='string'||!v.authorityId) throw new Error('authority missing');
-    if(!Number.isSafeInteger(v.instanceEpoch)||!Number.isSafeInteger(v.sequence)) throw new Error('clock invalid');
-    if(!v.state||typeof v.state!=='object') throw new Error('state missing');
+    if(!v||typeof v!=='object') throw new Error('invalid_envelope');
+    if(v.schemaVersion!==1) throw new Error('schema_mismatch');
+    if(typeof v.authorityId!=='string'||!v.authorityId) throw new Error('authority_missing');
+    if(!Number.isSafeInteger(v.instanceEpoch)||!Number.isSafeInteger(v.sequence)) throw new Error('clock_invalid');
+    if(!v.state||typeof v.state!=='object') throw new Error('state_missing');
     const s=v.state;
-    if(!s.byeoli||!s.ppae||!s.sky||!s.camera||!Array.isArray(s.props)) throw new Error('snapshot incomplete');
+    if(!s.byeoli||!s.ppae||!s.sky||!s.camera||!Array.isArray(s.props)) throw new Error('snapshot_incomplete');
     return v;
   },
   async poll(){
-    if(this._inFlight) return;
-    this._inFlight=true;
+    if(this._inFlight) return; this._inFlight=true;
     try{
       const r=await fetch('/api/byeoli/state',{cache:'no-store',headers:{accept:'application/json'}});
-      if(!r.ok) throw new Error('authority '+r.status);
-      const v=this.validate(await r.json());
+      let body=null;
+      try{ body=await r.json(); }catch{}
+      if(!r.ok){ const code=body&&body.error?body.error:('authority_http_'+r.status); throw new Error(code); }
+      const v=this.validate(body);
       if(this._epoch===v.instanceEpoch && v.sequence<=this._sequence) return;
       this._epoch=v.instanceEpoch; this._sequence=v.sequence; this._last=v.state;
-      this._lastSeenAt=Date.now(); this._stale=false; this._error=null;
+      this._lastSeenAt=Date.now(); this._stale=false; this._error=null; this._errorCode=null;
       document.getElementById('daytag').textContent='LIVE · '+v.authorityId+' · #'+v.sequence;
+      document.getElementById('tasteHint').textContent='— LIVE: Authority 읽기 전용';
     }catch(e){
-      this._error=e instanceof Error?e.message:String(e);
+      this._error=e instanceof Error?e.message:String(e); this._errorCode=this._error;
       this._stale=!this._lastSeenAt||Date.now()-this._lastSeenAt>5000;
-      document.getElementById('daytag').textContent=this._stale?'LIVE · 연결 대기':'LIVE · 재연결 중';
+      if(this._last){
+        document.getElementById('daytag').textContent='LIVE · 마지막 화면 유지 · 재연결 중';
+      }else{
+        LiveUi.showAuthorityError(this._errorCode||'unknown');
+      }
     }finally{ this._inFlight=false; }
   },
   start(){
-    if(this._timer) return;
-    this.poll();
-    this._timer=setInterval(()=>{
-      this.poll();
-      if(this._lastSeenAt&&Date.now()-this._lastSeenAt>5000) this._stale=true;
-    },1000);
+    if(this._timer) return; this.poll();
+    this._timer=setInterval(()=>{ this.poll(); if(this._lastSeenAt&&Date.now()-this._lastSeenAt>5000) this._stale=true; },1000);
   },
   stop(){ if(this._timer) clearInterval(this._timer); this._timer=null; },
 };
@@ -173,6 +210,7 @@ let stateProvider = LIVE_MODE ? RemoteStateProvider : LocalStateProvider;`,
   document.getElementById('tasteHint').textContent='— LIVE: Authority 읽기 전용';
   streamEl.innerHTML='';
   pushMsg('day','— 단 하나의 별이에 연결 중 —',null);
+  WakeLockManager.start();
   RemoteStateProvider.start();
 }
 requestAnimationFrame(loop);`,
