@@ -7,6 +7,24 @@ export type ByeoliAction = 'observe' | 'rest' | 'record' | 'wonder' | null;
 export type SkyPhase = 'dawn' | 'day' | 'dusk' | 'night';
 export type WeatherKind = 'clear' | 'rain' | 'snow';
 
+export type AuthorityLiveEvent = {
+  id: string;
+  kind: 'act' | 'pass' | 'rare' | 'diary';
+  action: Exclude<ByeoliAction, null> | null;
+  targetId: string | null;
+  targetType: string | null;
+  text: string;
+  sub: string | null;
+  occurredAt: number;
+};
+
+export type AuthorityTelemetry = {
+  memories: number;
+  diary: number;
+  drives: Record<Exclude<ByeoliAction, null>, number>;
+  fatigue: number;
+};
+
 export type ByeoliRuntimeState = {
   byeoli: {
     worldX: number;
@@ -45,6 +63,8 @@ export type ByeoliRuntimeState = {
   speedMul: number;
   epoch: number;
   updatedAt: number;
+  liveEvent?: AuthorityLiveEvent | null;
+  telemetry?: AuthorityTelemetry;
 };
 
 export type AuthorityEnvelope = {
