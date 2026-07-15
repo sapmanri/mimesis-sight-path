@@ -44,8 +44,57 @@
   .fatline{padding:3px 9px 0;font-size:9px;color:var(--dim);display:flex;justify-content:space-between;background:var(--panel)}
   .fatline .fv{color:var(--petal)}
 
-  /* ---- 별이의 취향 (BUILD 405 Habit) ---- */
-  .taste{padding:5px 9px 6px;background:var(--panel);}
+  /* ---- 별의 취향 (BUILD 405 Habit) ---- */
+  .taste{padding:5px 9px 6px;background:var(--panel);cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .taste:hover .taste-more,.taste:focus-visible .taste-more{color:var(--sage)}
+  .taste:focus-visible{outline:1px solid var(--sage);outline-offset:-1px}
+  .taste-more{float:right;color:var(--dim);text-transform:none;letter-spacing:0;font-size:9px}
+
+  /* ---- BUILD 413-A: 개인 기록 시트 ---- */
+  #pr-panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:min(560px,calc(100% - 24px));max-height:min(86dvh,760px);display:flex;flex-direction:column;
+    background:#12161a;border:1px solid #2a3138;border-radius:14px;overflow:hidden;
+    box-shadow:0 18px 60px rgba(0,0,0,.55)}
+  #pr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;
+    padding:14px 14px 10px;border-bottom:1px solid #232a31}
+  #pr-title{font-size:15px;font-weight:600;color:#e8e4d8;letter-spacing:.01em}
+  #pr-sub{margin-top:3px;font-size:10px;color:var(--dim);letter-spacing:.04em}
+  #pr-code{color:var(--sage);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em}
+  #pr-copy{margin-left:6px;padding:1px 6px;font-size:9px;color:var(--dim);background:#1b2126;
+    border:1px solid #2c343b;border-radius:4px;cursor:pointer}
+  #pr-copy:active{background:#232b31}
+  #pr-close{width:28px;height:28px;flex:0 0 28px;font-size:13px;color:var(--dim);background:#1b2126;
+    border:1px solid #2c343b;border-radius:7px;cursor:pointer;line-height:1}
+  #pr-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#232a31;
+    border-bottom:1px solid #232a31}
+  #pr-stats .s{background:#12161a;padding:8px 6px;text-align:center}
+  #pr-stats .sv{font-size:14px;font-weight:600;color:#e8e4d8}
+  #pr-stats .sl{margin-top:2px;font-size:9px;color:var(--dim);letter-spacing:.05em}
+  #pr-listwrap{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;padding:8px 10px}
+  .pr-row{padding:7px 8px;border-radius:8px;background:#151a1f;margin-bottom:5px}
+  .pr-r1{display:flex;align-items:center;gap:6px;font-size:11px;color:#dcd8cc}
+  .pr-em{font-size:13px}
+  .pr-name{font-weight:600}
+  .pr-cnt{margin-left:auto;color:var(--dim);font-size:9px}
+  .pr-acts{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px}
+  .pr-act{font-size:9px;color:var(--dim);background:#1b2127;border:1px solid #262e35;
+    border-radius:999px;padding:1px 6px}
+  .pr-act b{color:var(--sage);font-weight:600}
+  .pr-bar{margin-top:5px;height:3px;background:#222a30;border-radius:2px;overflow:hidden}
+  .pr-fill{display:block;height:100%;background:var(--sage)}
+  .pr-when{margin-top:4px;font-size:9px;color:#5d666e;letter-spacing:.02em}
+  #pr-foot{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid #232a31}
+  #pr-share{padding:7px 12px;font-size:11px;font-weight:600;color:#0d1114;background:var(--sage);
+    border:0;border-radius:8px;cursor:pointer}
+  #pr-share:disabled{opacity:.55;cursor:default}
+  #pr-note{font-size:9px;color:var(--dim)}
+  #pr-empty{padding:22px 10px;text-align:center;font-size:11px;color:var(--dim);line-height:1.7}
+  @media(max-width:480px){
+    #pr-panel{width:100%;max-height:92dvh;left:0;top:auto;bottom:0;transform:none;
+      border-radius:14px 14px 0 0;border-bottom:0;
+      padding-bottom:env(safe-area-inset-bottom,0)}
+  }
   .taste-head{font-size:9px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:4px;
     display:flex;justify-content:space-between}
   .taste-head #tasteHint{color:var(--sage);text-transform:none;letter-spacing:0}
@@ -99,16 +148,38 @@
 
   <div class="drives" id="driveBars"></div>
   <div class="fatline"><span>피로</span><span class="fv" id="fatVal">0.05</span></div>
-  <div class="taste" id="taste">
-    <div class="taste-head">별이의 취향 <span id="tasteHint">— 아직 없음</span></div>
+  <div class="taste" id="taste" role="button" tabindex="0" aria-haspopup="dialog"
+       title="별과 함께 발견한 것들 열기">
+    <div class="taste-head">별의 취향 <span id="tasteHint">— 아직 없음</span>
+      <span class="taste-more" id="tasteMore">전체 보기 ›</span></div>
     <div id="tasteList"></div>
   </div>
 
   <div class="stream-head">
-    <span>별이의 산책</span>
+    <span>별의 산책</span>
     <span class="tally" id="tally">기억 0 · 일기 0</span>
   </div>
   <div id="stream"></div>
+</div>
+
+<!-- BUILD 413-A: 별과 함께 발견한 것들 (개인 기록 시트)
+     z-index는 World Event Stage(999999)보다 낮다 — 이벤트가 항상 우선. -->
+<div id="pr-sheet" style="display:none;position:fixed;inset:0;z-index:99000;background:rgba(6,8,10,.62);backdrop-filter:blur(2px)">
+  <div id="pr-panel" role="dialog" aria-modal="true" aria-label="별과 함께 발견한 것들">
+    <div id="pr-head">
+      <div>
+        <div id="pr-title">별과 함께 발견한 것들</div>
+        <div id="pr-sub">Byeol · <span id="pr-code">—</span> <button id="pr-copy" type="button">복사</button></div>
+      </div>
+      <button id="pr-close" type="button" aria-label="닫기">✕</button>
+    </div>
+    <div id="pr-stats"></div>
+    <div id="pr-listwrap"><div id="pr-list"></div></div>
+    <div id="pr-foot">
+      <button id="pr-share" type="button">공유카드 만들기</button>
+      <span id="pr-note"></span>
+    </div>
+  </div>
 </div>
 
 <!-- BUILD 410-C2: Full Page World Event Stage (평소 display:none) -->
@@ -250,6 +321,81 @@ let loopCount=0;   // 2D 산책 연출용 루프 수(취향 시간과 분리)
 const habitEpoch=()=>byeoliDayEpoch();
 const habitEngine=createSharedHabitEngine(habitEpoch());
 
+/* =====================================================================
+   BUILD 413-A — 개인 관찰자 프로필 (Profile)
+   이 브라우저의 관찰자만의 기록. Authority 전체 telemetry와 절대 섞지 않는다.
+   habitEngine(strength/bias)은 그대로 두고, Profile은 habit이 갖고 있지 않은
+   "행동별 횟수 · 처음/마지막 만난 실제 시각 · 누적 관찰시간 · tally"만 보강한다.
+   지금은 localStorage에 저장하지만, 이후 서버 저장으로 옮길 수 있도록
+   Profile 객체 하나로 분리해 둔다 (로그인/복구 서버는 이 단계에서 만들지 않음).
+   ===================================================================== */
+const PROFILE_KEY='mimesis.byeoli.profile.v1';
+const Profile={
+  data:null, _sessionStart:Date.now(), _lastFlush:Date.now(),
+  _newCode(){
+    const A='ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // 헷갈리는 I,L,O,0,1 제외
+    const blk=n=>{ let s=''; for(let i=0;i<n;i++) s+=A[(Math.random()*A.length)|0]; return s; };
+    return 'BYL-'+blk(4)+'-'+blk(4);
+  },
+  _empty(){
+    const now=Date.now();
+    return { version:1, observerId:this._newCode(), createdAt:now,
+      memoryCount:0, diaryCount:0, tastes:{},
+      firstSeenAt:now, lastSeenAt:now, totalObservedMs:0, passCount:0 };
+  },
+  load(){
+    let d=null;
+    try{ const raw=localStorage.getItem(PROFILE_KEY); if(raw){ const p=JSON.parse(raw); if(p&&p.version===1&&p.observerId) d=p; } }catch(e){}
+    if(!d) d=this._empty();                       // 첫 접속 → 코드 생성 / 있으면 재사용
+    d.tastes=d.tastes||{}; d.lastSeenAt=Date.now();
+    this.data=d; this._sessionStart=Date.now(); this._lastFlush=Date.now();
+    this.save(); return d;
+  },
+  save(){ try{ localStorage.setItem(PROFILE_KEY, JSON.stringify(this.data)); }catch(e){} },
+  // 기록은 즉시 저장한다. 지연 저장은 탭을 빨리 닫거나 새로고침할 때 유실되고,
+  // 뒤늦게 도착한 타이머가 최신 상태를 덮어쓸 수 있다. localStorage 쓰기는 충분히 싸다.
+  _queueSave(){ this.save(); },
+  // 누적 관찰시간: 실제 경과 실시간만 더한다 (speedMul/배속과 무관)
+  flushTime(){
+    const now=Date.now(); const d=now-this._lastFlush; this._lastFlush=now;
+    if(d>0 && d<60000){ this.data.totalObservedMs+=d; }   // 탭 백그라운드 장시간은 버림
+    this.data.lastSeenAt=now; this._queueSave();
+  },
+  // 행동이 일어난 것만 취향에 반영 (pass는 취향 아님)
+  recordAction(targetType, drive){
+    const now=Date.now();
+    const t=this.data.tastes[targetType] || (this.data.tastes[targetType]={
+      type:targetType, acts:{observe:0,rest:0,record:0,wonder:0}, total:0,
+      firstAt:now, lastAt:now });
+    if(t.acts[drive]===undefined) t.acts[drive]=0;
+    t.acts[drive]++; t.total++; t.lastAt=now;
+    this._queueSave();
+  },
+  recordPass(){ this.data.passCount=(this.data.passCount||0)+1; this._queueSave(); },
+  bumpMemory(){ this.data.memoryCount++; this._queueSave(); },
+  bumpDiary(){ this.data.diaryCount++; this._queueSave(); },
+  tasteCount(){ return Object.keys(this.data.tastes).length; },
+  observedMs(){ return this.data.totalObservedMs + (Date.now()-this._lastFlush); },
+};
+Profile.load();
+window.addEventListener('pagehide', ()=>{ Profile.flushTime(); Profile.save(); });
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ Profile.flushTime(); Profile.save(); } });
+
+function fmtDuration(ms){
+  const s=Math.max(0,Math.floor(ms/1000)), h=Math.floor(s/3600), m=Math.floor((s%3600)/60);
+  if(h>=1) return h+'시간 '+m+'분';
+  if(m>=1) return m+'분';
+  return s+'초';
+}
+function fmtWhen(ts){
+  if(!ts) return '—';
+  const d=new Date(ts), now=new Date();
+  const p=n=>String(n).padStart(2,'0');
+  const sameDay=d.toDateString()===now.toDateString();
+  if(sameDay) return '오늘 '+p(d.getHours())+':'+p(d.getMinutes());
+  return (d.getMonth()+1)+'월 '+d.getDate()+'일 '+p(d.getHours())+':'+p(d.getMinutes());
+}
+
 const brain={
   drive:{observe:.30,rest:.22,record:.26,wonder:.34},
   fatigue:.05,
@@ -276,7 +422,9 @@ const brain={
     if(!passed){ this.drive[best]=clamp(this.drive[best]-0.45,0,1);
                  this.fatigue=clamp(this.fatigue-0.16,0,1);
                  // 취향 기록: 행동한 것만 (pass는 취향 아님)
-                 habitEngine.record(type,best,habitEpoch()); }
+                 habitEngine.record(type,best,habitEpoch());
+                 Profile.recordAction(type,best); }   // 413-A: 개인 취향(행동별 횟수·시각)
+    else { Profile.recordPass(); }                    // 413-A: 지나침은 점수 아닌 passCount만
     const intent={
       id:'intent-'+(intentCounter++),
       action: passed?'pass':best,
@@ -649,7 +797,7 @@ function updateEncounters(dt){
     } else {
       startAction(intent);
       pushMsg('act', `${def.emoji} <span class="k">${actKo(intent.action)}</span> · ${def.ko}`, `${intent.duration}초`);
-      tally.memories++; lastWinDrive=intent.action;
+      tally.memories++; Profile.bumpMemory(); lastWinDrive=intent.action;
       maybeDiary(intent, nearest, def, {passed:false, firstOfKind});
     }
     updateTally();
@@ -702,7 +850,7 @@ function diaryFor(intent, item, def, meta){
     line = `${def.emoji} ${vtxt}${def.ko} ${r}. ${tag}`;
   }
   pushMsg('diary', line, null);
-  tally.diary++;
+  tally.diary++; Profile.bumpDiary();
   archive.unshift({ line, intent, date:formatByeoliDate(), epoch:byeoliDayEpoch() }); // Life Archive(별이력 날짜 포함)
   updateTally();
 }
@@ -720,8 +868,12 @@ function pushMsg(cls, html, sub){
   streamEl.prepend(d);              // column-reverse라 prepend=아래(최신)
   while(streamEl.children.length>MAXMSG) streamEl.removeChild(streamEl.lastChild);
 }
+/* BUILD 413-A: tally는 항상 현재 관찰자의 로컬 누적값만 표시한다.
+   인자를 받지 않으므로 Authority 전체 telemetry가 이 UI를 덮어쓸 수 없다.
+   (전체 기억/일기 숫자는 사용자 화면에 절대 노출하지 않는다) */
 function updateTally(){
-  document.getElementById('tally').textContent=`기억 ${tally.memories} · 일기 ${tally.diary}`;
+  document.getElementById('tally').textContent=
+    `기억 ${Profile.data.memoryCount} · 일기 ${Profile.data.diaryCount}`;
 }
 
 /* ---- Drive 상태바 ---- */
@@ -744,7 +896,7 @@ function renderDrives(){
   fatVal.textContent=brain.fatigue.toFixed(2);
 }
 
-/* ---- 별이의 취향 (Habit strength 상위 표시) ---- */
+/* ---- 별의 취향 (Habit strength 상위 표시 · 메인은 대표 4개만) ---- */
 const tasteListEl=document.getElementById('tasteList');
 const tasteHintEl=document.getElementById('tasteHint');
 const prevStrength={};   // 감쇠 방향 감지용
@@ -767,6 +919,188 @@ function renderTaste(){
     </div>`;
   }).join('');
 }
+
+/* =====================================================================
+   BUILD 413-A — 별과 함께 발견한 것들 (개인 기록 시트 + 공유카드)
+   전체/global 숫자는 여기에 절대 들어오지 않는다. Profile + habitEngine(개인
+   localStorage) 만 읽는다. 시트는 World Event Stage보다 아래 z-index.
+   ===================================================================== */
+const PR={
+  el:null, _open:false, _prevFocus:null,
+  _lastTick:0,
+  // 게임 루프에서 매 프레임 불리지만, 실제 작업은 2초에 한 번만 한다.
+  tick(){
+    const now=Date.now();
+    if(now-this._lastTick < 2000) return;
+    this._lastTick=now;
+    Profile.flushTime();
+    if(this._open) this.render();     // 시트가 열려 있을 때만 갱신
+  },
+  _q(id){ return document.getElementById(id); },
+  init(){
+    this.el=this._q('pr-sheet');
+    const taste=this._q('taste');
+    const open=()=>this.open();
+    taste.addEventListener('click', open);
+    taste.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); } });
+    this._q('pr-close').addEventListener('click', ()=>this.close());
+    this.el.addEventListener('click', e=>{ if(e.target===this.el) this.close(); });   // 바깥 탭 닫기
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&this._open) this.close(); });
+    this._q('pr-copy').addEventListener('click', e=>{ e.stopPropagation(); this.copyCode(); });
+    this._q('pr-share').addEventListener('click', ()=>this.share());
+  },
+  open(){
+    if(this._open) return;
+    this._prevFocus=document.activeElement;
+    this._open=true; this.render(); this.el.style.display='block';
+    this._q('pr-close').focus();
+  },
+  close(){
+    if(!this._open) return;
+    this._open=false; this.el.style.display='none'; this._q('pr-note').textContent='';
+    if(this._prevFocus&&this._prevFocus.focus) this._prevFocus.focus();
+  },
+  copyCode(){
+    const code=Profile.data.observerId;
+    const done=()=>{ this._q('pr-note').textContent='관찰자 코드를 복사했습니다'; };
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(code).then(done,()=>this._fallbackCopy(code,done));
+    } else this._fallbackCopy(code,done);
+  },
+  _fallbackCopy(text,done){
+    try{ const ta=document.createElement('textarea'); ta.value=text;
+      ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done();
+    }catch(e){ this._q('pr-note').textContent=text; }
+  },
+  /* 개인에게 쌓인 모든 취향.
+     주의: habitEngine은 boot()마다 reset되는 "이번 산책의 습관"이라 누적 점수로 쓸 수 없다.
+     그래서 개인 취향 점수는 Profile 자신의 누적 행동 횟수로 계산한다.
+     score = 총 행동 수를 최다 항목 대비 정규화(0~1). 정렬은 점수 → 횟수 → 최근 순. */
+  rows(){
+    const list=Object.values(Profile.data.tastes).map(t=>({
+      type:t.type, acts:t.acts, total:t.total, firstAt:t.firstAt, lastAt:t.lastAt }));
+    const max=list.reduce((m,r)=>Math.max(m,r.total),0)||1;
+    for(const r of list) r.score=Math.min(1, r.total/max);
+    list.sort((a,b)=> (b.score-a.score) || (b.total-a.total) || (b.lastAt-a.lastAt));
+    return list;
+  },
+  render(){
+    const d=Profile.data;
+    this._q('pr-code').textContent=d.observerId;
+    const rows=this.rows();
+    this._q('pr-stats').innerHTML=[
+      ['함께한 시간', fmtDuration(Profile.observedMs())],
+      ['기억', String(d.memoryCount)],
+      ['일기', String(d.diaryCount)],
+      ['형성된 취향', String(rows.length)+'개'],
+      ['처음 만난 날', fmtWhen(d.firstSeenAt)],
+      ['마지막', fmtWhen(Date.now())],
+    ].map(([l,v])=>`<div class="s"><div class="sv">${v}</div><div class="sl">${l}</div></div>`).join('');
+    const list=this._q('pr-list');
+    if(rows.length===0){
+      list.innerHTML='<div id="pr-empty">아직 함께 발견한 것이 없습니다.<br>별이 걷다 무언가를 만나면 여기에 쌓입니다.</div>';
+      this._q('pr-share').disabled=true; return;
+    }
+    this._q('pr-share').disabled=false;
+    list.innerHTML=rows.map(r=>{
+      const def=CATALOG[r.type]||RARE[r.type]||{emoji:'·',ko:r.type};
+      const acts=['observe','record','rest','wonder']
+        .filter(a=>r.acts[a]>0)
+        .map(a=>`<span class="pr-act">${actKo(a)} <b>${r.acts[a]}</b></span>`).join('');
+      return `<div class="pr-row">
+        <div class="pr-r1"><span class="pr-em">${def.emoji}</span>
+          <span class="pr-name">${def.ko}</span>
+          <span class="pr-cnt">만남 ${r.total}회</span></div>
+        <div class="pr-acts">${acts||'<span class="pr-act">—</span>'}</div>
+        <div class="pr-bar"><span class="pr-fill" style="width:${Math.round(r.score*100)}%"></span></div>
+        <div class="pr-when">처음 ${fmtWhen(r.firstAt)} · 마지막 ${fmtWhen(r.lastAt)}</div>
+      </div>`;
+    }).join('');
+  },
+  /* ---- 공유카드 1080×1350 세로형 ---- */
+  async share(){
+    const note=this._q('pr-note'); note.textContent='카드 만드는 중…';
+    try{
+      const blob=await this.buildCard();
+      const file=new File([blob],'byeol-record.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
+        await navigator.share({files:[file], title:'별과 함께 발견한 것들'});
+        note.textContent='공유했습니다';
+      } else {                                   // 미지원 → PNG 다운로드
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='byeol-record.png';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(()=>URL.revokeObjectURL(url),4000);
+        note.textContent='PNG로 저장했습니다';
+      }
+    }catch(e){ note.textContent='카드를 만들지 못했습니다'; }
+  },
+  buildCard(){
+    const W=1080,H=1350, c=document.createElement('canvas'); c.width=W; c.height=H;
+    const g=c.getContext('2d'), d=Profile.data;
+    const sage='#A7B49A', ink='#e8e4d8', dim='#7d8790';
+    const bg=g.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0,'#0d1116'); bg.addColorStop(0.55,'#131a20'); bg.addColorStop(1,'#0b0f13');
+    g.fillStyle=bg; g.fillRect(0,0,W,H);
+    for(let i=0;i<90;i++){                        // 배경 별 (카드 장식)
+      const x=(i*97731%W), y=(i*54121%(H*0.42));
+      g.fillStyle='rgba(226,232,244,'+(0.05+(i%7)*0.02).toFixed(2)+')';
+      g.beginPath(); g.arc(x,y,(i%3)*0.7+0.6,0,6.283); g.fill();
+    }
+    g.textAlign='left';
+    g.fillStyle=sage; g.font='600 30px system-ui,sans-serif';
+    g.letterSpacing='8px'; g.fillText('BYEOL',80,116); g.letterSpacing='0px';
+    g.fillStyle=dim; g.font='400 24px ui-monospace,Menlo,monospace';
+    g.fillText(d.observerId,80,158);
+    g.fillStyle=ink; g.font='600 54px system-ui,sans-serif';
+    g.fillText('별과 함께',80,268); g.fillText('발견한 것들',80,336);
+    // 산책 화면 스냅샷
+    const snapY=386, snapH=300;
+    try{
+      const src=document.getElementById('game');
+      if(src&&src.width){
+        g.save(); this._roundRect(g,80,snapY,W-160,snapH,16); g.clip();
+        const sr=src.width/src.height, dr=(W-160)/snapH;
+        let sw=src.width, sh=src.height, sx=0, sy=0;
+        if(sr>dr){ sw=src.height*dr; sx=(src.width-sw)/2; } else { sh=src.width/dr; sy=(src.height-sh)/2; }
+        g.drawImage(src,sx,sy,sw,sh,80,snapY,W-160,snapH); g.restore();
+        g.strokeStyle='rgba(167,180,154,.28)'; g.lineWidth=2;
+        this._roundRect(g,80,snapY,W-160,snapH,16); g.stroke();
+      }
+    }catch(e){}
+    // 개인 수치 (전체/global 숫자는 절대 넣지 않음)
+    const sy2=snapY+snapH+62;
+    const stats=[['기억',String(d.memoryCount)],['일기',String(d.diaryCount)],
+                 ['함께한 시간',fmtDuration(Profile.observedMs())]];
+    stats.forEach((s,i)=>{ const x=80+i*((W-160)/3);
+      g.fillStyle=ink; g.font='600 44px system-ui,sans-serif'; g.fillText(s[1],x,sy2);
+      g.fillStyle=dim; g.font='400 20px system-ui,sans-serif'; g.fillText(s[0],x,sy2+30); });
+    // 대표 취향 5~8개
+    const rows=this.rows().slice(0,8);
+    let y=sy2+96;
+    g.fillStyle=sage; g.font='600 22px system-ui,sans-serif'; g.fillText('함께 발견한 것',80,y); y+=42;
+    for(const r of rows){
+      const def=CATALOG[r.type]||RARE[r.type]||{emoji:'·',ko:r.type};
+      g.font='400 34px system-ui,sans-serif'; g.fillStyle=ink;
+      g.fillText(def.emoji+'  '+def.ko, 84, y);
+      g.font='400 22px system-ui,sans-serif'; g.fillStyle=dim;
+      g.textAlign='right'; g.fillText(r.total+'회', W-84, y); g.textAlign='left';
+      const bw=W-168, bx=84, by=y+12;
+      g.fillStyle='rgba(255,255,255,.07)'; this._roundRect(g,bx,by,bw,5,3); g.fill();
+      g.fillStyle=sage; this._roundRect(g,bx,by,Math.max(4,bw*r.score),5,3); g.fill();
+      y+=64;
+    }
+    g.textAlign='center'; g.fillStyle=dim; g.font='400 24px system-ui,sans-serif';
+    g.fillText('함께 걸어준 시간들이 별의 취향이 되었습니다.', W/2, H-72);
+    return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('toBlob')),'image/png'));
+  },
+  _roundRect(g,x,y,w,h,r){
+    g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r);
+    g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath();
+  },
+};
+PR.init();
 
 /* =====================================================================
    UPDATE
@@ -1723,6 +2057,8 @@ function loop(t){
     const state = stateProvider.getCurrentByeoliState();
     if(state) render(state);
     renderDrives(); renderTaste();   // Observatory/sandbox UI — 캔버스 렌더 경로와 분리 (live: TODO authority telemetry)
+    // 413-A: 누적 관찰시간은 저빈도로만 갱신 (게임 루프·렌더 경로에 영향 없음)
+    PR.tick();
   }
   requestAnimationFrame(loop);
 }
@@ -1742,7 +2078,9 @@ function boot(){
   byeoli.worldX=0; byeoli.state='walk'; byeoli.speed=byeoli.baseSpeed;
   walkClock=0; lastDiaryAt=-999; loopCount=0;
   habitEngine.reset();
-  tally.memories=0; tally.diary=0; archive.length=0;
+  tally.memories=0; tally.diary=0; archive.length=0;   // 세션 카운터만 초기화
+  // 413-A: Profile(개인 기록)은 여기서 절대 건드리지 않는다.
+  // boot()은 새로고침·복귀마다 실행되므로, 지우면 관찰자의 누적 기록이 사라진다.
   seenKindsToday.clear(); currentTarget=null;
   streamEl.innerHTML='';
   buildWorld(); sky.reset(); ppae.reset(); Sound.stopWeather(); updateDayTag(); updateTally(); fitCanvas();
