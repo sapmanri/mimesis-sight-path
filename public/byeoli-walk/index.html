@@ -1213,10 +1213,321 @@ const SKY_COLORS={
   dusk:  { bands:['#3f4a6a','#7a5f78','#c47a6a','#e0a06a'], sun:'#f0a45a', tone:0.72 },
   night: { bands:['#0e1526','#141d33','#1c2740','#26324d'], sun:'#e8ecff', tone:0.5 },
 };
+
+/* =====================================================================
+   BUILD 414-A — Procedural Parallax Background System
+   기존 고정 배경을 "레이어 후보 조합형"으로 확장한다.
+   · 조합은 world SEED 기반 결정론 — 같은 seed면 새로고침해도 같은 풍경.
+     Math.random() 직접 호출 없음(makeRNG 사용).
+   · 레이어마다 parallax speed와 loop length가 다르다. 루프 길이는 서로소에
+     가깝게 잡아, 오래 걸어도 같은 조합이 동시에 반복되지 않게 한다.
+   · 계절·시간·날씨 eligibility로 어색한 조합(눈 쌓인 여름 등)을 차단한다.
+   · 배경은 취향 집계 대상이 아니다. Object Registry prop과 완전히 별개.
+   · foreground는 낮은 높이·낮은 대비 — 별/빼콩이/props 가독성을 해치지 않는다.
+   · 기존 날씨 로직은 읽기만 한다(수정·이중 구동 없음).
+   ===================================================================== */
+const BG_SEASONS=['spring','summer','autumn','winter'];
+// 별이력 하루 = 1 epoch. 계절은 epoch에서 결정론적으로 파생(기존 상태 불변).
+const BG_SEASON_LEN=8;                    // 별이력 8일마다 계절 전환
+function bgSeason(epoch){ return BG_SEASONS[Math.floor(epoch/BG_SEASON_LEN)%4]; }
+// 기존 sky는 dawn/day/dusk/night, weather는 clear/rain/snow만 갖는다.
+// 배경 축은 여기서 파생만 한다 — sky 객체를 건드리지 않는다.
+function bgTime(phase){ return phase==='dawn'?'morning':phase; }          // morning/day/dusk/night
+function bgWeather(sky){
+  if(sky.weather==='rain') return 'rain';
+  if(sky.weather==='snow') return 'snow';
+  return sky.cloudDark ? 'cloudy' : 'clear';   // 먹구름이면 흐림
+}
+
+/* ---- 레이어 후보 팩 ----
+   각 후보: id · draw(파라미터) · parallax · loop · 계절/시간/날씨 eligibility · palette
+   eligibility 배열이 없으면 "전부 허용". */
+const BG_PACK={
+  sky:[
+    { id:'clear-morning', time:['morning'], weather:['clear'],       palette:{a:'#e9c9a8',b:'#e4c2b0',c:'#dcc6c0',d:'#d2cfc4'} },
+    { id:'cloudy-morning',time:['morning'], weather:['cloudy','rain','fog','snow'], palette:{a:'#c9c6c0',b:'#c4c2bc',c:'#c0c0bc',d:'#bcbdb8'} },
+    { id:'pale-day',      time:['day'],     weather:['clear','cloudy'], palette:{a:'#cfe0d8',b:'#d7e1cf',c:'#dfe7d8',d:'#e4ebdd'} },
+    { id:'grey-day',      time:['day'],     weather:['fog','rain','snow'], palette:{a:'#b9bfc0',b:'#c1c6c4',c:'#c9cdc9',d:'#d1d4cf'} },
+    { id:'sunset',        time:['dusk'],    weather:['clear','cloudy'], palette:{a:'#3f4a6a',b:'#7a5f78',c:'#c47a6a',d:'#e0a06a'} },
+    { id:'blue-evening',  time:['dusk'],    weather:['rain','fog','snow'], palette:{a:'#39445e',b:'#4a5570',c:'#5d6880',d:'#6f7a90'} },
+    { id:'starry-night',  time:['night'],   weather:['clear','cloudy'], palette:{a:'#0e1526',b:'#141d33',c:'#1c2740',d:'#26324d'} },
+    { id:'overcast-night',time:['night'],   weather:['fog','rain','snow'], palette:{a:'#171b24',b:'#1d2430',c:'#242c3a',d:'#2c3444'} },
+  ],
+  farMountains:[
+    { id:'low-ridge',    parallax:0.05, loop:3700, base:'#b7c6ad', peaks:[[45,90,18],[130,64,13]] },
+    { id:'double-ridge', parallax:0.05, loop:3700, base:'#b2c1a9', peaks:[[30,110,26],[95,80,17],[160,70,21]] },
+    { id:'far-peaks',    parallax:0.05, loop:3700, base:'#adbca6', peaks:[[50,70,34],[120,58,27]] },
+    { id:'round-hills',  parallax:0.05, loop:3700, base:'#bcc9b2', peaks:[[40,120,16],[140,100,13]], round:true },
+    { id:'rocky',        parallax:0.05, loop:3700, base:'#a9b3a4', peaks:[[36,58,30],[86,44,22],[132,66,27]], jag:true },
+    { id:'misty',        parallax:0.05, loop:3700, base:'#c2ccc0', peaks:[[55,120,20],[150,90,15]], weather:['fog','rain','snow','cloudy'] },
+  ],
+  nearMountains:[
+    { id:'near-low',    parallax:0.12, loop:5100, base:'#93a68d', peaks:[[60,84,14]] },
+    { id:'near-twin',   parallax:0.12, loop:5100, base:'#8fa389', peaks:[[40,64,19],[110,56,15]] },
+    { id:'near-broad',  parallax:0.12, loop:5100, base:'#97a991', peaks:[[70,130,12]], round:true },
+    { id:'near-none',   parallax:0.12, loop:5100, base:null, peaks:[] },     // 비어 있는 후보(개방감)
+  ],
+  distantForest:[
+    { id:'pine-line',   parallax:0.22, loop:4300, col:'#5f7a5e', kind:'pine',   step:11 },
+    { id:'broadleaf',   parallax:0.22, loop:4300, col:'#6d8a63', kind:'round',  step:13 },
+    { id:'bamboo',      parallax:0.22, loop:4300, col:'#7d9a6a', kind:'bamboo', step:7,  season:['spring','summer'] },
+    { id:'bare-trees',  parallax:0.22, loop:4300, col:'#6b6152', kind:'bare',   step:12, season:['autumn','winter'] },
+    { id:'deep-forest', parallax:0.22, loop:4300, col:'#4c6350', kind:'dense',  step:6 },
+    { id:'sparse',      parallax:0.22, loop:4300, col:'#6f8a68', kind:'round',  step:26 },
+  ],
+  midTrees:[
+    { id:'mid-mixed',   parallax:0.38, loop:3100, col:'#8ba286', house:true },
+    { id:'mid-trees',   parallax:0.38, loop:3100, col:'#849c80', house:false },
+    { id:'mid-village', parallax:0.38, loop:3100, col:'#8ba286', house:true, dense:true },
+  ],
+  field:[
+    { id:'grass',       parallax:0.55, loop:2900, col:'#3f5a45', top:'#4d6b52' },
+    { id:'paddy',       parallax:0.55, loop:2900, col:'#47624a', top:'#587a58', rows:true, season:['spring','summer'] },
+    { id:'silver-grass',parallax:0.55, loop:2900, col:'#6a6a4e', top:'#8a8560', tufts:true, season:['autumn'] },
+    { id:'flower-field',parallax:0.55, loop:2900, col:'#4a6349', top:'#5c7a55', dots:'#d98fb0', season:['spring','summer'] },
+    { id:'yellow-grass',parallax:0.55, loop:2900, col:'#5d6142', top:'#7a7a50', season:['autumn','winter'] },
+    { id:'snow-field',  parallax:0.55, loop:2900, col:'#9aa7ad', top:'#c3ced2', season:['winter'], weather:['snow','clear','cloudy','fog'] },
+  ],
+  roadside:[
+    { id:'stone-wall',  parallax:0.78, loop:2300, kind:'wall',  col:'#7d7f78' },
+    { id:'low-fence',   parallax:0.78, loop:2300, kind:'fence', col:'#8a7458' },
+    { id:'bare-road',   parallax:0.78, loop:2300, kind:'none' },
+    { id:'grass-verge', parallax:0.78, loop:2300, kind:'verge', col:'#4e6b4c' },
+  ],
+  foreground:[
+    { id:'tall-grass',  parallax:1.05, loop:1900, kind:'grass',   col:'#2f4738' },
+    { id:'small-flower',parallax:1.05, loop:1900, kind:'flower',  col:'#365040', dot:'#c98aa8', season:['spring','summer'] },
+    { id:'stone-grass', parallax:1.05, loop:1900, kind:'stone',   col:'#33493c', dot:'#6d7370' },
+    { id:'fallen-leaf', parallax:1.05, loop:1900, kind:'leaf',    col:'#5a4530', dot:'#8a5a34', season:['autumn'] },
+    { id:'snow-mound',  parallax:1.05, loop:1900, kind:'snow',    col:'#8f9ba1', dot:'#c8d2d6', season:['winter'] },
+    { id:'puddle',      parallax:1.05, loop:1900, kind:'puddle',  col:'#3d5250', dot:'#6f8a8e', weather:['rain','fog'] },
+  ],
+};
+const BG_ORDER=['sky','farMountains','nearMountains','distantForest','midTrees','field','roadside','foreground'];
+
+function bgEligible(c, ctxv){
+  if(c.season  && !c.season.includes(ctxv.season))   return false;
+  if(c.time    && !c.time.includes(ctxv.time))       return false;
+  if(c.weather && !c.weather.includes(ctxv.weather)) return false;
+  return true;
+}
+/* 조합 선택: seed + 레이어 이름으로 결정론적 인덱스.
+   후보가 비면 조건을 단계적으로만 완화한다(날씨 → 계절 순).
+   time은 하늘/지상 톤이 어긋나므로 절대 완화하지 않는다. */
+function bgPick(layer, seed, ctxv){
+  const all=BG_PACK[layer];
+  let pool=all.filter(c=>bgEligible(c,ctxv));
+  if(!pool.length) pool=all.filter(c=>                       // 날씨만 완화
+    (!c.season||c.season.includes(ctxv.season)) && (!c.time||c.time.includes(ctxv.time)));
+  if(!pool.length) pool=all.filter(c=> !c.time||c.time.includes(ctxv.time));  // 계절도 완화
+  if(!pool.length) pool=all;                                  // 최후(정의상 도달하지 않음)
+  let h=seed>>>0;
+  for(let i=0;i<layer.length;i++){ h^=layer.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  return pool[h%pool.length];
+}
+/* ---- 디버그 훅 (sandbox 전용) ----
+   ?bgSeed=1234 &season=autumn &time=night &weather=fog
+   ⚠ Production Live(mode==='live')에서는 query가 Authority/정상 상태보다
+   우선하면 안 되므로 전부 무시한다. */
+let BG_SEED=0, BG_FORCE=null;
+function bgInitDebug(){
+  BG_SEED=SEED>>>0;
+  BG_FORCE=null;
+  try{
+    if(typeof stateProvider!=='undefined' && stateProvider.mode==='live') return;
+    const qs=new URLSearchParams(location.search);
+    const s=qs.get('bgSeed');
+    if(s!==null && s!=='' && isFinite(+s)) BG_SEED=(+s)>>>0;
+    const f={};
+    const se=qs.get('season'), ti=qs.get('time'), we=qs.get('weather');
+    if(se && BG_SEASONS.includes(se)) f.season=se;
+    if(ti && ['morning','day','dusk','night'].includes(ti)) f.time=ti;
+    if(we && ['clear','cloudy','fog','rain','snow'].includes(we)) f.weather=we;
+    if(Object.keys(f).length) BG_FORCE=f;
+    // sandbox 전용 진단 훅 (Live에서는 위에서 return되어 노출되지 않는다)
+    window.__BG_DEBUG__={
+      describe:()=>BG.describe(), pack:()=>BG_PACK, order:()=>BG_ORDER,
+      pick:(layer,seed,ctxv)=>bgPick(layer,seed,ctxv),
+      eligible:(c,ctxv)=>bgEligible(c,ctxv), calls:()=>BG.calls,
+    };
+  }catch(e){}
+}
+
+const BG={
+  _key:null, _combo:null, _ctx:null, calls:0,
+  context(sky, epoch){
+    const c={ season:bgSeason(epoch), time:bgTime(sky.phase), weather:bgWeather(sky) };
+    if(BG_FORCE){                       // sandbox 강제값 (live에서는 BG_FORCE가 null)
+      if(BG_FORCE.season)  c.season=BG_FORCE.season;
+      if(BG_FORCE.time)    c.time=BG_FORCE.time;
+      if(BG_FORCE.weather) c.weather=BG_FORCE.weather;
+    }
+    return c;
+  },
+  // 조합은 (seed, 계절, 시간, 날씨)가 바뀔 때만 다시 고른다 — 매 프레임 배열 생성 없음.
+  combo(seed, sky, epoch){
+    const c=this.context(sky, epoch);
+    const key=seed+'|'+c.season+'|'+c.time+'|'+c.weather;
+    if(this._key===key) return this._combo;
+    const out={};
+    for(const l of BG_ORDER) out[l]=bgPick(l, seed, c);
+    this._key=key; this._combo=out; this._ctx=c;
+    return out;
+  },
+  // 현재 조합을 id만으로 요약 (디버그·검증용)
+  describe(){
+    if(!this._combo) return null;
+    const o={};
+    for(const l of BG_ORDER) o[l]=this._combo[l]?this._combo[l].id:null;
+    return { seed:BG_SEED, ctx:this._ctx, layers:o };
+  },
+};
+
+/* ---- 레이어 렌더러 ----
+   공통 규약: (c=후보, cam=카메라 worldX, tone=밤 톤배율, gy=지평선 y)
+   · 배열 생성·DOM·blur/filter 없음. 정수 좌표 fillRect만 사용.
+   · 화면 밖은 그리지 않는다(루프 시작점을 화면 기준으로 계산).
+   · BG.calls로 draw 호출 수를 계측한다. */
+function bgLoopStart(cam, parallax, loop){
+  // 레이어 고유 loop 길이로 감싸 반복점을 서로 어긋나게 한다
+  const off=-((cam*parallax)%loop);
+  return off>0?off-loop:off;
+}
+function bgMountains(c, cam, tone, gy){
+  if(!c.base || !c.peaks.length) return;
+  const col=shade(c.base, tone);
+  ctx.fillStyle=col;
+  const span=200;                                   // 능선 1세트 폭
+  let x=bgLoopStart(cam, c.parallax, c.loop)%span;
+  for(let bx=x-span; bx<W+span; bx+=span){
+    for(let i=0;i<c.peaks.length;i++){
+      const p=c.peaks[i], px0=bx+p[0], w=p[1], h=p[2];
+      if(px0+w<-10 || px0-w>W+10) continue;          // 화면 밖 skip
+      if(c.jag){ bgJagPeak(px0, gy, w, h); }
+      else if(c.round){ bgRoundPeak(px0, gy, w, h); }
+      else { hill(px0, gy, w, h); }
+      BG.calls++;
+    }
+  }
+}
+function bgRoundPeak(cx,by,w,h){
+  for(let i=0;i<h;i++){ const k=i/h, ww=w*Math.sqrt(Math.max(0,1-(1-k)*(1-k)));
+    ctx.fillRect((cx-ww/2)|0,(by-h+i)|0,ww|0,1); }
+}
+function bgJagPeak(cx,by,w,h){
+  for(let i=0;i<h;i++){ const k=i/h; let ww=w*k;
+    ww*= (1 + ((i%3===0)?0.10:(i%2===0?-0.06:0)));   // 결정론적 바위 요철
+    ctx.fillRect((cx-ww/2)|0,(by-h+i)|0,ww|0,1); }
+}
+function bgForest(c, cam, tone, gy){
+  const col=shade(c.col, tone);
+  ctx.fillStyle=col;
+  const step=c.step;
+  let x=bgLoopStart(cam, c.parallax, c.loop)%step;
+  for(let bx=x-step; bx<W+step; bx+=step){
+    const i=((bx*7)|0);
+    if(c.kind==='pine'){ const h=9+((i%3)*2);
+      for(let r=0;r<3;r++){ const w=8-r*2; ctx.fillRect((bx-w/2)|0,(gy-h-r*3)|0,w|0,3); } }
+    else if(c.kind==='round'){ const h=7+((i%3)*2);
+      ctx.fillRect((bx-3)|0,(gy-h)|0,6,h); ctx.fillRect((bx-4)|0,(gy-h-3)|0,8,4); }
+    else if(c.kind==='bamboo'){ const h=13+((i%4)*2);
+      ctx.fillRect(bx|0,(gy-h)|0,1,h); ctx.fillRect((bx-2)|0,(gy-h)|0,4,2); }
+    else if(c.kind==='bare'){ const h=10+((i%3)*2);
+      ctx.fillRect(bx|0,(gy-h)|0,1,h);
+      ctx.fillRect((bx-3)|0,(gy-h+2)|0,3,1); ctx.fillRect((bx+1)|0,(gy-h+4)|0,3,1); }
+    else { ctx.fillRect((bx-4)|0,(gy-11)|0,8,11); }   // dense
+    BG.calls++;
+  }
+}
+function bgMidTrees(c, cam, tone, gy){
+  const col=shade(c.col, tone);
+  const span=c.dense?100:150;
+  let x=bgLoopStart(cam, c.parallax, c.loop)%span;
+  for(let bx=x-span; bx<W+span; bx+=span){
+    tree(bx+26, gy-2, col); BG.calls++;
+    if(c.house){ house(bx+86, gy-2); BG.calls++; }
+  }
+}
+function bgField(c, cam, tone, gy){
+  px(0,gy,W,H-gy, shade(c.col,tone));
+  px(0,gy,W,2, shade(c.top,tone));
+  BG.calls+=2;
+  const step=8;
+  let x=bgLoopStart(cam, c.parallax, c.loop)%step;
+  if(c.rows){                                        // 논두렁 — 가로 이랑
+    ctx.fillStyle=shade(c.top,tone);
+    for(let yy=gy+6; yy<H; yy+=7){ ctx.fillRect(0,yy|0,W,1); BG.calls++; }
+  }
+  for(let bx=x;bx<W;bx+=step){
+    px(bx,gy+7,2,2, shade('#365040',tone));
+    px(bx+4,gy+14,2,2, shade('#2f4738',tone));
+    BG.calls+=2;
+  }
+  if(c.tufts){                                       // 억새 — 낮고 성기게
+    ctx.fillStyle=shade(c.top,tone);
+    for(let bx=x;bx<W;bx+=step*3){ ctx.fillRect(bx|0,(gy+3)|0,1,4); BG.calls++; }
+  }
+  if(c.dots){                                        // 꽃밭 점
+    ctx.fillStyle=shade(c.dots,tone);
+    for(let bx=x+3;bx<W;bx+=step*2){ ctx.fillRect(bx|0,(gy+9)|0,1,1); BG.calls++; }
+  }
+}
+function bgRoadside(c, cam, tone, gy){
+  if(c.kind==='none') return;
+  const col=shade(c.col,tone);
+  ctx.fillStyle=col;
+  const step=c.kind==='fence'?14:10;
+  let x=bgLoopStart(cam, c.parallax, c.loop)%step;
+  for(let bx=x-step; bx<W+step; bx+=step){
+    if(c.kind==='wall'){ ctx.fillRect(bx|0,(gy-4)|0,9,4); }
+    else if(c.kind==='fence'){ ctx.fillRect(bx|0,(gy-6)|0,1,6); ctx.fillRect(bx|0,(gy-5)|0,14,1); }
+    else { ctx.fillRect(bx|0,(gy-2)|0,3,2); }        // verge
+    BG.calls++;
+  }
+}
+/* foreground: 낮은 높이·낮은 대비. 별/빼콩이/props를 가리지 않도록
+   지평선 아래(발치)에만, 최대 4px 높이로 그린다. */
+function bgForeground(c, cam, tone, gy){
+  const col=shade(c.col,tone);
+  const step=12;
+  let x=bgLoopStart(cam, c.parallax, c.loop)%step;
+  ctx.fillStyle=col;
+  const baseY=H-6;                                   // 화면 최하단 — 캐릭터보다 앞
+  for(let bx=x-step; bx<W+step; bx+=step){
+    if(c.kind==='grass'){ ctx.fillRect(bx|0,(baseY-3)|0,1,3); ctx.fillRect((bx+3)|0,(baseY-2)|0,1,2); }
+    else if(c.kind==='stone'){ ctx.fillRect(bx|0,(baseY-2)|0,3,2); }
+    else if(c.kind==='snow'){ ctx.fillRect(bx|0,(baseY-2)|0,7,2); }
+    else if(c.kind==='puddle'){ ctx.fillRect(bx|0,(baseY-1)|0,9,1); }
+    else if(c.kind==='leaf'){ ctx.fillRect(bx|0,(baseY-1)|0,2,1); }
+    else { ctx.fillRect(bx|0,(baseY-3)|0,1,3); }     // flower 줄기
+    BG.calls++;
+  }
+  if(c.dot){                                         // 낮은 대비 악센트
+    ctx.fillStyle=shade(c.dot,tone);
+    for(let bx=x+5; bx<W; bx+=step*2){ ctx.fillRect(bx|0,(baseY-4)|0,1,1); BG.calls++; }
+  }
+}
+
+/* foreground는 캐릭터 뒤가 아니라 앞에 그려야 깊이가 생기므로 render()에서 따로 부른다.
+   조합은 drawBackground가 이미 만든 캐시를 그대로 재사용한다(재선정 없음). */
+function drawForegroundLayer(sky, camera){
+  const combo=BG._combo;
+  if(!combo || !combo.foreground) return;
+  const S=SKY_COLORS[sky.phase];
+  bgForeground(combo.foreground, camera.worldX, S.tone, GROUND_Y);
+}
+
 function drawBackground(sky, camera){
   const S=SKY_COLORS[sky.phase];
-  const bandH=Math.ceil(GROUND_Y/S.bands.length);
-  for(let i=0;i<S.bands.length;i++) px(0,i*bandH,W,bandH,S.bands[i]);
+  // BUILD 414-A: 레이어 조합 (seed+계절+시간+날씨가 바뀔 때만 재선정)
+  const epoch=(typeof byeoliDayEpoch==='function')?byeoliDayEpoch():0;
+  const combo=BG.combo(BG_SEED, sky, epoch);
+  BG.calls=0;
+  // 하늘 밴드 — 조합된 팔레트 사용 (없으면 기존 SKY_COLORS로 폴백)
+  const sp=combo.sky&&combo.sky.palette;
+  const bands=sp?[sp.a,sp.b,sp.c,sp.d]:S.bands;
+  const bandH=Math.ceil(GROUND_Y/bands.length);
+  for(let i=0;i<bands.length;i++){ px(0,i*bandH,W,bandH,bands[i]); BG.calls++; }
   const isNight=sky.phase==='night', isDusk=sky.phase==='dusk';
 
   // ---- 별 (밤/노을) ----
@@ -1240,7 +1551,7 @@ function drawBackground(sky, camera){
     // 달 (초승 표현)
     const mx=W-40 - (sky.t-0.62)/0.38*(W-80), my=30+Math.sin((sky.t-0.62)/0.38*Math.PI)*-14+30;
     ctx.fillStyle='#e8ecff'; disc(mx, my, 6);
-    ctx.fillStyle=S.bands[1]; disc(mx+2.5, my-1.5, 6); // 그믐 깎기
+    ctx.fillStyle=bands[1]; disc(mx+2.5, my-1.5, 6); // 그믐 깎기
   }
 
   // ---- 구름 (흰/먹) ----
@@ -1264,19 +1575,15 @@ function drawBackground(sky, camera){
   if(sky.flybys) for(const f of sky.flybys){ if(f.kind!=='creature') drawFlyby(f, isNight); }
 
   const cam=camera.worldX;
-  // 먼 언덕 (밤엔 어둡게)
-  const hillCol = shade('#b7c6ad', S.tone);
-  const o1=-(cam*0.15)%180; ctx.fillStyle=hillCol;
-  for(let bx=o1-180;bx<W+180;bx+=180){ hill(bx+45,GROUND_Y,90,22); hill(bx+130,GROUND_Y,64,16); }
-  // ---- 괴생명체 (지평선 뒤, 언덕과 나무 사이) ----
+  // ---- BUILD 414-A: 조합된 지상 레이어 (뒤 → 앞) ----
+  bgMountains(combo.farMountains,  cam, S.tone, GROUND_Y);
+  bgMountains(combo.nearMountains, cam, S.tone, GROUND_Y);
+  // ---- 괴생명체 (지평선 뒤, 언덕과 나무 사이) ----  [기존 순서 유지]
   if(sky.flybys) for(const f of sky.flybys){ if(f.kind==='creature') drawFlyby(f, isNight); }
-  // 중간 나무/집
-  const o2=-(cam*0.4)%150;
-  for(let bx=o2-150;bx<W+150;bx+=150){ tree(bx+26,GROUND_Y-2,shade('#8ba286',S.tone)); house(bx+86,GROUND_Y-2); }
-  // 땅
-  px(0,GROUND_Y,W,H-GROUND_Y,shade('#3f5a45',S.tone)); px(0,GROUND_Y,W,2,shade('#4d6b52',S.tone));
-  const o3=-(cam*1.0)%8; 
-  for(let bx=o3;bx<W;bx+=8){ px(bx,GROUND_Y+7,2,2,shade('#365040',S.tone)); px(bx+4,GROUND_Y+14,2,2,shade('#2f4738',S.tone)); }
+  bgForest(combo.distantForest, cam, S.tone, GROUND_Y);
+  bgMidTrees(combo.midTrees,    cam, S.tone, GROUND_Y);
+  bgField(combo.field,          cam, S.tone, GROUND_Y);
+  bgRoadside(combo.roadside,    cam, S.tone, GROUND_Y);
 }
 // 색을 tone배율로 어둡게 (밤 표현)
 function shade(hex, tone){
@@ -2011,6 +2318,9 @@ function render(state){
   for(const p of state.props){ const sx=p.x-camShift; if(sx>-30&&sx<W+30) drawProp(p,sx); }
   drawPpae(state.ppae);
   drawByeoli(state.byeoli);
+  // BUILD 414-A: foreground는 캐릭터보다 앞(깊이감). 화면 최하단·최대 4px·낮은 대비라
+  // 별/빼콩이/props의 식별을 방해하지 않는다.
+  drawForegroundLayer(state.sky, state.camera);
   drawWeather(state.sky);
   drawFlash(state.flash);
 }
@@ -2074,6 +2384,8 @@ window.addEventListener('resize',fitCanvas);
 
 function boot(){
   rng=makeRNG(SEED);
+  bgInitDebug();          // BUILD 414-A: 배경 시드/디버그 query 반영 (reseed에도 대응)
+  BG._key=null;           // 조합 캐시 무효화 → 새 seed로 다시 고름
   brain.drive={observe:.30,rest:.22,record:.26,wonder:.34}; brain.fatigue=.05;
   byeoli.worldX=0; byeoli.state='walk'; byeoli.speed=byeoli.baseSpeed;
   walkClock=0; lastDiaryAt=-999; loopCount=0;
