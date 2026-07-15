@@ -748,6 +748,147 @@ export const OBJECT_REGISTRY:ObjectRegistryEntry[] = [
   twoD('eagle-owl','수리부엉이','rare','🦉','rare',0,{wonder:.7,observe:.45,record:.4},['눈이주황','아주크다','소리없이날았다'],[],{rareEvent:true}),
   twoD('cloud-iridescent','채운','rare','🌈','rare',0,{wonder:.7,observe:.45,record:.4},['구름이무지개색','상서롭다고','한참올려다봤다'],[],{rareEvent:true}),
 
+  /* ===== BUILD 414-F — 오브젝트 401–500 =========================================
+     ---- batch 1 (401–425) ---- */
+  // 일상·생활 (5)
+  twoD('ash-pile','아궁이 재','thing','🔥','uncommon',2,{observe:.24,wonder:.14},['곱다','아직따뜻','밭에뿌린다']),
+  twoD('paper-bag-wet','젖은 종이봉투','thing','🛍️','common',3,{observe:.20,wonder:.12},['찢어짐','내용물은','비를만났다']),
+  twoD('clothes-pin-jar','집게 통','thing','🧺','common',3,{observe:.22},['빨래줄옆','나무집게','섞여있다']),
+  twoD('kimchi-fridge','김치냉장고','thing','🧊','uncommon',2,{observe:.22,wonder:.14},['마당에','돌아간다','스티커붙음']),
+  twoD('shovel-in-dirt','꽂힌 삽','thing','🪏','common',3,{observe:.24,wonder:.12},['일하다말고','반쯤박힘','주인은어디']),
+  // 자연·흔적 (5)
+  twoD('bee-dead','죽은 벌','nature','🐝','uncommon',2,{observe:.28,wonder:.28},['창턱에','뒤집힘','일생이짧다']),
+  twoD('bark-beetle-trail','나무껍질 벌레길','nature','🪵','uncommon',2,{observe:.30,wonder:.26,record:.16},['글씨같다','읽을수없다','속으로갔다']),
+  twoD('bird-cache-nut','새가 박은 도토리','nature','🌰','rare',1,{observe:.32,wonder:.30},['나무틈에','정확하게','기억할까']),
+  twoD('deer-rub-tree','뿔 비빈 나무','nature','🦌','rare',1,{observe:.30,wonder:.26},['껍질벗겨짐','같은높이','밤에왔다']),
+  twoD('vine-strangle','휘감은 덩굴','nature','🌿','uncommon',2,{observe:.28,wonder:.24},['조여든다','천천히','나무가진다']),
+  // 계절 (4)
+  twoD('spring-nest-material','둥지 재료 나르는 새','animal','🪶','rare',1,{observe:.32,wonder:.28,record:.20},['입에물고','여러번','짓는중']),
+  twoD('summer-well-cold','두레박 냉장고','thing','🪣','uncommon',2,{observe:.28,wonder:.22},['수박담가둠','시원하다','옛날냉장고']),
+  twoD('autumn-seed-fly','날아가는 씨앗','nature','🌾','uncommon',2,{observe:.30,wonder:.28,record:.18},['낙하산','바람타고','어디까지']),
+  twoD('winter-bird-feeder','겨울 모이통','thing','🐦','uncommon',2,{observe:.28,record:.18},['누가달았나','줄이선다','비었다']),
+  // 날씨 (3)
+  twoD('rain-gauge','우량계','thing','📏','uncommon',2,{observe:.26,wonder:.16},['눈금','어제만큼','누가읽나']),
+  twoD('fog-valley','골짜기 안개','nature','🌫️','uncommon',2,{observe:.30,wonder:.28,record:.20},['강처럼흐른다','아래만','산이섬']),
+  twoD('snow-blower-mark','눈 치운 자국','nature','⛄','uncommon',2,{observe:.24,wonder:.14},['깔끔하다','양옆으로','기계였나']),
+  // 시간대 (2)
+  twoD('dawn-fisher','새벽 낚시꾼','thing','🎣','rare',1,{observe:.28,wonder:.26},['움직이지않는다','안개속','인기척']),
+  twoD('night-truck-light','밤 트럭 불빛','thing','🚚','uncommon',2,{observe:.24,wonder:.22},['멀리서','지나간다','소리가먼저']),
+  // 상황형 (3)
+  twoD('cat-fight-sound','안 보이는 고양이 싸움','animal','😾','rare',1,{wonder:.36,observe:.26},['소리만','어디선가','무섭다']),
+  twoD('bird-chase-hawk','매 쫓는 작은 새','animal','🦅','rare',1,{observe:.34,wonder:.34,record:.24},['훨씬작은데','물러서지않는다','둥지가있나']),
+  twoD('dog-and-ball','공 앞의 개','animal','⚽','rare',1,{observe:.32,wonder:.24,record:.18},['던져달라고','안짖는다','기다림']),
+  // 이상하고 웃긴 것 (2)
+  twoD('cat-on-scarecrow','허수아비 어깨 고양이','animal','🐈','rare',1,{wonder:.42,observe:.30,record:.24},['둘다안움직임','누가더허수아비','새는신경안씀']),
+  twoD('tire-planter','타이어 화분','thing','🛞','rare',1,{wonder:.32,observe:.26},['하얗게칠함','꽃이산다','굴러가던것']),
+  // 극희귀 (1)
+  twoD('badger-night','오소리','rare','🦡','rare',0,{wonder:.65,observe:.45,record:.4},['통통했다','뒤뚱','금방숲으로'],[],{rareEvent:true}),
+
+  /* ---- batch 2 (426–450) ---- */
+  // 일상·생활 (5)
+  twoD('rubber-slippers','고무 슬리퍼','thing','🩴','common',3,{observe:.20,record:.10},['뒤축닳음','아무나신는다','마루밑']),
+  twoD('bug-net','잠자리채','thing','🪆','uncommon',2,{observe:.24,wonder:.20},['그물이찢김','벽에','여름것']),
+  twoD('rice-bag-empty','빈 쌀포대','thing','🌾','common',3,{observe:.20},['접어둠','글씨가큼','다른데쓴다']),
+  twoD('kettle-black','까만 주전자','thing','🫖','common',3,{observe:.22,rest:.12},['불에오래','손잡이는나무','물맛이다르다']),
+  twoD('door-latch','문고리','thing','🚪','common',3,{observe:.24,wonder:.14},['닳아반질','수백번','손이기억한다']),
+  // 자연·흔적 (5)
+  twoD('grass-seed-stick','옷에 붙는 씨앗','nature','🌾','uncommon',2,{observe:.26,wonder:.22},['도깨비바늘','떼어도','또붙는다']),
+  twoD('bird-poop-line','전선 아래','nature','🐦','common',3,{observe:.22,wonder:.16},['하얗게줄','늘같은자리','피해다닌다']),
+  twoD('log-mushroom-farm','표고 원목','nature','🍄','uncommon',2,{observe:.28,record:.16},['세워둠','구멍마다','기다림']),
+  twoD('crab-shell-molt','게 허물','nature','🦀','rare',1,{observe:.30,wonder:.30},['통째로','속이비었다','더커졌겠지']),
+  twoD('bird-preen-feather','다듬은 깃털','nature','🪶','uncommon',2,{observe:.26,wonder:.20},['한자리에','여러개','오래앉았다']),
+  // 계절 (4)
+  twoD('spring-bud-swell','부푼 겨울눈','nature','🌱','uncommon',2,{observe:.30,wonder:.24},['터지기직전','빨갛다','곧']),
+  twoD('summer-ice-bar','얼음 동동','thing','🧊','uncommon',2,{observe:.26,rest:.18},['땀이맺힌다','컵밖에','금방녹는다']),
+  twoD('autumn-rake-line','갈퀴 자국','nature','🍂','uncommon',2,{observe:.26,wonder:.16},['줄무늬','정성','또떨어진다']),
+  twoD('winter-icicle-row','고드름 줄','nature','🧊','uncommon',2,{observe:.30,record:.20},['크기가다르다','처마따라','떨어지면위험']),
+  // 날씨 (2)
+  twoD('wind-sock','바람 자루','thing','🎏','uncommon',2,{observe:.26,wonder:.18},['부풀었다','방향','축들때도']),
+  twoD('rain-barrel','빗물 통','thing','🛢️','uncommon',2,{observe:.24,wonder:.16},['가득찼다','모기가살까','밭에준다']),
+  // 시간대 (3)
+  twoD('dawn-bread-light','새벽 불 켠 부엌','thing','🍞','uncommon',2,{observe:.26,wonder:.24},['제일먼저','누가일어났다','따뜻해보인다']),
+  twoD('noon-bell-tower','정오 종탑','thing','🔔','uncommon',2,{observe:.26,wonder:.20},['열두번','마을전체','시계가없어도']),
+  twoD('night-star-reflect','별 비친 논','nature','✨','rare',1,{observe:.34,wonder:.34,record:.26},['위아래가같다','발밑에하늘','걷기미안하다']),
+  // 상황형 (2)
+  twoD('cat-carrying-kitten','새끼 문 어미 고양이','animal','🐈','rare',1,{observe:.36,wonder:.34,record:.28},['목덜미를','조심히','이사중']),
+  twoD('bird-in-scarecrow-hat','허수아비 모자 속 둥지','animal','🪹','rare',1,{wonder:.42,observe:.32,record:.24},['안이비었다','아늑한가','완전히졌다']),
+  // 이상하고 웃긴 것 (3)
+  twoD('cat-sleeping-tool','연장 위 고양이','animal','🔧','rare',1,{wonder:.36,observe:.28},['일못한다','비켜주지않음','포기']),
+  twoD('umbrella-tree','우산 걸린 나무','thing','☂️','rare',1,{wonder:.34,observe:.24},['바람에날림','높이걸림','못뗀다']),
+  twoD('mirror-on-tree','나무의 거울','thing','🪞','rare',1,{wonder:.38,observe:.28},['왜여기','숲이비친다','누가걸었나']),
+  // 극희귀 (1)
+  twoD('wild-boar-family','멧돼지 가족','rare','🐗','rare',0,{wonder:.7,observe:.45,record:.35},['새끼가줄무늬','조용히','숨을참았다'],[],{rareEvent:true}),
+
+  /* ---- batch 3 (451–475) ---- */
+  // 일상·생활 (5)
+  twoD('gourd-hanging','매달린 조롱박','thing','🥒','uncommon',2,{observe:.28,wonder:.20},['시렁위','말리는중','바가지될것']),
+  twoD('coal-hole','연탄 구멍 뚫개','thing','🔧','uncommon',2,{observe:.22,wonder:.16},['쇠막대','아궁이옆','손잡이가뜨겁다']),
+  twoD('chalk-wall','분필 낙서','thing','✏️','uncommon',2,{observe:.28,wonder:.24,record:.16},['아이키높이','비오면지워진다','그림']),
+  twoD('bench-carved','이름 새긴 벤치','rest','🪑','rare',1,{rest:.30,observe:.28,wonder:.24},['누가누구를','오래됐다','아직있을까']),
+  twoD('bicycle-bell-broken','안 울리는 종','thing','🔔','common',3,{observe:.22,wonder:.14},['눌러도','소리가없다','녹']),
+  // 자연·흔적 (5)
+  twoD('spider-on-web','줄 위의 거미','animal','🕷️','uncommon',2,{observe:.30,wonder:.26},['가운데','미동없다','기다린다']),
+  twoD('bee-hive-wild','자연 벌집','nature','🐝','rare',1,{observe:.32,wonder:.32,record:.20},['나무구멍','윙윙','다가가지않는다']),
+  twoD('bird-shell-blue','파란 알껍질','nature','🥚','rare',1,{observe:.32,wonder:.30,record:.20},['땅에','무사히나왔나','작은조각']),
+  twoD('mole-cricket','땅강아지','animal','🦗','rare',1,{observe:.30,wonder:.30},['앞발이삽','밤에운다','처음본다']),
+  twoD('leaf-rolled-bug','말린 잎 속 벌레','nature','🍃','uncommon',2,{observe:.30,wonder:.26},['돌돌','집을지었다','안엔뭐가']),
+  // 계절 (3)
+  twoD('spring-tea-leaf','찻잎 새순','nature','🍵','uncommon',2,{observe:.30,record:.18},['한잎두잎','손끝으로','향이난다']),
+  twoD('summer-corn-tassel','옥수수 수염','nature','🌽','uncommon',2,{observe:.28,record:.16},['갈색이면','다익었다','만져본다']),
+  twoD('winter-cabbage-cover','짚 덮은 배추','nature','🥬','uncommon',2,{observe:.26,wonder:.16},['얼지말라고','정성','겨울밭']),
+  // 날씨 (3)
+  twoD('lightning-far','먼 번개','nature','⚡','rare',1,{wonder:.38,observe:.30},['소리는나중','한참뒤','다가온다']),
+  twoD('wind-tree-roar','바람 소리 나무','nature','🌳','uncommon',2,{observe:.26,wonder:.28},['파도같다','올려다본다','눈을감는다']),
+  twoD('snow-first-flake','첫눈 한 송이','nature','❄️','rare',1,{observe:.34,wonder:.36,record:.26},['하나만','손에서녹음','올해처음']),
+  // 시간대 (2)
+  twoD('dawn-cow-bell','새벽 소 방울','animal','🐄','uncommon',2,{observe:.26,wonder:.24},['딸랑','아직어둡다','일어났나보다']),
+  twoD('dusk-kite','저녁 연','thing','🪁','rare',1,{observe:.30,wonder:.30,record:.22},['아직떠있다','줄이길다','누가잡고있나']),
+  // 상황형 (3)
+  twoD('cat-vs-dog-standoff','고양이와 개','animal','🐕','rare',1,{observe:.36,wonder:.30,record:.22},['둘다안움직임','개가먼저','포기했다']),
+  twoD('bird-feeding-chick','먹이 주는 새','animal','🐦','rare',1,{observe:.36,wonder:.32,record:.28},['입을벌린다','한입씩','정신없다']),
+  twoD('frog-on-lotus','연잎 위 개구리','animal','🐸','rare',1,{observe:.34,wonder:.28,record:.24},['딱맞게','안빠진다','그림같다']),
+  // 이상하고 웃긴 것 (3)
+  twoD('scarecrow-sunglasses','선글라스 낀 허수아비','thing','🕶️','rare',1,{wonder:.42,observe:.28},['멋있다','누가씌웠나','새는웃는다']),
+  twoD('cat-in-shoe','신발 속 고양이','animal','👞','rare',1,{wonder:.40,observe:.30,record:.22},['아기고양이','딱맞음','주인은못신는다']),
+  twoD('door-to-nowhere','벽에 난 문','thing','🚪','rare',1,{wonder:.40,observe:.30},['열면벽','왜만들었나','손잡이는있다']),
+  // 극희귀 (1)
+  twoD('raccoon-dog','너구리','rare','🦝','rare',0,{wonder:.65,observe:.45,record:.4},['눈가가검다','통통','서로놀랐다'],[],{rareEvent:true}),
+
+  /* ---- batch 4 (476–500) ---- */
+  // 일상·생활 (5)
+  twoD('water-pump-hand','수동 펌프','thing','🚰','uncommon',2,{observe:.28,wonder:.20},['마중물','손잡이가길다','아직나올까']),
+  twoD('rice-straw-stack','볏짚 낟가리','thing','🌾','uncommon',2,{observe:.26,record:.14},['둥글게쌓음','겨울소여물','포근해보인다']),
+  twoD('tin-cup-hook','걸린 양은컵','thing','🥤','common',3,{observe:.22,rest:.12},['찌그러짐','아무나마신다','물맛이시원']),
+  twoD('paper-lantern-torn','찢어진 종이등','thing','🏮','uncommon',2,{observe:.24,wonder:.20},['축제뒤','비맞음','아직걸림']),
+  twoD('cement-bag','시멘트 포대','thing','🧱','common',3,{observe:.18},['굳어버림','한쪽구석','돌이됐다']),
+  // 자연·흔적 (5)
+  twoD('cicada-chorus-tree','매미 나무','animal','🪰','uncommon',2,{observe:.26,wonder:.26},['이나무만','시끄럽다','왜여기만']),
+  twoD('bird-territory-sing','노래하는 새','animal','🐦','uncommon',2,{observe:.30,wonder:.24,record:.18},['제일높은가지','같은자리','매일아침']),
+  twoD('ants-bridge','개미 다리','animal','🐜','rare',1,{observe:.34,wonder:.34,record:.22},['몸으로','건넌다','믿기힘들다']),
+  twoD('tree-two-grown','붙어 자란 나무','nature','🌳','rare',1,{observe:.32,wonder:.30,record:.22},['하나가됐다','언제부터','떼어낼수없다']),
+  twoD('bird-eggshell-nest','둥지 옆 껍질','nature','🥚','uncommon',2,{observe:.28,wonder:.26},['다나왔다','어미가치웠나','조각만']),
+  // 계절 (4)
+  twoD('spring-cow-graze','풀 뜯는 소','animal','🐄','uncommon',2,{observe:.30,rest:.20,record:.16},['천천히','고개를안든다','되새김질']),
+  twoD('summer-shade-dog','그늘 찾는 개','animal','🐕','uncommon',2,{observe:.28,rest:.26},['혀를뺐다','안움직인다','해가돌면따라간다']),
+  twoD('autumn-rice-gold','황금 들판','nature','🌾','uncommon',2,{observe:.32,record:.24,wonder:.16},['다익었다','고개숙임','바람에물결']),
+  twoD('winter-smoke-still','겨울 굴뚝 연기','thing','💨','uncommon',2,{observe:.28,wonder:.22},['수직으로','바람이없다','추운날']),
+  // 날씨 (2)
+  twoD('sun-dog','무리해','rare','☀️','rare',0,{wonder:.65,observe:.4,record:.35},['해가셋','아주추운날','눈이부시다'],[],{rareEvent:true}),
+  twoD('rain-street-shine','비 젖은 길','nature','🌧️','uncommon',2,{observe:.30,wonder:.22,record:.18},['불빛이번진다','반질','조심']),
+  // 시간대 (3)
+  twoD('morning-market-box','새벽 시장 상자','thing','📦','uncommon',2,{observe:.24,wonder:.18},['벌써와있다','채소가담김','이슬맺힘']),
+  twoD('noon-nap-cat-roof','지붕 낮잠 고양이','animal','🐈','rare',1,{observe:.32,rest:.28,record:.22},['제일따뜻한곳','늘어짐','안내려온다']),
+  twoD('night-window-last','마지막 불빛','thing','🪟','uncommon',2,{observe:.26,wonder:.26,rest:.16},['다들잠들었다','하나만','누가안자나']),
+  // 상황형 (2)
+  twoD('cat-bird-ignore','서로 무시','animal','🐈','rare',1,{wonder:.36,observe:.30},['둘다안본척','거리는가깝다','협정인가']),
+  twoD('dog-tail-only','꼬리만 흔드는 개','animal','🐕','rare',1,{observe:.30,wonder:.28,record:.20},['풀에가림','꼬리만','기분좋은게보인다']),
+  // 이상하고 웃긴 것 (2)
+  twoD('boot-on-scarecrow-head','장화 쓴 허수아비','thing','🥾','rare',1,{wonder:.42,observe:.28},['모자대신','거꾸로','새가더당황']),
+  twoD('cat-loaf-lineup','줄지은 식빵 고양이','animal','🍞','rare',1,{wonder:.44,observe:.32,record:.26},['셋다똑같이','같은방향','뭘보나']),
+  // 극희귀 (2)
+  twoD('crane-flying','두루미','rare','🕊️','rare',0,{wonder:.7,observe:.45,record:.4},['날개가아주넓다','목이길다','천천히갔다'],[],{rareEvent:true}),
+  twoD('moonbow','달무지개','rare','🌈','rare',0,{wonder:.75,observe:.45,record:.4},['밤에무지개','희미하다','평생한번'],[],{rareEvent:true}),
+
   threeD('rock-small','작은 바위','자연'),threeD('rock-big','큰 바위','자연'),threeD('stone-tall','선 돌','자연'),threeD('slab','바위 슬랩 (대형)','자연'),threeD('bush','수풀','자연'),threeD('tree','작은 나무','자연'),threeD('grass','풀 다발','자연'),
   threeD('cabin','오두막','구조물'),threeD('tent','텐트 (캠프)','구조물'),threeD('lighthouse','등대','구조물'),threeD('door','초록 대문','구조물'),threeD('wall-stone','돌담 조각','구조물'),threeD('chair','의자','구조물'),threeD('streetlamp','가로등 (불빛)','구조물'),threeD('lantern','랜턴 (불빛)','구조물'),threeD('oldcar','낡은 차','구조물'),threeD('plane','비행기','구조물'),
   threeD('suitcase','캐리어','기억 사물'),threeD('book','책 무더기','기억 사물'),threeD('cup','찻잔','기억 사물'),threeD('fruit','과일','기억 사물'),threeD('cd-shelf','CD 선반','기억 사물'),threeD('sea-edge','바다의 가장자리','기억 사물'),
