@@ -1241,8 +1241,15 @@ function drawByeoli(byeoli){
    별이 state·Brain·sky.flybys·발소리는 절대 안 건드리고, 렌더 override만 한다.
    작은 creature flyby와 완전히 분리. */
 // journalLines 접근용 (src/worldEvents/worldEventRegistry.ts와 동기 유지).
+/* BUILD 410-D/E: 3종 이벤트 정의. durationSeconds/journalLines는 TS 레지스트리
+   (src/worldEvents/worldEventRegistry.ts)와 값이 일치해야 한다. title은 we-title 표기용. */
 const WORLD_EVENT_DEFS = {
-  godzilla: { journalLines:['산인 줄 알았는데, 산이 걸어갔다.','오늘은 먼 산이 잠깐 움직였다.'] },
+  godzilla: { title:'GODZILLA', durationSeconds:12,
+    journalLines:['산인 줄 알았는데, 산이 걸어갔다.','오늘은 먼 산이 잠깐 움직였다.'] },
+  'meteor-shower': { title:'METEOR SHOWER', durationSeconds:14,
+    journalLines:['별이 몇 개, 조용히 떨어졌다.','소원을 빌 새도 없이 지나갔다.','밤하늘이 잠깐 붐볐다.'] },
+  ufo: { title:'UFO', durationSeconds:10,
+    journalLines:['하늘에 잠깐, 설명할 수 없는 불빛이 있었다.','무언가 멈춰 서서 이쪽을 보는 것 같았다.'] },
 };
 /* ===== BUILD 410-C2: Full Page World Event Stage ==========================
    평소 방송을 잠시 끊고, 페이지 전체를 이벤트 전용 방송 화면으로 전환한다.
@@ -1251,6 +1258,8 @@ const WORLD_EVENT_DEFS = {
    410-C 로직 유지. 별이 state/Brain/발소리/creature flyby 안 건드림. */
 const WorldEventStage = {
   active:null, scheduledInstanceId:null, loggedInstanceIds:new Set(),
+  scheduledSoundKeys:new Set(),          // BUILD 410-D/E: 이벤트별 사운드 중복 예약 방지
+  _meteorCache:null, _ufoCache:null,     // 결정론적 배치 캐시 (key=eventInstanceId)
   _stageEl:null, _cv:null, _cx:null, _raf:null, _running:false,
   _init(){
     if(this._stageEl) return;
@@ -1275,14 +1284,15 @@ const WorldEventStage = {
     const app=document.getElementById('app'); if(app) app.style.display='none';
     this._stageEl.style.display='block';
     this._resize(); window.addEventListener('resize', this._onResize=()=>this._resize());
-    // 타이틀
-    const tt=document.getElementById('we-title'); if(tt) tt.textContent = (this.active.eventId==='godzilla'?'GODZILLA':this.active.eventId.toUpperCase());
+    // 타이틀 (DEFS 기반. 하이픈 id가 그대로 노출되지 않게)
+    const _d0=WORLD_EVENT_DEFS[this.active.eventId];
+    const tt=document.getElementById('we-title'); if(tt) tt.textContent = (_d0&&_d0.title) || String(this.active.eventId).replace(/-/g,' ').toUpperCase();
     const cap=document.getElementById('we-caption'); if(cap){ cap.style.opacity='0'; cap.textContent=''; }
     this._running=true;
     const loop=()=>{
       if(!this._running) return;
       const p=this._progress(this.active);
-      this.scheduleGodzillaSound(this.active);   // 새 인스턴스면 1회 예약 (410-C 로직)
+      this.scheduleEventSound(this.active);      // 이벤트별 사운드 예약 (410-D/E 분기)
       this._draw(p);
       if(Date.now()>=this.active.endsAt){ this._finish(this.active); this.stop(); return; }
       this._raf=requestAnimationFrame(loop);
@@ -1303,8 +1313,29 @@ const WorldEventStage = {
     this._cx.setTransform(dpr,0,0,dpr,0,0); this._W=w; this._H=h;
   },
 
-  // 전체 새 그림 — "잠시 다른 방송". 산책 배경 재사용 안 함.
+  // 이벤트별 분기 디스패처 (BUILD 410-D/E). 고질라 본문은 _drawGodzilla로 그대로 이동.
   _draw(p){
+    const id=this.active&&this.active.eventId;
+    if(id==='meteor-shower') this._drawMeteorShower(p);
+    else if(id==='ufo') this._drawUfo(p);
+    else this._drawGodzilla(p);
+    this._drawCaption(p);
+  },
+
+  // 문장 처리 공통 (모든 이벤트가 공유). 종료 직전 1줄, sequence로 결정론적 선택.
+  _drawCaption(p){
+    const cap=document.getElementById('we-caption');
+    if(!cap) return;
+    if(p>=0.83 && !cap.textContent){
+      const def=(typeof WORLD_EVENT_DEFS!=='undefined')?WORLD_EVENT_DEFS[this.active.eventId]:null;
+      const lines=(def&&def.journalLines)||['오늘, 하늘에 무슨 일이 있었다.'];
+      cap.textContent=lines[((this.active.sequence||0)>>>0)%lines.length]; cap.style.opacity='1';
+    }
+    if(p<0.83 && cap.textContent){ cap.textContent=''; cap.style.opacity='0'; }
+  },
+
+  // 전체 새 그림 — "잠시 다른 방송". 산책 배경 재사용 안 함.
+  _drawGodzilla(p){
     const cx=this._cx, W=this._W, H=this._H;
     // 타임라인: 0~1 암전 / 1~4 거대한 발+흔들림 / 4~8 몸통+등가시 / 8~10 얼굴 / 10~12 꼬리+정적+문장
     // 카메라 흔들림 1px (stomp 창)
@@ -1336,11 +1367,6 @@ const WorldEventStage = {
     cx.restore();
     // ── 암전 오버레이 ──
     if(black>0){ cx.fillStyle='rgba(0,0,0,'+black.toFixed(3)+')'; cx.fillRect(0,0,W,H); }
-    // ── 문장 (10초부터) ──
-    const cap=document.getElementById('we-caption');
-    if(cap){ if(p>=0.83 && !cap.textContent){ const def=(typeof WORLD_EVENT_DEFS!=='undefined')?WORLD_EVENT_DEFS[this.active.eventId]:null;
-        const lines=(def&&def.journalLines)||['산이 움직였다.']; cap.textContent=lines[((this.active.sequence||0)>>>0)%lines.length]; cap.style.opacity='1'; }
-      if(p<0.83 && cap.textContent){ cap.textContent=''; cap.style.opacity='0'; } }
   },
 
   // 거대 도마뱀형 괴수 — 화면 중앙~오른쪽. 특정 영화 복제 아님. 타임라인 따라 부위 강조.
@@ -1389,6 +1415,218 @@ const WorldEventStage = {
     }
   },
 
+  /* ── 결정론적 난수 (BUILD 410-D/E) ────────────────────────────────
+     같은 eventInstanceId면 모든 뷰어·모든 재접속에서 동일한 배치가 나온다.
+     매 프레임 Math.random() 금지. 배열은 instanceId 키로 1회만 생성해 캐시. */
+  _hash(str){ let h=2166136261>>>0; const s=String(str||'');
+    for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h>>>0; },
+  _rnd(seed,i){ let x=(seed+i*2654435761)>>>0; x^=x<<13; x>>>=0; x^=x>>17; x^=x<<5; x>>>=0; return x/4294967296; },
+
+  // 공통 밤하늘 (유성우/UFO 공유). 고정 별 + 낮은 지평선. 과다 발광 금지.
+  _drawNightSky(cx,W,H,seed,starCount,brightness){
+    const g=cx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#04060d'); g.addColorStop(0.55,'#070c18'); g.addColorStop(1,'#0c1424');
+    cx.fillStyle=g; cx.fillRect(-2,-2,W+4,H+4);
+    const n=Math.min(100,starCount);
+    for(let i=0;i<n;i++){
+      const sx=this._rnd(seed,i*3+1)*W, sy=this._rnd(seed,i*3+2)*H*0.72;
+      const r=0.6+this._rnd(seed,i*3+3)*1.2;
+      const tw=0.55+0.45*Math.sin(Date.now()/900+i*1.7);   // 잔잔한 반짝임
+      cx.fillStyle='rgba(226,232,244,'+(0.30*tw*brightness).toFixed(3)+')';
+      cx.beginPath(); cx.arc(sx,sy,r,0,6.283); cx.fill();
+    }
+    cx.fillStyle='rgba(120,140,170,0.05)'; cx.fillRect(0,H*0.66,W,44);   // 얇은 안개
+    cx.fillStyle='#070a10';                                              // 낮은 지평선
+    const hy=H*0.80; cx.beginPath(); cx.moveTo(0,hy);
+    for(let x=0;x<=W;x+=48){ cx.lineTo(x, hy-14*Math.abs(Math.sin(x*0.006+1.2))-6); }
+    cx.lineTo(W,H); cx.lineTo(0,H); cx.closePath(); cx.fill();
+  },
+
+  /* ── 유성우 (14초) ─────────────────────────────────────────────────
+     0~0.14 밤하늘/별 서서히 · 0.16~0.30 첫 유성 1개 천천히
+     0.36~0.75 본 유성우 12개(시작·길이·밝기 제각각, 같은 좌하향 방향성)
+     0.75~0.89 가장 긴 유성 + 하늘 가장 밝음 · 0.90~1.0 사라짐/문장/암전
+     흔들림 0. 폭죽 아님. */
+  _meteors(){
+    const key=this.active.eventInstanceId;
+    if(this._meteorCache && this._meteorCache.key===key) return this._meteorCache.list;
+    const seed=this._hash(key), list=[];
+    list.push({ startP:0.16, durationP:0.14, x:0.68, y:0.10, dx:-0.34, dy:0.30, length:52, brightness:0.62, big:false });
+    for(let i=0;i<12;i++){                    // 본 유성우 — 제각각이되 방향성은 공유(좌하향)
+      const r1=this._rnd(seed,i*5+11), r2=this._rnd(seed,i*5+12), r3=this._rnd(seed,i*5+13),
+            r4=this._rnd(seed,i*5+14), r5=this._rnd(seed,i*5+15);
+      const ang=-0.72+r4*0.30;                // 방향 편차 작게 → 같은 흐름
+      const len=22+r5*58;
+      list.push({ startP:0.36+r1*0.36, durationP:0.10+r2*0.13, x:0.30+r3*0.72, y:r2*0.34,
+        dx:Math.cos(ang)*-1, dy:Math.sin(ang)*-1, length:len, brightness:0.34+r5*0.42, big:false });
+    }
+    list.push({ startP:0.75, durationP:0.14, x:1.06, y:0.06, dx:-0.86, dy:0.42,
+      length:Math.min(this._W*0.68,Math.max(this._W*0.45,this._W*0.55)), brightness:0.95, big:true });
+    const out={key,list}; this._meteorCache=out; return list;
+  },
+  _drawMeteorShower(p){
+    const cx=this._cx, W=this._W, H=this._H, seed=this._hash(this.active.eventInstanceId);
+    // shakeX=shakeY=0 — 고질라 stomp가 여기 절대 적용되지 않음
+    const sky=(p<0.14)?(p/0.14):(p>0.90?Math.max(0,1-(p-0.90)/0.10):1);
+    const peak=(p>0.75&&p<0.89)?1.18:1.0;                 // 가장 긴 유성 구간에서 하늘 조금 더 밝게
+    this._drawNightSky(cx,W,H,seed,70,Math.min(1.2,sky*peak));
+    for(const m of this._meteors()){
+      if(p<m.startP || p>m.startP+m.durationP) continue;  // 자기 창에서만
+      const k=(p-m.startP)/m.durationP;
+      const fade=Math.sin(k*Math.PI);                      // 나타났다 사라짐
+      if(fade<=0.01) continue;
+      const travel=m.big?W*1.25:W*0.42;
+      const hx=m.x*W+m.dx*travel*k, hy=m.y*H+m.dy*travel*k;
+      const tx=hx-m.dx*m.length, ty=hy-m.dy*m.length;      // 꼬리는 진행 반대방향
+      const a=m.brightness*fade;
+      const tg=cx.createLinearGradient(hx,hy,tx,ty);
+      tg.addColorStop(0,'rgba(238,244,255,'+(0.85*a).toFixed(3)+')');
+      tg.addColorStop(0.45,'rgba(206,222,255,'+(0.30*a).toFixed(3)+')');
+      tg.addColorStop(1,'rgba(180,205,255,0)');
+      cx.strokeStyle=tg; cx.lineWidth=m.big?2.2:1.3; cx.lineCap='round';
+      cx.beginPath(); cx.moveTo(hx,hy); cx.lineTo(tx,ty); cx.stroke();
+      cx.fillStyle='rgba(245,250,255,'+(0.9*a).toFixed(3)+')';   // 머리
+      cx.beginPath(); cx.arc(hx,hy,m.big?2.0:1.2,0,6.283); cx.fill();
+    }
+    let black=0;                                            // 인트로/아웃트로 암전
+    if(p<0.06) black=1-(p/0.06); else if(p>0.94) black=(p-0.94)/0.06;
+    if(black>0){ cx.fillStyle='rgba(0,0,0,'+black.toFixed(3)+')'; cx.fillRect(0,0,W,H); }
+  },
+
+  /* ── UFO (10초) ────────────────────────────────────────────────────
+     0~0.10 밤하늘 · 0.10~0.34 먼 작은 빛으로 등장 · 0.34~0.55 천천히 접근/횡단
+     0.55~0.74 정지 + 탐색광이 지면을 훑음 · 0.74~0.88 조용히 이탈 + 문장
+     공포 아님. 신기함. 특정 IP 형태 복제 금지(단순 렌즈형 실루엣). 흔들림 0. */
+  _ufo(){
+    const key=this.active.eventInstanceId;
+    if(this._ufoCache && this._ufoCache.key===key) return this._ufoCache.v;
+    const seed=this._hash(key);
+    const v={ dir:this._rnd(seed,7)<0.5?-1:1, hoverX:0.40+this._rnd(seed,8)*0.22, hoverY:0.26+this._rnd(seed,9)*0.10 };
+    this._ufoCache={key,v}; return v;
+  },
+  _drawUfo(p){
+    const cx=this._cx, W=this._W, H=this._H, seed=this._hash(this.active.eventInstanceId);
+    const u=this._ufo();
+    const sky=(p<0.10)?(p/0.10):(p>0.90?Math.max(0,1-(p-0.90)/0.10):1);
+    this._drawNightSky(cx,W,H,seed,60,sky);
+    if(p<0.10){ return; }                                   // 아직 하늘만
+    // 경로: 가장자리에서 등장 → hover 지점으로 접근 → 정지 → 반대편으로 이탈
+    const enterX=u.dir>0?-0.10:1.10, exitX=u.dir>0?1.12:-0.12;
+    const hx=u.hoverX, hy=u.hoverY;
+    let px,py,scale,alpha=1;
+    if(p<0.34){ const k=(p-0.10)/0.24; const e=k*k*(3-2*k);  // 작은 빛 → 접근
+      px=enterX+(hx-enterX)*e; py=(hy-0.06)+(hy-(hy-0.06))*e; scale=0.22+0.5*e; }
+    else if(p<0.55){ const k=(p-0.34)/0.21; const e=k*k*(3-2*k);
+      px=hx; py=hy-0.02+0.02*e; scale=0.72+0.28*e; }
+    else if(p<0.74){ px=hx; py=hy+Math.sin((p-0.55)*26)*0.004; scale=1.0; }   // 정지 + 미세 부유
+    else { const k=Math.min(1,(p-0.74)/0.16); const e=k*k;
+      px=hx+(exitX-hx)*e; py=hy-0.05*e; scale=1.0-0.45*e; alpha=1-0.85*e; }
+    const X=px*W, Y=py*H, S=Math.min(W,H)/300*scale;
+    // 탐색광 (정지 구간에서만, 지면을 부드럽게 훑음) — 공포 아닌 호기심의 빛
+    if(p>0.55&&p<0.76){
+      const k=(p-0.55)/0.21, sweep=Math.sin(k*Math.PI*1.4)*W*0.13;
+      const beamA=Math.sin(Math.min(1,k*1.6)*Math.PI)*0.22;
+      if(beamA>0.01){
+        const gy=H*0.80, bx=X+sweep;
+        const bg=cx.createLinearGradient(X,Y+S*10,bx,gy);
+        bg.addColorStop(0,'rgba(196,230,255,'+(beamA).toFixed(3)+')');
+        bg.addColorStop(1,'rgba(150,200,255,0)');
+        cx.fillStyle=bg; cx.beginPath(); cx.moveTo(X-S*12,Y+S*8); cx.lineTo(X+S*12,Y+S*8);
+        cx.lineTo(bx+S*30,gy); cx.lineTo(bx-S*30,gy); cx.closePath(); cx.fill();
+        cx.fillStyle='rgba(190,225,255,'+(beamA*0.5).toFixed(3)+')';   // 지면 광점
+        cx.beginPath(); cx.ellipse(bx,gy,S*30,S*5,0,0,6.283); cx.fill();
+      }
+    }
+    // 본체 — 단순 렌즈형 실루엣 + 은은한 광. 특정 IP 형태 아님.
+    const glow=cx.createRadialGradient(X,Y,0,X,Y,S*26);
+    glow.addColorStop(0,'rgba(200,232,255,'+(0.30*alpha).toFixed(3)+')');
+    glow.addColorStop(1,'rgba(160,200,255,0)');
+    cx.fillStyle=glow; cx.beginPath(); cx.arc(X,Y,S*26,0,6.283); cx.fill();
+    cx.fillStyle='rgba(214,238,255,'+(0.92*alpha).toFixed(3)+')';      // 멀 땐 그냥 작은 빛
+    cx.beginPath(); cx.arc(X,Y,Math.max(1.1,S*1.8),0,6.283); cx.fill();
+    if(scale>0.55){
+      cx.fillStyle='rgba(24,32,44,'+(0.92*alpha).toFixed(3)+')';       // 동체
+      cx.beginPath(); cx.ellipse(X,Y,S*13,S*3.6,0,0,6.283); cx.fill();
+      cx.fillStyle='rgba(38,52,70,'+(0.9*alpha).toFixed(3)+')';        // 돔
+      cx.beginPath(); cx.ellipse(X,Y-S*2.6,S*6,S*3.0,0,Math.PI,0); cx.fill();
+      for(let i=0;i<5;i++){                                            // 하단 순환 등
+        const ph=(Date.now()/560+i*0.2)%1, lx=X-S*9+i*S*4.5;
+        const la=(0.30+0.55*Math.abs(Math.sin(ph*Math.PI)))*alpha;
+        cx.fillStyle='rgba(255,226,170,'+la.toFixed(3)+')';
+        cx.beginPath(); cx.arc(lx,Y+S*3.2,S*0.9,0,6.283); cx.fill();
+      }
+    }
+    let black=0;
+    if(p<0.05) black=1-(p/0.05); else if(p>0.93) black=(p-0.93)/0.07;
+    if(black>0){ cx.fillStyle='rgba(0,0,0,'+black.toFixed(3)+')'; cx.fillRect(0,0,W,H); }
+  },
+
+  /* ── 사운드 분기 (BUILD 410-D/E) ──────────────────────────────────
+     기존 Sound.ctx 재사용(새 AudioContext 생성 금지). iOS unlock 전이면
+     _ready()가 false → 예약 안 하고 그냥 리턴(화면은 계속 진행).
+     중복 방지 키는 eventInstanceId+cue 로 분리 → 고질라 키와 섞이지 않음. */
+  scheduleEventSound(active){
+    const id=active&&active.eventId;
+    if(id==='meteor-shower') this.scheduleMeteorSound(active);
+    else if(id==='ufo') this.scheduleUfoSound(active);
+    else this.scheduleGodzillaSound(active);
+  },
+  _sndCtx(){
+    const Sd=(typeof Sound!=='undefined')?Sound:null;
+    if(!Sd || !Sd.on || !Sd._ready()) return null;
+    return Sd.ctx||null;
+  },
+  // 유성우 — 조용한 반짝임/공기감. 고질라 쿵 재사용 금지. 5회, 지난 cue는 생략.
+  scheduleMeteorSound(active){
+    const key=active.eventInstanceId+'|meteor';
+    if(this.scheduledSoundKeys.has(key)) return;
+    const ctxA=this._sndCtx(); if(!ctxA) return;
+    const dur=(active.endsAt-active.startedAt)/1000;
+    const CUES=[0.30,0.42,0.55,0.66,0.78];
+    const elapsed=(Date.now()-active.startedAt)/1000;
+    const seed=this._hash(active.eventInstanceId);
+    CUES.forEach((frac,i)=>{
+      const rel=dur*frac-elapsed; if(rel<-0.05) return;         // 이미 지난 반짝임은 재생 안 함
+      const t=ctxA.currentTime+Math.max(0,rel);
+      const f=1100+this._rnd(seed,i+31)*700;                    // 1100~1800Hz
+      const len=0.08+this._rnd(seed,i+41)*0.10;                 // 0.08~0.18s
+      const vol=0.04+this._rnd(seed,i+51)*0.08;                 // 0.04~0.12
+      const o=ctxA.createOscillator(), g=ctxA.createGain();
+      o.type='triangle'; o.frequency.setValueAtTime(f,t);
+      o.frequency.exponentialRampToValueAtTime(f*0.62,t+len);
+      g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+len);
+      o.connect(g); g.connect(ctxA.destination); o.start(t); o.stop(t+len+0.02);
+    });
+    this.scheduledSoundKeys.add(key);
+  },
+  // UFO — 낮고 조용한 전자음 1회(호버 구간에 얕은 비트). 공포 아님.
+  scheduleUfoSound(active){
+    const key=active.eventInstanceId+'|ufo';
+    if(this.scheduledSoundKeys.has(key)) return;
+    const ctxA=this._sndCtx(); if(!ctxA) return;
+    const dur=(active.endsAt-active.startedAt)/1000;
+    const startFrac=0.12, endFrac=0.86;
+    const elapsed=(Date.now()-active.startedAt)/1000;
+    const relStart=dur*startFrac-elapsed, relEnd=dur*endFrac-elapsed;
+    if(relEnd<=0.05){ this.scheduledSoundKeys.add(key); return; }   // 이미 다 지나감
+    const t0=ctxA.currentTime+Math.max(0,relStart);
+    const t1=ctxA.currentTime+Math.max(0.1,relEnd);
+    const o=ctxA.createOscillator(), o2=ctxA.createOscillator(), g=ctxA.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(132,t0);
+    o.frequency.linearRampToValueAtTime(178,t0+(t1-t0)*0.55);
+    o.frequency.linearRampToValueAtTime(120,t1);
+    o2.type='sine'; o2.frequency.setValueAtTime(133.6,t0);          // 얕은 비트(맥놀이)
+    o2.frequency.linearRampToValueAtTime(121.2,t1);
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(0.10,t0+0.5);
+    g.gain.setValueAtTime(0.10,Math.max(t0+0.5,t1-0.8));
+    g.gain.exponentialRampToValueAtTime(0.0001,t1);
+    o.connect(g); o2.connect(g); g.connect(ctxA.destination);
+    o.start(t0); o2.start(t0); o.stop(t1+0.05); o2.stop(t1+0.05);
+    this.scheduledSoundKeys.add(key);
+  },
+
   // 저주파 쿵 3회 — 410-C 로직 그대로 (성공 후 기록, startedAt 기준 절대시각, 지난 쿵 생략)
   scheduleGodzillaSound(active){
     if(this.scheduledInstanceId===active.eventInstanceId) return;
@@ -1409,7 +1647,7 @@ const WorldEventStage = {
     if(this.loggedInstanceIds.has(active.eventInstanceId)) return;
     this.loggedInstanceIds.add(active.eventInstanceId);
     const def=(typeof WORLD_EVENT_DEFS!=='undefined')?WORLD_EVENT_DEFS[active.eventId]:null;
-    const lines=(def&&def.journalLines)||['산인 줄 알았는데, 산이 걸어갔다.'];
+    const lines=(def&&def.journalLines)||['오늘, 하늘에 무슨 일이 있었다.'];
     const idx=((active.sequence||0)>>>0)%lines.length;
     if(typeof pushMsg==='function') pushMsg('diary','🌑 '+lines[idx],null);
   },
@@ -1417,14 +1655,14 @@ const WorldEventStage = {
 };
 const WorldEventPlayer = WorldEventStage;  // 하위 호환 별칭 (기존 참조 유지)
 
-// Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla[&eventOffset=초]
+// Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla|meteor-shower|ufo[&eventOffset=초]
 // ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
 let SANDBOX_EVENT_DEBUG=false;
 try{
   const qs=new URLSearchParams(location.search);
   const q=qs.get('event');
-  if(q && stateProvider.mode!=='live'){ SANDBOX_EVENT_DEBUG=true;
-    const dur=12000;                                  // godzilla durationSeconds=12
+  if(q && WORLD_EVENT_DEFS[q] && stateProvider.mode!=='live'){ SANDBOX_EVENT_DEBUG=true;
+    const dur=(WORLD_EVENT_DEFS[q].durationSeconds||12)*1000;   // 이벤트별 길이 (DEFS = TS 레지스트리와 동일)
     const off=Math.max(0, Math.min(dur/1000-0.1, parseFloat(qs.get('eventOffset')||'0')))*1000;
     const started=Date.now()-off;                     // eventOffset초 진행 지점부터
     WorldEventPlayer.start({ eventId:q, eventInstanceId:'sandbox-'+q+'-'+started,
