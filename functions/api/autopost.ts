@@ -13,6 +13,8 @@ interface Env {
   CAPTURES?: R2Bucket;            // BUILD 355: R2 캡처 버킷 — 방송 이미지를 여기서 뽑는다
   CAPTURES_PUBLIC_BASE?: string; // r2.dev 공개 URL 접두사
   THREADS_APP_SECRET?: string;   // BUILD 417: 토큰 자동 갱신용 (threads-auth.ts와 동일 앱)
+  THREADS_TOKEN?: string;        // BUILD 417: (선택) 대시보드 토큰 생성기로 만든 장기 토큰 — 첫 실행 시 KV로 이관
+  THREADS_USER_ID?: string;      // BUILD 417: (선택) 위 토큰의 Threads user id
 }
 
 const FEED_KEY = 'feed';
@@ -60,10 +62,15 @@ interface ThreadsAuth { token: string; userId: string; refreshedAt: number }
 
 async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
   const raw = await env.PLANET.get(THREADS_AUTH_KEY);
-  if (!raw) return null;
-  let auth: ThreadsAuth;
-  try { auth = JSON.parse(raw); } catch { return null; }
-  if (!auth.token || !auth.userId) return null;
+  let auth: ThreadsAuth | null = null;
+  if (raw) { try { auth = JSON.parse(raw); } catch { auth = null; } }
+  // env 부트스트랩 — Meta 대시보드 "사용자 토큰 생성기"로 만든 토큰을
+  // CF env에 넣으면 첫 실행 때 KV로 옮겨 앉는다. 이후 갱신은 KV에서.
+  if ((!auth || !auth.token) && env.THREADS_TOKEN && env.THREADS_USER_ID) {
+    auth = { token: env.THREADS_TOKEN, userId: env.THREADS_USER_ID, refreshedAt: Date.now() };
+    await env.PLANET.put(THREADS_AUTH_KEY, JSON.stringify(auth));
+  }
+  if (!auth || !auth.token || !auth.userId) return null;
   // 자동 갱신 — 토큰이 24시간 이상 묵어야 갱신 가능하므로 7일 주기가 안전
   if (Date.now() - auth.refreshedAt > REFRESH_AFTER_MS) {
     try {
