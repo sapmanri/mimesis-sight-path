@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mimesis-observer-registry",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-13",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "OBSERVER_REGISTRY",
+        "class_name": "ObserverRegistry"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ObserverRegistry"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

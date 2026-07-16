@@ -92,11 +92,41 @@
     border:1px solid var(--sage);border-radius:8px;cursor:pointer}
   #pr-save:disabled{opacity:.55;cursor:default}
   #pr-note{font-size:9px;color:var(--dim)}
+  /* ---- BUILD 419-B: 관찰자 복구 UI ---- */
+  #pr-backup{padding:7px 12px;font-size:11px;font-weight:600;color:var(--sage);background:transparent;
+    border:1px solid var(--sage);border-radius:8px;cursor:pointer}
+  #rc-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;
+    padding:0 12px 10px;font-size:9px;color:var(--dim)}
+  #pr-bkbadge{font-size:9px;color:var(--dim)}
+  #pr-bkbadge.warn{color:#c9a04a}
+  #pr-restore-open{background:none;border:0;padding:0;font-size:9px;color:var(--dim);
+    text-decoration:underline;cursor:pointer}
+  #rc-panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,92vw);
+    background:#12171c;border:1px solid #232a31;border-radius:14px;padding:18px 16px;color:#cfd6dc}
+  #rc-panel h3{margin:0 0 10px;font-size:13px;color:var(--sage)}
+  #rc-panel p{margin:6px 0;font-size:11px;line-height:1.7;color:#aab3ba}
+  #rc-panel .rc-key{display:block;margin:10px 0;padding:10px;text-align:center;
+    font:600 13px ui-monospace,Menlo,monospace;letter-spacing:.06em;background:#0d1114;
+    border:1px dashed #3a464f;border-radius:8px;color:#e8e4d8;user-select:all;word-break:break-all}
+  #rc-panel .rc-warn{color:#c9a04a}
+  #rc-panel input{width:100%;box-sizing:border-box;margin:4px 0;padding:9px 10px;
+    font:500 12px ui-monospace,Menlo,monospace;background:#0d1114;border:1px solid #2a333b;
+    border-radius:8px;color:#e8e4d8;text-transform:uppercase}
+  #rc-panel .rc-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  #rc-panel .rc-primary{padding:8px 12px;font-size:11px;font-weight:600;color:#0d1114;
+    background:var(--sage);border:0;border-radius:8px;cursor:pointer}
+  #rc-panel .rc-primary:disabled{opacity:.55;cursor:default}
+  #rc-panel .rc-ghost{padding:8px 12px;font-size:11px;font-weight:600;color:var(--sage);
+    background:transparent;border:1px solid var(--sage);border-radius:8px;cursor:pointer}
+  #rc-panel .rc-note{font-size:10px;color:#c9a04a;min-height:14px;margin-top:8px}
   #pr-empty{padding:22px 10px;text-align:center;font-size:11px;color:var(--dim);line-height:1.7}
   @media(max-width:480px){
     #pr-panel{width:100%;max-height:92dvh;left:0;top:auto;bottom:0;transform:none;
       border-radius:14px 14px 0 0;border-bottom:0;
       padding-bottom:env(safe-area-inset-bottom,0)}
+    #rc-panel{width:100%;left:0;top:auto;bottom:0;transform:none;
+      border-radius:14px 14px 0 0;border-bottom:0;
+      padding-bottom:calc(18px + env(safe-area-inset-bottom,0))}
   }
   .taste-head{font-size:9px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:4px;
     display:flex;justify-content:space-between}
@@ -181,9 +211,19 @@
     <div id="pr-foot">
       <button id="pr-share" type="button">공유카드 만들기</button>
       <button id="pr-save" type="button">PNG 저장</button>
+      <button id="pr-backup" type="button">기록 지키기</button>
       <span id="pr-note"></span>
     </div>
+    <div id="rc-foot">
+      <span id="pr-bkbadge"></span>
+      <button id="pr-restore-open" type="button">기존 별이 이어가기</button>
+    </div>
   </div>
+</div>
+
+<!-- BUILD 419-B: 관찰자 복구 모달 (발급 / 복구 / 교체 확인 — 내용은 JS 렌더) -->
+<div id="rc-sheet" style="display:none;position:fixed;inset:0;z-index:99500;background:rgba(6,8,10,.62);backdrop-filter:blur(2px)">
+  <div id="rc-panel" role="dialog" aria-modal="true" aria-label="기록 지키기"></div>
 </div>
 
 <!-- BUILD 410-C2: Full Page World Event Stage (평소 display:none) -->
@@ -381,6 +421,48 @@ const Profile={
   tasteCount(){ return Object.keys(this.data.tastes).length; },
   observedMs(){ return this.data.totalObservedMs + (Date.now()-this._lastFlush); },
 };
+/* =====================================================================
+   BUILD 419-B — 복구 staging 부트 (정본: docs/BUILD_419A_OBSERVER_RECOVERY.md §5-1)
+   localStorage 키 2개(profile·habits)의 일괄 갱신은 원자적이지 않다.
+   restore.pending이 남아 있으면: payload는 저장 시점에 전체 검증된 것이므로
+   전진 완료(3~7 재실행), 손상이면 pending을 버리고 기존 로컬 유지(롤백).
+   Profile.load()보다 먼저 실행되어야 복구된 프로필을 읽는다.
+   ===================================================================== */
+const HABITS_LS='mimesis.byeoli.habits.v2';
+const RECOVERY_LS='mimesis.byeoli.recovery.v1';
+const RESTORE_PENDING_LS='mimesis.byeoli.restore.pending';
+function rcValidPending(p){
+  return !!(p && p.payload && p.payload.profile && p.payload.profile.version===1
+    && typeof p.payload.profile.observerId==='string'
+    && typeof p.revision==='number' && typeof p.recoveryKey==='string');
+}
+// §5-1 3~7단계. 실패 시 예외 — 호출측이 pending 처분을 결정한다.
+function rcApplyPending(p){
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(p.payload.profile));
+  if(p.payload.habits!==null && p.payload.habits!==undefined){
+    localStorage.setItem(HABITS_LS, JSON.stringify(p.payload.habits));
+  } else {
+    localStorage.removeItem(HABITS_LS);
+  }
+  const chk=JSON.parse(localStorage.getItem(PROFILE_KEY));
+  if(!chk || chk.observerId!==p.payload.profile.observerId) throw new Error('restore verify failed');
+  if(p.payload.habits!==null && p.payload.habits!==undefined) JSON.parse(localStorage.getItem(HABITS_LS));
+  localStorage.setItem(RECOVERY_LS, JSON.stringify({
+    recoveryKey:p.recoveryKey, baseRevision:p.revision, registeredAt:Date.now() }));
+  localStorage.removeItem(RESTORE_PENDING_LS);
+}
+(function rcBootStaging(){
+  let raw=null; try{ raw=localStorage.getItem(RESTORE_PENDING_LS); }catch(e){ return; }
+  if(!raw) return;
+  try{
+    const p=JSON.parse(raw);
+    if(rcValidPending(p)){ rcApplyPending(p); }                       // 전진 완료
+    else { localStorage.removeItem(RESTORE_PENDING_LS); }             // 손상 → 롤백
+  }catch(e){
+    try{ localStorage.removeItem(RESTORE_PENDING_LS); }catch(e2){}    // 롤백 — 기존 로컬 유지
+  }
+})();
+
 Profile.load();
 window.addEventListener('pagehide', ()=>{ Profile.flushTime(); Profile.save(); });
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ Profile.flushTime(); Profile.save(); } });
@@ -1128,6 +1210,327 @@ const PR={
   },
 };
 PR.init();
+
+/* =====================================================================
+   BUILD 419-B — Recovery (기록 지키기 · 기존 별이 이어가기)
+   정본: docs/BUILD_419A_OBSERVER_RECOVERY.md §4~§9 (인터페이스 동결)
+   - 자동 백업 트리거는 정확히 3개: 5분 주기 · visibilitychange(hidden) · 발급 직후 1회
+   - 409 충돌 → 자동 백업 중지 + 조용한 배지. 덮어쓰기는 수동 확인 경로(force)만
+   - Recovery Key는 발급·복구 UI에서만 표시. 카드·일반 화면·로그 노출 금지
+   - 보호 백업 성공 = 교체의 전제. 실패 시 중단 ([다시 시도]/[파일 저장 후 계속])
+   ===================================================================== */
+const Recovery={
+  data:null, conflict:false, conflictRevision:null, lastResult:null, _timer:null, _busy:false,
+  OBS_RE:/^BYL-[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{4}-[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{4}$/,
+  KEY_RE:/^BYLR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{6}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{6}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{6}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{6}$/,
+
+  load(){
+    try{
+      const raw=localStorage.getItem(RECOVERY_LS);
+      if(raw){ const d=JSON.parse(raw);
+        if(d && typeof d.recoveryKey==='string' && typeof d.baseRevision==='number') this.data=d; }
+    }catch(e){}
+  },
+  save(){ try{ localStorage.setItem(RECOVERY_LS, JSON.stringify(this.data)); }catch(e){} },
+  instanceId(){
+    const K='mimesis.byeoli.instance.v1';
+    try{
+      let id=localStorage.getItem(K);
+      if(!id){ id='ci_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem(K,id); }
+      return id;
+    }catch(e){ return 'ci_volatile'; }
+  },
+  // Crockford base32 24자 (I/L/O/U 제외, 32자 집합이라 byte%32 균등)
+  newKey(){
+    const A='0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+    const b=new Uint8Array(24); crypto.getRandomValues(b);
+    let s=''; for(let i=0;i<24;i++){ s+=A[b[i]%32]; if(i%6===5 && i<23) s+='-'; }
+    return 'BYLR-'+s;
+  },
+  buildBlob(){
+    Profile.flushTime();
+    let habits=null;
+    try{ const raw=localStorage.getItem(HABITS_LS); if(raw) habits=JSON.parse(raw); }catch(e){}
+    return { profile: Profile.data, habits };
+  },
+  hasRealRecords(p){
+    p=p||Profile.data;
+    return !!(p && (p.memoryCount>0 || p.diaryCount>0 ||
+      Object.keys(p.tastes||{}).length>0 || p.totalObservedMs>60000));
+  },
+
+  // 네트워크 오류만 지수 백오프 3회 (§7). HTTP 응답은 재시도하지 않는다.
+  async post(path, body){
+    let delay=800;
+    for(let i=0;i<3;i++){
+      try{
+        const res=await fetch('/api/observer/'+path,{
+          method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body) });
+        const data=await res.json().catch(()=>null);
+        return { status:res.status, data };
+      }catch(e){
+        if(i===2) return { status:0, data:null };
+        await new Promise(r=>setTimeout(r,delay)); delay*=2;
+      }
+    }
+    return { status:0, data:null };
+  },
+
+  async backup(opts){
+    if(!this.data || this._busy) return { ok:false, code:'not_ready' };
+    this._busy=true;
+    try{
+      const body={
+        observerId: Profile.data.observerId, recoveryKey: this.data.recoveryKey,
+        blob: this.buildBlob(), schemaVersion: 1, baseRevision: this.data.baseRevision,
+        clientSavedAt: Date.now(), clientInstanceId: this.instanceId() };
+      if(opts && opts.force===true){ body.force=true; body.confirmedRevision=opts.confirmedRevision; }
+      const r=await this.post('backup', body);
+      if(r.status===200 && r.data && r.data.ok){
+        this.data.baseRevision=r.data.revision; this.save();
+        this.conflict=false; this.conflictRevision=null;
+        this.lastResult={ ok:true, at:Date.now() };
+        this.updateBadge(); return { ok:true, revision:r.data.revision };
+      }
+      if(r.status===409 && r.data && r.data.error==='backup_conflict'){
+        this.conflict=true;
+        this.conflictRevision=(typeof r.data.revision==='number') ? r.data.revision : null;
+        // 충돌 감지는 구현하되 경고 모달 없음 — 조용한 배지 + 로그 (§9)
+        console.warn('[recovery] backup_conflict', {
+          serverRevision:this.conflictRevision, baseRevision:this.data.baseRevision,
+          clientInstanceId:this.instanceId() });
+        this.lastResult={ ok:false, at:Date.now(), code:'backup_conflict' };
+        this.updateBadge(); return { ok:false, code:'backup_conflict', revision:this.conflictRevision };
+      }
+      this.lastResult={ ok:false, at:Date.now(), code:(r.data && r.data.error) || ('http_'+r.status) };
+      this.updateBadge(); return { ok:false, code:this.lastResult.code };
+    } finally { this._busy=false; }
+  },
+
+  autoBackup(){ if(!this.data || this.conflict) return; this.backup({}); },
+  startAuto(){
+    if(this._timer) return;
+    this._timer=setInterval(()=>this.autoBackup(), 5*60*1000);
+    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) this.autoBackup(); });
+  },
+
+  /* ---- 조용한 배지 (산책 방해 금지) ---- */
+  updateBadge(){
+    const el=document.getElementById('pr-bkbadge'); if(!el) return;
+    el.classList.remove('warn');
+    if(!this.data){ el.textContent=''; return; }
+    if(this.conflict){ el.classList.add('warn'); el.textContent='다른 기기의 기록과 충돌'; return; }
+    if(this.lastResult && !this.lastResult.ok){
+      el.classList.add('warn');
+      el.textContent='마지막 백업 '+fmtAgoMin(this.lastResult.at)+' 실패'; return;
+    }
+    if(this.lastResult && this.lastResult.ok){ el.textContent='백업됨 · '+fmtAgoMin(this.lastResult.at); return; }
+    el.textContent='';
+  },
+
+  /* ---- 모달 공통 ---- */
+  _sheet(){ return document.getElementById('rc-sheet'); },
+  _panel(){ return document.getElementById('rc-panel'); },
+  openPanel(html){ this._panel().innerHTML=html; this._sheet().style.display='block'; },
+  closePanel(){ this._sheet().style.display='none'; this._panel().innerHTML=''; },
+  _note(msg){ const n=this._panel().querySelector('.rc-note'); if(n) n.textContent=msg; },
+
+  /* ---- 발급: "기록 지키기" (§5) — 키 1회 표시·복사·분실 경고, 직후 첫 백업 ---- */
+  openIssue(){
+    const key=this.newKey();
+    this.openPanel(
+      '<h3>기록 지키기</h3>'+
+      '<p>이 복구 코드가 있으면 다른 브라우저·기기에서도 이 별이의 기록을 이어갈 수 있습니다.</p>'+
+      '<span class="rc-key" id="rc-keytext"></span>'+
+      '<p class="rc-warn">이 코드는 지금 한 번만 표시됩니다. 잃어버리면 이 별이의 기록도 되찾을 수 없습니다.</p>'+
+      '<div class="rc-row">'+
+      '<button type="button" class="rc-ghost" id="rc-copy">복사</button>'+
+      '<button type="button" class="rc-primary" id="rc-issue-done">저장했어요, 기록 지키기 시작</button>'+
+      '<button type="button" class="rc-ghost" id="rc-cancel">취소</button>'+
+      '</div><div class="rc-note"></div>');
+    this._panel().querySelector('#rc-keytext').textContent=key;
+    this._panel().querySelector('#rc-copy').addEventListener('click', async ()=>{
+      try{ await navigator.clipboard.writeText(key); this._note('복사했습니다'); }
+      catch(e){ this._note('복사에 실패했습니다 — 코드를 직접 적어주세요'); }
+    });
+    this._panel().querySelector('#rc-cancel').addEventListener('click', ()=>this.closePanel());
+    this._panel().querySelector('#rc-issue-done').addEventListener('click', async (ev)=>{
+      ev.target.disabled=true;
+      this.data={ recoveryKey:key, baseRevision:0, registeredAt:Date.now() };
+      this.save();
+      const r=await this.backup({});           // 발급 직후 첫 백업 (예외 트리거, §9)
+      this.startAuto();
+      this.syncButtons();
+      if(r.ok){ this.closePanel(); }
+      else { this._note('첫 백업에 실패했습니다 — 자동으로 다시 시도합니다'); setTimeout(()=>this.closePanel(), 1600); }
+    });
+  },
+
+  /* ---- 수동 "지금 백업" — 충돌 시에만 확인 후 force 덮어쓰기 (§6) ---- */
+  async manualBackup(){
+    if(!this.data){ this.openIssue(); return; }
+    const r=await this.backup({});
+    if(r.ok){ return; }
+    if(r.code==='backup_conflict'){ this.openForceConfirm(); }
+  },
+  openForceConfirm(){
+    const rev=this.conflictRevision;
+    this.openPanel(
+      '<h3>다른 기기의 기록과 충돌</h3>'+
+      '<p>다른 기기가 먼저 백업했습니다 (서버 기록 rev.'+(rev===null?'?':rev)+').<br>'+
+      '지금 이 브라우저의 기록으로 서버 기록을 덮어쓸까요?</p>'+
+      '<p class="rc-warn">덮어쓰면 다른 기기가 백업한 내용은 사라집니다.</p>'+
+      '<div class="rc-row">'+
+      '<button type="button" class="rc-primary" id="rc-force">이 기록으로 덮어쓰기</button>'+
+      '<button type="button" class="rc-ghost" id="rc-cancel">그대로 두기</button>'+
+      '</div><div class="rc-note"></div>');
+    this._panel().querySelector('#rc-cancel').addEventListener('click', ()=>this.closePanel());
+    this._panel().querySelector('#rc-force').addEventListener('click', async (ev)=>{
+      ev.target.disabled=true;
+      // confirmedRevision = 확인 시점에 본 서버 revision — 처리 순간 또 갱신됐으면 재409 (§4)
+      const r=await this.backup({ force:true, confirmedRevision:rev });
+      if(r.ok){ this.closePanel(); return; }
+      if(r.code==='backup_conflict'){ this.openForceConfirm(); return; }   // 재409 — 새 revision으로 다시
+      this._note('덮어쓰지 못했습니다. 잠시 뒤에 다시 시도해 주세요');
+      ev.target.disabled=false;
+    });
+  },
+
+  /* ---- 복구: "기존 별이 이어가기" (§5·§7) ---- */
+  openRestore(){
+    this.openPanel(
+      '<h3>기존 별이 이어가기</h3>'+
+      '<p>다른 브라우저에서 "기록 지키기"를 했던 별이의 기록을 이 브라우저로 가져옵니다.</p>'+
+      '<input id="rc-obs" placeholder="관찰자 코드 (BYL-XXXX-XXXX)" autocomplete="off" spellcheck="false">'+
+      '<input id="rc-key" placeholder="복구 코드 (BYLR-……)" autocomplete="off" spellcheck="false">'+
+      '<div class="rc-row">'+
+      '<button type="button" class="rc-primary" id="rc-go">이어가기</button>'+
+      '<button type="button" class="rc-ghost" id="rc-cancel">취소</button>'+
+      '</div><div class="rc-note"></div>');
+    this._panel().querySelector('#rc-cancel').addEventListener('click', ()=>this.closePanel());
+    this._panel().querySelector('#rc-go').addEventListener('click', ()=>this._runRestore());
+  },
+  async _runRestore(){
+    const obs=(this._panel().querySelector('#rc-obs').value||'').trim().toUpperCase();
+    const key=(this._panel().querySelector('#rc-key').value||'').trim().toUpperCase();
+    if(!this.OBS_RE.test(obs) || !this.KEY_RE.test(key)){ this._note('코드 형식이 맞지 않습니다'); return; }
+    const go=this._panel().querySelector('#rc-go'); go.disabled=true;
+    this._note('기록을 찾는 중…');
+    const r=await this.post('restore', { observerId:obs, recoveryKey:key });
+    if(r.status!==200 || !r.data || !r.data.ok){
+      go.disabled=false;
+      const code=r.data && r.data.error;
+      if(r.status===0){ this._note('연결하지 못했습니다 — 다시 시도해 주세요'); return; }
+      if(code==='observer_not_found'){ this._note('등록된 기록을 찾지 못했습니다. "기록 지키기"를 했던 코드인지 확인해 주세요'); return; }
+      if(code==='observer_key_mismatch'){ this._note('복구 코드가 일치하지 않습니다'); return; }
+      if(code==='rate_limited'){ this._note('시도가 너무 많았습니다. 10분 뒤에 다시'); return; }
+      if(code==='schema_unsupported'){ this._note('기록 형식이 달라 복구할 수 없습니다'); return; }
+      this._note('지금은 복구할 수 없습니다. 잠시 뒤에 다시'); return;
+    }
+    // §5-1 1단계: 수신 blob 전체 검증
+    const blob=r.data.blob;
+    if(r.data.schemaVersion!==1 || !blob || !blob.profile || blob.profile.version!==1 ||
+       blob.profile.observerId!==obs){
+      go.disabled=false; this._note('기록 형식이 달라 복구할 수 없습니다'); return;
+    }
+    const incoming={ payload:blob, revision:r.data.revision, recoveryKey:key, observerId:obs, savedAt:Date.now() };
+    if(!this.hasRealRecords()){ this._stageAndReload(incoming); return; }
+    this.openReplaceConfirm(incoming);
+  },
+
+  /* ---- 교체 확인 + 보호 백업 (§6) ---- */
+  openReplaceConfirm(incoming){
+    const registered=!!this.data;
+    this.openPanel(
+      '<h3>기록 교체 확인</h3>'+
+      '<p>이 브라우저에는 이미 별이의 기록이 있습니다.<br>'+
+      '가져온 기록('+incoming.observerId+')으로 교체할까요?</p>'+
+      (registered
+        ? '<p>교체 전에 지금 기록을 서버에 한 번 더 지켜둡니다.</p>'
+        : '<p class="rc-warn">이 브라우저의 기록은 사라집니다.</p>')+
+      '<div class="rc-row">'+
+      '<button type="button" class="rc-primary" id="rc-replace">'+(registered?'기록 지키고 교체':'교체')+'</button>'+
+      '<button type="button" class="rc-ghost" id="rc-cancel">취소</button>'+
+      '</div><div class="rc-note"></div>');
+    this._panel().querySelector('#rc-cancel').addEventListener('click', ()=>this.closePanel());
+    this._panel().querySelector('#rc-replace').addEventListener('click', async (ev)=>{
+      ev.target.disabled=true;
+      if(this.data){
+        this._note('지금 기록을 지키는 중…');
+        const p=await this.backup({});
+        if(!p.ok){ this.openProtectFail(incoming); return; }   // 성공해야만 교체 (§6 — 강행 금지)
+      }
+      this._stageAndReload(incoming);
+    });
+  },
+  openProtectFail(incoming){
+    this.openPanel(
+      '<h3>지금 기록을 지키지 못해 복구를 멈췄습니다</h3>'+
+      '<p>이 브라우저의 기록을 서버에 백업하지 못했습니다.<br>'+
+      '기록을 지키지 못한 채 교체하지는 않습니다.</p>'+
+      '<div class="rc-row">'+
+      '<button type="button" class="rc-primary" id="rc-retry">다시 시도</button>'+
+      '<button type="button" class="rc-ghost" id="rc-file">로컬 기록을 JSON 파일로 내려받고 계속</button>'+
+      '<button type="button" class="rc-ghost" id="rc-cancel">취소</button>'+
+      '</div><div class="rc-note"></div>');
+    this._panel().querySelector('#rc-cancel').addEventListener('click', ()=>this.closePanel());
+    this._panel().querySelector('#rc-retry').addEventListener('click', async (ev)=>{
+      ev.target.disabled=true;
+      const p=await this.backup({});
+      if(p.ok){ this._stageAndReload(incoming); return; }
+      ev.target.disabled=false; this._note('아직 백업하지 못했습니다');
+    });
+    this._panel().querySelector('#rc-file').addEventListener('click', ()=>{
+      this.downloadLocalJSON();
+      this._stageAndReload(incoming);
+    });
+  },
+  downloadLocalJSON(){
+    try{
+      const data=JSON.stringify(this.buildBlob(), null, 2);
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([data], {type:'application/json'}));
+      const d=new Date(), p=n=>String(n).padStart(2,'0');
+      a.download='byeol-backup-'+Profile.data.observerId+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
+      document.body.appendChild(a); a.click();
+      setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }catch(e){}
+  },
+  // §5-1 2단계(pending 기록) 후 3~7 적용 → reload. 중간에 죽어도 부트가 전진/롤백.
+  _stageAndReload(incoming){
+    this._note('기록을 옮기는 중…');
+    try{
+      localStorage.setItem(RESTORE_PENDING_LS, JSON.stringify(incoming));
+      rcApplyPending(incoming);
+      location.reload();
+    }catch(e){
+      this._note('기록을 옮기지 못했습니다. 잠시 뒤에 다시 시도해 주세요');
+    }
+  },
+
+  syncButtons(){
+    const b=document.getElementById('pr-backup');
+    if(b) b.textContent=this.data ? '지금 백업' : '기록 지키기';
+    this.updateBadge();
+  },
+  init(){
+    this.load();
+    const b=document.getElementById('pr-backup');
+    if(b) b.addEventListener('click', ()=>this.manualBackup());
+    const ro=document.getElementById('pr-restore-open');
+    if(ro) ro.addEventListener('click', ()=>this.openRestore());
+    // 시트 열릴 때 배지 갱신 — PR.open은 건드리지 않고 감싼다
+    const prOpen=PR.open.bind(PR);
+    PR.open=(...a)=>{ const r=prOpen(...a); this.syncButtons(); return r; };
+    this.syncButtons();
+    if(this.data) this.startAuto();            // 부트 백업 없음 — 트리거는 3개뿐 (§9)
+  },
+};
+function fmtAgoMin(ts){
+  const m=Math.max(0, Math.round((Date.now()-ts)/60000));
+  return m===0 ? '방금' : m+'분 전';
+}
+Recovery.init();
 
 /* =====================================================================
    UPDATE
