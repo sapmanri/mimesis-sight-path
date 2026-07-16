@@ -12,9 +12,7 @@ interface Env {
   PUBLISH_KEY?: string;
   CAPTURES?: R2Bucket;            // BUILD 355: R2 캡처 버킷 — 방송 이미지를 여기서 뽑는다
   CAPTURES_PUBLIC_BASE?: string; // r2.dev 공개 URL 접두사
-  METRICOOL_TOKEN?: string;      // BUILD 417: Metricool API 토큰 (설정→API, X-Mc-Auth 헤더)
-  METRICOOL_USER_ID?: string;    // BUILD 417: Metricool userId
-  METRICOOL_BLOG_ID?: string;    // BUILD 417: 브랜드(blogId) — Mimesis(@mimesis_op)
+  THREADS_APP_SECRET?: string;   // BUILD 417: 토큰 자동 갱신용 (threads-auth.ts와 동일 앱)
 }
 
 const FEED_KEY = 'feed';
@@ -44,72 +42,87 @@ const IMAGE_POOL: string[] = [
 const POSTS: { text: string }[] = (byeolliPosts as { posts: { text: string }[] }).posts;
 
 /* =====================================================================
-   BUILD 417 — 진짜 Threads 발행 (Metricool API)
+   BUILD 417 — 진짜 Threads 발행 (Meta Threads API 직접, 무료)
    내부 KV 피드 발행은 그대로 유지하고, 같은 내용을 실제 Threads(@mimesis_op)로
-   디스패치한다. cron이 이 엔드포인트를 때리는 순간 별리가 진짜 SNS에 등장한다.
-   · 인증: X-Mc-Auth 헤더 (Bearer 아님 — Metricool 특유의 함정)
-   · providers는 반드시 객체 배열 [{network:'threads'}] — 문자열 배열이면 조용히 실패
-   · 이미지는 normalize 엔드포인트를 먼저 거친다 (외부 URL → Metricool 호스팅)
-   · ?draft=1 이면 Threads엔 초안으로만 들어간다 (첫 가동 검증용)
-   · Threads 실패가 내부 피드 발행을 깨지 않는다 — 결과만 응답에 보고
+   보낸다. cron이 이 엔드포인트를 때리는 순간 별리가 진짜 SNS에 등장한다.
+   · 토큰: /api/threads-auth 로 1회 발급 → KV('threads_auth') 저장.
+     이후 크론이 돌 때마다 7일 지났으면 자동 갱신 (60일 만료 훨씬 이전).
+   · 발행: 컨테이너 생성(/threads) → 발행(/threads_publish) 2단계.
+     미디어 처리 지연 대비 발행은 3초 간격 최대 5회 재시도.
+   · ?draft=1: 컨테이너 생성까지만 — 공개 게시 없이 인증·미디어 파이프 검증.
+   · Threads 실패가 내부 피드 발행을 깨지 않는다 — 결과만 응답에 보고.
    ===================================================================== */
+const THREADS_AUTH_KEY = 'threads_auth';
+const THREADS_API = 'https://graph.threads.net/v1.0';
+const REFRESH_AFTER_MS = 7 * 24 * 3600 * 1000; // 7일마다 갱신 (만료 60일)
+
+interface ThreadsAuth { token: string; userId: string; refreshedAt: number }
+
+async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
+  const raw = await env.PLANET.get(THREADS_AUTH_KEY);
+  if (!raw) return null;
+  let auth: ThreadsAuth;
+  try { auth = JSON.parse(raw); } catch { return null; }
+  if (!auth.token || !auth.userId) return null;
+  // 자동 갱신 — 토큰이 24시간 이상 묵어야 갱신 가능하므로 7일 주기가 안전
+  if (Date.now() - auth.refreshedAt > REFRESH_AFTER_MS) {
+    try {
+      const u = new URL('https://graph.threads.net/refresh_access_token');
+      u.searchParams.set('grant_type', 'th_refresh_token');
+      u.searchParams.set('access_token', auth.token);
+      const r = await fetch(u.toString());
+      if (r.ok) {
+        const j = (await r.json()) as { access_token?: string };
+        if (j.access_token) {
+          auth = { ...auth, token: j.access_token, refreshedAt: Date.now() };
+          await env.PLANET.put(THREADS_AUTH_KEY, JSON.stringify(auth));
+        }
+      }
+      // 갱신 실패 시 기존 토큰으로 계속 — 60일 안이면 여전히 유효
+    } catch { /* 갱신 실패 무시 */ }
+  }
+  return auth;
+}
+
 async function dispatchToThreads(
   env: Env, text: string, img: string | null, draft: boolean,
 ): Promise<{ attempted: boolean; ok: boolean; detail: string }> {
-  if (!env.METRICOOL_TOKEN || !env.METRICOOL_USER_ID || !env.METRICOOL_BLOG_ID) {
-    return { attempted: false, ok: false, detail: 'metricool env not configured' };
-  }
-  const qs = `blogId=${env.METRICOOL_BLOG_ID}&userId=${env.METRICOOL_USER_ID}`;
-  const authHeader = { 'X-Mc-Auth': env.METRICOOL_TOKEN };
+  const auth = await getThreadsAuth(env);
+  if (!auth) return { attempted: false, ok: false, detail: 'threads auth not configured — GET /api/threads-auth?key=... 먼저' };
 
-  // 이미지 normalize — 실패하면 원본 URL로 시도, 그것도 안 되면 텍스트만
-  let media: string[] = [];
-  if (img) {
-    try {
-      const n = await fetch(
-        `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(img)}&${qs}`,
-        { headers: authHeader },
-      );
-      if (n.ok) {
-        const j = (await n.json()) as { url?: string; data?: { url?: string } };
-        media = [j?.url || j?.data?.url || img];
-      } else media = [img];
-    } catch { media = [img]; }
-  }
-
-  // 발행 시각: 지금+2분 (과거 시각 거부 대비). KST는 DST가 없어 UTC+9 고정 변환이 안전.
-  const seoul = new Date(Date.now() + 2 * 60 * 1000 + 9 * 3600 * 1000);
-  const dateTime = seoul.toISOString().slice(0, 19);
-
-  const body = {
-    autoPublish: !draft,
-    draft,
-    text,
-    media,
-    mediaAltText: media.map(() => '별이 산책하며 찍은 사진'),
-    providers: [{ network: 'threads' }],
-    threadsData: {},
-    publicationDate: { dateTime, timezone: 'Asia/Seoul' },
-    descendants: [],
-    firstCommentText: '',
-    hasNotReadNotes: false,
-    shortener: false,
-    smartLinkData: { ids: [] },
-  };
+  // 1) 컨테이너 생성 — Threads 본문 한도 500자
+  const create = new URL(`${THREADS_API}/${auth.userId}/threads`);
+  create.searchParams.set('text', text.slice(0, 500));
+  if (img) { create.searchParams.set('media_type', 'IMAGE'); create.searchParams.set('image_url', img); }
+  else create.searchParams.set('media_type', 'TEXT');
+  create.searchParams.set('access_token', auth.token);
+  let containerId = '';
   try {
-    const r = await fetch(`https://app.metricool.com/api/v2/scheduler/posts?${qs}`, {
-      method: 'POST',
-      headers: { ...authHeader, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const detailText = await r.text();
-    return {
-      attempted: true, ok: r.ok,
-      detail: r.ok ? (draft ? 'draft created' : 'published') : `HTTP ${r.status}: ${detailText.slice(0, 200)}`,
-    };
-  } catch (e) {
-    return { attempted: true, ok: false, detail: String(e) };
+    const r = await fetch(create.toString(), { method: 'POST' });
+    const j = (await r.json()) as { id?: string; error?: { message?: string } };
+    if (!r.ok || !j.id) {
+      return { attempted: true, ok: false, detail: `container failed: ${j?.error?.message ?? r.status}` };
+    }
+    containerId = j.id;
+  } catch (e) { return { attempted: true, ok: false, detail: `container error: ${String(e)}` }; }
+
+  if (draft) return { attempted: true, ok: true, detail: `container ${containerId} created (not published — draft mode)` };
+
+  // 2) 발행 — 미디어 처리 지연 대비 재시도
+  const publish = new URL(`${THREADS_API}/${auth.userId}/threads_publish`);
+  publish.searchParams.set('creation_id', containerId);
+  publish.searchParams.set('access_token', auth.token);
+  let lastDetail = '';
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (attempt > 0) await new Promise((res) => setTimeout(res, 3000));
+    try {
+      const r = await fetch(publish.toString(), { method: 'POST' });
+      const j = (await r.json()) as { id?: string; error?: { message?: string } };
+      if (r.ok && j.id) return { attempted: true, ok: true, detail: `published: ${j.id}` };
+      lastDetail = j?.error?.message ?? `HTTP ${r.status}`;
+    } catch (e) { lastDetail = String(e); }
   }
+  return { attempted: true, ok: false, detail: `publish failed after retries: ${lastDetail.slice(0, 200)}` };
 }
 
 export const onRequestOptions: PagesFunction<Env> = async () =>
