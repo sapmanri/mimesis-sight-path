@@ -9,8 +9,9 @@
     "validate:world-events": "node scripts/validate-world-events.mjs",
     "validate:strict": "node --experimental-vm-modules scripts/validate-strict.mjs",
     "validate:card": "node scripts/validate-share-card.mjs",
+    "validate:observer": "node scripts/validate-observer-contract.mjs && node --test observer-registry/tests/logic.test.ts",
     "validate:zone": "node scripts/validate-zone-system.mjs",
-    "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && npm run validate:zone && npm run validate:live:structure && vite build",
+    "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && npm run validate:observer && npm run validate:zone && npm run validate:live:structure && vite build",
     "preview": "vite preview",
     "validate:live:structure": "node scripts/validate-live-structure.mjs",
     "validate:live:deployed": "node scripts/validate-live-deployed.mjs"
