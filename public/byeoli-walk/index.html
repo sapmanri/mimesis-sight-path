@@ -1171,7 +1171,8 @@ function snapshotByeoliState(){
     sky: { t:sky.t, phase:sky.phase, weather:sky.weather, clouds:sky.clouds,
            cloudDark:sky.cloudDark, particles:sky.particles, flybys:sky.flybys },
     props,                                // 소품 배치·type·rare·phase·variant
-    camera: { camShift, worldX:byeoli.worldX, screenX:byeoli.screenX, worldLen },
+    camera: { camShift, worldX:byeoli.worldX, screenX:byeoli.screenX, worldLen,
+              loopCount },              // BUILD 416-A: 누적 거리(존 진행)용. 서버 계약에도 필요(407)
     flash: { on:flash.on, timer:flash.timer },  // 카메라 플래시
     speedMul,                             // 배속(연출 맥락)
     epoch: byeoliDayEpoch(),              // 별이력 시각
@@ -1315,24 +1316,106 @@ const BG_PACK={
 };
 const BG_ORDER=['sky','farMountains','nearMountains','distantForest','midTrees','field','roadside','foreground'];
 
+/* =====================================================================
+   BUILD 416-A — 거리 존 시스템
+   걸어온 누적 거리에서 존(마을→논길→숲→언덕)을 파생해 조합 축에 추가한다.
+   · 존은 eligible 풀 "안에서만" 좁힌다 — eligibility 위반이 구조적으로 불가능.
+     완화 순서: 존 → 날씨 → 계절. 시간은 절대 완화하지 않음(414-A 규칙).
+   · 3500m마다 순환하되 cycle 번호가 해시에 들어가 재방문 존은 다른 조합.
+   · 전환은 계단식 — 먼 레이어부터 15m 간격으로 갈아탄다(동시 전환 금지).
+   · sky는 존 무관 — 하늘은 시간과 날씨의 것.
+   · 설계 문서: docs/BUILD_416A_ZONE_SYSTEM.md
+   ===================================================================== */
+const BG_M2PX=16;                          // 1m = 16px (걸음 62px/s → 존당 ~2~4분)
+const BG_ZONES=[
+  { id:'village', from:0,    to:500  },
+  { id:'paddy',   from:500,  to:1500 },
+  { id:'forest',  from:1500, to:2500 },
+  { id:'hills',   from:2500, to:3500 },
+];
+const BG_CYCLE_M=3500;                     // 한 여정. 이후 마을부터 순환
+// 계단식 전환 — far→near 순서로 존 경계를 늦게 만난다 (m)
+const BG_STAGGER={ farMountains:0, nearMountains:15, distantForest:30,
+                   midTrees:45, field:60, roadside:75, foreground:90 };
+// 존별 레이어 선호 후보 — 반드시 BG_PACK에 실존하는 id만 (validate:zone이 강제)
+const BG_ZONE_PREF={
+  village:{
+    farMountains:['low-ridge','round-hills'],
+    nearMountains:['near-low','near-none'],
+    distantForest:['broadleaf','sparse'],
+    midTrees:['mid-village','mid-mixed'],
+    field:['grass','flower-field','snow-field'],
+    roadside:['stone-wall','low-fence'],
+    foreground:['small-flower','stone-grass','snow-mound','puddle'],
+  },
+  paddy:{
+    farMountains:['low-ridge','double-ridge'],
+    nearMountains:['near-none','near-low'],        // 개방감
+    distantForest:['sparse','broadleaf'],
+    midTrees:['mid-trees'],
+    field:['paddy','yellow-grass','snow-field'],
+    roadside:['grass-verge','bare-road'],
+    foreground:['tall-grass','puddle','snow-mound'],
+  },
+  forest:{
+    farMountains:['far-peaks','double-ridge','misty'],
+    nearMountains:['near-twin','near-broad'],
+    distantForest:['deep-forest','pine-line','bamboo','bare-trees'],
+    midTrees:['mid-trees'],
+    field:['grass','yellow-grass','snow-field'],
+    roadside:['bare-road','grass-verge'],
+    foreground:['fallen-leaf','tall-grass','stone-grass','snow-mound'],
+  },
+  hills:{
+    farMountains:['far-peaks','rocky','misty'],
+    nearMountains:['near-twin','near-broad'],
+    distantForest:['sparse','bare-trees','pine-line'],
+    midTrees:['mid-trees'],
+    field:['silver-grass','yellow-grass','grass','snow-field'],
+    roadside:['bare-road'],
+    foreground:['stone-grass','tall-grass','snow-mound'],
+  },
+};
+// 누적 거리(m). loopCount가 없는 (구)원격 스냅샷은 0 폴백 — 랩 내 거리만으로 동작
+function bgDistanceM(camera){
+  if(!camera) return 0;
+  const laps=(camera.loopCount|0), wl=camera.worldLen||0, wx=camera.worldX||0;
+  return (laps*wl+wx)/BG_M2PX;
+}
+// 레이어별 유효 거리 → (zone, cycle). 계단식: 가까운 레이어일수록 경계를 늦게 만난다
+function bgJourney(distM, layer){
+  const eff=Math.max(0, distM-(BG_STAGGER[layer]||0));
+  const cycle=Math.floor(eff/BG_CYCLE_M);
+  const m=eff-cycle*BG_CYCLE_M;
+  let zone=BG_ZONES[0].id;
+  for(const z of BG_ZONES){ if(m>=z.from&&m<z.to){ zone=z.id; break; } }
+  return { zone, cycle };
+}
+
 function bgEligible(c, ctxv){
   if(c.season  && !c.season.includes(ctxv.season))   return false;
   if(c.time    && !c.time.includes(ctxv.time))       return false;
   if(c.weather && !c.weather.includes(ctxv.weather)) return false;
   return true;
 }
-/* 조합 선택: seed + 레이어 이름으로 결정론적 인덱스.
-   후보가 비면 조건을 단계적으로만 완화한다(날씨 → 계절 순).
+/* 조합 선택: seed + 레이어 이름 + (존, 사이클)로 결정론적 인덱스.
+   후보가 비면 조건을 단계적으로만 완화한다(존 → 날씨 → 계절 순).
    time은 하늘/지상 톤이 어긋나므로 절대 완화하지 않는다. */
-function bgPick(layer, seed, ctxv){
+function bgPick(layer, seed, ctxv, zone, cycle){
   const all=BG_PACK[layer];
   let pool=all.filter(c=>bgEligible(c,ctxv));
   if(!pool.length) pool=all.filter(c=>                       // 날씨만 완화
     (!c.season||c.season.includes(ctxv.season)) && (!c.time||c.time.includes(ctxv.time)));
   if(!pool.length) pool=all.filter(c=> !c.time||c.time.includes(ctxv.time));  // 계절도 완화
   if(!pool.length) pool=all;                                  // 최후(정의상 도달하지 않음)
+  // BUILD 416-A: 존 선호는 eligible 풀 안에서만 좁힌다 — 교집합이 비면 존만 포기
+  if(zone && BG_ZONE_PREF[zone] && BG_ZONE_PREF[zone][layer]){
+    const pref=pool.filter(c=>BG_ZONE_PREF[zone][layer].includes(c.id));
+    if(pref.length) pool=pref;
+  }
   let h=seed>>>0;
-  for(let i=0;i<layer.length;i++){ h^=layer.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  const tag=layer+'|'+(zone||'')+'|'+((cycle|0)||0);
+  for(let i=0;i<tag.length;i++){ h^=tag.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
   return pool[h%pool.length];
 }
 /* ---- 디버그 훅 (sandbox 전용) ----
@@ -1373,7 +1456,7 @@ function bgInitDebug(){
 }
 
 const BG={
-  _key:null, _combo:null, _ctx:null, calls:0,
+  _key:null, _combo:null, _ctx:null, _journey:null, calls:0,
   context(sky, epoch){
     const c={ season:bgSeason(epoch), time:bgTime(sky.phase), weather:bgWeather(sky) };
     if(BG_FORCE){                       // sandbox 강제값 (live에서는 BG_FORCE가 null)
@@ -1383,14 +1466,26 @@ const BG={
     }
     return c;
   },
-  // 조합은 (seed, 계절, 시간, 날씨)가 바뀔 때만 다시 고른다 — 매 프레임 배열 생성 없음.
-  combo(seed, sky, epoch){
+  // 조합은 (seed, 계절, 시간, 날씨, 레이어별 존·사이클)이 바뀔 때만 다시 고른다.
+  // 존 시그니처 계산은 프레임당 산술 몇 번 — 배열 생성 없음.
+  combo(seed, sky, epoch, camera){
     const c=this.context(sky, epoch);
-    const key=seed+'|'+c.season+'|'+c.time+'|'+c.weather;
+    const distM=bgDistanceM(camera);
+    let zoneSig='';
+    const journeys={};
+    for(const l of BG_ORDER){
+      if(l==='sky'){ journeys[l]=null; continue; }           // 하늘은 존 무관
+      const j=bgJourney(distM, l);
+      journeys[l]=j; zoneSig+=l[0]+j.zone[0]+j.cycle;
+    }
+    const key=seed+'|'+c.season+'|'+c.time+'|'+c.weather+'|'+zoneSig;
     if(this._key===key) return this._combo;
     const out={};
-    for(const l of BG_ORDER) out[l]=bgPick(l, seed, c);
-    this._key=key; this._combo=out; this._ctx=c;
+    for(const l of BG_ORDER){
+      const j=journeys[l];
+      out[l]=bgPick(l, seed, c, j?j.zone:null, j?j.cycle:0);
+    }
+    this._key=key; this._combo=out; this._ctx=c; this._journey=journeys;
     return out;
   },
   // 현재 조합을 id만으로 요약 (디버그·검증용)
@@ -1398,7 +1493,9 @@ const BG={
     if(!this._combo) return null;
     const o={};
     for(const l of BG_ORDER) o[l]=this._combo[l]?this._combo[l].id:null;
-    return { seed:BG_SEED, ctx:this._ctx, layers:o };
+    const j=this._journey&&this._journey.foreground;
+    return { seed:BG_SEED, ctx:this._ctx, layers:o,
+             zone:j?j.zone:null, cycle:j?j.cycle:0 };
   },
 };
 
@@ -1538,9 +1635,9 @@ function drawForegroundLayer(sky, camera){
 
 function drawBackground(sky, camera){
   const S=SKY_COLORS[sky.phase];
-  // BUILD 414-A: 레이어 조합 (seed+계절+시간+날씨가 바뀔 때만 재선정)
+  // BUILD 414-A: 레이어 조합 (seed+계절+시간+날씨 + [416-A] 존·사이클이 바뀔 때만 재선정)
   const epoch=(typeof byeoliDayEpoch==='function')?byeoliDayEpoch():0;
-  const combo=BG.combo(BG_SEED, sky, epoch);
+  const combo=BG.combo(BG_SEED, sky, epoch, camera);
   BG.calls=0;
   // 하늘 밴드 — 조합된 팔레트 사용 (없으면 기존 SKY_COLORS로 폴백)
   const sp=combo.sky&&combo.sky.palette;
