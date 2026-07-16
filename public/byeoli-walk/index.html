@@ -1052,7 +1052,9 @@ const PR={
     g.fillStyle=sage; g.font='600 30px system-ui,sans-serif';
     g.letterSpacing='8px'; g.fillText('BYEOL',80,116); g.letterSpacing='0px';
     g.fillStyle=dim; g.font='400 24px ui-monospace,Menlo,monospace';
-    g.fillText(d.observerId,80,158);
+    // 카드는 외부로 공유되므로 Observer Code 마지막 4자리를 마스킹한다 (P0-1)
+    const maskedId=d.observerId.length>4 ? d.observerId.slice(0,-4)+'••••' : d.observerId;
+    g.fillText(maskedId,80,158);
     g.fillStyle=ink; g.font='600 54px system-ui,sans-serif';
     g.fillText('별과 함께',80,268); g.fillText('발견한 것들',80,336);
     // 산책 화면 스냅샷
@@ -1076,8 +1078,10 @@ const PR={
     stats.forEach((s,i)=>{ const x=80+i*((W-160)/3);
       g.fillStyle=ink; g.font='600 44px system-ui,sans-serif'; g.fillText(s[1],x,sy2);
       g.fillStyle=dim; g.font='400 20px system-ui,sans-serif'; g.fillText(s[0],x,sy2+30); });
-    // 대표 취향 5~8개
-    const rows=this.rows().slice(0,8);
+    // 대표 취향 최대 5개 + 초과분은 '외 N개' 한 줄 요약 (P0-1)
+    // 7개부터 footer(H-72)를 침범하고 8개부터 카드 밖으로 이탈하던 버그의 수정.
+    const LIST_MAX=5, FOOTER_BASE=H-72, FOOTER_MIN_GAP=48;
+    const all=this.rows(), rows=all.slice(0,LIST_MAX), extra=all.length-rows.length;
     let y=sy2+96;
     g.fillStyle=sage; g.font='600 22px system-ui,sans-serif'; g.fillText('함께 발견한 것',80,y); y+=42;
     for(const r of rows){
@@ -1091,6 +1095,12 @@ const PR={
       g.fillStyle=sage; this._roundRect(g,bx,by,Math.max(4,bw*r.score),5,3); g.fill();
       y+=64;
     }
+    if(extra>0){                                  // 6번째 행: 초과분 요약
+      g.font='400 24px system-ui,sans-serif'; g.fillStyle=dim;
+      g.fillText('외 '+extra+'개의 발견', 84, y);
+    }
+    // footer 위 최소 여백 고정 검증 — 설계상 위반 불가능하지만 회귀를 조기에 잡는다
+    if(y>FOOTER_BASE-FOOTER_MIN_GAP) console.warn('[card] list bottom '+y+' violates footer gap');
     g.textAlign='center'; g.fillStyle=dim; g.font='400 24px system-ui,sans-serif';
     g.fillText('함께 걸어준 시간들이 별의 취향이 되었습니다.', W/2, H-72);
     return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('toBlob')),'image/png'));
