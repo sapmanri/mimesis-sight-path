@@ -12,6 +12,9 @@ interface Env {
   PUBLISH_KEY?: string;
   CAPTURES?: R2Bucket;            // BUILD 355: R2 캡처 버킷 — 방송 이미지를 여기서 뽑는다
   CAPTURES_PUBLIC_BASE?: string; // r2.dev 공개 URL 접두사
+  THREADS_APP_SECRET?: string;   // BUILD 417: 토큰 자동 갱신용 (threads-auth.ts와 동일 앱)
+  THREADS_TOKEN?: string;        // BUILD 417: (선택) 대시보드 토큰 생성기로 만든 장기 토큰 — 첫 실행 시 KV로 이관
+  THREADS_USER_ID?: string;      // BUILD 417: (미사용 — /me 자동 조회로 대체. 남아 있어도 무해)
 }
 
 const FEED_KEY = 'feed';
@@ -39,6 +42,105 @@ const IMAGE_POOL: string[] = [
 ];
 
 const POSTS: { text: string }[] = (byeolliPosts as { posts: { text: string }[] }).posts;
+
+/* =====================================================================
+   BUILD 417 — 진짜 Threads 발행 (Meta Threads API 직접, 무료)
+   내부 KV 피드 발행은 그대로 유지하고, 같은 내용을 실제 Threads(@mimesis_op)로
+   보낸다. cron이 이 엔드포인트를 때리는 순간 별리가 진짜 SNS에 등장한다.
+   · 토큰: /api/threads-auth 로 1회 발급 → KV('threads_auth') 저장.
+     이후 크론이 돌 때마다 7일 지났으면 자동 갱신 (60일 만료 훨씬 이전).
+   · 발행: 컨테이너 생성(/threads) → 발행(/threads_publish) 2단계.
+     미디어 처리 지연 대비 발행은 3초 간격 최대 5회 재시도.
+   · ?draft=1: 컨테이너 생성까지만 — 공개 게시 없이 인증·미디어 파이프 검증.
+   · Threads 실패가 내부 피드 발행을 깨지 않는다 — 결과만 응답에 보고.
+   ===================================================================== */
+const THREADS_AUTH_KEY = 'threads_auth';
+const THREADS_API = 'https://graph.threads.net/v1.0';
+const REFRESH_AFTER_MS = 7 * 24 * 3600 * 1000; // 7일마다 갱신 (만료 60일)
+
+interface ThreadsAuth { token: string; userId: string; refreshedAt: number }
+
+async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
+  const raw = await env.PLANET.get(THREADS_AUTH_KEY);
+  let auth: ThreadsAuth | null = null;
+  if (raw) { try { auth = JSON.parse(raw); } catch { auth = null; } }
+  // env 부트스트랩 — Meta 대시보드 "사용자 토큰 생성기"로 만든 토큰을
+  // CF env(THREADS_TOKEN)에 넣으면 첫 실행 때 /me로 실제 사용자 ID를 조회해
+  // KV로 옮겨 앉는다. env의 THREADS_USER_ID는 신뢰하지 않는다 —
+  // 앱 ID를 잘못 넣는 실수가 실제로 있었고, /me가 항상 정답이다.
+  if ((!auth || !auth.token) && env.THREADS_TOKEN) {
+    try {
+      const meRes = await fetch(
+        `https://graph.threads.net/v1.0/me?fields=id,username&access_token=${encodeURIComponent(env.THREADS_TOKEN)}`,
+      );
+      const me = (await meRes.json()) as { id?: string; username?: string };
+      if (meRes.ok && me.id) {
+        auth = { token: env.THREADS_TOKEN, userId: me.id, refreshedAt: Date.now() };
+        await env.PLANET.put(THREADS_AUTH_KEY, JSON.stringify(auth));
+      }
+    } catch { /* 부트스트랩 실패 — 아래에서 null 반환 */ }
+  }
+  if (!auth || !auth.token || !auth.userId) return null;
+  // 자동 갱신 — 토큰이 24시간 이상 묵어야 갱신 가능하므로 7일 주기가 안전
+  if (Date.now() - auth.refreshedAt > REFRESH_AFTER_MS) {
+    try {
+      const u = new URL('https://graph.threads.net/refresh_access_token');
+      u.searchParams.set('grant_type', 'th_refresh_token');
+      u.searchParams.set('access_token', auth.token);
+      const r = await fetch(u.toString());
+      if (r.ok) {
+        const j = (await r.json()) as { access_token?: string };
+        if (j.access_token) {
+          auth = { ...auth, token: j.access_token, refreshedAt: Date.now() };
+          await env.PLANET.put(THREADS_AUTH_KEY, JSON.stringify(auth));
+        }
+      }
+      // 갱신 실패 시 기존 토큰으로 계속 — 60일 안이면 여전히 유효
+    } catch { /* 갱신 실패 무시 */ }
+  }
+  return auth;
+}
+
+async function dispatchToThreads(
+  env: Env, text: string, img: string | null, draft: boolean,
+): Promise<{ attempted: boolean; ok: boolean; detail: string }> {
+  const auth = await getThreadsAuth(env);
+  if (!auth) return { attempted: false, ok: false, detail: 'threads auth not configured — GET /api/threads-auth?key=... 먼저' };
+
+  // 1) 컨테이너 생성 — Threads 본문 한도 500자
+  const create = new URL(`${THREADS_API}/${auth.userId}/threads`);
+  create.searchParams.set('text', text.slice(0, 500));
+  if (img) { create.searchParams.set('media_type', 'IMAGE'); create.searchParams.set('image_url', img); }
+  else create.searchParams.set('media_type', 'TEXT');
+  create.searchParams.set('access_token', auth.token);
+  let containerId = '';
+  try {
+    const r = await fetch(create.toString(), { method: 'POST' });
+    const j = (await r.json()) as { id?: string; error?: { message?: string } };
+    if (!r.ok || !j.id) {
+      return { attempted: true, ok: false, detail: `container failed: ${j?.error?.message ?? r.status}` };
+    }
+    containerId = j.id;
+  } catch (e) { return { attempted: true, ok: false, detail: `container error: ${String(e)}` }; }
+
+  if (draft) return { attempted: true, ok: true, detail: `container ${containerId} created (not published — draft mode)` };
+
+  // 2) 발행 — 미디어 처리 지연 대비 재시도
+  const publish = new URL(`${THREADS_API}/${auth.userId}/threads_publish`);
+  publish.searchParams.set('creation_id', containerId);
+  publish.searchParams.set('access_token', auth.token);
+  let lastDetail = '';
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (attempt > 0) await new Promise((res) => setTimeout(res, 3000));
+    try {
+      const r = await fetch(publish.toString(), { method: 'POST' });
+      const j = (await r.json()) as { id?: string; error?: { message?: string } };
+      if (r.ok && j.id) return { attempted: true, ok: true, detail: `published: ${j.id}` };
+      lastDetail = j?.error?.message ?? `HTTP ${r.status}`;
+    } catch (e) { lastDetail = String(e); }
+  }
+  return { attempted: true, ok: false, detail: `publish failed after retries: ${lastDetail.slice(0, 200)}` };
+}
 
 export const onRequestOptions: PagesFunction<Env> = async () =>
   new Response(null, { status: 204, headers: CORS });
@@ -108,7 +210,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const nextRecent = [pick, ...recent].slice(0, RECENT_KEEP);
   await env.PLANET.put(RECENT_KEY, JSON.stringify(nextRecent));
 
-  return new Response(JSON.stringify({ ok: true, posted: chosen.text, index: pick, img: !!img }), {
+  // BUILD 417: 같은 내용을 진짜 Threads로. ?draft=1 이면 초안으로만.
+  const url = new URL(request.url);
+  const draft = url.searchParams.get('draft') === '1';
+  const threads = await dispatchToThreads(env, chosen.text, img, draft);
+
+  return new Response(JSON.stringify({ ok: true, posted: chosen.text, index: pick, img: !!img, threads }), {
     status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
   });
 };
