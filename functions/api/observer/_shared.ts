@@ -108,19 +108,24 @@ export function blobKey(observerId: string, revision: number): string {
   return `blob:${observerId}:${revision}`;
 }
 
-/** 워커 내부 호출 — observerId는 헤더, 나머지는 body */
+/** 워커 내부 호출 — observerId는 헤더, 나머지는 body. 바인딩 장애는 storage_error 응답으로 강등. */
 export async function callRegistry(
   registry: Fetcher,
   path: 'prepare' | 'commit' | 'restore',
   observerId: string,
   body: Record<string, unknown>,
 ): Promise<Response> {
-  return registry.fetch(`https://observer-registry.internal/observer/${path}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-observer-id': observerId,
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    return await registry.fetch(`https://observer-registry.internal/observer/${path}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-observer-id': observerId,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    console.error(`observer registry binding fetch failed id=${maskObserverId(observerId)} path=${path}`, err);
+    return errorResponse('storage_error');
+  }
 }

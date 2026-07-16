@@ -56,6 +56,7 @@ export class ObserverRegistry extends DurableObject<Env> {
     }
 
     const url = new URL(request.url);
+    if (url.pathname === '/observer/ping') return json({ ok: true, ping: 'do' });
     const meta = (await this.ctx.storage.get<ObserverMeta>(META_KEY)) ?? null;
     const now = Date.now();
 
@@ -133,6 +134,11 @@ export default {
     if (!OBSERVER_ID_RE.test(observerId)) return errorJson('invalid_payload');
 
     const stub = env.OBSERVER_REGISTRY.get(env.OBSERVER_REGISTRY.idFromName(observerId));
-    return stub.fetch(request);
+    try {
+      return await stub.fetch(request);
+    } catch {
+      // DO 디스패치 실패를 1101이 아닌 계약 오류코드로 응답
+      return errorJson('storage_error');
+    }
   },
 };
