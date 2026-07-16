@@ -7,12 +7,13 @@
     "dev": "vite",
     "validate:objects": "node scripts/validate-object-registry.mjs",
     "validate:world-events": "node scripts/validate-world-events.mjs",
-    "validate:live": "node scripts/validate-live-middleware.mjs",
     "validate:strict": "node --experimental-vm-modules scripts/validate-strict.mjs",
     "validate:card": "node scripts/validate-share-card.mjs",
     "validate:zone": "node scripts/validate-zone-system.mjs",
-    "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && npm run validate:zone && vite build",
-    "preview": "vite preview"
+    "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && npm run validate:zone && npm run validate:live:structure && vite build",
+    "preview": "vite preview",
+    "validate:live:structure": "node scripts/validate-live-structure.mjs",
+    "validate:live:deployed": "node scripts/validate-live-deployed.mjs"
   },
   "dependencies": {
     "@react-three/drei": "latest",
