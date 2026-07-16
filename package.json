@@ -10,7 +10,8 @@
     "validate:live": "node scripts/validate-live-middleware.mjs",
     "validate:strict": "node --experimental-vm-modules scripts/validate-strict.mjs",
     "validate:card": "node scripts/validate-share-card.mjs",
-    "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && vite build",
+    "validate:zone": "node scripts/validate-zone-system.mjs",
+    "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && npm run validate:zone && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
