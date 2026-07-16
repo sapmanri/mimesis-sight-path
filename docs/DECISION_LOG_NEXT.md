@@ -26,9 +26,11 @@ BUILD 413-A(개인 기록·공유카드) 이후 발견된 P0 항목.
 검증: 0/1/5/6/20 케이스 node-canvas 실렌더 회귀 테스트 30/30 통과.
 최악 케이스(20개)에서 콘텐츠 하단 1206 ≤ 한계 1230 (footer 1278 − gap 48).
 
-**후속 품질 작업(미착수)**: 세션 임시 검증 스크립트 2종을 저장소 정식 테스트로 편입할 것.
-- `cardtest.mjs` — buildCard 추출 + node-canvas 실렌더 회귀 (마스킹/행수/요약행/여백)
-- `strict.js` — `vm.SourceTextModule` 기반 엄격 파서 (module 스크립트 대응판. 구판은 `vm.Script`라 `type="module"` 블록을 컴파일하지 못함)
+**후속 품질 작업 — ✅ 완료 (BUILD 415-B)**: 검증 스크립트 2종을 저장소 정식 validator로 편입.
+- `scripts/validate-share-card.mjs` (`npm run validate:card`) — buildCard 추출 + 스텁 컨텍스트 기하 검증 (마스킹/행수/요약행/여백, 0/1/5/6/20). 의존성 제로. `--png` + devDep `canvas` 설치 시 육안용 PNG 출력.
+- `scripts/validate-strict.mjs` (`npm run validate:strict`) — `vm.SourceTextModule` 기반 엄격 파서. **검사 블록 0개면 실패** 규칙 내장 (빈 PASS 사고 방지).
+- 둘 다 `npm run build` 게이트에 편입 — Cloudflare 배포마다 자동 실행.
+- 음성 테스트로 검증기 자체를 검증함: 옛 slice(0,8) 버그 재현 시 7건 검출·exit 1, const 중복 주입 시 검출·exit 1.
 
 이하는 당시 조사 기록 (해결 전 상태 기준).
 
@@ -142,6 +144,6 @@ BUILD 413-A(개인 기록·공유카드) 이후 발견된 P0 항목.
 |---|---|
 | P0-1 카드 겹침 | ✅ **해결** — BUILD 415-A (최대 5개 + 외 N개, PR #51) |
 | P0-1 코드 마스킹 | ✅ **해결** — 카드 한정 뒷 4자리 마스킹 |
-| P0-1 회귀 테스트 편입 | ⏳ 후속 — cardtest/strict를 정식 테스트로 |
+| P0-1 회귀 테스트 편입 | ✅ **해결** — BUILD 415-B (validate:card / validate:strict, build 게이트 편입) |
 | P0-2 복구 UI | **백엔드 부재로 현재 구현 불가** — 서버 이관과 동시 진행 필요 |
 | P0-2 키 분리 | **현재는 불필요**(복구 권한 없음) / **서버 이관 시 필수** |

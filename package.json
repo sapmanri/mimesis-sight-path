@@ -8,7 +8,9 @@
     "validate:objects": "node scripts/validate-object-registry.mjs",
     "validate:world-events": "node scripts/validate-world-events.mjs",
     "validate:live": "node scripts/validate-live-middleware.mjs",
-    "build": "npm run validate:objects && npm run validate:world-events && vite build",
+    "validate:strict": "node --experimental-vm-modules scripts/validate-strict.mjs",
+    "validate:card": "node scripts/validate-share-card.mjs",
+    "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
