@@ -88,6 +88,9 @@
   #pr-share{padding:7px 12px;font-size:11px;font-weight:600;color:#0d1114;background:var(--sage);
     border:0;border-radius:8px;cursor:pointer}
   #pr-share:disabled{opacity:.55;cursor:default}
+  #pr-save{padding:7px 12px;font-size:11px;font-weight:600;color:var(--sage);background:transparent;
+    border:1px solid var(--sage);border-radius:8px;cursor:pointer}
+  #pr-save:disabled{opacity:.55;cursor:default}
   #pr-note{font-size:9px;color:var(--dim)}
   #pr-empty{padding:22px 10px;text-align:center;font-size:11px;color:var(--dim);line-height:1.7}
   @media(max-width:480px){
@@ -177,6 +180,7 @@
     <div id="pr-listwrap"><div id="pr-list"></div></div>
     <div id="pr-foot">
       <button id="pr-share" type="button">공유카드 만들기</button>
+      <button id="pr-save" type="button">PNG 저장</button>
       <span id="pr-note"></span>
     </div>
   </div>
@@ -948,6 +952,7 @@ const PR={
     document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&this._open) this.close(); });
     this._q('pr-copy').addEventListener('click', e=>{ e.stopPropagation(); this.copyCode(); });
     this._q('pr-share').addEventListener('click', ()=>this.share());
+    this._q('pr-save').addEventListener('click', ()=>this.saveCard());
   },
   open(){
     if(this._open) return;
@@ -1000,9 +1005,9 @@ const PR={
     const list=this._q('pr-list');
     if(rows.length===0){
       list.innerHTML='<div id="pr-empty">아직 함께 발견한 것이 없습니다.<br>별이 걷다 무언가를 만나면 여기에 쌓입니다.</div>';
-      this._q('pr-share').disabled=true; return;
+      this._q('pr-share').disabled=true; this._q('pr-save').disabled=true; return;
     }
-    this._q('pr-share').disabled=false;
+    this._q('pr-share').disabled=false; this._q('pr-save').disabled=false;
     list.innerHTML=rows.map(r=>{
       const def=CATALOG[r.type]||RARE[r.type]||{emoji:'·',ko:r.type};
       const acts=['observe','record','rest','wonder']
@@ -1034,6 +1039,18 @@ const PR={
         setTimeout(()=>URL.revokeObjectURL(url),4000);
         note.textContent='PNG로 저장했습니다';
       }
+    }catch(e){ note.textContent='카드를 만들지 못했습니다'; }
+  },
+  // 데스크톱용 직행 저장 — macOS 공유 시트 설정과 무관하게 항상 파일로 떨어진다
+  async saveCard(){
+    const note=this._q('pr-note'); note.textContent='카드 만드는 중…';
+    try{
+      const blob=await this.buildCard();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='byeol-record.png';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      note.textContent='PNG로 저장했습니다';
     }catch(e){ note.textContent='카드를 만들지 못했습니다'; }
   },
   buildCard(){
