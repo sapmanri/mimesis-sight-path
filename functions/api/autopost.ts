@@ -12,6 +12,9 @@ interface Env {
   PUBLISH_KEY?: string;
   CAPTURES?: R2Bucket;            // BUILD 355: R2 캡처 버킷 — 방송 이미지를 여기서 뽑는다
   CAPTURES_PUBLIC_BASE?: string; // r2.dev 공개 URL 접두사
+  METRICOOL_TOKEN?: string;      // BUILD 417: Metricool API 토큰 (설정→API, X-Mc-Auth 헤더)
+  METRICOOL_USER_ID?: string;    // BUILD 417: Metricool userId
+  METRICOOL_BLOG_ID?: string;    // BUILD 417: 브랜드(blogId) — Mimesis(@mimesis_op)
 }
 
 const FEED_KEY = 'feed';
@@ -39,6 +42,75 @@ const IMAGE_POOL: string[] = [
 ];
 
 const POSTS: { text: string }[] = (byeolliPosts as { posts: { text: string }[] }).posts;
+
+/* =====================================================================
+   BUILD 417 — 진짜 Threads 발행 (Metricool API)
+   내부 KV 피드 발행은 그대로 유지하고, 같은 내용을 실제 Threads(@mimesis_op)로
+   디스패치한다. cron이 이 엔드포인트를 때리는 순간 별리가 진짜 SNS에 등장한다.
+   · 인증: X-Mc-Auth 헤더 (Bearer 아님 — Metricool 특유의 함정)
+   · providers는 반드시 객체 배열 [{network:'threads'}] — 문자열 배열이면 조용히 실패
+   · 이미지는 normalize 엔드포인트를 먼저 거친다 (외부 URL → Metricool 호스팅)
+   · ?draft=1 이면 Threads엔 초안으로만 들어간다 (첫 가동 검증용)
+   · Threads 실패가 내부 피드 발행을 깨지 않는다 — 결과만 응답에 보고
+   ===================================================================== */
+async function dispatchToThreads(
+  env: Env, text: string, img: string | null, draft: boolean,
+): Promise<{ attempted: boolean; ok: boolean; detail: string }> {
+  if (!env.METRICOOL_TOKEN || !env.METRICOOL_USER_ID || !env.METRICOOL_BLOG_ID) {
+    return { attempted: false, ok: false, detail: 'metricool env not configured' };
+  }
+  const qs = `blogId=${env.METRICOOL_BLOG_ID}&userId=${env.METRICOOL_USER_ID}`;
+  const authHeader = { 'X-Mc-Auth': env.METRICOOL_TOKEN };
+
+  // 이미지 normalize — 실패하면 원본 URL로 시도, 그것도 안 되면 텍스트만
+  let media: string[] = [];
+  if (img) {
+    try {
+      const n = await fetch(
+        `https://app.metricool.com/api/actions/normalize/image/url?url=${encodeURIComponent(img)}&${qs}`,
+        { headers: authHeader },
+      );
+      if (n.ok) {
+        const j = (await n.json()) as { url?: string; data?: { url?: string } };
+        media = [j?.url || j?.data?.url || img];
+      } else media = [img];
+    } catch { media = [img]; }
+  }
+
+  // 발행 시각: 지금+2분 (과거 시각 거부 대비). KST는 DST가 없어 UTC+9 고정 변환이 안전.
+  const seoul = new Date(Date.now() + 2 * 60 * 1000 + 9 * 3600 * 1000);
+  const dateTime = seoul.toISOString().slice(0, 19);
+
+  const body = {
+    autoPublish: !draft,
+    draft,
+    text,
+    media,
+    mediaAltText: media.map(() => '별이 산책하며 찍은 사진'),
+    providers: [{ network: 'threads' }],
+    threadsData: {},
+    publicationDate: { dateTime, timezone: 'Asia/Seoul' },
+    descendants: [],
+    firstCommentText: '',
+    hasNotReadNotes: false,
+    shortener: false,
+    smartLinkData: { ids: [] },
+  };
+  try {
+    const r = await fetch(`https://app.metricool.com/api/v2/scheduler/posts?${qs}`, {
+      method: 'POST',
+      headers: { ...authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const detailText = await r.text();
+    return {
+      attempted: true, ok: r.ok,
+      detail: r.ok ? (draft ? 'draft created' : 'published') : `HTTP ${r.status}: ${detailText.slice(0, 200)}`,
+    };
+  } catch (e) {
+    return { attempted: true, ok: false, detail: String(e) };
+  }
+}
 
 export const onRequestOptions: PagesFunction<Env> = async () =>
   new Response(null, { status: 204, headers: CORS });
@@ -108,7 +180,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const nextRecent = [pick, ...recent].slice(0, RECENT_KEEP);
   await env.PLANET.put(RECENT_KEY, JSON.stringify(nextRecent));
 
-  return new Response(JSON.stringify({ ok: true, posted: chosen.text, index: pick, img: !!img }), {
+  // BUILD 417: 같은 내용을 진짜 Threads로. ?draft=1 이면 초안으로만.
+  const url = new URL(request.url);
+  const draft = url.searchParams.get('draft') === '1';
+  const threads = await dispatchToThreads(env, chosen.text, img, draft);
+
+  return new Response(JSON.stringify({ ok: true, posted: chosen.text, index: pick, img: !!img, threads }), {
     status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
   });
 };
