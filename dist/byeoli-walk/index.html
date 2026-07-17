@@ -1345,7 +1345,9 @@ const Recovery={
       const body={
         observerId: Profile.data.observerId, recoveryKey: this.data.recoveryKey,
         blob: this.buildBlob(), schemaVersion: 1, baseRevision: this.data.baseRevision,
-        clientSavedAt: Date.now(), clientInstanceId: this.instanceId() };
+        clientSavedAt: Date.now(), clientInstanceId: this.instanceId(),
+        // 422-OPS-E: blob과 별도의 익명 집계용 snapshot — 숫자·대상 type만, 일기 원문 없음(§6-4)
+        collectiveSnapshot: this.buildCollectiveSnapshot() };
       if(opts && opts.force===true){ body.force=true; body.confirmedRevision=opts.confirmedRevision; }
       const r=await this.post('backup', body);
       if(r.status===200 && r.data && r.data.ok){
@@ -1367,6 +1369,27 @@ const Recovery={
       this.lastResult={ ok:false, at:Date.now(), code:(r.data && r.data.error) || ('http_'+r.status) };
       this.updateBadge(); return { ok:false, code:this.lastResult.code };
     } finally { this._busy=false; }
+  },
+
+  /* 422-OPS-E: 집단 통계용 snapshot — Profile 수치와 tastes의 acts 카운트만.
+     일기 원문·문장 조각·개인 텍스트는 절대 싣지 않는다(§6-4 v1 고정).
+     sourceRevision=baseRevision → 서버가 이전보다 클 때만 delta 반영(재전송 멱등). */
+  buildCollectiveSnapshot(){
+    const d=(typeof Profile!=='undefined'&&Profile.data)||null;
+    if(!d) return undefined;
+    const targets={};
+    const ts=d.tastes||{};
+    for(const k of Object.keys(ts).slice(0,300)){
+      const a=(ts[k]&&ts[k].acts)||{};
+      targets[k]={ observe:a.observe|0, rest:a.rest|0, record:a.record|0, wonder:a.wonder|0 };
+    }
+    return {
+      schemaVersion:1,
+      sourceRevision:(this.data&&this.data.baseRevision)|0,
+      totals:{ diary:d.diaryCount|0, memories:d.memoryCount|0,
+               observedMs:d.totalObservedMs|0, pass:d.passCount|0 },
+      targets,
+    };
   },
 
   autoBackup(){ if(!this.data || this.conflict) return; this.backup({}); },
@@ -7195,5 +7218,6 @@ boot();
 requestAnimationFrame(loop);
 </script>
 <script src="/byeoli-walk/world-event-sync.js" defer></script>
+<script src="/byeoli-walk/presence-sync.js" defer></script>
 </body>
 </html>

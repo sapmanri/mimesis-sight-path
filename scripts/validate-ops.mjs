@@ -53,6 +53,8 @@ const ALLOWED_APIS = new Set([
   '/api/ops/event-schedule', // 쓰기 예외 1호
   '/api/world-event/active',
   '/api/ops/capture',        // 쓰기 예외 2호
+  '/api/ops/presence',       // 422-OPS-D 읽기
+  '/api/ops/collective',     // 422-OPS-E 읽기 (k-익명 적용 후)
 ]);
 for (const m of html.matchAll(/['"](\/api\/[^'"]*)['"]/g)) {
   if (!ALLOWED_APIS.has(m[1])) errors.push(`허용목록 밖 API 경로: ${m[1]}`);
@@ -183,6 +185,39 @@ if (!captureTs.includes('sanitizeMeta')) {
 if (!captureTs.includes('0xff') || !captureTs.includes('0xd8')) {
   errors.push('capture API에 JPEG 시그니처 검증이 없다');
 }
+
+// ── 9. 422-OPS-D presence 계약 (§6-3) ─────────────────────
+const presenceTs = await readFile(new URL('../functions/api/telemetry/presence.ts', import.meta.url), 'utf8').catch(() => '');
+for (const [pattern, why] of [
+  [/headers\.get\(\s*['"]cf-connecting-ip['"]/i, 'IP 원문 접근 금지'],
+  [/headers\.get\(\s*['"]user-agent['"]/i, 'User-Agent 접근 금지'],
+  [/observerId/, 'Observer 식별자 금지'],
+  [/BYLR/, 'Recovery Key 금지'],
+]) {
+  if (pattern.test(presenceTs)) errors.push(`telemetry/presence.ts 위반: ${why}`);
+}
+if (!presenceTs) errors.push('telemetry/presence.ts가 없다');
+const presenceJs = await readFile(new URL('../public/byeoli-walk/presence-sync.js', import.meta.url), 'utf8').catch(() => '');
+if (!presenceJs.includes('window.top !== window.self')) {
+  errors.push('presence-sync.js에 iframe 제외 가드가 없다 (관측소가 스스로 세션을 만든다)');
+}
+if (/BYLR|observerId|recoveryKey/.test(presenceJs)) {
+  errors.push('presence-sync.js에 개인 식별자 흔적이 있다');
+}
+if (!walkHtml.includes('presence-sync.js')) errors.push('걷기 앱에 presence-sync.js 태그가 없다');
+// 콘솔 표기 계약: 세션이지 사람이 아니다
+for (const banned of ['현재 관찰자', '오늘 고유 사용자', '명이 함께 열']) {
+  if (html.includes(banned)) errors.push(`presence 표기 계약 위반: "${banned}" (§6-3 — 세션으로 표기)`);
+}
+
+// ── 10. 422-OPS-E collective 계약 (§6-4) ──────────────────
+const collectiveTs = await readFile(new URL('../functions/api/_collective.ts', import.meta.url), 'utf8').catch(() => '');
+if (!/K_ANON\s*=\s*5/.test(collectiveTs)) errors.push('_collective.ts에 k-익명 상수(5)가 없다');
+const collectiveIo = await readFile(new URL('../functions/api/_collective-io.ts', import.meta.url), 'utf8').catch(() => '');
+if (/blob/i.test(collectiveIo)) errors.push('_collective-io.ts가 blob을 참조한다 — 집계 경로는 blob 불투명이어야 한다');
+if (!walkHtml.includes('buildCollectiveSnapshot')) errors.push('걷기 앱에 collectiveSnapshot 빌더가 없다');
+const opsCollective = await readFile(new URL('../functions/api/ops/collective.ts', import.meta.url), 'utf8').catch(() => '');
+if (!opsCollective.includes('kAnonView')) errors.push('ops/collective.ts가 k-익명 필터를 거치지 않는다');
 
 if (errors.length) {
   console.error(`validate:ops FAIL — ${errors.length}건`);

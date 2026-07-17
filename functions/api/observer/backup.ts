@@ -25,6 +25,13 @@ import {
   sha256Hex,
   type ObserverEnv,
 } from './_shared';
+import { ingestCollectiveSnapshot } from '../_collective-io';
+
+// 422-OPS-E: 집단 통계는 blob과 "별도로" 실린 collectiveSnapshot만 소비한다.
+// blob은 여기서도 계속 불투명 — 집계 경로는 blob 내용을 알지 못한다 (§6-4).
+interface BackupEnv extends ObserverEnv {
+  PLANET?: KVNamespace;
+}
 
 export const onRequestOptions: PagesFunction<ObserverEnv> = async () =>
   new Response(null, { status: 204, headers: CORS });
@@ -128,6 +135,16 @@ export const onRequestPost: PagesFunction<ObserverEnv> = async ({ request, env }
       status: commitRes.ok ? 500 : commitRes.status,
       headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' },
     });
+  }
+
+  // 422-OPS-E: 커밋 성공 후 집단 snapshot 반영 — 어떤 실패도 백업 성공 응답을 깨지 않는다.
+  const planet = (env as BackupEnv).PLANET;
+  if (planet && body.collectiveSnapshot !== undefined) {
+    try {
+      await ingestCollectiveSnapshot(planet, observerId, body.collectiveSnapshot);
+    } catch (err) {
+      console.warn('collective ingest failed (backup unaffected)', err);
+    }
   }
 
   // 6. 성공 응답

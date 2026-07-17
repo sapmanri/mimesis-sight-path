@@ -161,6 +161,20 @@
     </section>
 
     <section>
+      <h2>함께 걷는<span class="sub">브라우저 세션 기준 — 사람 수가 아니다 (§6-3 표기 계약)</span></h2>
+      <dl class="kv num">
+        <dt>지금</dt><dd id="prNow">—</dd>
+        <dt>오늘</dt><dd id="prToday">—</dd>
+        <dt>머묾</dt><dd id="prDur">—</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>모두가 만난 것들<span class="sub">기록을 지킨 관찰자 기준 · k-익명(5명) 적용</span></h2>
+      <div id="collective" class="note">아직 집계를 불러오는 중이다.</div>
+    </section>
+
+    <section>
       <h2>현재 상태<span class="sub">라이브 별이 기준 — 관찰자별 별이 집계는 422-OPS-E에서</span></h2>
       <dl class="kv num">
         <dt>행동</dt><dd id="stAction">—</dd>
@@ -244,6 +258,8 @@ const API = {
   eventSchedule: '/api/ops/event-schedule', // 쓰기 예외 1호 (423-EVENTS 예약)
   eventActive: '/api/world-event/active',
   capture: '/api/ops/capture',              // 쓰기 예외 2호 (425-A 엽서 업로드)
+  presence: '/api/ops/presence',            // 422-OPS-D 익명 세션 집계 (읽기)
+  collective: '/api/ops/collective',        // 422-OPS-E 집단 관찰 집계 (읽기, k-익명 적용 후)
 };
 
 const EVENTS = JSON.parse(document.getElementById('ops-events').textContent);
@@ -340,7 +356,11 @@ function renderWatch(){
   if (!entries.length) return;
   const most = [...entries].sort((a, b) => b[1].count - a[1].count)[0];
   const longestT = [...entries].sort((a, b) => b[1].maxDur - a[1].maxDur)[0];
-  const parts = [`오늘 별이는 관측소가 지켜보는 동안 ${watch.stops}번 멈춰 섰습니다.`];
+  const parts = [];
+  if (lastPresence && lastPresence.today.sessions > 0) {
+    parts.push(`오늘 ${lastPresence.today.sessions}개의 브라우저 세션이 별이와 함께 걸었습니다.`);
+  }
+  parts.push(`별이는 관측소가 지켜보는 동안 ${watch.stops}번 멈춰 섰습니다.`);
   parts.push(`가장 자주 만난 것은 ${most[0]}(${most[1].count}번)이었습니다.`);
   if (longestT[0] !== most[0] && longestT[1].maxDur > 0) {
     parts.push(`하지만 가장 오래 바라본 것은 ${longestT[0]}(${longestT[1].maxDur.toFixed(1)}초)였습니다.`);
@@ -637,6 +657,51 @@ async function autoPostcard(){
   await shootPostcard(false);
 }
 
+/* ── 함께 걷는 (422-OPS-D) — 세션이지 사람이 아니다 ── */
+let lastPresence = null;
+async function pollPresence(){
+  try {
+    const d = await getJson(API.presence);
+    if (!d.ok) return;
+    lastPresence = d;
+    $('prNow').textContent = `함께 열린 세션 ${d.active.sessions}개 · live ${d.active.live}개`;
+    $('prToday').textContent = `감지된 브라우저 세션 ${d.today.sessions}개`;
+    $('prDur').textContent = d.today.sessions
+      ? `평균 ${dur(d.today.avgMs)} · 가장 오래 ${dur(d.today.maxMs)}`
+      : '—';
+    renderWatch(); // 메타 일기에 세션 수 반영
+  } catch (e) { /* 유지 */ }
+}
+
+/* ── 모두가 만난 것들 (422-OPS-E) — k-익명 적용 후만 도착한다 ── */
+async function pollCollective(){
+  let d = null;
+  try { d = await getJson(API.collective); } catch (e) { return; }
+  if (!d.ok) return;
+  const box = $('collective'); box.textContent = ''; box.className = '';
+  if (d.hidden) {
+    box.className = 'note';
+    box.textContent = `아직 충분한 관찰자가 없다 — 기록을 지킨 관찰자 ${d.participants}명 (${d.kAnon}명부터 공개된다).`;
+    return;
+  }
+  const head = document.createElement('div'); head.className = 'note';
+  head.textContent = `기록을 지킨 관찰자 ${d.participants}명 기준`;
+  box.appendChild(head);
+  const medals = ['🥇', '🥈', '🥉'];
+  const list = document.createElement('dl'); list.className = 'kv num';
+  (d.targets ?? []).slice(0, 10).forEach((t, i) => {
+    const dt = document.createElement('dt'); dt.textContent = medals[i] ?? `${i + 1}.`;
+    const dd = document.createElement('dd');
+    dd.textContent = `${t.emoji} ${t.label} ${t.total}`;
+    list.append(dt, dd);
+  });
+  if (!(d.targets ?? []).length) {
+    const p = document.createElement('div'); p.className = 'note';
+    p.textContent = '공개 가능한 항목이 아직 없다 (항목별 기여 관찰자 5명부터).';
+    box.appendChild(p);
+  } else box.appendChild(list);
+}
+
 /* ── health: 세션 경과 (60s) ──────────────────────── */
 async function pollHealth(){
   try {
@@ -780,8 +845,10 @@ function iso10(dayKey){
 $('postcardBtn').addEventListener('click', () => shootPostcard(true));
 
 renderWatch(); // 새로고침 전 관측분 복원
-pollState(); pollHealth(); pollEventActive(); pollEventSchedule();
+pollState(); pollHealth(); pollEventActive(); pollEventSchedule(); pollPresence(); pollCollective();
 pollPostcards().then(() => pollFeed()).then(pollPublishLog); // 캡션·일지 승격은 엽서 메타가 먼저
+setInterval(pollPresence, 30000);
+setInterval(pollCollective, 5 * 60 * 1000);
 setInterval(pollState, 5000);
 setInterval(pollHealth, 60000);
 setInterval(pollFeed, 60000);
