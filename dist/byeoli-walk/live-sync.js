@@ -5,75 +5,18 @@
   let lastSequence = -1;
   let inFlight = false;
   let syncTimer = null;
-  let wakeLock = null;
-  let wakeRetryBound = false;
 
   const setText = (id, text) => {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
   };
 
-  const ensureWakeBadge = () => {
-    let badge = document.getElementById('liveWakeBadge');
-    if (badge) return badge;
-    badge = document.createElement('div');
-    badge.id = 'liveWakeBadge';
-    badge.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:80;padding:5px 7px;border:1px solid #4f5d4f;background:rgba(10,18,11,.88);color:#b9c7b5;font:10px ui-monospace,monospace;letter-spacing:.03em;pointer-events:none';
-    document.body.appendChild(badge);
-    return badge;
-  };
-
-  const setWakeBadge = (text, warning = false) => {
-    const badge = ensureWakeBadge();
-    badge.textContent = text;
-    badge.style.color = warning ? '#e9b0a8' : '#b9c7b5';
-  };
-
-  async function acquireWakeLock() {
-    if (document.visibilityState !== 'visible') return;
-    if (!('wakeLock' in navigator)) {
-      setWakeBadge('⚠ 화면 자동 잠금 가능', true);
-      return;
-    }
-    try {
-      if (wakeLock && !wakeLock.released) return;
-      wakeLock = await navigator.wakeLock.request('screen');
-      setWakeBadge('🔋 화면 유지 중');
-      wakeLock.addEventListener('release', () => {
-        wakeLock = null;
-        if (document.visibilityState === 'visible') {
-          setWakeBadge('⚠ 화면 유지 재시도 중', true);
-          window.setTimeout(acquireWakeLock, 300);
-        }
-      }, { once: true });
-    } catch (error) {
-      setWakeBadge('⚠ 화면 자동 잠금 가능', true);
-    }
-  }
-
-  async function releaseWakeLock() {
-    const current = wakeLock;
-    wakeLock = null;
-    if (current && !current.released) {
-      try { await current.release(); } catch (error) {}
-    }
-  }
-
-  function bindWakeLockRetries() {
-    if (wakeRetryBound) return;
-    wakeRetryBound = true;
-    const retry = () => acquireWakeLock();
-    window.addEventListener('pointerdown', retry, { passive: true });
-    window.addEventListener('keydown', retry);
-    window.addEventListener('pageshow', retry);
-    window.addEventListener('pagehide', releaseWakeLock);
+  // Wake Lock은 여기서 다루지 않는다 — BUILD 424부터 미들웨어 주입 WakeLockManager
+  // (liveStatusBadge, 탭 가능한 버튼)가 단일 소유자다. 이 파일의 옛 배지(liveWakeBadge)가
+  // 남아 있어 우하단에 배지가 두 개 겹치던 문제를 제거했다 (2026-07-18 Vase 리포트).
+  function bindVisibilitySync() {
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        acquireWakeLock();
-        sync();
-      } else {
-        releaseWakeLock();
-      }
+      if (document.visibilityState === 'visible') sync();
     });
   }
 
@@ -145,7 +88,6 @@
     syncTimer = window.setInterval(sync, 2000);
   }
 
-  bindWakeLockRetries();
-  acquireWakeLock();
+  bindVisibilitySync();
   startSyncLoop();
 })();

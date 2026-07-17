@@ -8,7 +8,9 @@
 import byeolliPosts from './byeolli_posts.json';
 import { appendPublishLog, bump401Bucket } from './_publish-log';
 
-interface Env {
+// 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
+// 크론 경로의 동작은 그대로 — export만 추가 (자율 시스템 무변경 원칙).
+export interface Env {
   PLANET: KVNamespace;
   PUBLISH_KEY?: string;
   CAPTURES?: R2Bucket;            // BUILD 355: R2 캡처 버킷 — 방송 이미지를 여기서 뽑는다
@@ -115,7 +117,7 @@ function metaErrorCode(j: MetaResp, httpStatus: number): string {
   return `http_${httpStatus}`;
 }
 
-async function dispatchToThreads(
+export async function dispatchToThreads(
   env: Env, text: string, img: string | null, draft: boolean,
 ): Promise<ThreadsResult> {
   const auth = await getThreadsAuth(env);

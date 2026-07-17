@@ -258,6 +258,7 @@ const API = {
   eventSchedule: '/api/ops/event-schedule', // 쓰기 예외 1호 (423-EVENTS 예약)
   eventActive: '/api/world-event/active',
   capture: '/api/ops/capture',              // 쓰기 예외 2호 (425-A 엽서 업로드)
+  publishNow: '/api/ops/publish-now',       // 쓰기 예외 3호 (엽서 즉시 발행 — Vase 판정 07-18)
   presence: '/api/ops/presence',            // 422-OPS-D 익명 세션 집계 (읽기)
   collective: '/api/ops/collective',        // 422-OPS-E 집단 관찰 집계 (읽기, k-익명 적용 후)
 };
@@ -582,6 +583,29 @@ async function postCapture(body){
   return res.json();
 }
 
+/* 쓰기 예외 3호 — 선택한 엽서로 지금 Threads 발행. 외부 공개 행위라 confirm을 거친다. */
+async function postPublishNow(captureId){
+  const res = await fetch(API.publishNow, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ captureId }),
+  });
+  return res.json();
+}
+
+async function publishPostcard(m){
+  const label = [m.byeoliAction ? ko(ACT_KO, m.byeoliAction) : null, m.targetLabel ?? m.targetType]
+    .filter(Boolean).join(' · ') || '이 엽서';
+  if (!confirm(`「${label}」 엽서로 지금 Threads에 발행할까?\n(문장은 크론과 같은 규칙으로 풀에서 골라진다)`)) return;
+  const r = await postPublishNow(m.captureId);
+  if (!r.ok) { alert(`발행 실패: ${r.error ?? '알 수 없음'}`); return; }
+  alert(r.threads.ok
+    ? `발행됐다 ✓ — ${r.textIndex}번째 문장과 함께.`
+    : `내부 피드에는 실렸지만 Threads가 거부했다 (${r.threads.errorCode ?? '?'}) — 운영 로그를 보자.`);
+  await pollFeed();
+  await pollPublishLog();
+}
+
 function blobToBase64(blob){
   return new Promise((res, rej) => {
     const r = new FileReader();
@@ -633,6 +657,11 @@ async function pollPostcards(){
         m.byeoliAction ? ko(ACT_KO, m.byeoliAction) : null,
         m.targetLabel ?? m.targetType, m.skyPhase ? ko(PHASE_KO, m.skyPhase) : null,
       ].filter(Boolean).join(' · ') || '—';
+      const pub = document.createElement('button'); pub.type = 'button';
+      pub.className = 'cancelBtn'; pub.style.borderColor = 'var(--sage)'; pub.style.color = 'var(--sage)';
+      pub.textContent = '발행';
+      pub.addEventListener('click', () => publishPostcard(m));
+      cap.appendChild(pub);
       const del = document.createElement('button'); del.type = 'button';
       del.className = 'cancelBtn'; del.textContent = '삭제';
       del.addEventListener('click', async () => {

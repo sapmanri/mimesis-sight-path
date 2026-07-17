@@ -28,10 +28,12 @@ for (const [pattern, why] of [
 ]) {
   if (pattern.test(html)) errors.push(`쓰기 경로 금지 위반: ${why}`);
 }
-// 쓰기 표면 목록(고정): 1호 예약(423) · 2호 엽서(425-A). 이 목록 밖 쓰기는 빌드 실패.
+// 쓰기 표면 목록(고정): 1호 예약(423) · 2호 엽서(425-A) · 3호 즉시 발행(07-18 Vase 판정).
+// 이 목록 밖 쓰기는 빌드 실패.
 const WRITE_SURFACES = [
   ['postEventSchedule', /fetch\(API\.eventSchedule,\s*\{\s*\n?\s*method:\s*'POST'/],
   ['postCapture', /fetch\(API\.capture,\s*\{\s*\n?\s*method:\s*'POST'/],
+  ['postPublishNow', /fetch\(API\.publishNow,\s*\{\s*\n?\s*method:\s*'POST'/],
 ];
 const methodUses = [...html.matchAll(/method\s*:\s*['"]([A-Z]+)['"]/g)];
 if (methodUses.length !== WRITE_SURFACES.length || methodUses.some((m) => m[1] !== 'POST')) {
@@ -53,6 +55,7 @@ const ALLOWED_APIS = new Set([
   '/api/ops/event-schedule', // 쓰기 예외 1호
   '/api/world-event/active',
   '/api/ops/capture',        // 쓰기 예외 2호
+  '/api/ops/publish-now',    // 쓰기 예외 3호
   '/api/ops/presence',       // 422-OPS-D 읽기
   '/api/ops/collective',     // 422-OPS-E 읽기 (k-익명 적용 후)
 ]);
@@ -164,7 +167,7 @@ if (/method\s*:|XMLHttpRequest|sendBeacon/.test(syncJs)) {
   errors.push('world-event-sync.js는 읽기 전용이어야 한다 (쓰기 수단 발견)');
 }
 // 감사 하드룰: 쓰기 API는 Access 이메일을 기록해야 한다
-for (const rel of ['../functions/api/ops/event-schedule.ts', '../functions/api/ops/capture.ts']) {
+for (const rel of ['../functions/api/ops/event-schedule.ts', '../functions/api/ops/capture.ts', '../functions/api/ops/publish-now.ts']) {
   const src = await readFile(new URL(rel, import.meta.url), 'utf8').catch(() => '');
   if (!src.includes('cf-access-authenticated-user-email')) {
     errors.push(`${rel.replace('../', '')}에 감사 기록(Access 이메일)이 없다`);
