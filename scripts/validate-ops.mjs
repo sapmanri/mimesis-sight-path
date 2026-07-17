@@ -28,12 +28,13 @@ for (const [pattern, why] of [
 ]) {
   if (pattern.test(html)) errors.push(`쓰기 경로 금지 위반: ${why}`);
 }
-// 쓰기 표면 목록(고정): 1호 예약(423) · 2호 엽서(425-A) · 3호 즉시 발행(07-18 Vase 판정).
+// 쓰기 표면 목록(고정): 1호 예약(423) · 2호 엽서(425-A) · 3호 즉시 발행 · 4호 답글(425-B/C).
 // 이 목록 밖 쓰기는 빌드 실패.
 const WRITE_SURFACES = [
   ['postEventSchedule', /fetch\(API\.eventSchedule,\s*\{\s*\n?\s*method:\s*'POST'/],
   ['postCapture', /fetch\(API\.capture,\s*\{\s*\n?\s*method:\s*'POST'/],
   ['postPublishNow', /fetch\(API\.publishNow,\s*\{\s*\n?\s*method:\s*'POST'/],
+  ['postThreadsReplies', /fetch\(API\.threadsReplies,\s*\{\s*\n?\s*method:\s*'POST'/],
 ];
 const methodUses = [...html.matchAll(/method\s*:\s*['"]([A-Z]+)['"]/g)];
 if (methodUses.length !== WRITE_SURFACES.length || methodUses.some((m) => m[1] !== 'POST')) {
@@ -56,6 +57,7 @@ const ALLOWED_APIS = new Set([
   '/api/world-event/active',
   '/api/ops/capture',        // 쓰기 예외 2호
   '/api/ops/publish-now',    // 쓰기 예외 3호
+  '/api/ops/threads-replies', // 쓰기 예외 4호 (답글 — 승인 발행)
   '/api/ops/presence',       // 422-OPS-D 읽기
   '/api/ops/collective',     // 422-OPS-E 읽기 (k-익명 적용 후)
 ]);
@@ -167,7 +169,7 @@ if (/method\s*:|XMLHttpRequest|sendBeacon/.test(syncJs)) {
   errors.push('world-event-sync.js는 읽기 전용이어야 한다 (쓰기 수단 발견)');
 }
 // 감사 하드룰: 쓰기 API는 Access 이메일을 기록해야 한다
-for (const rel of ['../functions/api/ops/event-schedule.ts', '../functions/api/ops/capture.ts', '../functions/api/ops/publish-now.ts']) {
+for (const rel of ['../functions/api/ops/event-schedule.ts', '../functions/api/ops/capture.ts', '../functions/api/ops/publish-now.ts', '../functions/api/ops/threads-replies.ts']) {
   const src = await readFile(new URL(rel, import.meta.url), 'utf8').catch(() => '');
   if (!src.includes('cf-access-authenticated-user-email')) {
     errors.push(`${rel.replace('../', '')}에 감사 기록(Access 이메일)이 없다`);
@@ -221,6 +223,22 @@ if (/blob/i.test(collectiveIo)) errors.push('_collective-io.ts가 blob을 참조
 if (!walkHtml.includes('buildCollectiveSnapshot')) errors.push('걷기 앱에 collectiveSnapshot 빌더가 없다');
 const opsCollective = await readFile(new URL('../functions/api/ops/collective.ts', import.meta.url), 'utf8').catch(() => '');
 if (!opsCollective.includes('kAnonView')) errors.push('ops/collective.ts가 k-익명 필터를 거치지 않는다');
+
+// ── 11. 425-B/C 답글 하드룰 (§4 · Phase 1) ────────────────
+const repliesTs = await readFile(new URL('../functions/api/ops/threads-replies.ts', import.meta.url), 'utf8').catch(() => '');
+if (!repliesTs) {
+  errors.push('threads-replies.ts가 없다');
+} else {
+  if (!repliesTs.includes('pepperHash')) errors.push('답글: username 해시 저장이 아니다');
+  if (!repliesTs.includes('draftEligibility')) errors.push('답글: 정책 판정(draftEligibility)을 거치지 않는다');
+  if (!repliesTs.includes("decision !== 'drafted'")) errors.push('답글: 승인은 drafted 상태에서만 가능해야 한다');
+  if (!/action === 'approve'/.test(repliesTs) || !/dailyReplyCap/.test(repliesTs)) {
+    errors.push('답글: 승인 경로에 30% 상한 재확인이 없다');
+  }
+}
+const repliesLogic = await readFile(new URL('../functions/api/_replies.ts', import.meta.url), 'utf8').catch(() => '');
+if (!/REPLY_RATIO\s*=\s*0\.3/.test(repliesLogic)) errors.push('답글: 30% 상한 상수가 없다');
+if (!repliesLogic.includes("'category_sensitive'")) errors.push('답글: 민감 카테고리 차단이 없다');
 
 if (errors.length) {
   console.error(`validate:ops FAIL — ${errors.length}건`);

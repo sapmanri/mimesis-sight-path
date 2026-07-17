@@ -63,7 +63,7 @@ const REFRESH_AFTER_MS = 7 * 24 * 3600 * 1000; // 7일마다 갱신 (만료 60�
 
 interface ThreadsAuth { token: string; userId: string; refreshedAt: number }
 
-async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
+export async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
   const raw = await env.PLANET.get(THREADS_AUTH_KEY);
   let auth: ThreadsAuth | null = null;
   if (raw) { try { auth = JSON.parse(raw); } catch { auth = null; } }

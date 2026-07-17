@@ -198,6 +198,12 @@
     </section>
 
     <section>
+      <h2>Threads 대화<span class="sub">답글은 승인해야만 나간다 (Phase 1) · 상한 = 오늘 댓글의 30%</span></h2>
+      <div class="note num" id="thrSummary">불러오는 중…</div>
+      <div class="journal" id="thrList" style="margin-top:10px"></div>
+    </section>
+
+    <section>
       <h2>오늘 사진<span class="sub">오늘 발행에 실린 이미지</span></h2>
       <div class="shots" id="shots"></div>
       <h2 style="margin-top:18px">엽서<span class="sub">별이가 남긴 장면+관찰일기 — 발행 이미지 풀에 우선 공급</span></h2>
@@ -259,6 +265,7 @@ const API = {
   eventActive: '/api/world-event/active',
   capture: '/api/ops/capture',              // 쓰기 예외 2호 (425-A 엽서 업로드)
   publishNow: '/api/ops/publish-now',       // 쓰기 예외 3호 (엽서 즉시 발행 — Vase 판정 07-18)
+  threadsReplies: '/api/ops/threads-replies', // 쓰기 예외 4호 (425-B/C 답글 후보·승인 — 30% 상한)
   presence: '/api/ops/presence',            // 422-OPS-D 익명 세션 집계 (읽기)
   collective: '/api/ops/collective',        // 422-OPS-E 집단 관찰 집계 (읽기, k-익명 적용 후)
 };
@@ -686,6 +693,109 @@ async function autoPostcard(){
   await shootPostcard(false);
 }
 
+/* ── Threads 대화 (425-B/C) — 쓰기 예외 4호: 후보·승인·거절·⭐ ── */
+const ELIG_KO = {
+  aging: '10분 숙성 중', daily_cap: '오늘 상한(30%) 소진', per_post_cap: '이 게시물엔 이미 2건',
+  per_account_cooldown: '같은 계정 24시간 내 답함', category_spam: '스팸 — 무응답',
+  category_sensitive: '민감 주제 — 자동 경로 없음', category_light: '이모지/짧음 — 무응답',
+  already_published: '답함',
+};
+const CAT_KO = { observation: '관찰', question: '질문', greeting: '인사', light: '가벼움', spam: '스팸', sensitive: '민감' };
+
+async function postThreadsReplies(body){
+  const res = await fetch(API.threadsReplies, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+async function pollThreadsReplies(force){
+  let d = null;
+  try { d = await getJson(API.threadsReplies + (force ? '?force=1' : '')); } catch (e) { return; }
+  if (!d.ok) return;
+  $('thrSummary').textContent = [
+    `누적 ${d.replies.length}건`,
+    `오늘 새 댓글 ${d.cap.todayNew}건`,
+    `오늘 답글 ${d.cap.used}/${d.cap.cap}`,
+    d.lastIngestAt ? `마지막 확인 ${ago(d.lastIngestAt)}` : null,
+    d.claudeReady ? null : '⚠ ANTHROPIC_API_KEY 미설정 — 후보 생성 불가',
+  ].filter(Boolean).join(' · ');
+
+  const box = $('thrList'); box.textContent = '';
+  if (!d.replies.length) {
+    const p = document.createElement('div'); p.className = 'note';
+    p.textContent = '아직 수집된 댓글이 없다. 사람들이 말을 걸어오면 여기에 쌓인다.';
+    box.appendChild(p);
+    return;
+  }
+  for (const r of d.replies.slice(0, 20)) {
+    const row = document.createElement('div'); row.className = 'run';
+    const head = document.createElement('div'); head.className = 'when num';
+    head.textContent = `${hhmm(r.commentCreatedAt)} · ${r.authorMask} · ${CAT_KO[r.category] ?? r.category}${r.bookmarked ? ' · ⭐' : ''}`;
+    row.appendChild(head);
+    const txt = document.createElement('div'); txt.className = 'what';
+    txt.textContent = r.text || '(내용 없음)';
+    row.appendChild(txt);
+
+    const act = document.createElement('div'); act.className = 'what';
+    const btn = (label, cls, fn) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'cancelBtn';
+      if (cls) { b.style.borderColor = 'var(--sage)'; b.style.color = 'var(--sage)'; }
+      b.textContent = label; b.addEventListener('click', fn); act.appendChild(b);
+    };
+    const refresh = () => pollThreadsReplies(false);
+
+    if (r.decision === 'collected') {
+      if (r.eligibility) {
+        const s = document.createElement('span'); s.className = 'note';
+        s.textContent = ELIG_KO[r.eligibility] ?? r.eligibility;
+        act.appendChild(s);
+      } else {
+        btn('후보 만들기', true, async () => {
+          const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId });
+          if (!res.ok) alert(`후보 실패: ${res.error}`);
+          refresh();
+        });
+      }
+      btn('무응답 처리', false, async () => {
+        await postThreadsReplies({ action: 'reject', sourceCommentId: r.sourceCommentId, reason: '운영자 무응답 처리' });
+        refresh();
+      });
+    } else if (r.decision === 'drafted') {
+      const cand = document.createElement('div');
+      cand.style.cssText = 'color:#e7dcc4;border-left:2px solid var(--sage);padding-left:10px;margin:4px 0';
+      cand.textContent = `별이의 답 후보 — ${r.generatedText}`;
+      row.appendChild(cand);
+      btn('승인 · 발행', true, async () => {
+        if (!confirm(`이 답글을 지금 Threads에 남길까?\n\n"${r.generatedText}"`)) return;
+        const res = await postThreadsReplies({ action: 'approve', sourceCommentId: r.sourceCommentId });
+        alert(res.ok ? '답글을 남겼다 ✓' : `발행 실패: ${res.error ?? '?'}`);
+        refresh();
+      });
+      btn('거절', false, async () => {
+        await postThreadsReplies({ action: 'reject', sourceCommentId: r.sourceCommentId });
+        refresh();
+      });
+    } else if (r.decision === 'published') {
+      const done = document.createElement('div'); done.className = 'what ok';
+      done.textContent = `답함 ✓ — ${r.generatedText}`;
+      row.appendChild(done);
+    } else {
+      const s = document.createElement('span'); s.className = 'note';
+      s.textContent = `${r.decision === 'failed' ? '실패' : '무응답'} — ${r.reason ?? ''}`;
+      act.appendChild(s);
+    }
+    btn('⭐', false, async () => {
+      await postThreadsReplies({ action: 'bookmark', sourceCommentId: r.sourceCommentId });
+      refresh();
+    });
+    row.appendChild(act);
+    box.appendChild(row);
+  }
+}
+
 /* ── 함께 걷는 (422-OPS-D) — 세션이지 사람이 아니다 ── */
 let lastPresence = null;
 async function pollPresence(){
@@ -876,8 +986,10 @@ $('postcardBtn').addEventListener('click', () => shootPostcard(true));
 renderWatch(); // 새로고침 전 관측분 복원
 pollState(); pollHealth(); pollEventActive(); pollEventSchedule(); pollPresence(); pollCollective();
 pollPostcards().then(() => pollFeed()).then(pollPublishLog); // 캡션·일지 승격은 엽서 메타가 먼저
+pollThreadsReplies(false); // 서버가 25분 간격으로 lazy 수집
 setInterval(pollPresence, 30000);
 setInterval(pollCollective, 5 * 60 * 1000);
+setInterval(() => pollThreadsReplies(false), 10 * 60 * 1000);
 setInterval(pollState, 5000);
 setInterval(pollHealth, 60000);
 setInterval(pollFeed, 60000);
