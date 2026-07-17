@@ -8,6 +8,9 @@ import { transformWalkHtml } from './byeoli-walk/_middleware';
  * pages.dev 의 루트(3D 앱)와 /byeoli-walk/ 는 변화 없음.
  */
 const PUBLIC_WALK_HOST = 'byeoli.sapmanri.com';
+const MANIFEST_PATH = '/byeoli-walk/manifest.webmanifest';
+/** 앱이 pages.dev에서 실제로 사는 경로 — 커스텀 도메인에서는 루트 */
+const WALK_BASE = '/byeoli-walk/';
 
 /** 걷기 앱 셸 변환 — live-parity 제거 + ?mode=live 처리 (기존 루트 미들웨어 로직 그대로) */
 function transformWalkShell(html: string, url: URL): string {
@@ -48,6 +51,26 @@ interface Env {
 export const onRequest: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url);
   const host = (context.request.headers.get('host') ?? url.hostname).toLowerCase();
+
+  // manifest는 한 파일이 원본. 앱이 사는 위치가 호스트마다 다르므로 start_url/scope/id만
+  // 그 호스트에 맞게 조정해 내보낸다 (공개 도메인=루트, pages.dev=/byeoli-walk/).
+  if (url.pathname === MANIFEST_PATH) {
+    const asset = await context.env.ASSETS.fetch(new URL(MANIFEST_PATH, url));
+    if (!asset.ok) return asset;
+    const manifest = (await asset.json()) as Record<string, unknown>;
+    if (host !== PUBLIC_WALK_HOST) {
+      manifest.id = WALK_BASE;
+      manifest.start_url = WALK_BASE;
+      manifest.scope = WALK_BASE;
+    }
+    return new Response(JSON.stringify(manifest), {
+      status: 200,
+      headers: {
+        'content-type': 'application/manifest+json; charset=utf-8',
+        'cache-control': 'no-store',
+      },
+    });
+  }
 
   if (host === PUBLIC_WALK_HOST && url.pathname === '/') {
     // 정적 자산에서 걷기 앱 HTML을 직접 가져와 기존 두 변환(CATALOG 주입 → 셸)을
