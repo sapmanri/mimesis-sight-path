@@ -1,16 +1,15 @@
 import { serialize2DRegistry, validateObjectRegistry } from '../../src/objects/objectRegistry';
 
-export const onRequest: PagesFunction = async (context) => {
-  const response = await context.next();
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.includes('text/html')) return response;
-
-  let html = await response.text();
-
+/**
+ * BUILD 421-B: CATALOG 치환 변환을 순수 함수로 분리.
+ * 이 미들웨어(/byeoli-walk/)와 루트 미들웨어의 공개 도메인 host-rewrite가 공유한다.
+ * 변환 내용은 기존과 바이트 단위로 동일 — 레지스트리 무결성 실패만 예외로 던진다(호출측이 500 변환).
+ */
+export function transformWalkHtml(html: string): string {
   // BUILD 408-A — one object identity source.
   const registryErrors = validateObjectRegistry();
   if (registryErrors.length) {
-    return new Response(`Object registry invalid:\n${registryErrors.join('\n')}`, { status: 500 });
+    throw new Error(`Object registry invalid:\n${registryErrors.join('\n')}`);
   }
   const twoD = serialize2DRegistry();
   html = html.replace(/const CATALOG = \{[\s\S]*?\n\};\n\n\/\/ variant 라벨/, `const CATALOG = ${JSON.stringify(twoD.catalog)};\n\n// variant 라벨`);
@@ -257,6 +256,21 @@ let stateProvider = LIVE_MODE ? RemoteStateProvider : LocalStateProvider;`,
 }
 requestAnimationFrame(loop);`,
   );
+
+  return html;
+}
+
+export const onRequest: PagesFunction = async (context) => {
+  const response = await context.next();
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/html')) return response;
+
+  let html = await response.text();
+  try {
+    html = transformWalkHtml(html);
+  } catch (err) {
+    return new Response(err instanceof Error ? err.message : String(err), { status: 500 });
+  }
 
   const headers = new Headers(response.headers);
   headers.delete('content-length');
