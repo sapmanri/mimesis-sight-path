@@ -232,8 +232,9 @@ if (!repliesTs) {
   if (!repliesTs.includes('pepperHash')) errors.push('답글: username 해시 저장이 아니다');
   if (!repliesTs.includes('draftEligibility')) errors.push('답글: 정책 판정(draftEligibility)을 거치지 않는다');
   if (!repliesTs.includes("decision !== 'drafted'")) errors.push('답글: 승인은 drafted 상태에서만 가능해야 한다');
-  if (!/action === 'approve'/.test(repliesTs) || !/dailyReplyCap/.test(repliesTs)) {
-    errors.push('답글: 승인 경로에 30% 상한 재확인이 없다');
+  // 승인 경로 전용 마커 — GET의 상한 표시와 별개로, approve가 직접 daily_cap을 거부해야 한다
+  if (!repliesTs.includes("error: 'daily_cap'")) {
+    errors.push('답글: 승인 경로에 30% 상한 재확인(daily_cap 거부)이 없다');
   }
 }
 const repliesLogic = await readFile(new URL('../functions/api/_replies.ts', import.meta.url), 'utf8').catch(() => '');
