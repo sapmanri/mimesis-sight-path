@@ -99,7 +99,14 @@ const LiveUi = {
     if(this.badge) return this.badge;
     const el=document.createElement('div');
     el.id='liveStatusBadge';
-    el.style.cssText='position:fixed;right:8px;bottom:8px;z-index:50;padding:5px 7px;border:1px solid #4f5d4f;background:rgba(10,18,11,.88);color:#b9c7b5;font:10px ui-monospace,monospace;letter-spacing:.03em;pointer-events:none';
+    // 424: 배지는 탭 가능한 버튼이다. 이전엔 pointer-events:none이라 눌리지 않았고,
+    // Wake Lock 재시도가 "화면 아무 데나 탭"에만 의존해 사용자가 인지할 수 없었다.
+    // 최소 탭 타깃 44px 확보, 우하단(우상단 HUD와 겹치지 않음).
+    el.style.cssText='position:fixed;right:8px;bottom:8px;z-index:50;min-height:44px;display:flex;align-items:center;padding:8px 12px;border:1px solid #4f5d4f;border-radius:8px;background:rgba(10,18,11,.88);color:#b9c7b5;font:10px ui-monospace,monospace;letter-spacing:.03em;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none';
+    el.setAttribute('role','button');
+    el.setAttribute('tabindex','0');
+    el.addEventListener('click',()=>{ WakeLockManager.retryFromUser(); });
+    el.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); WakeLockManager.retryFromUser(); } });
     document.body.appendChild(el); this.badge=el; return el;
   },
   set(text,warning=false){ const el=this.ensure(); el.textContent=text; el.style.color=warning?'#e9b0a8':'#b9c7b5'; },
@@ -139,6 +146,11 @@ const WakeLockManager = {
     }
   },
   async release(){ const s=this.sentinel; this.sentinel=null; if(s&&!s.released){ try{ await s.release(); }catch{} } },
+  // 424: 배지를 직접 눌렀을 때 — 사용자 제스처가 확실하므로 브라우저가 요청을 받아준다.
+  retryFromUser(){
+    if(!this.enabled) this.start();
+    else { LiveUi.set('🔋 화면 유지 확인 중…'); this.acquire(); }
+  },
 };
 
 function liveLerp(a,b,t){ return a+(b-a)*t; }
@@ -243,6 +255,9 @@ let stateProvider = LIVE_MODE ? RemoteStateProvider : LocalStateProvider;`,
     "boot();\nrequestAnimationFrame(loop);",
     `if(stateProvider.mode==='sandbox'){
   boot();
+  // BUILD 424: 공개 사이트(sandbox)도 화면 유지가 필요하다. 걷기를 지켜보는 앱인데
+  // 그동안 Wake Lock이 live 모드에서만 시작돼 byeoli.sapmanri.com에서는 화면이 꺼졌다.
+  WakeLockManager.start();
 }else{
   fitCanvas();
   document.getElementById('speedBtn').disabled=true;
