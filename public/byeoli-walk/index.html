@@ -99,7 +99,7 @@
     padding:0 12px 10px;font-size:9px;color:var(--dim)}
   #pr-bkbadge{font-size:9px;color:var(--dim)}
   #pr-bkbadge.warn{color:#c9a04a}
-  #pr-restore-open{background:none;border:0;padding:0;font-size:9px;color:var(--dim);
+  #pr-restore-open,#pr-onboarding-open{background:none;border:0;padding:0;font-size:9px;color:var(--dim);
     text-decoration:underline;cursor:pointer}
   #rc-panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(420px,92vw);
     background:#12171c;border:1px solid #232a31;border-radius:14px;padding:18px 16px;color:#cfd6dc}
@@ -119,6 +119,22 @@
   #rc-panel .rc-ghost{padding:8px 12px;font-size:11px;font-weight:600;color:var(--sage);
     background:transparent;border:1px solid var(--sage);border-radius:8px;cursor:pointer}
   #rc-panel .rc-note{font-size:10px;color:#c9a04a;min-height:14px;margin-top:8px}
+  /* ---- BUILD 420-B: 온보딩 — rc 톤 그대로, 버튼 하나만 강조 ---- */
+  #ob-sheet{opacity:0;transition:opacity .28s ease}
+  #ob-sheet.ob-in{opacity:1}
+  #ob-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,88vw);
+    max-height:86dvh;overflow-y:auto;box-sizing:border-box;
+    background:rgba(18,23,28,.92);border:1px solid #232a31;border-radius:14px;
+    padding:26px 22px;text-align:center;color:#cfd6dc}
+  #ob-title{margin:0 0 14px;font-size:15px;font-weight:600;color:var(--sage);line-height:1.5}
+  #ob-body{margin:0 0 20px;font-size:12px;line-height:1.9;color:#aab3ba}
+  #ob-start{display:block;width:100%;padding:12px 0;font-size:13px;font-weight:600;
+    color:#0d1114;background:var(--sage);border:0;border-radius:10px;cursor:pointer}
+  #ob-sub{margin:14px 0 0;font-size:10px;line-height:1.7;color:var(--dim)}
+  @media(max-width:480px){
+    #ob-card{width:100%;left:0;top:auto;bottom:0;transform:none;border-radius:14px 14px 0 0;
+      border-bottom:0;padding-bottom:calc(26px + env(safe-area-inset-bottom,0))}
+  }
   #pr-empty{padding:22px 10px;text-align:center;font-size:11px;color:var(--dim);line-height:1.7}
   @media(max-width:480px){
     #pr-panel{width:100%;max-height:92dvh;left:0;top:auto;bottom:0;transform:none;
@@ -216,7 +232,11 @@
     </div>
     <div id="rc-foot">
       <span id="pr-bkbadge"></span>
-      <button id="pr-restore-open" type="button">기존 별이 이어가기</button>
+      <span>
+        <button id="pr-onboarding-open" type="button">안내 다시 보기</button>
+        ·
+        <button id="pr-restore-open" type="button">기존 별이 이어가기</button>
+      </span>
     </div>
   </div>
 </div>
@@ -224,6 +244,16 @@
 <!-- BUILD 419-B: 관찰자 복구 모달 (발급 / 복구 / 교체 확인 — 내용은 JS 렌더) -->
 <div id="rc-sheet" style="display:none;position:fixed;inset:0;z-index:99500;background:rgba(6,8,10,.62);backdrop-filter:blur(2px)">
   <div id="rc-panel" role="dialog" aria-modal="true" aria-label="기록 지키기"></div>
+</div>
+
+<!-- BUILD 420-B: 첫 진입 온보딩 (첫 방문에만 자동 노출, 배경 산책은 계속 움직임) -->
+<div id="ob-sheet" style="display:none;position:fixed;inset:0;z-index:99400;background:rgba(6,8,10,.5);backdrop-filter:blur(3px)">
+  <div id="ob-card" role="dialog" aria-modal="true" aria-label="별이와 함께 산책을 시작합니다">
+    <h2 id="ob-title">별이와 함께 산책을 시작합니다.</h2>
+    <p id="ob-body">별이는 당신이 오래 바라본 풍경을 기억합니다.<br><br>천천히 걸어보세요.<br>작은 발견과 취향이 조금씩 쌓입니다.</p>
+    <button id="ob-start" type="button">산책 시작하기</button>
+    <p id="ob-sub">기록 지키기를 해두면 다른 기기에서도 다시 이어갈 수 있어요.</p>
+  </div>
 </div>
 
 <!-- BUILD 410-C2: Full Page World Event Stage (평소 display:none) -->
@@ -1523,6 +1553,44 @@ function fmtAgoMin(ts){
   return m===0 ? '방금' : m+'분 전';
 }
 Recovery.init();
+
+/* =====================================================================
+   BUILD 420-B — 첫 진입 온보딩
+   첫 방문에만 자동 노출. 버튼 확인 후 다시 자동 노출하지 않는다.
+   기록 시트의 "안내 다시 보기"로 언제든 재열람 (플래그는 건드리지 않음).
+   배경 산책 루프는 멈추지 않는다 — 모달을 닫는 순간 산책이 그대로 이어진다.
+   ===================================================================== */
+const ONBOARDING_LS='mimesis.byeoli.onboarding.v1';   // 온보딩 완료 플래그 (전용 키)
+const Onboarding={
+  _open:false,
+  seen(){ try{ return localStorage.getItem(ONBOARDING_LS)==='1'; }catch(e){ return true; } },
+  markSeen(){ try{ localStorage.setItem(ONBOARDING_LS,'1'); }catch(e){} },
+  show(){
+    if(this._open) return;
+    this._open=true;
+    const sheet=document.getElementById('ob-sheet');
+    sheet.style.display='block';
+    void sheet.offsetHeight;                    // reflow — transition 시작점 확정 (rAF 비의존)
+    sheet.classList.add('ob-in');               // 짧은 페이드인
+    document.getElementById('ob-start').focus();
+  },
+  dismiss(){
+    if(!this._open) return;
+    this._open=false;
+    this.markSeen();
+    const sheet=document.getElementById('ob-sheet');
+    sheet.classList.remove('ob-in');
+    setTimeout(()=>{ sheet.style.display='none'; }, 300);
+  },
+  init(){
+    document.getElementById('ob-start').addEventListener('click', ()=>this.dismiss());
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&this._open) this.dismiss(); });
+    const again=document.getElementById('pr-onboarding-open');
+    if(again) again.addEventListener('click', ()=>{ PR.close(); this.show(); });
+    if(!this.seen()) this.show();               // 첫 방문에만 자동 노출
+  },
+};
+Onboarding.init();
 
 /* =====================================================================
    UPDATE
