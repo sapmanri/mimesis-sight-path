@@ -7037,6 +7037,7 @@ function composePostcard(opts){
     byeoliAction: acting ? byeoli.actAction : (byeoli.state||null),
     targetId: byeoli.actTarget||null,
     targetType: tProp ? tProp.type : null,
+    targetLabel: targetLabel,
     diaryLines: lines,
   };
   return new Promise(res=>c.toBlob(b=>res(b?{blob:b,meta}:null),'image/jpeg',0.92));

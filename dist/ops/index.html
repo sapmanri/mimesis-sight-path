@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>BYEOLI OPS — 관측소</title>
+<title>별이 관측소 — Observer Observatory</title>
 <!--
   BUILD 422-OPS-B — Observer Console Shell (read-only)
   정본: docs/BUILD_422_OPS_OBSERVER_CONSOLE.md §9, §11
@@ -39,6 +39,9 @@
   .frame .shield{position:absolute; inset:0}/* 조작 차단 오버레이 — 클릭이 iframe에 닿지 않는다 */
   .liveMeta{display:flex; flex-direction:column; gap:4px}
   .liveMeta .row{display:flex; gap:10px; align-items:baseline}
+  /* 일기가 먼저 읽히고, 세계를 다시 보게 한다 — 왼쪽 텍스트를 살린다 */
+  #liveEventLine{font-size:17px; color:#e7dcc4; line-height:1.5}
+  #liveRecent{display:flex; flex-direction:column; gap:2px; font-size:13px; color:var(--dim)}
   .dimt{color:var(--dim)}
   .openLive{margin-top:4px; font-size:13px}
   /* ── 오른쪽: CONSOLE ─────────────────────────────── */
@@ -118,7 +121,7 @@
 <div class="layout">
 
   <aside class="live">
-    <h1>BYEOLI OPS<span class="ro">관측소 · read-only</span></h1>
+    <h1>별이 관측소<span class="ro">관찰자들의 관찰자 · read-only</span></h1>
     <div class="frame">
       <!-- same-origin /live — 미들웨어가 온보딩 플래그를 주입해 게이트 없이 바로 라이브.
            Wake Lock은 콘솔에서 불필요 → 명시적으로 거부(설계 §1). -->
@@ -129,7 +132,8 @@
     </div>
     <div class="liveMeta">
       <div class="row num"><span id="skyLine">—</span><span class="dimt" id="progressLine"></span></div>
-      <div class="row"><span class="dimt">지금</span><span id="liveEventLine">—</span></div>
+      <div class="row"><span id="liveEventLine">—</span></div>
+      <div id="liveRecent"></div>
       <div class="row num dimt"><span id="seqLine">—</span></div>
     </div>
     <div class="openLive">
@@ -140,14 +144,21 @@
   <main class="console">
 
     <div class="today">
-      <h2>오늘의 별이<span class="sub">Authority 라이브 별이 — 모든 관찰자가 공유하는 하나</span></h2>
+      <h2>오늘 별이는 이런 하루를 보내고 있습니다<span class="sub">라이브 별이 — 모든 관찰자가 공유하는 하나</span></h2>
       <div class="lines">
+        <span id="tdMood" style="font-size:17px">—</span>
         <span id="tdAction">—</span>
         <span id="tdPhotos">—</span>
         <span id="tdCounts">—</span>
         <span id="tdNext">—</span>
       </div>
     </div>
+
+    <section>
+      <h2>오늘의 문장<span class="sub">별이가 가장 오래 마음에 남겨둔 것 — 관측소가 지켜본 동안</span></h2>
+      <div id="todaySentence" style="font-size:19px; line-height:1.7; color:#e7dcc4">아직 별이의 하루를 지켜보는 중이다.</div>
+      <div class="note num" id="todaySentenceSub"></div>
+    </section>
 
     <section>
       <h2>현재 상태<span class="sub">라이브 별이 기준 — 관찰자별 별이 집계는 422-OPS-E에서</span></h2>
@@ -208,10 +219,15 @@
       </dl>
     </section>
 
+    <section>
+      <h2>오늘의 메타 일기<span class="sub">관측소가 열려 있던 동안 기준 — 관찰자 집계는 422-OPS-D·E에서 온다</span></h2>
+      <div id="metaDiary" style="font-size:16px; line-height:1.9; color:var(--text)">별이의 하루가 아직 쌓이는 중이다.</div>
+    </section>
+
     <footer>
-      read-only 관측소 — 유일한 예외는 이벤트 "예약"(의도 기록·감사 남음)이며, 개시 여부는 런타임이
-      조건을 재검증해 결정한다. 별이는 이 화면을 모른다.<br>
-      byeoli-ops 호스트 전용 · Cloudflare Access · BUILD 422-OPS-B + 423-EVENTS
+      여기는 서버를 관리하는 곳이 아니라, 별이가 살아가는 하루를 바라보는 곳이다.<br>
+      read-only — 예외는 이벤트 예약과 엽서 두 가지뿐(감사 기록 남음). 별이는 이 화면을 모른다.<br>
+      byeoli-ops 호스트 전용 · Cloudflare Access · BUILD 422-OPS-B + 423-EVENTS + 425-A
     </footer>
 
   </main>
@@ -267,6 +283,70 @@ async function getJson(url){
 /* ── 상태 폴링: /api/byeoli/state (5s) ────────────── */
 let lastState = null;
 let sessionStartedAt = null; // health.startedAt — Authority 인스턴스 기준(§9-0: "이번 세션"으로 표기)
+
+/* ── 관측 버퍼 — 관측소가 열려 있는 동안 별이의 행동을 모은다 (오늘 단위, 새로고침 유지) ──
+   "오늘의 문장"과 "메타 일기"의 소스. 관찰자 집계가 아니라 별이(라이브) 기준 — 정직 라벨 필수. */
+const WATCH_LS = 'obsv_watch_' + kstDayKey(Date.now());
+let watch = { stops: 0, targets: {}, longest: null, lastActAt: 0, lastActLabel: null };
+try { const w = JSON.parse(localStorage.getItem(WATCH_LS) || 'null'); if (w && typeof w.stops === 'number') watch = w; } catch (e) {}
+let lastLiveEventId = null;
+const liveRecentBuf = [];
+
+function watchLiveEvent(ev){
+  if (!ev || !ev.id || ev.id === lastLiveEventId) return;
+  lastLiveEventId = ev.id;
+  if (ev.text) {
+    liveRecentBuf.unshift(ev.text);
+    if (liveRecentBuf.length > 4) liveRecentBuf.pop();
+    const box = $('liveRecent'); box.textContent = '';
+    for (const t of liveRecentBuf.slice(1)) {
+      const d = document.createElement('div'); d.textContent = t; box.appendChild(d);
+    }
+  }
+  const now = Date.now();
+  if (ev.kind === 'act') {
+    watch.stops += 1;
+    const label = ev.text && ev.text.includes('· ')
+      ? ev.text.slice(ev.text.lastIndexOf('· ') + 2).trim()
+      : (ev.targetType || '무언가');
+    const durS = ev.sub ? parseFloat(ev.sub) : NaN;
+    const t = watch.targets[label] || { count: 0, maxDur: 0, diary: null };
+    t.count += 1;
+    if (Number.isFinite(durS) && durS > t.maxDur) t.maxDur = durS;
+    watch.targets[label] = t;
+    if (Number.isFinite(durS) && (!watch.longest || durS > watch.longest.dur)) {
+      watch.longest = { label, dur: durS, diary: t.diary };
+    }
+    watch.lastActAt = now; watch.lastActLabel = label;
+  } else if (ev.kind === 'diary' && ev.text) {
+    // 직전 30초 안의 행동을 뒤따른 일기라면 그 대상의 문장으로 기억한다
+    if (watch.lastActLabel && now - watch.lastActAt < 30000) {
+      const t = watch.targets[watch.lastActLabel];
+      if (t) t.diary = ev.text;
+      if (watch.longest && watch.longest.label === watch.lastActLabel) watch.longest.diary = ev.text;
+    }
+  } else { return; }
+  try { localStorage.setItem(WATCH_LS, JSON.stringify(watch)); } catch (e) {}
+  renderWatch();
+}
+
+function renderWatch(){
+  const L = watch.longest;
+  if (L) {
+    $('todaySentence').textContent = L.diary || `${L.label}. 오늘은 조금 오래 마음에 남았다.`;
+    $('todaySentenceSub').textContent = `${L.label} · ${L.dur.toFixed(1)}초`;
+  }
+  const entries = Object.entries(watch.targets);
+  if (!entries.length) return;
+  const most = [...entries].sort((a, b) => b[1].count - a[1].count)[0];
+  const longestT = [...entries].sort((a, b) => b[1].maxDur - a[1].maxDur)[0];
+  const parts = [`오늘 별이는 관측소가 지켜보는 동안 ${watch.stops}번 멈춰 섰습니다.`];
+  parts.push(`가장 자주 만난 것은 ${most[0]}(${most[1].count}번)이었습니다.`);
+  if (longestT[0] !== most[0] && longestT[1].maxDur > 0) {
+    parts.push(`하지만 가장 오래 바라본 것은 ${longestT[0]}(${longestT[1].maxDur.toFixed(1)}초)였습니다.`);
+  }
+  $('metaDiary').textContent = parts.join(' ');
+}
 async function pollState(){
   try {
     const s = await getJson(API.state);
@@ -274,6 +354,16 @@ async function pollState(){
     renderState(s);
     renderEvents(s);
   } catch (e) { /* 다음 턴에 재시도 — 표시값은 직전 것 유지 */ }
+}
+
+/* ── 별이 기분 — 숫자보다 기분 (Vase) ── */
+function byeoliMood(actAction, tel, sky, acting){
+  if ((tel.fatigue ?? 0) >= 0.5) return '😴 졸림';
+  if (sky.weather && sky.weather !== 'clear') return '🌧 차분함';
+  if (acting && actAction === 'wonder') return '🤔 궁금함';
+  const d = tel.drives ?? {};
+  if (Math.max(d.observe ?? 0, d.record ?? 0, d.wonder ?? 0) >= 0.8) return '🙂 조금 들뜸';
+  return '😀 평온';
 }
 
 function renderState(s){
@@ -287,9 +377,11 @@ function renderState(s){
     (typeof b.worldX === 'number' && worldLen) ? `진행 ${(b.worldX / worldLen * 100).toFixed(1)}%` : '';
   $('liveEventLine').textContent = s.state?.liveEvent?.text ?? '—';
   $('seqLine').textContent = `seq ${s.sequence ?? '—'} · ${typeof s.updatedAt === 'number' ? ago(s.updatedAt) : '—'} 갱신`;
+  watchLiveEvent(s.state?.liveEvent);
 
   const acting = b.state === 'acting' && b.actAction;
   const verb = acting ? `${ko(ACT_KO, b.actAction)} 중` : (STATE_KO[b.state] ?? b.state ?? '—');
+  $('tdMood').textContent = byeoliMood(b.actAction, tel, sky, acting);
   $('tdAction').textContent = sessionStartedAt
     ? `${verb} · 이번 세션 ${dur(Date.now() - sessionStartedAt)}`
     : verb;
@@ -350,12 +442,48 @@ async function cancelReservation(id){
   await pollEventSchedule();
 }
 
+/* 이벤트 카드는 한 번만 만들고(예약 입력칸 보존 — 리렌더에 입력이 지워지던 버그 수정),
+   상태·조건·pending·발생기록 텍스트만 제자리 갱신한다. */
+const evRefs = new Map();
+function buildEvents(){
+  const box = $('events'); box.textContent = '';
+  for (const ev of EVENTS) {
+    const el = document.createElement('div'); el.className = 'event';
+    const name = document.createElement('div'); name.className = 'name';
+    name.textContent = ev.label;
+    const idTag = document.createElement('span'); idTag.className = 'id num';
+    idTag.textContent = `${ev.id} · ${ev.rarity} · 쿨다운 ${ev.cooldownSeconds/3600}h`;
+    name.appendChild(idTag);
+
+    const kv = document.createElement('dl'); kv.className = 'kv';
+    const mk = (t) => {
+      const dt = document.createElement('dt'); dt.textContent = t;
+      const dd = document.createElement('dd'); kv.append(dt, dd); return dd;
+    };
+    const statusDd = mk('상태');
+    const condDd = mk('조건');
+    const schedDd = mk('예약');
+    const row = document.createElement('div'); row.className = 'sched';
+    const input = document.createElement('input');
+    input.type = 'datetime-local'; input.step = 60;
+    const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = '예약';
+    btn.addEventListener('click', () => createReservation(ev.id, input));
+    row.append(input, btn, Object.assign(document.createElement('span'), { className:'note', textContent:'KST' }));
+    const pendingBox = document.createElement('div');
+    schedDd.append(row, pendingBox);
+    const firedDd = mk('발생기록');
+
+    el.append(name, kv); box.appendChild(el);
+    evRefs.set(ev.id, { statusDd, condDd, pendingBox, firedDd });
+  }
+}
+
 function renderEvents(s){
+  if (!evRefs.size) buildEvents();
   const sky = s?.state?.sky ?? {};
   const now = Date.now();
-  const box = $('events');
-  box.textContent = '';
   for (const ev of EVENTS) {
+    const R = evRefs.get(ev.id);
     const timeOk = !ev.eligibleTime || (sky.phase && ev.eligibleTime.includes(sky.phase));
     const wxOk = !ev.eligibleWeather || (sky.weather && ev.eligibleWeather.includes(sky.weather));
     const met = timeOk && wxOk;
@@ -365,36 +493,15 @@ function renderEvents(s){
     ].filter(Boolean).join(' · ');
     const nowDesc = `${ko(PHASE_KO, sky.phase)} · ${ko(WEATHER_KO, sky.weather)}`;
 
-    const el = document.createElement('div'); el.className = 'event';
-    const name = document.createElement('div'); name.className = 'name';
-    name.textContent = ev.label;
-    const idTag = document.createElement('span'); idTag.className = 'id num';
-    idTag.textContent = `${ev.id} · ${ev.rarity} · 쿨다운 ${ev.cooldownSeconds/3600}h`;
-    name.appendChild(idTag);
-
-    const kv = document.createElement('dl'); kv.className = 'kv';
-    const add = (t, d, cls) => {
-      const dt = document.createElement('dt'); dt.textContent = t;
-      const dd = typeof d === 'string' ? Object.assign(document.createElement('dd'), { textContent: d }) : d;
-      if (cls && dd.className === '') dd.className = cls;
-      kv.append(dt, dd);
-    };
-
     const running = lastActive && lastActive.eventId === ev.id && now < lastActive.endsAt;
     const pendings = lastSchedule.filter(r => r.eventId === ev.id && r.status === 'pending');
-    add('상태', running ? `진행 중 — ${hhmm(lastActive.endsAt)}까지` : (pendings.length ? `예약 ${pendings.length}건 대기` : '대기'),
-        running ? 'warn' : (pendings.length ? 'ok' : 'no'));
-    add('조건', met ? `충족 (${nowDesc})` : `미충족 (현재 ${nowDesc} — ${needs} 필요)`, met ? 'ok' : 'no');
+    R.statusDd.textContent = running ? `진행 중 — ${hhmm(lastActive.endsAt)}까지`
+      : (pendings.length ? `예약 ${pendings.length}건 대기` : '대기');
+    R.statusDd.className = running ? 'warn' : (pendings.length ? 'ok' : 'no');
+    R.condDd.textContent = met ? `충족 (${nowDesc})` : `미충족 (현재 ${nowDesc} — ${needs} 필요)`;
+    R.condDd.className = met ? 'ok' : 'no';
 
-    // 예약 입력 + pending 목록
-    const schedDd = document.createElement('dd');
-    const row = document.createElement('div'); row.className = 'sched';
-    const input = document.createElement('input');
-    input.type = 'datetime-local'; input.step = 60;
-    const btn = document.createElement('button'); btn.type = 'button'; btn.textContent = '예약';
-    btn.addEventListener('click', () => createReservation(ev.id, input));
-    row.append(input, btn, Object.assign(document.createElement('span'), { className:'note', textContent:'KST' }));
-    schedDd.appendChild(row);
+    R.pendingBox.textContent = '';
     for (const p of pendings) {
       const pr = document.createElement('div'); pr.className = 'pendingRow num';
       pr.textContent = p.fireAt.slice(0, 16).replace('T', ' ');
@@ -402,19 +509,17 @@ function renderEvents(s){
       cancel.className = 'cancelBtn'; cancel.textContent = '취소';
       cancel.addEventListener('click', () => cancelReservation(p.id));
       pr.appendChild(cancel);
-      schedDd.appendChild(pr);
+      R.pendingBox.appendChild(pr);
     }
-    add('예약', schedDd);
 
     const fired = lastSchedule
       .filter(r => r.eventId === ev.id && r.status === 'fired' && r.instance)
       .sort((a, b) => b.instance.startedAt - a.instance.startedAt);
-    add('발생기록', fired.length ? `최근 ${kstFull(fired[0].instance.startedAt)} 개시` : '없음', fired.length ? 'ok' : 'no');
-
-    el.append(name, kv); box.appendChild(el);
+    R.firedDd.textContent = fired.length ? `최근 ${kstFull(fired[0].instance.startedAt)} 개시` : '없음';
+    R.firedDd.className = fired.length ? 'ok' : 'no';
   }
 
-  // 예약·수행 이력 테이블
+  // 예약·수행 이력 테이블 (입력 없음 — 재구성 무해)
   const tbody = $('schedHistory').querySelector('tbody'); tbody.textContent = '';
   for (const r of lastSchedule.slice(0, 30)) {
     const tr = document.createElement('tr');
@@ -446,6 +551,7 @@ async function pollEventActive(){
 
 /* ── 엽서 (425-A) — 쓰기 예외 2호: 콘솔→R2 업로드 ── */
 let lastPostcardUploadAt = 0;
+let lastCaptures = []; // capture_meta 목록 — 사진 캡션·일지 서술 승격의 소스
 
 async function postCapture(body){
   const res = await fetch(API.capture, {
@@ -488,6 +594,7 @@ async function pollPostcards(){
   try {
     const d = await getJson(API.capture);
     if (!d.ok) return;
+    lastCaptures = d.captures ?? [];
     const box = $('postcards'); box.textContent = '';
     for (const m of (d.captures ?? []).slice(0, 8)) {
       const wrap = document.createElement('figure');
@@ -504,8 +611,16 @@ async function pollPostcards(){
       cap.style.maxWidth = '132px'; cap.style.fontSize = '11px';
       cap.textContent = [
         m.byeoliAction ? ko(ACT_KO, m.byeoliAction) : null,
-        m.targetType, m.skyPhase ? ko(PHASE_KO, m.skyPhase) : null,
+        m.targetLabel ?? m.targetType, m.skyPhase ? ko(PHASE_KO, m.skyPhase) : null,
       ].filter(Boolean).join(' · ') || '—';
+      const del = document.createElement('button'); del.type = 'button';
+      del.className = 'cancelBtn'; del.textContent = '삭제';
+      del.addEventListener('click', async () => {
+        const r = await postCapture({ action: 'delete', captureId: m.captureId });
+        if (!r.ok) alert(`삭제 실패: ${r.error ?? '알 수 없음'}`);
+        await pollPostcards();
+      });
+      cap.appendChild(del);
       wrap.appendChild(cap);
       box.appendChild(wrap);
     }
@@ -542,16 +657,25 @@ async function pollFeed(){
   try { lastFeed = await getJson(API.feed); } catch (e) { return; }
   const todayKey = kstDayKey(Date.now());
   const todayPosts = lastFeed.filter(p => typeof p.t === 'number' && kstDayKey(p.t) === todayKey);
-  const imgs = todayPosts.map(p => p.img).filter(Boolean);
-  $('tdPhotos').textContent = `사진 ${imgs.length}장 — 오늘 발행 기준`;
+  const withImg = todayPosts.filter(p => p.img);
+  $('tdPhotos').textContent = `사진 ${withImg.length}장 — 오늘 발행 기준`;
   const shots = $('shots'); shots.textContent = '';
-  for (const u of imgs) {
+  for (const p of withImg) {
+    const u = p.img.startsWith('http') ? p.img : IMG_BASE + p.img.replace(/^\//,'');
+    const key = (p.img.match(/captures\/[^?#]+/) || [])[0];
+    const cm = key ? lastCaptures.find(c => c.r2Key === key) : null;
+    const fig = document.createElement('figure'); fig.style.margin = '0';
+    const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener'; a.title = '원본 보기';
     const img = document.createElement('img');
-    img.loading = 'lazy'; img.alt = '오늘 발행 사진';
-    img.src = u.startsWith('http') ? u : IMG_BASE + u.replace(/^\//,'');
-    shots.appendChild(img);
+    img.loading = 'lazy'; img.alt = '오늘 발행 사진'; img.src = u;
+    a.appendChild(img); fig.appendChild(a);
+    const cap = document.createElement('figcaption');
+    cap.className = 'note'; cap.style.fontSize = '11px'; cap.style.maxWidth = '132px';
+    cap.textContent = [hhmm(p.t), cm?.targetLabel, 'Threads 발행'].filter(Boolean).join(' · ');
+    fig.appendChild(cap);
+    shots.appendChild(fig);
   }
-  if (!imgs.length) {
+  if (!withImg.length) {
     const p = document.createElement('div'); p.className = 'note';
     p.textContent = '오늘 발행에 실린 사진이 아직 없다.'; shots.appendChild(p);
   }
@@ -604,10 +728,17 @@ async function pollPublishLog(){
     } else {
       if (typeof r.textIndex === 'number') {
         const post = feed.find(p => Math.abs((p.t ?? 0) - r.invokedAt) < 120000);
-        lines.push(`${r.textIndex}번째 문장을 골랐다.` + (post?.text ? ` — “${post.text}”` : ''));
+        lines.push(`별이가 ${r.textIndex}번째 문장을 골랐다.` + (post?.text ? ` — “${post.text}”` : ''));
       }
-      lines.push(r.imageKey ? '걷는 사진 한 장을 함께 걸었다.' : '사진 없이 나섰다.');
-      lines.push(r.result === 'success' ? 'Threads에 올렸다. ✓' : 'Threads에 올리지 못했다. ✕');
+      if (r.imageKey) {
+        const cm = lastCaptures.find(c => c.r2Key === r.imageKey);
+        lines.push(cm?.targetLabel
+          ? `「${[cm.byeoliAction ? ko(ACT_KO, cm.byeoliAction) : null, cm.targetLabel].filter(Boolean).join(' · ')}」 엽서를 함께 걸었다.`
+          : '걷는 사진 한 장을 함께 걸었다.');
+      } else {
+        lines.push('사진 없이 나섰다.');
+      }
+      lines.push(r.result === 'success' ? '사람들에게 이 이야기를 남겼다. ✓' : 'Threads에 올리지 못했다. ✕');
     }
     for (const t of lines) {
       const p = document.createElement('div'); p.className = 'what';
@@ -648,8 +779,9 @@ function iso10(dayKey){
 
 $('postcardBtn').addEventListener('click', () => shootPostcard(true));
 
-pollState(); pollHealth(); pollEventActive(); pollEventSchedule(); pollPostcards();
-pollFeed().then(pollPublishLog); // 일지의 문장 원문 대조는 feed가 먼저
+renderWatch(); // 새로고침 전 관측분 복원
+pollState(); pollHealth(); pollEventActive(); pollEventSchedule();
+pollPostcards().then(() => pollFeed()).then(pollPublishLog); // 캡션·일지 승격은 엽서 메타가 먼저
 setInterval(pollState, 5000);
 setInterval(pollHealth, 60000);
 setInterval(pollFeed, 60000);

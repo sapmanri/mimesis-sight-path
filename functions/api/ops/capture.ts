@@ -34,6 +34,8 @@ export interface CaptureMeta {
   byeoliAction: string | null;
   targetId: string | null;
   targetType: string | null;
+  /** 화면 표기와 같은 한글 라벨 (예: '라벤더') — 일지 서술 승격용 */
+  targetLabel: string | null;
   diaryLines: string[];
 }
 
@@ -52,6 +54,7 @@ function sanitizeMeta(raw: Record<string, unknown>): Omit<CaptureMeta, 'captureI
     byeoliAction: str(raw.byeoliAction, 16),
     targetId: str(raw.targetId),
     targetType: str(raw.targetType, 40),
+    targetLabel: str(raw.targetLabel, 40),
     diaryLines: lines,
   };
 }
@@ -68,8 +71,20 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const uploadedBy = request.headers.get('cf-access-authenticated-user-email') ?? 'unknown';
-  let body: { imageBase64?: string; meta?: Record<string, unknown> };
+  let body: { action?: string; captureId?: string; imageBase64?: string; meta?: Record<string, unknown> };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
+
+  // 삭제 — 잘못 찍은 엽서를 발행 풀에서 뺀다 (R2 원본 + 메타 동시 제거)
+  if (body.action === 'delete') {
+    const raw = await env.PLANET.get(META_KEY);
+    const list: CaptureMeta[] = raw ? JSON.parse(raw) : [];
+    const target = list.find((m) => m.captureId === body.captureId);
+    if (!target) return json(404, { ok: false, error: 'not_found' });
+    await env.CAPTURES.delete(target.r2Key);
+    await env.PLANET.put(META_KEY, JSON.stringify(list.filter((m) => m.captureId !== body.captureId)));
+    return json(200, { ok: true, deleted: target.captureId });
+  }
+
   if (!body.imageBase64 || typeof body.imageBase64 !== 'string') return json(400, { ok: false, error: 'no_image' });
 
   let bytes: Uint8Array;
