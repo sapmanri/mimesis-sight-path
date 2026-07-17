@@ -45,7 +45,7 @@
   .console{padding:20px 26px 60px; max-width:860px}
   section{padding:18px 0; border-bottom:1px solid var(--sep)}
   section h2{font-size:13px; font-weight:600; color:var(--sage); margin-bottom:10px}
-  section h2 .sub{color:var(--dim); font-weight:400; margin-left:8px}
+  h2 .sub{color:var(--dim); font-weight:400; font-size:12px; margin-left:8px}
   /* 오늘의 별이 — 오른쪽 최상단 고정 */
   .today{
     position:sticky; top:0; z-index:5; background:var(--bg);
@@ -127,7 +127,7 @@
   <main class="console">
 
     <div class="today">
-      <h2>오늘의 별이</h2>
+      <h2>오늘의 별이<span class="sub">Authority 라이브 별이 — 모든 관찰자가 공유하는 하나</span></h2>
       <div class="lines">
         <span id="tdAction">—</span>
         <span id="tdPhotos">—</span>
@@ -137,7 +137,7 @@
     </div>
 
     <section>
-      <h2>현재 상태</h2>
+      <h2>현재 상태<span class="sub">라이브 별이 기준 — 관찰자별 별이 집계는 422-OPS-E에서</span></h2>
       <dl class="kv num">
         <dt>행동</dt><dd id="stAction">—</dd>
         <dt>대상</dt><dd id="stTarget">—</dd>
@@ -168,6 +168,7 @@
     <section>
       <h2>대형 이벤트 3종<span class="sub">정의는 살아있고, 발사 장치가 아직 없다</span></h2>
       <div class="events" id="events"></div>
+      <p class="note">발생 시각 예약은 월드 이벤트 런타임(423-EVENTS)과 함께 들어온다 — "예약≠발동" 분리안으로 재판정 대기 중. 이 콘솔은 read-only로 남는다.</p>
     </section>
 
     <section>
