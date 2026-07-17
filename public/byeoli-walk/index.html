@@ -473,6 +473,12 @@ function fmtDuration(ms){
   if(m>=1) return m+'분';
   return s+'초';
 }
+// 420-A: 코드 마스킹 통합 — 외부로 나가는 표면(공유카드·다운로드 파일명)은 전부 이 함수만 쓴다.
+// 앞뒤 일부만 남긴다: BYL-92JQ-JNFF → BYL-92••••FF. filler로 파일명 안전문자 지정 가능.
+function maskObserverCode(id, filler){
+  if(typeof id!=='string' || id.length<8) return filler||'••••';
+  return id.slice(0,6)+(filler||'••••')+id.slice(-2);
+}
 function fmtWhen(ts){
   if(!ts) return '—';
   const d=new Date(ts), now=new Date();
@@ -1151,8 +1157,8 @@ const PR={
     g.fillStyle=sage; g.font='600 30px system-ui,sans-serif';
     g.letterSpacing='8px'; g.fillText('BYEOL',80,116); g.letterSpacing='0px';
     g.fillStyle=dim; g.font='400 24px ui-monospace,Menlo,monospace';
-    // 카드는 외부로 공유되므로 Observer Code 마지막 4자리를 마스킹한다 (P0-1)
-    const maskedId=d.observerId.length>4 ? d.observerId.slice(0,-4)+'••••' : d.observerId;
+    // 카드는 외부로 공유되므로 코드는 앞뒤 일부만 남기고 마스킹한다 (P0-1 → 420-A 강화)
+    const maskedId=maskObserverCode(d.observerId);
     g.fillText(maskedId,80,158);
     g.fillStyle=ink; g.font='600 54px system-ui,sans-serif';
     g.fillText('별과 함께',80,268); g.fillText('발견한 것들',80,336);
@@ -1463,6 +1469,8 @@ const Recovery={
       this._stageAndReload(incoming);
     });
   },
+  // 보호 백업 실패 = 복구 중단 + 재시도만. 파일 다운로드 탈출구는 Public Beta 범위에서
+  // 제외됨 (2026-07-17 결정) — "백업 실패해도 계속"이 없는 원칙은 그대로 유지된다.
   openProtectFail(incoming){
     this.openPanel(
       '<h3>지금 기록을 지키지 못해 복구를 멈췄습니다</h3>'+
@@ -1470,7 +1478,6 @@ const Recovery={
       '기록을 지키지 못한 채 교체하지는 않습니다.</p>'+
       '<div class="rc-row">'+
       '<button type="button" class="rc-primary" id="rc-retry">다시 시도</button>'+
-      '<button type="button" class="rc-ghost" id="rc-file">로컬 기록을 JSON 파일로 내려받고 계속</button>'+
       '<button type="button" class="rc-ghost" id="rc-cancel">취소</button>'+
       '</div><div class="rc-note"></div>');
     this._panel().querySelector('#rc-cancel').addEventListener('click', ()=>this.closePanel());
@@ -1478,23 +1485,8 @@ const Recovery={
       ev.target.disabled=true;
       const p=await this.backup({});
       if(p.ok){ this._stageAndReload(incoming); return; }
-      ev.target.disabled=false; this._note('아직 백업하지 못했습니다');
+      ev.target.disabled=false; this._note('아직 백업하지 못했습니다 — 잠시 뒤에 다시 시도해 주세요');
     });
-    this._panel().querySelector('#rc-file').addEventListener('click', ()=>{
-      this.downloadLocalJSON();
-      this._stageAndReload(incoming);
-    });
-  },
-  downloadLocalJSON(){
-    try{
-      const data=JSON.stringify(this.buildBlob(), null, 2);
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(new Blob([data], {type:'application/json'}));
-      const d=new Date(), p=n=>String(n).padStart(2,'0');
-      a.download='byeol-backup-'+Profile.data.observerId+'-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
-      document.body.appendChild(a); a.click();
-      setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    }catch(e){}
   },
   // §5-1 2단계(pending 기록) 후 3~7 적용 → reload. 중간에 죽어도 부트가 전진/롤백.
   _stageAndReload(incoming){
