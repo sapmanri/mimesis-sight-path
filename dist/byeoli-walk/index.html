@@ -7134,19 +7134,28 @@ const AlbumCapture={
 const AlbumUi={
   _chip:null, _overlay:null, _count:0,
   init(){
-    const chip=document.createElement('button');
-    chip.id='albumChip'; chip.type='button';
-    chip.style.cssText='position:fixed;left:8px;bottom:8px;z-index:49;min-height:44px;display:none;align-items:center;gap:6px;padding:8px 12px;border:1px solid #4f5d4f;border-radius:8px;background:rgba(10,18,11,.88);color:#b9c7b5;font:11px ui-monospace,monospace;cursor:pointer;-webkit-tap-highlight-color:transparent';
-    chip.addEventListener('click',()=>this.openOverlay());
-    document.body.appendChild(chip); this._chip=chip;
+    // 관찰자의 보관함 도크 — 사진첩(순간)과 취향(축적)은 같은 결의 두 문 (Vase 판정 07-19).
+    // 평소엔 IdleFade가 흐려두고, 터치/움직임에 깨어난다 — 있되 거슬리지 않게.
+    const dock=document.createElement('div');
+    dock.id='obsDock';
+    dock.style.cssText='position:fixed;left:8px;bottom:8px;z-index:49;display:flex;gap:6px';
+    const mkChip=(id,label,fn)=>{
+      const b=document.createElement('button');
+      b.id=id; b.type='button'; b.textContent=label;
+      b.style.cssText='min-height:44px;display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #4f5d4f;border-radius:8px;background:rgba(10,18,11,.88);color:#b9c7b5;font:11px ui-monospace,monospace;cursor:pointer;-webkit-tap-highlight-color:transparent';
+      b.addEventListener('click',fn);
+      dock.appendChild(b); return b;
+    };
+    this._chip=mkChip('albumChip','📷 사진첩',()=>this.openOverlay());
+    mkChip('tasteChip','🌿 나의 취향',()=>{ try{ PR.open(); }catch(e){} });
+    document.body.appendChild(dock);
     this.refreshChip();
   },
   async refreshChip(){
     try{
       const shots=await Album.list();
       this._count=shots.length;
-      if(this._count>0){ this._chip.style.display='flex'; this._chip.textContent=`📷 별이의 사진첩 ${this._count}`; }
-      else this._chip.style.display='none';
+      this._chip.textContent=this._count>0?`📷 사진첩 ${this._count}`:'📷 사진첩';
     }catch(e){}
   },
   flash(){
@@ -7237,6 +7246,26 @@ const AlbumUi={
 try{ AlbumUi.init(); }catch(e){ /* 앨범 UI 실패가 산책을 막지 않는다 */ }
 // QA 훅 (421-A 실기기 점검용): 촬영·열기만 노출, 데이터 접근 표면 아님
 window.__album={ shoot:()=>AlbumCapture.onRecordDone(), open:()=>AlbumUi.openOverlay() };
+
+/* BUILD 426-B — 컨트롤 자동 페이드: 산책을 방해하지 않게 6초 뒤 흐려지고,
+   화면을 만지면 깨어난다. 대상: 우상단 컨트롤(.ctrls) + 좌하단 보관함 도크. */
+const IdleFade={
+  els:[], t:null, DELAY:6000,
+  init(){
+    this.els=[document.querySelector('.ctrls'), document.getElementById('obsDock')].filter(Boolean);
+    for(const el of this.els) el.style.transition='opacity .6s';
+    const wake=()=>this.wake();
+    for(const ev of ['pointerdown','pointermove','keydown','touchstart'])
+      window.addEventListener(ev,wake,{passive:true});
+    this.wake();
+  },
+  wake(){
+    for(const el of this.els) el.style.opacity='1';
+    if(this.t) clearTimeout(this.t);
+    this.t=setTimeout(()=>{ for(const el of this.els) el.style.opacity='0.14'; }, this.DELAY);
+  },
+};
+try{ IdleFade.init(); }catch(e){}
 
 // Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla|meteor-shower|ufo[&eventOffset=초]
 // ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
