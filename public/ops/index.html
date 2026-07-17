@@ -579,7 +579,8 @@ function renderEvents(s){
       : (STATUS_KO[r.status] ?? r.status);
     for (const v of [
       r.fireAt.slice(0, 16).replace('T', ' '),
-      r.eventId, result, r.requestedBy ?? '—',
+      r.eventId, result,
+      r.requestedBy === 'world' ? '🌠 자연 발생' : (r.requestedBy ?? '—'),
     ]) { const td = document.createElement('td'); td.textContent = String(v); tr.appendChild(td); }
     tbody.appendChild(tr);
   }

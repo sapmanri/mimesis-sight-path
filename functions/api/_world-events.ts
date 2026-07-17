@@ -154,8 +154,63 @@ export async function saveActive(env: WorldEventEnv, instance: ActiveInstance): 
   await env.PLANET.put(ACTIVE_KEY, JSON.stringify(instance));
 }
 
+/* ── BUILD 426-C — 자연 발생 (세렌디피티) ─────────────────────────────
+   예약(연출)과 별개로, 조건이 맞는 밤에 낮은 확률로 이벤트가 "그냥" 일어난다.
+   결정론이 핵심: 시간 슬롯×이벤트 해시 주사위 — 시청 화면이 몇 개든 같은 슬롯은
+   같은 결론에 수렴한다(시청자 수가 발생 확률에 영향을 주면 안 된다).
+   예약이 항상 우선. 조건·쿨다운 재검증은 예약과 동일 규칙. */
+
+const NATURAL_SLOT_MS = 60 * 60 * 1000; // 1시간 주사위
+/** 적격 시간당 발생 확률 — 희귀도별. 쿨다운이 상한을 이중으로 지킨다. */
+const NATURAL_P: Record<string, number> = { legendary: 0.02, rare: 0.035, uncommon: 0.05 };
+
+/** FNV-1a 해시 → [0,1) — 슬롯·이벤트별 결정론 주사위 */
+export function naturalRoll(eventId: string, slotStart: number): number {
+  const s = `${eventId}:${slotStart}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0) / 0x100000000;
+}
+
+/**
+ * 자연 발생 판정 — 이번 시간 슬롯의 주사위가 통과하고 조건·쿨다운이 맞으면 개시.
+ * 같은 슬롯 재호출은 schedule의 nat-<id>-<slot> 기록으로 멱등(이미 기록됨 → 무시).
+ */
+export function resolveNatural(
+  schedule: EventReservation[], ctx: DirectorContext,
+): { schedule: EventReservation[]; activated: ActiveInstance | null; changed: boolean } {
+  const slotStart = Math.floor(ctx.now / NATURAL_SLOT_MS) * NATURAL_SLOT_MS;
+  for (const def of WORLD_EVENT_REGISTRY) {
+    const natId = `nat-${def.id}-${slotStart}`;
+    if (schedule.some((r) => r.id === natId)) continue;              // 이 슬롯은 이미 결론남
+    const p = NATURAL_P[def.rarity] ?? 0;
+    if (naturalRoll(def.id, slotStart) >= p) continue;               // 주사위 불통과
+    if (!eligible(def.id, ctx.phase, ctx.weather)) continue;          // 조건 미충족 — 기록 없이 넘어감(다음 슬롯에 다시)
+    const last = lastFiredAt(schedule, def.id);
+    if (last !== null && ctx.now - last < def.cooldownSeconds * 1000) continue;
+    const activated: ActiveInstance = {
+      eventId: def.id,
+      eventInstanceId: `res-${natId}`,                               // 결정론 — 동시 폴링 수렴
+      startedAt: ctx.now,
+      endsAt: ctx.now + def.durationSeconds * 1000,
+      sequence: ctx.sequence,
+    };
+    const record: EventReservation = {
+      id: natId, eventId: def.id,
+      fireAt: new Date(slotStart + 9 * 3600 * 1000).toISOString().replace('Z', '+09:00'),
+      fireAtMs: slotStart,
+      requestedAt: slotStart,
+      requestedBy: 'world',                                          // 자연 발생 — 사람이 아니라 세계가
+      status: 'fired', resolvedAt: ctx.now, skipReason: null,
+      instance: activated,
+    };
+    return { schedule: [record, ...schedule.map((r) => ({ ...r }))], activated, changed: true };
+  }
+  return { schedule, activated: null, changed: false };
+}
+
 export const worldEventConfig = {
-  SCHEDULE_KEY, ACTIVE_KEY, SCHEDULE_KEEP, FIRE_GRACE_MS, MAX_AHEAD_MS,
+  SCHEDULE_KEY, ACTIVE_KEY, SCHEDULE_KEEP, FIRE_GRACE_MS, MAX_AHEAD_MS, NATURAL_SLOT_MS, NATURAL_P,
 };
 
 export { WORLD_EVENT_REGISTRY, getWorldEventById };

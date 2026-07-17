@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseFireAtKst, validateReservationInput, resolveDue,
+  parseFireAtKst, validateReservationInput, resolveDue, resolveNatural, naturalRoll,
   worldEventConfig, type EventReservation,
 } from './_world-events.ts';
 
@@ -99,6 +99,68 @@ test('같은 턴 만기 2건 → 개시는 1건, 나머지는 pending 유지', (
   assert.ok(activated);
   assert.equal(activated.eventInstanceId, 'res-b'); // 먼저 만기된 쪽
   assert.equal(schedule.find((r) => r.id === 'a')?.status, 'pending');
+});
+
+/* ── 426-C 자연 발생 ── */
+const SLOT = worldEventConfig.NATURAL_SLOT_MS;
+function findSlot(eventId: string, pass: boolean): number {
+  const p = worldEventConfig.NATURAL_P.rare;
+  for (let i = 0; i < 5000; i++) {
+    const slot = i * SLOT;
+    const hit = naturalRoll(eventId, slot) < p;
+    if (hit === pass) return slot;
+  }
+  throw new Error('slot not found');
+}
+
+test('자연 발생: 주사위 통과 슬롯 + 조건 충족 → 개시, requestedBy=world', () => {
+  const slot = findSlot('meteor-shower', true);
+  const { schedule, activated } = resolveNatural([], { now: slot + 1000, phase: 'night', weather: 'clear', sequence: 5 });
+  assert.ok(activated);
+  assert.equal(activated.eventId, 'meteor-shower');
+  assert.equal(activated.eventInstanceId, `res-nat-meteor-shower-${slot}`);
+  assert.equal(schedule[0].requestedBy, 'world');
+  assert.equal(schedule[0].status, 'fired');
+});
+
+test('자연 발생: 같은 슬롯 재호출 = 멱등 (기록으로 결론남)', () => {
+  const slot = findSlot('meteor-shower', true);
+  const first = resolveNatural([], { now: slot + 1000, phase: 'night', weather: 'clear', sequence: 5 });
+  const again = resolveNatural(first.schedule, { now: slot + 5000, phase: 'night', weather: 'clear', sequence: 6 });
+  // meteor는 기록됨 — 같은 슬롯에서 meteor 재발 없음 (다른 이벤트가 우연히 통과할 수는 있음)
+  assert.ok(!again.activated || again.activated.eventId !== 'meteor-shower');
+});
+
+test('자연 발생: 주사위 불통과 슬롯 → 아무 일도 없다', () => {
+  // 세 이벤트 모두 불통과인 슬롯을 찾는다
+  let slot = -1;
+  for (let i = 0; i < 5000; i++) {
+    const s = i * SLOT;
+    if (naturalRoll('meteor-shower', s) >= worldEventConfig.NATURAL_P.rare
+      && naturalRoll('ufo', s) >= worldEventConfig.NATURAL_P.rare
+      && naturalRoll('godzilla', s) >= worldEventConfig.NATURAL_P.legendary) { slot = s; break; }
+  }
+  assert.ok(slot >= 0);
+  const { activated, changed } = resolveNatural([], { now: slot + 1000, phase: 'night', weather: 'clear', sequence: 1 });
+  assert.equal(activated, null);
+  assert.equal(changed, false);
+});
+
+test('자연 발생: 조건 미충족이면 기록 없이 통과 (낮의 운석우는 없다)', () => {
+  const slot = findSlot('meteor-shower', true);
+  const { schedule, activated } = resolveNatural([], { now: slot + 1000, phase: 'day', weather: 'clear', sequence: 1 });
+  assert.ok(!activated || activated.eventId !== 'meteor-shower');
+  assert.ok(!schedule.some((r) => r.id === `nat-meteor-shower-${slot}`));
+});
+
+test('자연 발생: 쿨다운 안이면 개시 없음', () => {
+  const slot = findSlot('meteor-shower', true);
+  const recentFire: EventReservation = res({
+    id: 'r0', status: 'fired',
+    instance: { eventId: 'meteor-shower', eventInstanceId: 'x', startedAt: slot - 3600_000, endsAt: slot - 3600_000 + 14000, sequence: 1 },
+  });
+  const { activated } = resolveNatural([recentFire], { now: slot + 1000, phase: 'night', weather: 'clear', sequence: 1 });
+  assert.ok(!activated || activated.eventId !== 'meteor-shower'); // 12h 쿨다운 — 1h 전 발사
 });
 
 test('cancelled/fired 상태는 재평가하지 않는다', () => {
