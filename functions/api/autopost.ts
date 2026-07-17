@@ -6,6 +6,7 @@
 // KV 바인딩: PLANET. 키: 'feed'(공용 스레드), 'bot_recent'(최근 발행 인덱스 — 중복 회피).
 
 import byeolliPosts from './byeolli_posts.json';
+import { appendPublishLog, bump401Bucket } from './_publish-log';
 
 interface Env {
   PLANET: KVNamespace;
@@ -101,11 +102,24 @@ async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
   return auth;
 }
 
+// detail: 개발자가 HTTP 응답에서 보는 라이브 요약(원문 message 포함 가능).
+// errorCode·requestId: publish_log에 저장되는 구조화 요약 — 여기엔 원문 message를 담지 않는다.
+type ThreadsResult = {
+  attempted: boolean; ok: boolean; detail: string;
+  errorCode: string | null; requestId: string | null;
+};
+type MetaResp = { id?: string; error?: { code?: number; error_subcode?: number; fbtrace_id?: string; message?: string } };
+function metaErrorCode(j: MetaResp, httpStatus: number): string {
+  const e = j?.error;
+  if (e?.code != null) return e.error_subcode != null ? `${e.code}/${e.error_subcode}` : String(e.code);
+  return `http_${httpStatus}`;
+}
+
 async function dispatchToThreads(
   env: Env, text: string, img: string | null, draft: boolean,
-): Promise<{ attempted: boolean; ok: boolean; detail: string }> {
+): Promise<ThreadsResult> {
   const auth = await getThreadsAuth(env);
-  if (!auth) return { attempted: false, ok: false, detail: 'threads auth not configured — GET /api/threads-auth?key=... 먼저' };
+  if (!auth) return { attempted: false, ok: false, detail: 'threads auth not configured — GET /api/threads-auth?key=... 먼저', errorCode: 'auth_missing', requestId: null };
 
   // 1) 컨테이너 생성 — Threads 본문 한도 500자
   const create = new URL(`${THREADS_API}/${auth.userId}/threads`);
@@ -116,30 +130,34 @@ async function dispatchToThreads(
   let containerId = '';
   try {
     const r = await fetch(create.toString(), { method: 'POST' });
-    const j = (await r.json()) as { id?: string; error?: { message?: string } };
+    const j = (await r.json()) as MetaResp;
     if (!r.ok || !j.id) {
-      return { attempted: true, ok: false, detail: `container failed: ${j?.error?.message ?? r.status}` };
+      return { attempted: true, ok: false, detail: `container failed: ${j?.error?.message ?? r.status}`, errorCode: metaErrorCode(j, r.status), requestId: j?.error?.fbtrace_id ?? null };
     }
     containerId = j.id;
-  } catch (e) { return { attempted: true, ok: false, detail: `container error: ${String(e)}` }; }
+  } catch (e) { return { attempted: true, ok: false, detail: `container error: ${String(e)}`, errorCode: 'network', requestId: null }; }
 
-  if (draft) return { attempted: true, ok: true, detail: `container ${containerId} created (not published — draft mode)` };
+  if (draft) return { attempted: true, ok: true, detail: `container ${containerId} created (not published — draft mode)`, errorCode: null, requestId: containerId };
 
   // 2) 발행 — 미디어 처리 지연 대비 재시도
   const publish = new URL(`${THREADS_API}/${auth.userId}/threads_publish`);
   publish.searchParams.set('creation_id', containerId);
   publish.searchParams.set('access_token', auth.token);
   let lastDetail = '';
+  let lastCode = 'unknown';
+  let lastTrace: string | null = null;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     if (attempt > 0) await new Promise((res) => setTimeout(res, 3000));
     try {
       const r = await fetch(publish.toString(), { method: 'POST' });
-      const j = (await r.json()) as { id?: string; error?: { message?: string } };
-      if (r.ok && j.id) return { attempted: true, ok: true, detail: `published: ${j.id}` };
+      const j = (await r.json()) as MetaResp;
+      if (r.ok && j.id) return { attempted: true, ok: true, detail: `published: ${j.id}`, errorCode: null, requestId: j.id };
       lastDetail = j?.error?.message ?? `HTTP ${r.status}`;
-    } catch (e) { lastDetail = String(e); }
+      lastCode = metaErrorCode(j, r.status);
+      lastTrace = j?.error?.fbtrace_id ?? null;
+    } catch (e) { lastDetail = String(e); lastCode = 'network'; }
   }
-  return { attempted: true, ok: false, detail: `publish failed after retries: ${lastDetail.slice(0, 200)}` };
+  return { attempted: true, ok: false, detail: `publish failed after retries: ${lastDetail.slice(0, 200)}`, errorCode: lastCode, requestId: lastTrace };
 }
 
 export const onRequestOptions: PagesFunction<Env> = async () =>
@@ -157,11 +175,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
 // POST — 봇 발행. 외부 Cron이 X-Publish-Key와 함께 호출.
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.PUBLISH_KEY) {
+    // 503 key_missing — 매 실행 기록 (422-OPS-A §3-2)
+    await appendPublishLog(env, {
+      invokedAt: Date.now(), result: 'key_missing', httpStatus: 503,
+      textIndex: null, imageKey: null,
+      threads: { attempted: false, ok: false, errorCode: null, requestId: null },
+    }).catch(() => {});
     return new Response(JSON.stringify({ error: 'PUBLISH_KEY not configured' }), {
       status: 503, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
   if (request.headers.get('X-Publish-Key') !== env.PUBLISH_KEY) {
+    // 401 key_mismatch — 건별 기록 금지, 10분 슬롯 카운터만 (헤더·IP·UA 저장 안 함)
+    await bump401Bucket(env, Date.now()).catch(() => {});
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
@@ -214,6 +240,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
   const draft = url.searchParams.get('draft') === '1';
   const threads = await dispatchToThreads(env, chosen.text, img, draft);
+
+  // 정상 실행 1건 기록 — Layer1(운영)·Layer2(별이 일지) 소스 모두 담는다. draft는 로그 제외.
+  if (!draft) {
+    await appendPublishLog(env, {
+      invokedAt: Date.now(),
+      result: threads.ok ? 'success' : 'threads_failed',
+      httpStatus: 200,
+      textIndex: pick,
+      imageKey: img ? (img.match(/captures\/[^?#]+/)?.[0] ?? null) : null,
+      threads: { attempted: threads.attempted, ok: threads.ok, errorCode: threads.errorCode, requestId: threads.requestId },
+    }).catch(() => {});
+  }
 
   return new Response(JSON.stringify({ ok: true, posted: chosen.text, index: pick, img: !!img, threads }), {
     status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
