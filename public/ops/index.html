@@ -100,10 +100,33 @@
   .cancelBtn{border-color:var(--line); color:var(--dim); padding:2px 8px; margin-left:8px}
   .pendingRow{margin-top:4px}
   footer{padding:22px 0; color:var(--dim); font-size:12px}
+  .pcimg{width:132px; height:165px; object-fit:cover; border:1px solid var(--sep); display:block}
+  .pccap{max-width:132px; font-size:11px}
+  /* ── 모바일 (Vase 지시 §9: 라이브 상단 고정 → 콘솔 세로 스크롤) ── */
   @media (max-width:900px){
     .layout{grid-template-columns:1fr}
-    .live{position:sticky; top:0; height:44vh; z-index:10}
-    .today{position:static}
+    .live{
+      position:sticky; top:0; z-index:10; height:auto;
+      padding:10px 12px; gap:8px;
+      border-right:0; border-bottom:1px solid var(--sep);
+    }
+    .frame{flex:none; height:30vh; min-height:160px}
+    #liveRecent{display:none}          /* 모바일은 현재 한 줄만 */
+    #liveEventLine{font-size:15px}
+    .openLive{display:none}
+    .console{padding:14px 14px 90px; max-width:none}
+    .today{position:static; padding-top:12px}
+    .kv{grid-template-columns:72px 1fr}
+    /* 탭 타깃 — 승인·발행·삭제·예약을 엄지로 누를 수 있게 */
+    .cancelBtn, .sched button{min-height:40px; padding:8px 16px; font-size:14px}
+    .sched input[type="datetime-local"]{min-height:40px; font-size:15px; flex:1; min-width:0}
+    details > table, details{overflow-x:auto}
+    table{min-width:520px}
+    .drives{max-width:none}
+    .shots img{width:100px; height:75px}
+    .pcimg{width:100px; height:125px}
+    .pccap{max-width:100px}
+    #todaySentence{font-size:17px}
   }
 </style>
 </head>
@@ -655,13 +678,11 @@ async function pollPostcards(){
       if (m.url) {
         const img = document.createElement('img');
         img.loading = 'lazy'; img.alt = '엽서'; img.src = m.url;
-        img.style.width = '132px'; img.style.height = '165px'; img.style.objectFit = 'cover';
-        img.style.border = '1px solid var(--sep)'; img.style.display = 'block';
+        img.className = 'pcimg';
         wrap.appendChild(img);
       }
       const cap = document.createElement('figcaption');
-      cap.className = 'note';
-      cap.style.maxWidth = '132px'; cap.style.fontSize = '11px';
+      cap.className = 'note pccap';
       cap.textContent = [
         m.byeoliAction ? ko(ACT_KO, m.byeoliAction) : null,
         m.targetLabel ?? m.targetType, m.skyPhase ? ko(PHASE_KO, m.skyPhase) : null,
@@ -717,13 +738,25 @@ async function pollThreadsReplies(force){
   let d = null;
   try { d = await getJson(API.threadsReplies + (force ? '?force=1' : '')); } catch (e) { return; }
   if (!d.ok) return;
+  const todayKey = kstDayKey(Date.now());
+  const bookmarkedToday = d.replies.filter(r => r.bookmarked && kstDayKey(r.commentCreatedAt) === todayKey).length;
+  // Phase 2 판정 재료: 수동 검토(승인 발행 + 운영자 거절/무응답)만 센다 — Claude의 자동 무응답 판단은 제외
+  const published = d.replies.filter(r => r.decision === 'published').length;
+  const operatorRejected = d.replies.filter(r => r.decision === 'ignored' && (r.reason ?? '').startsWith('운영자')).length;
+  const reviewed = published + operatorRejected;
   $('thrSummary').textContent = [
     `누적 ${d.replies.length}건`,
     `오늘 새 댓글 ${d.cap.todayNew}건`,
     `오늘 답글 ${d.cap.used}/${d.cap.cap}`,
+    `⭐ 오늘 별이가 기억한 댓글 ${bookmarkedToday}개`,
+    `Phase 2 검토 ${reviewed}/30${reviewed ? ` · 승인율 ${Math.round(published / reviewed * 100)}%` : ''}`,
     d.lastIngestAt ? `마지막 확인 ${ago(d.lastIngestAt)}` : null,
     d.claudeReady ? null : '⚠ ANTHROPIC_API_KEY 미설정 — 후보 생성 불가',
   ].filter(Boolean).join(' · ');
+
+  // 새 댓글(미처리) 수를 탭 제목에 — 다른 탭을 보다가도 알 수 있게
+  const unhandled = d.replies.filter(r => r.decision === 'collected' || r.decision === 'drafted').length;
+  document.title = unhandled > 0 ? `(${unhandled}) 별이 관측소` : '별이 관측소 — Observer Observatory';
 
   const box = $('thrList'); box.textContent = '';
   if (!d.replies.length) {
