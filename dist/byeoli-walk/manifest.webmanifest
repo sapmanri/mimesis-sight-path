@@ -1,0 +1,47 @@
+{
+  "id": "/",
+  "name": "별이 — 함께 걷는 작은 산책",
+  "short_name": "별이",
+  "description": "별이와 천천히 걸어보세요. 작은 발견과 취향이 조금씩 쌓입니다.",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#12171c",
+  "theme_color": "#12171c",
+  "icons": [
+    {
+      "src": "/byeoli-walk/assets/brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/byeoli-walk/assets/brand/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/byeoli-walk/assets/brand/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/byeoli-walk/assets/brand/screenshot-mobile.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/byeoli-walk/assets/brand/screenshot-desktop.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ]
+}

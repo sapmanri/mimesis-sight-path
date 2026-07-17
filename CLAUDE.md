@@ -20,7 +20,7 @@
 ```
 npm run build
 ```
-= validate:objects (1148:1148) → world-events → strict → card → zone → live:structure → vite build.
+= validate:objects (1148:1148) → world-events → strict → card → observer → brand → publish-log → zone → ops → live:structure → vite build.
 배포본 검사는 `npm run validate:live:deployed` (게이트 밖).
 
 ## 구조 핵심

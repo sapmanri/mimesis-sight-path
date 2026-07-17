@@ -61,6 +61,18 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     });
   }
 
+  // 422-OPS-B: 콘솔 HTML도 같은 경계 — 공개 호스트에서 /ops 경로는 404 (운영 경로 노출 금지 §8).
+  if ((url.pathname === '/ops' || url.pathname.startsWith('/ops/')) && host !== OPS_HOST) {
+    return new Response('Not Found', { status: 404, headers: { 'cache-control': 'no-store' } });
+  }
+
+  // 422-OPS-B: 운영 호스트 루트 = 관측소 콘솔. 원본은 public/ops/index.html 하나뿐(파일 이동 없음).
+  if (host === OPS_HOST && url.pathname === '/') {
+    const asset = await context.env.ASSETS.fetch(new URL('/ops/', url));
+    if (!asset.ok) return asset;
+    return htmlResponse(await asset.text(), asset);
+  }
+
   // manifest는 한 파일이 원본. 앱이 사는 위치가 호스트마다 다르므로 start_url/scope/id만
   // 그 호스트에 맞게 조정해 내보낸다 (공개 도메인=루트, pages.dev=/byeoli-walk/).
   if (url.pathname === MANIFEST_PATH) {

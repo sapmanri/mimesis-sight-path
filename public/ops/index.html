@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>BYEOLI OPS — 관측소</title>
+<!--
+  BUILD 422-OPS-B — Observer Console Shell (read-only)
+  정본: docs/BUILD_422_OPS_OBSERVER_CONSOLE.md §9, §11
+  이 페이지는 조종석이 아니라 관측소다. 모든 요청은 GET뿐이며 쓰기 API 호출은
+  validate:ops 게이트가 빌드에서 차단한다. byeoli-ops 호스트 전용(루트 미들웨어)
+  + Cloudflare Access 뒤에서만 서빙된다.
+-->
+<style>
+  :root{
+    --sage:#A7B49A; --panel:#12160f; --line:#2b352a; --dim:#5d6a5f;
+    --bg:#12171c; --sep:#232a31; --text:#cfd6cc; --warn:#f4d06a; --bad:#d98a4a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:14px/1.6 system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif;
+  }
+  .num{font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:13px}
+  a{color:var(--sage)}
+  .layout{display:grid; grid-template-columns:38% 62%; min-height:100vh}
+  /* ── 왼쪽: LIVE (sticky) ─────────────────────────── */
+  .live{
+    position:sticky; top:0; height:100vh; padding:20px 18px;
+    background:var(--panel); border-right:1px solid var(--sep);
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .live h1{font-size:13px; font-weight:600; letter-spacing:.12em; color:var(--sage)}
+  .live h1 .ro{color:var(--dim); font-weight:400; letter-spacing:0; margin-left:8px}
+  .frame{position:relative; flex:1; min-height:220px; border:1px solid var(--sep); background:#000}
+  .frame iframe{width:100%; height:100%; border:0; display:block}
+  .frame .shield{position:absolute; inset:0}/* 조작 차단 오버레이 — 클릭이 iframe에 닿지 않는다 */
+  .liveMeta{display:flex; flex-direction:column; gap:4px}
+  .liveMeta .row{display:flex; gap:10px; align-items:baseline}
+  .dimt{color:var(--dim)}
+  .openLive{margin-top:4px; font-size:13px}
+  /* ── 오른쪽: CONSOLE ─────────────────────────────── */
+  .console{padding:20px 26px 60px; max-width:860px}
+  section{padding:18px 0; border-bottom:1px solid var(--sep)}
+  section h2{font-size:13px; font-weight:600; color:var(--sage); margin-bottom:10px}
+  section h2 .sub{color:var(--dim); font-weight:400; margin-left:8px}
+  /* 오늘의 별이 — 오른쪽 최상단 고정 */
+  .today{
+    position:sticky; top:0; z-index:5; background:var(--bg);
+    padding:16px 0 14px; border-bottom:1px solid var(--sep);
+  }
+  .today h2{font-size:13px; color:var(--sage); margin-bottom:8px}
+  .today .lines{display:flex; flex-direction:column; gap:3px; font-size:15px}
+  .kv{display:grid; grid-template-columns:96px 1fr; gap:4px 14px}
+  .kv dt{color:var(--dim)}
+  .drives{display:flex; flex-direction:column; gap:6px; max-width:420px; margin-top:8px}
+  .drives .d{display:grid; grid-template-columns:44px 1fr 44px; gap:10px; align-items:center}
+  .drives .bar{height:6px; background:var(--line)}
+  .drives .bar i{display:block; height:100%; background:var(--sage)}
+  /* 일정·Threads */
+  .slots{display:flex; gap:18px; margin-bottom:12px}
+  .slot .t{color:var(--dim); margin-right:6px}
+  .journal{display:flex; flex-direction:column; gap:10px}
+  .journal .run .when{color:var(--sage)}
+  .journal .run .what{margin-left:14px}
+  .journal .missed{color:var(--warn)}
+  .journal .fail{color:var(--bad)}
+  details{margin-top:12px}
+  details summary{cursor:pointer; color:var(--dim); font-size:13px}
+  table{border-collapse:collapse; margin-top:8px; width:100%}
+  th,td{text-align:left; padding:4px 10px 4px 0; border-bottom:1px solid var(--line);
+        font-family:ui-monospace, Menlo, monospace; font-size:12px; color:var(--text)}
+  th{color:var(--dim); font-weight:400}
+  /* 사진 */
+  .shots{display:flex; flex-wrap:wrap; gap:8px}
+  .shots img{width:132px; height:99px; object-fit:cover; border:1px solid var(--sep); display:block}
+  .note{color:var(--dim); font-size:13px; margin-top:8px}
+  /* 이벤트 */
+  .events{display:flex; flex-direction:column; gap:16px}
+  .event .name{margin-bottom:4px}
+  .event .name .id{color:var(--dim); margin-left:8px}
+  .event .kv{grid-template-columns:72px 1fr; max-width:520px}
+  .ok{color:var(--sage)} .no{color:var(--dim)}
+  footer{padding:22px 0; color:var(--dim); font-size:12px}
+  @media (max-width:900px){
+    .layout{grid-template-columns:1fr}
+    .live{position:sticky; top:0; height:44vh; z-index:10}
+    .today{position:static}
+  }
+</style>
+</head>
+<body>
+<!-- 이벤트 메타 — 원본은 src/worldEvents/worldEventRegistry.ts.
+     validate:ops 게이트가 레지스트리와 1:1 일치를 강제한다(드리프트 차단). -->
+<script id="ops-events" type="application/json">
+[
+  {"id":"godzilla","label":"산 뒤를 걷는 거대한 그림자","rarity":"legendary","cooldownSeconds":86400,"eligibleTime":["dusk","night"]},
+  {"id":"meteor-shower","label":"밤하늘을 긋는 별들","rarity":"rare","cooldownSeconds":43200,"eligibleTime":["night"],"eligibleWeather":["clear"]},
+  {"id":"ufo","label":"멈춰 선 낯선 불빛","rarity":"rare","cooldownSeconds":64800,"eligibleTime":["dusk","night"]}
+]
+</script>
+
+<div class="layout">
+
+  <aside class="live">
+    <h1>BYEOLI OPS<span class="ro">관측소 · read-only</span></h1>
+    <div class="frame">
+      <iframe id="liveFrame" src="https://byeoli.sapmanri.com/?mode=live"
+              sandbox="allow-scripts allow-same-origin" title="별이 라이브"></iframe>
+      <div class="shield" title="콘솔에서는 조작할 수 없습니다"></div>
+    </div>
+    <div class="liveMeta">
+      <div class="row num"><span id="skyLine">—</span><span class="dimt" id="progressLine"></span></div>
+      <div class="row"><span class="dimt">지금</span><span id="liveEventLine">—</span></div>
+      <div class="row num dimt"><span id="seqLine">—</span></div>
+    </div>
+    <div class="openLive">
+      <a href="https://byeoli.sapmanri.com/?mode=live" target="_blank" rel="noopener">라이브 화면 열기 ↗</a>
+    </div>
+  </aside>
+
+  <main class="console">
+
+    <div class="today">
+      <h2>오늘의 별이</h2>
+      <div class="lines">
+        <span id="tdAction">—</span>
+        <span id="tdPhotos">—</span>
+        <span id="tdCounts">—</span>
+        <span id="tdNext">—</span>
+      </div>
+    </div>
+
+    <section>
+      <h2>현재 상태</h2>
+      <dl class="kv num">
+        <dt>행동</dt><dd id="stAction">—</dd>
+        <dt>대상</dt><dd id="stTarget">—</dd>
+        <dt>피로</dt><dd id="stFatigue">—</dd>
+      </dl>
+      <div class="drives" id="stDrives"></div>
+    </section>
+
+    <section>
+      <h2>오늘 일정 · Threads<span class="sub">08:00 / 18:00 / 22:00 KST</span></h2>
+      <div class="slots num" id="slotRow">—</div>
+      <div class="journal" id="journal"></div>
+      <details>
+        <summary>운영 로그 (Layer 1)</summary>
+        <table id="opsLogTable">
+          <thead><tr><th>slot</th><th>result</th><th>http</th><th>errorCode</th><th>requestId</th><th>runId</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </details>
+    </section>
+
+    <section>
+      <h2>오늘 사진<span class="sub">오늘 발행에 실린 이미지</span></h2>
+      <div class="shots" id="shots"></div>
+      <p class="note">촬영 시각·장소 메타 없음 — 자동 캡처 파이프라인 도입 전까지는 발행 기준으로만 보인다.</p>
+    </section>
+
+    <section>
+      <h2>대형 이벤트 3종<span class="sub">정의는 살아있고, 발사 장치가 아직 없다</span></h2>
+      <div class="events" id="events"></div>
+    </section>
+
+    <section>
+      <h2>Authority</h2>
+      <dl class="kv num">
+        <dt>sequence</dt><dd id="auSeq">—</dd>
+        <dt>갱신 지연</dt><dd id="auLag">—</dd>
+        <dt>세션 시작</dt><dd id="auStarted">—</dd>
+        <dt>stale</dt><dd id="auStale">—</dd>
+      </dl>
+    </section>
+
+    <footer>
+      read-only 관측소 — 이 화면에는 쓰기 동작이 없다. 별이는 이 화면을 모른다.<br>
+      byeoli-ops 호스트 전용 · Cloudflare Access · BUILD 422-OPS-B
+    </footer>
+
+  </main>
+</div>
+
+<script>
+'use strict';
+/* 모든 네트워크 요청은 GET fetch 4종뿐 — validate:ops가 이 목록 밖 호출을 빌드에서 막는다. */
+const API = {
+  state: '/api/byeoli/state',
+  health: '/api/byeoli/health',
+  publishLog: '/api/ops/publish-log',
+  feed: '/api/feed',
+};
+
+const EVENTS = JSON.parse(document.getElementById('ops-events').textContent);
+const ACT_KO = { observe:'관찰', rest:'쉼', record:'사진', wonder:'궁금' };
+const PHASE_KO = { dawn:'새벽', day:'낮', dusk:'해질녘', night:'밤' };
+const WEATHER_KO = { clear:'맑음', rain:'비', snow:'눈', fog:'안개', cloudy:'흐림' };
+const IMG_BASE = 'https://pub-8ec6440aae5545379fcfdd50a243847a.r2.dev/';
+
+const $ = (id) => document.getElementById(id);
+const ko = (map, k) => (k && map[k]) || k || '—';
+
+/* ── KST 시간 도우미 ──────────────────────────────── */
+const KST = 9 * 60 * 60 * 1000;
+function kstDate(ms){ return new Date(ms + KST); }           // getUTC*로 읽는다
+function kstDayKey(ms){ const d = kstDate(ms); return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`; }
+function hhmm(ms){ const d = kstDate(ms); const p = n => String(n).padStart(2,'0'); return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; }
+function kstFull(ms){ const d = kstDate(ms); const p = n => String(n).padStart(2,'0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; }
+function ago(ms){
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}초 전`;
+  if (s < 3600) return `${Math.floor(s/60)}분 전`;
+  return `${Math.floor(s/3600)}시간 ${Math.floor((s%3600)/60)}분 전`;
+}
+function dur(ms){
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
+  return h > 0 ? `${h}시간 ${m % 60}분` : `${m}분`;
+}
+
+async function getJson(url){
+  const res = await fetch(url);                 // GET only
+  if (!res.ok) throw new Error(`${url} ${res.status}`);
+  return res.json();
+}
+
+/* ── 상태 폴링: /api/byeoli/state (5s) ────────────── */
+let lastState = null;
+let sessionStartedAt = null; // health.startedAt — Authority 인스턴스 기준(§9-0: "이번 세션"으로 표기)
+async function pollState(){
+  try {
+    const s = await getJson(API.state);
+    lastState = s;
+    renderState(s);
+    renderEvents(s);
+  } catch (e) { /* 다음 턴에 재시도 — 표시값은 직전 것 유지 */ }
+}
+
+function renderState(s){
+  const b = s.state?.byeoli ?? {};
+  const sky = s.state?.sky ?? {};
+  const tel = s.state?.telemetry ?? {};
+  const worldLen = s.state?.camera?.worldLen;
+
+  $('skyLine').textContent = `${ko(PHASE_KO, sky.phase)} · ${ko(WEATHER_KO, sky.weather)}`;
+  $('progressLine').textContent =
+    (typeof b.worldX === 'number' && worldLen) ? `진행 ${(b.worldX / worldLen * 100).toFixed(1)}%` : '';
+  $('liveEventLine').textContent = s.state?.liveEvent?.text ?? '—';
+  $('seqLine').textContent = `seq ${s.sequence ?? '—'} · ${typeof s.updatedAt === 'number' ? ago(s.updatedAt) : '—'} 갱신`;
+
+  const acting = b.state === 'acting' && b.actAction;
+  const verb = acting ? `${ko(ACT_KO, b.actAction)} 중` : (b.state === 'walking' ? '걷는 중' : (b.state ?? '—'));
+  $('tdAction').textContent = sessionStartedAt
+    ? `${verb} · 이번 세션 ${dur(Date.now() - sessionStartedAt)}`
+    : verb;
+  $('tdCounts').textContent =
+    `기억 ${tel.memories ?? '—'} · 일기 ${tel.diary ?? '—'} (누적)`;
+
+  $('stAction').textContent = acting ? `${ko(ACT_KO, b.actAction)} (${b.actAction})` : (b.state ?? '—');
+  $('stTarget').textContent = b.actTarget ?? '—';
+  $('stFatigue').textContent = typeof tel.fatigue === 'number' ? tel.fatigue.toFixed(3) : '—';
+
+  const drives = tel.drives ?? {};
+  const box = $('stDrives');
+  box.textContent = '';
+  for (const k of ['observe','rest','record','wonder']) {
+    const v = typeof drives[k] === 'number' ? drives[k] : null;
+    const row = document.createElement('div'); row.className = 'd';
+    const name = document.createElement('span'); name.textContent = ACT_KO[k];
+    const bar = document.createElement('div'); bar.className = 'bar';
+    const fill = document.createElement('i'); fill.style.width = v === null ? '0%' : `${Math.min(100, v*100)}%`;
+    bar.appendChild(fill);
+    const val = document.createElement('span'); val.className = 'num'; val.textContent = v === null ? '—' : v.toFixed(2);
+    row.append(name, bar, val); box.appendChild(row);
+  }
+}
+
+/* ── 이벤트 3종 — 준비중 3층 표현 (§5) ────────────── */
+function renderEvents(s){
+  const sky = s?.state?.sky ?? {};
+  const box = $('events');
+  box.textContent = '';
+  for (const ev of EVENTS) {
+    const timeOk = !ev.eligibleTime || (sky.phase && ev.eligibleTime.includes(sky.phase));
+    const wxOk = !ev.eligibleWeather || (sky.weather && ev.eligibleWeather.includes(sky.weather));
+    const met = timeOk && wxOk;
+    const needs = [
+      ev.eligibleTime ? ev.eligibleTime.map(t => ko(PHASE_KO, t)).join('/') : null,
+      ev.eligibleWeather ? ev.eligibleWeather.map(w => ko(WEATHER_KO, w)).join('/') : null,
+    ].filter(Boolean).join(' · ');
+    const nowDesc = `${ko(PHASE_KO, sky.phase)} · ${ko(WEATHER_KO, sky.weather)}`;
+
+    const el = document.createElement('div'); el.className = 'event';
+    const name = document.createElement('div'); name.className = 'name';
+    name.textContent = ev.label;
+    const idTag = document.createElement('span'); idTag.className = 'id num';
+    idTag.textContent = `${ev.id} · ${ev.rarity} · 쿨다운 ${ev.cooldownSeconds/3600}h`;
+    name.appendChild(idTag);
+
+    const kv = document.createElement('dl'); kv.className = 'kv';
+    const add = (t, d, cls) => {
+      const dt = document.createElement('dt'); dt.textContent = t;
+      const dd = document.createElement('dd'); dd.textContent = d;
+      if (cls) dd.className = cls;
+      kv.append(dt, dd);
+    };
+    add('상태', '준비중');
+    add('조건', met ? `충족 (${nowDesc})` : `미충족 (현재 ${nowDesc} — ${needs} 필요)`, met ? 'ok' : 'no');
+    add('발동', '미구현 (런타임 없음 · 423-EVENTS 대기)', 'no');
+    add('발생기록', '없음', 'no');
+    el.append(name, kv); box.appendChild(el);
+  }
+}
+
+/* ── health: 세션 경과 (60s) ──────────────────────── */
+async function pollHealth(){
+  try {
+    const h = await getJson(API.health);
+    if (typeof h.startedAt === 'number') {
+      sessionStartedAt = h.startedAt;
+      $('auStarted').textContent = `${kstFull(h.startedAt)} KST`;
+    }
+    $('auSeq').textContent = h.sequence ?? '—';
+    if (typeof h.lastTickAt === 'number') $('auLag').textContent = ago(h.lastTickAt);
+    $('auStale').textContent = lastState ? String(lastState.stale ?? '—') : '—';
+  } catch (e) { /* 유지 */ }
+}
+
+/* ── publish-log: 슬롯 · 별이 일지 · 운영 로그 (60s) ── */
+async function pollPublishLog(){
+  let log = null;
+  try { log = await getJson(API.publishLog); } catch (e) { return; }
+  let feed = [];
+  try { feed = await getJson(API.feed); } catch (e) { /* 문장 원문 없이 표시 */ }
+
+  const todayKey = kstDayKey(Date.now());
+  const missed = new Set(log.missedSlots ?? []);
+  const runsBySlot = new Map();
+  for (const r of log.runs ?? []) if (r.scheduledFor && !runsBySlot.has(r.scheduledFor)) runsBySlot.set(r.scheduledFor, r);
+
+  /* 슬롯 요약 줄 — 오늘의 08/18/22 */
+  const slotRow = $('slotRow'); slotRow.textContent = '';
+  const nowD = kstDate(Date.now());
+  const slotIsos = (log.schedule ?? [8,18,22]).map(h => {
+    const p = n => String(n).padStart(2,'0');
+    return { h, iso: `${nowD.getUTCFullYear()}-${p(nowD.getUTCMonth()+1)}-${p(nowD.getUTCDate())}T${p(h)}:00:00+09:00` };
+  });
+  let nextLabel = null;
+  for (const { h, iso } of slotIsos) {
+    const run = runsBySlot.get(iso);
+    let mark, cls = '';
+    if (run) { mark = run.result === 'success' ? '✅' : '⚠️'; if (run.result !== 'success') cls = 'fail'; }
+    else if (missed.has(iso)) { mark = '⛔ 기록 없음'; cls = 'missed'; }
+    else { mark = '예정'; if (nextLabel === null && nowD.getUTCHours() < h) nextLabel = `${String(h).padStart(2,'0')}:00`; }
+    const el = document.createElement('span'); el.className = `slot ${cls}`;
+    el.innerHTML = `<span class="t">${String(h).padStart(2,'0')}:00</span>${mark}`;
+    slotRow.appendChild(el);
+  }
+  $('tdNext').textContent = nextLabel
+    ? `Threads 다음 예정 · ${nextLabel}`
+    : 'Threads 오늘 일정 종료 · 내일 08:00';
+
+  /* 별이 일지 (Layer 2) — 오늘 run만, 최신순 */
+  const journal = $('journal'); journal.textContent = '';
+  const todayRuns = (log.runs ?? []).filter(r => kstDayKey(r.invokedAt) === todayKey);
+  for (const r of todayRuns) {
+    const div = document.createElement('div'); div.className = 'run';
+    const when = document.createElement('div'); when.className = 'when num';
+    when.textContent = hhmm(r.invokedAt);
+    div.appendChild(when);
+    const lines = [];
+    if (r.result === 'key_missing') {
+      lines.push('열쇠가 설정돼 있지 않아 나서지 못했다. (503)');
+    } else {
+      if (typeof r.textIndex === 'number') {
+        const post = feed.find(p => Math.abs((p.t ?? 0) - r.invokedAt) < 120000);
+        lines.push(`${r.textIndex}번째 문장을 골랐다.` + (post?.text ? ` — “${post.text}”` : ''));
+      }
+      lines.push(r.imageKey ? '걷는 사진 한 장을 함께 걸었다.' : '사진 없이 나섰다.');
+      lines.push(r.result === 'success' ? 'Threads에 올렸다. ✓' : 'Threads에 올리지 못했다. ✕');
+    }
+    for (const t of lines) {
+      const p = document.createElement('div'); p.className = 'what';
+      if (r.result !== 'success' && t.includes('✕')) p.classList.add('fail');
+      p.textContent = t; div.appendChild(p);
+    }
+    journal.appendChild(div);
+  }
+  for (const iso of [...missed].filter(i => i.startsWith(iso10(todayKey)))) {
+    const div = document.createElement('div'); div.className = 'run';
+    div.innerHTML = `<div class="when num">${iso.slice(11,16)}</div><div class="what missed">호출 기록 없음 (크론 미실행 추정)</div>`;
+    journal.appendChild(div);
+  }
+  if (!journal.children.length) {
+    const p = document.createElement('div'); p.className = 'note';
+    p.textContent = '오늘 발행 기록이 아직 없다.';
+    journal.appendChild(p);
+  }
+
+  /* 운영 로그 (Layer 1) — 최근 30건 */
+  const tbody = $('opsLogTable').querySelector('tbody'); tbody.textContent = '';
+  for (const r of (log.runs ?? []).slice(0, 30)) {
+    const tr = document.createElement('tr');
+    for (const v of [
+      r.scheduledFor ? r.scheduledFor.slice(5,16).replace('T',' ') : '(수동)',
+      r.result, r.httpStatus, r.threads?.errorCode ?? '—', r.threads?.requestId ?? '—', r.runId,
+    ]) { const td = document.createElement('td'); td.textContent = String(v); tr.appendChild(td); }
+    tbody.appendChild(tr);
+  }
+
+  /* 오늘 사진 — 오늘 feed의 img */
+  const todayPosts = feed.filter(p => typeof p.t === 'number' && kstDayKey(p.t) === todayKey);
+  const imgs = todayPosts.map(p => p.img).filter(Boolean);
+  $('tdPhotos').textContent = `사진 ${imgs.length}장 — 오늘 발행 기준`;
+  const shots = $('shots'); shots.textContent = '';
+  for (const u of imgs) {
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.alt = '오늘 발행 사진';
+    img.src = u.startsWith('http') ? u : IMG_BASE + u.replace(/^\//,'');
+    shots.appendChild(img);
+  }
+  if (!imgs.length) {
+    const p = document.createElement('div'); p.className = 'note';
+    p.textContent = '오늘 발행에 실린 사진이 아직 없다.'; shots.appendChild(p);
+  }
+}
+
+function iso10(dayKey){
+  const [y, mo, d] = dayKey.split('-').map(Number);
+  const p = n => String(n).padStart(2,'0');
+  return `${y}-${p(mo+1)}-${p(d)}`;
+}
+
+pollState(); pollHealth(); pollPublishLog();
+setInterval(pollState, 5000);
+setInterval(pollHealth, 60000);
+setInterval(pollPublishLog, 60000);
+</script>
+</body>
+</html>
