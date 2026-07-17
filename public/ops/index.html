@@ -175,7 +175,12 @@
     <section>
       <h2>오늘 사진<span class="sub">오늘 발행에 실린 이미지</span></h2>
       <div class="shots" id="shots"></div>
-      <p class="note">촬영 시각·장소 메타 없음 — 자동 캡처 파이프라인 도입 전까지는 발행 기준으로만 보인다.</p>
+      <h2 style="margin-top:18px">엽서<span class="sub">별이가 남긴 장면+관찰일기 — 발행 이미지 풀에 우선 공급</span></h2>
+      <div class="sched">
+        <button type="button" id="postcardBtn">엽서 찍기</button>
+        <span class="note" id="postcardStatus">콘솔이 열려 있는 동안 30분마다 좋은 순간을 자동으로 찍는다.</span>
+      </div>
+      <div class="shots" id="postcards" style="margin-top:10px"></div>
     </section>
 
     <section>
@@ -220,8 +225,9 @@ const API = {
   health: '/api/byeoli/health',
   publishLog: '/api/ops/publish-log',
   feed: '/api/feed',
-  eventSchedule: '/api/ops/event-schedule', // 유일한 쓰기 표면 (423-EVENTS 예약 — 명시적 예외)
+  eventSchedule: '/api/ops/event-schedule', // 쓰기 예외 1호 (423-EVENTS 예약)
   eventActive: '/api/world-event/active',
+  capture: '/api/ops/capture',              // 쓰기 예외 2호 (425-A 엽서 업로드)
 };
 
 const EVENTS = JSON.parse(document.getElementById('ops-events').textContent);
@@ -438,6 +444,84 @@ async function pollEventActive(){
   } catch (e) { /* 유지 */ }
 }
 
+/* ── 엽서 (425-A) — 쓰기 예외 2호: 콘솔→R2 업로드 ── */
+let lastPostcardUploadAt = 0;
+
+async function postCapture(body){
+  const res = await fetch(API.capture, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+function blobToBase64(blob){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(blob);
+  });
+}
+
+async function shootPostcard(force){
+  const status = $('postcardStatus');
+  const pc = $('liveFrame').contentWindow?.__postcard;
+  if (!pc) { status.textContent = '라이브 화면이 아직 준비되지 않았다.'; return false; }
+  let shot = null;
+  try { shot = await pc.compose({ force }); } catch (e) { status.textContent = '합성 실패 — 잠시 후 다시.'; return false; }
+  if (!shot) {
+    if (force) status.textContent = '지금은 그릴 일기가 없다 — 별이가 조금 더 걷게 두자.';
+    return false;
+  }
+  const imageBase64 = await blobToBase64(shot.blob);
+  const r = await postCapture({ imageBase64, meta: shot.meta });
+  if (!r.ok) { status.textContent = `저장 실패: ${r.error ?? '알 수 없음'}`; return false; }
+  lastPostcardUploadAt = Date.now();
+  status.textContent = `엽서 저장됨 · ${new Date().toLocaleTimeString('ko-KR')} — 다음 발행 풀에 들어간다.`;
+  await pollPostcards();
+  return true;
+}
+
+async function pollPostcards(){
+  try {
+    const d = await getJson(API.capture);
+    if (!d.ok) return;
+    const box = $('postcards'); box.textContent = '';
+    for (const m of (d.captures ?? []).slice(0, 8)) {
+      const wrap = document.createElement('figure');
+      wrap.style.margin = '0';
+      if (m.url) {
+        const img = document.createElement('img');
+        img.loading = 'lazy'; img.alt = '엽서'; img.src = m.url;
+        img.style.width = '132px'; img.style.height = '165px'; img.style.objectFit = 'cover';
+        img.style.border = '1px solid var(--sep)'; img.style.display = 'block';
+        wrap.appendChild(img);
+      }
+      const cap = document.createElement('figcaption');
+      cap.className = 'note';
+      cap.style.maxWidth = '132px'; cap.style.fontSize = '11px';
+      cap.textContent = [
+        m.byeoliAction ? ko(ACT_KO, m.byeoliAction) : null,
+        m.targetType, m.skyPhase ? ko(PHASE_KO, m.skyPhase) : null,
+      ].filter(Boolean).join(' · ') || '—';
+      wrap.appendChild(cap);
+      box.appendChild(wrap);
+    }
+    if (!box.children.length) {
+      const p = document.createElement('div'); p.className = 'note';
+      p.textContent = '아직 엽서가 없다.'; box.appendChild(p);
+    }
+  } catch (e) { /* 유지 */ }
+}
+
+/* 상주 자동 캡처: 5분마다 시도, 업로드는 30분 간격. 좋은 순간(연관 일기 ≥3줄)일 때만 찍힌다. */
+async function autoPostcard(){
+  if (Date.now() - lastPostcardUploadAt < 30 * 60 * 1000) return;
+  await shootPostcard(false);
+}
+
 /* ── health: 세션 경과 (60s) ──────────────────────── */
 async function pollHealth(){
   try {
@@ -562,7 +646,9 @@ function iso10(dayKey){
   return `${y}-${p(mo+1)}-${p(d)}`;
 }
 
-pollState(); pollHealth(); pollEventActive(); pollEventSchedule();
+$('postcardBtn').addEventListener('click', () => shootPostcard(true));
+
+pollState(); pollHealth(); pollEventActive(); pollEventSchedule(); pollPostcards();
 pollFeed().then(pollPublishLog); // 일지의 문장 원문 대조는 feed가 먼저
 setInterval(pollState, 5000);
 setInterval(pollHealth, 60000);
@@ -570,6 +656,7 @@ setInterval(pollFeed, 60000);
 setInterval(pollPublishLog, 60000);
 setInterval(pollEventActive, 15000);
 setInterval(pollEventSchedule, 30000);
+setInterval(autoPostcard, 5 * 60 * 1000);
 </script>
 </body>
 </html>

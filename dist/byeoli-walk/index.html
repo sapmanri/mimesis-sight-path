@@ -6966,6 +6966,82 @@ window.__worldEventStage = {
   isActive:()=>!!WorldEventStage.active,
 };
 
+/* =====================================================================
+   BUILD 425-A — 엽서(Postcard) 합성기
+   Threads 발행용 4:5(1080×1350) 엽서를 전용 캔버스로 합성한다. 화면 캡처가 아니다:
+   장면(위 55.6%, 별이 중심 216px 크롭 ×5 픽셀 보존) + 관찰일기(아래 44.4%)를 직접 그린다.
+   호출자는 Ops 콘솔(same-origin /live iframe)뿐. 사용자 화면 레이아웃은 건드리지 않으며
+   개인 데이터(Observer Code·Recovery Key)는 어떤 경로로도 그리지 않는다.
+   정본: docs/BUILD_425_THREADS_CAPTURE_AND_REPLY.md §3
+   ===================================================================== */
+window.__postcard = { compose: composePostcard };
+function pcCollectLines(targetLabel){
+  const nodes=[...document.querySelectorAll('#stream .msg')];   // [0]=최신
+  const seen=new Set(); const rel=[]; const rest=[];
+  for(const n of nodes){
+    if(!/\b(act|diary|rare)\b/.test(n.className)) continue;     // pass('그냥 지나침')·day 제외
+    const sub=n.querySelector('.sub');
+    const text=(sub? n.textContent.replace(sub.textContent,'') : n.textContent).trim();
+    if(!text || seen.has(text)) continue;
+    seen.add(text);
+    (targetLabel && text.includes(targetLabel) ? rel : rest).push(text);
+    if(rel.length+rest.length>=14) break;
+  }
+  return rel.concat(rest).slice(0,6);
+}
+function composePostcard(opts){
+  opts=opts||{};
+  const CW=1080, CH=1350, SCENE_H=750, SW=216;                  // 216×150 → ×5 = 1080×750
+  const acting = byeoli.state==='acting' && byeoli.actAction;
+  const tProp = byeoli.actTarget ? (props||[]).find(p=>p.id===byeoli.actTarget) : null;
+  // 최근 act 줄에서 대상 라벨·지속시간 (화면과 같은 표기 유지)
+  const lastAct=document.querySelector('#stream .msg.act');
+  let targetLabel=null, dur=null;
+  if(lastAct){
+    const s=lastAct.querySelector('.sub'); dur=s?s.textContent.trim():null;
+    const t=(s? lastAct.textContent.replace(s.textContent,'') : lastAct.textContent).trim();
+    const i=t.lastIndexOf('· '); if(i>=0) targetLabel=t.slice(i+2).trim();
+  }
+  const lines=pcCollectLines(targetLabel);
+  if(lines.length<3 && !opts.force) return Promise.resolve(null);  // 좋은 순간이 아니면 찍지 않는다
+  if(!lines.length) return Promise.resolve(null);
+  const c=document.createElement('canvas'); c.width=CW; c.height=CH;
+  const g=c.getContext('2d');
+  // ── 장면: 별이가 가로 40% 지점에 오는 크롭, 픽셀아트 보존 ──
+  const sx=Math.max(0, Math.min(W-SW, Math.round(byeoli.screenX-86)));
+  g.imageSmoothingEnabled=false;
+  g.drawImage(cv, sx,0,SW,H, 0,0,CW,SCENE_H);
+  // ── 일기 패널 (앱 팔레트 그대로) ──
+  g.fillStyle='#12160f'; g.fillRect(0,SCENE_H,CW,CH-SCENE_H);
+  g.fillStyle='#2b352a'; g.fillRect(0,SCENE_H,CW,2);
+  const FONT='ui-monospace,"SFMono-Regular",Menlo,monospace';
+  let y=SCENE_H+88;
+  for(const line of lines){
+    g.font='34px '+FONT; g.fillStyle='#e7dcc4';
+    const chunks=[]; let s=line;
+    while(s.length>0 && chunks.length<2){ chunks.push(s.slice(0,30)); s=s.slice(30); }
+    if(s.length>0) chunks[chunks.length-1]=chunks[chunks.length-1].slice(0,-1)+'…';
+    for(const chunk of chunks){ g.fillText(chunk,64,y); y+=52; }
+    y+=16;
+    if(y>CH-130) break;
+  }
+  // ── 서명줄: "궁금 · 나무 버섯 · 2.7초" ──
+  const sig=[acting?actKo(byeoli.actAction):null, targetLabel, dur].filter(Boolean).join(' · ');
+  g.font='30px '+FONT;
+  if(sig){ g.fillStyle='#A7B49A'; g.fillText(sig,64,CH-64); }
+  g.fillStyle='#5d6a5f'; g.textAlign='right'; g.fillText('별이 산책',CW-64,CH-64); g.textAlign='left';
+  const meta={
+    capturedAt:Date.now(),
+    zonePct: worldLen ? Math.round(byeoli.worldX/worldLen*1000)/10 : null,
+    skyPhase:sky.phase, weather:sky.weather,
+    byeoliAction: acting ? byeoli.actAction : (byeoli.state||null),
+    targetId: byeoli.actTarget||null,
+    targetType: tProp ? tProp.type : null,
+    diaryLines: lines,
+  };
+  return new Promise(res=>c.toBlob(b=>res(b?{blob:b,meta}:null),'image/jpeg',0.92));
+}
+
 // Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla|meteor-shower|ufo[&eventOffset=초]
 // ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
 let SANDBOX_EVENT_DEBUG=false;

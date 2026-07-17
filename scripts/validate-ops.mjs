@@ -28,25 +28,31 @@ for (const [pattern, why] of [
 ]) {
   if (pattern.test(html)) errors.push(`쓰기 경로 금지 위반: ${why}`);
 }
+// 쓰기 표면 목록(고정): 1호 예약(423) · 2호 엽서(425-A). 이 목록 밖 쓰기는 빌드 실패.
+const WRITE_SURFACES = [
+  ['postEventSchedule', /fetch\(API\.eventSchedule,\s*\{\s*\n?\s*method:\s*'POST'/],
+  ['postCapture', /fetch\(API\.capture,\s*\{\s*\n?\s*method:\s*'POST'/],
+];
 const methodUses = [...html.matchAll(/method\s*:\s*['"]([A-Z]+)['"]/g)];
-if (methodUses.length !== 1 || methodUses[0][1] !== 'POST') {
-  errors.push(`fetch method 옵션은 예약 POST 1곳만 허용 (발견 ${methodUses.length}건: ${methodUses.map((m) => m[1]).join(',')})`);
+if (methodUses.length !== WRITE_SURFACES.length || methodUses.some((m) => m[1] !== 'POST')) {
+  errors.push(`fetch method 옵션은 선언된 쓰기 표면 ${WRITE_SURFACES.length}곳(POST)만 허용 (발견 ${methodUses.length}건: ${methodUses.map((m) => m[1]).join(',')})`);
 }
-if (!/fetch\(API\.eventSchedule,\s*\{\s*\n?\s*method:\s*'POST'/.test(html)) {
-  errors.push('예약 POST가 postEventSchedule(API.eventSchedule) 형태가 아니다 — 쓰기 표면은 한 곳으로 고정');
+for (const [name, pattern] of WRITE_SURFACES) {
+  if (!pattern.test(html)) errors.push(`쓰기 표면 ${name}이(가) 선언된 형태가 아니다`);
 }
-if ((html.match(/method\s*:/g) ?? []).length !== 1) {
-  errors.push('method: 사용이 postEventSchedule 밖에도 있다');
+if ((html.match(/method\s*:/g) ?? []).length !== WRITE_SURFACES.length) {
+  errors.push('method: 사용이 선언된 쓰기 표면 밖에도 있다');
 }
 
-// fetch 대상은 허용목록만 (읽기 5종 + 쓰기 예외 1종).
+// fetch 대상은 허용목록만 (읽기 5종 + 쓰기 예외 2종).
 const ALLOWED_APIS = new Set([
   '/api/byeoli/state',
   '/api/byeoli/health',
   '/api/ops/publish-log',
   '/api/feed',
-  '/api/ops/event-schedule', // 쓰기 예외 — POST는 위 규칙이 1곳으로 제한
+  '/api/ops/event-schedule', // 쓰기 예외 1호
   '/api/world-event/active',
+  '/api/ops/capture',        // 쓰기 예외 2호
 ]);
 for (const m of html.matchAll(/['"](\/api\/[^'"]*)['"]/g)) {
   if (!ALLOWED_APIS.has(m[1])) errors.push(`허용목록 밖 API 경로: ${m[1]}`);
@@ -155,10 +161,27 @@ if (!syncJs.includes('/api/world-event/active')) {
 if (/method\s*:|XMLHttpRequest|sendBeacon/.test(syncJs)) {
   errors.push('world-event-sync.js는 읽기 전용이어야 한다 (쓰기 수단 발견)');
 }
-// 감사 하드룰: 예약 API는 Access 이메일을 기록해야 한다
-const schedTs = await readFile(new URL('../functions/api/ops/event-schedule.ts', import.meta.url), 'utf8').catch(() => '');
-if (!schedTs.includes('cf-access-authenticated-user-email')) {
-  errors.push('event-schedule API에 감사 기록(Access 이메일)이 없다');
+// 감사 하드룰: 쓰기 API는 Access 이메일을 기록해야 한다
+for (const rel of ['../functions/api/ops/event-schedule.ts', '../functions/api/ops/capture.ts']) {
+  const src = await readFile(new URL(rel, import.meta.url), 'utf8').catch(() => '');
+  if (!src.includes('cf-access-authenticated-user-email')) {
+    errors.push(`${rel.replace('../', '')}에 감사 기록(Access 이메일)이 없다`);
+  }
+}
+
+// ── 8. 425-A 엽서 계약 ────────────────────────────────────
+if (!walkHtml.includes('window.__postcard')) {
+  errors.push('걷기 앱에 엽서 합성기 훅(window.__postcard)이 없다');
+}
+if (!walkHtml.includes('그냥 지나침')) {
+  errors.push("걷기 앱 pass 라인('그냥 지나침')이 사라졌다 — 엽서 제외 필터 앵커");
+}
+const captureTs = await readFile(new URL('../functions/api/ops/capture.ts', import.meta.url), 'utf8').catch(() => '');
+if (!captureTs.includes('sanitizeMeta')) {
+  errors.push('capture API에 meta 화이트리스트(sanitizeMeta)가 없다');
+}
+if (!captureTs.includes('0xff') || !captureTs.includes('0xd8')) {
+  errors.push('capture API에 JPEG 시그니처 검증이 없다');
 }
 
 if (errors.length) {

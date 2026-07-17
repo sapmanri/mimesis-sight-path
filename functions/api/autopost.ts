@@ -211,6 +211,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       imgPool = listed.objects.map((o) => o.key).sort().reverse().slice(0, 40).map((k) => `${base}/${k}`);
     } catch { /* R2 실패 시 폴백 */ }
   }
+  // BUILD 425-A: 엽서 우선 — capture_meta에 기록된(=장면·일기 문맥이 있는) 키가
+  // 충분하면 그 풀에서만 뽑는다. 메타 없는 옛 수동 캡처는 자연 은퇴한다.
+  if (imgPool.length > 0) {
+    try {
+      const metaRaw = await env.PLANET.get('capture_meta');
+      if (metaRaw) {
+        const metaKeys = new Set((JSON.parse(metaRaw) as { r2Key: string }[]).map((m) => m.r2Key));
+        const postcardPool = imgPool.filter((u) => {
+          const k = u.match(/captures\/[^?#]+/)?.[0];
+          return !!k && metaKeys.has(k);
+        });
+        if (postcardPool.length >= 5) imgPool = postcardPool;
+      }
+    } catch { /* 메타 실패 시 기존 풀 유지 */ }
+  }
   if (imgPool.length === 0) imgPool = IMAGE_POOL; // 폴백: 하드코딩 8장
   const img = imgPool.length > 0 && Math.random() < 0.8
     ? imgPool[Math.floor(Math.random() * imgPool.length)]
