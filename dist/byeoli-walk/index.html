@@ -114,9 +114,6 @@
   #pr-share{padding:7px 12px;font-size:11px;font-weight:600;color:#0d1114;background:var(--sage);
     border:0;border-radius:8px;cursor:pointer}
   #pr-share:disabled{opacity:.55;cursor:default}
-  #pr-save{padding:7px 12px;font-size:11px;font-weight:600;color:var(--sage);background:transparent;
-    border:1px solid var(--sage);border-radius:8px;cursor:pointer}
-  #pr-save:disabled{opacity:.55;cursor:default}
   #pr-note{font-size:9px;color:var(--dim)}
   /* ---- BUILD 419-B: 관찰자 복구 UI ---- */
   #pr-backup{padding:7px 12px;font-size:11px;font-weight:600;color:var(--sage);background:transparent;
@@ -252,7 +249,6 @@
     <div id="pr-listwrap"><div id="pr-list"></div></div>
     <div id="pr-foot">
       <button id="pr-share" type="button">공유카드 만들기</button>
-      <button id="pr-save" type="button">PNG 저장</button>
       <button id="pr-backup" type="button">기록 지키기</button>
       <span id="pr-note"></span>
     </div>
@@ -1096,7 +1092,6 @@ const PR={
     document.addEventListener('keydown', e=>{ if(e.key==='Escape'&&this._open) this.close(); });
     this._q('pr-copy').addEventListener('click', e=>{ e.stopPropagation(); this.copyCode(); });
     this._q('pr-share').addEventListener('click', ()=>this.share());
-    this._q('pr-save').addEventListener('click', ()=>this.saveCard());
   },
   open(){
     if(this._open) return;
@@ -1149,9 +1144,9 @@ const PR={
     const list=this._q('pr-list');
     if(rows.length===0){
       list.innerHTML='<div id="pr-empty">아직 함께 발견한 것이 없습니다.<br>별이 걷다 무언가를 만나면 여기에 쌓입니다.</div>';
-      this._q('pr-share').disabled=true; this._q('pr-save').disabled=true; return;
+      this._q('pr-share').disabled=true; return;
     }
-    this._q('pr-share').disabled=false; this._q('pr-save').disabled=false;
+    this._q('pr-share').disabled=false;
     list.innerHTML=rows.map(r=>{
       const def=CATALOG[r.type]||RARE[r.type]||{emoji:'·',ko:r.type};
       const acts=['observe','record','rest','wonder']
@@ -1174,7 +1169,9 @@ const PR={
       const blob=await this.buildCard();
       const file=new File([blob],'byeol-record.png',{type:'image/png'});
       if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
-        await navigator.share({files:[file], title:'별과 함께 발견한 것들'});
+        // 파일만 싣는다 — title 등 텍스트를 섞으면 macOS 공유 시트가
+        // '이미지+텍스트 복합'으로 보고 사진 앱을 목록에서 뺀다 (2026-07-19 Vase 리포트)
+        await navigator.share({files:[file]});
         note.textContent='공유했습니다';
       } else {                                   // 미지원 → PNG 다운로드
         const url=URL.createObjectURL(blob);
@@ -1185,18 +1182,8 @@ const PR={
       }
     }catch(e){ note.textContent='카드를 만들지 못했습니다'; }
   },
-  // 데스크톱용 직행 저장 — macOS 공유 시트 설정과 무관하게 항상 파일로 떨어진다
-  async saveCard(){
-    const note=this._q('pr-note'); note.textContent='카드 만드는 중…';
-    try{
-      const blob=await this.buildCard();
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=url; a.download='byeol-record.png';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(()=>URL.revokeObjectURL(url),4000);
-      note.textContent='PNG로 저장했습니다';
-    }catch(e){ note.textContent='카드를 만들지 못했습니다'; }
-  },
+  // 'PNG 저장' 버튼은 제거됨(2026-07-19 Vase) — 공유 시트의 저장/복사가 그 역할을 대신하고,
+  // 공유 미지원 브라우저는 share()의 폴백이 여전히 PNG 다운로드로 떨어진다.
   buildCard(){
     const W=1080,H=1350, c=document.createElement('canvas'); c.width=W; c.height=H;
     const g=c.getContext('2d'), d=Profile.data;
