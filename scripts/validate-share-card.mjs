@@ -54,9 +54,40 @@ const buildCardBody = extractMethodBody('buildCard');
 const roundRectBody = extractMethodBody('_roundRect');
 if (!buildCardBody || !roundRectBody) fail();
 
+/* ---------- 420-A: 실제 중앙 마스킹 함수를 소스에서 추출해 그대로 검증 ---------- */
+function extractFunctionSource(name) {
+  const start = html.indexOf(`function ${name}(`);
+  if (start === -1) return null;
+  const bodyStart = html.indexOf('{', start);
+  let depth = 0;
+  let i = bodyStart;
+  for (; i < html.length; i += 1) {
+    const ch = html[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+  }
+  return html.slice(start, i + 1);
+}
+const maskSource = extractFunctionSource('maskObserverCode');
+if (!maskSource) fail();
+const maskObserverCode = new Function(`return (${maskSource});`)();
+
 /* ---------- 스텁 캔버스 환경 ---------- */
 const FULL_CODE = 'BYL-TEST-WXYZ';
-const MASKED = FULL_CODE.slice(0, -4) + '••••';
+const MASKED = maskObserverCode(FULL_CODE);
+// 앞뒤 일부만 남는 형태인지 자체 검증 (전체 노출·뒤쪽만 마스킹 형태 금지)
+if (
+  MASKED === FULL_CODE ||
+  MASKED.includes(FULL_CODE.slice(4, -2)) ||      // 중간부가 살아있으면 실패
+  !MASKED.startsWith(FULL_CODE.slice(0, 6)) ||
+  !MASKED.endsWith(FULL_CODE.slice(-2))
+) {
+  console.error(`[card] maskObserverCode rule violated: ${FULL_CODE} -> ${MASKED}`);
+  process.exit(1);
+}
 const H = 1350;
 const FOOTER_BASE = H - 72; // 1278
 const MIN_GAP = 48;
@@ -195,6 +226,7 @@ function makeEnv(tasteCount) {
     'RARE',
     'fmtDuration',
     'fmtWhen',
+    'maskObserverCode',
     'console',
     `return (function(){${buildCardBody}}).call(this);`,
   ).bind(
@@ -205,6 +237,7 @@ function makeEnv(tasteCount) {
     {},
     () => '1시간',
     () => '2026.07.16',
+    maskObserverCode,
     { warn: (...args) => warned.push(args.join(' ')) },
   );
 
