@@ -241,6 +241,19 @@ const repliesLogic = await readFile(new URL('../functions/api/_replies.ts', impo
 if (!/REPLY_RATIO\s*=\s*0\.3/.test(repliesLogic)) errors.push('답글: 30% 상한 상수가 없다');
 if (!repliesLogic.includes("'category_sensitive'")) errors.push('답글: 민감 카테고리 차단이 없다');
 
+// ── 12. 425-D 별이 문장 작가 — 폴백 안전 계약 ─────────────
+const autopostTs = await readFile(new URL('../functions/api/autopost.ts', import.meta.url), 'utf8').catch(() => '');
+if (autopostTs.includes('writeByeoliPost')) {
+  // 작가가 붙어 있으면 문장 풀 폴백이 반드시 남아 있어야 한다 (크론 발행은 자율 시스템)
+  if (!autopostTs.includes('byeolli_posts.json') || !autopostTs.includes('candidates')) {
+    errors.push('autopost: 문장 풀 폴백이 사라졌다 — Claude 장애 시 발행이 멈춘다');
+  }
+}
+const writerTs = await readFile(new URL('../functions/api/_byeoli-writer.ts', import.meta.url), 'utf8').catch(() => '');
+if (writerTs && !writerTs.includes('return null')) {
+  errors.push('_byeoli-writer: 실패 시 null 반환(폴백 신호)이 없다');
+}
+
 if (errors.length) {
   console.error(`validate:ops FAIL — ${errors.length}건`);
   for (const e of errors) console.error(`  - ${e}`);

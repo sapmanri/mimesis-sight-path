@@ -8,6 +8,7 @@
 import byeolliPosts from '../byeolli_posts.json';
 import { dispatchToThreads, type Env as AutopostEnv } from '../autopost';
 import { appendPublishLog } from '../_publish-log';
+import { writeByeoliPost } from '../_byeoli-writer';
 import type { CaptureMeta } from './capture';
 
 type Env = AutopostEnv;
@@ -48,24 +49,40 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const now = Date.now();
   const feedRaw = await env.PLANET.get(FEED_KEY);
-  const feed: unknown[] = feedRaw ? JSON.parse(feedRaw) : [];
+  const feed: { text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
+
+  // BUILD 425-D: 엽서의 장면·일기로 Claude가 글을 쓴다. 실패 시 문장 풀 폴백.
+  let text = chosen.text;
+  let textIndex: number | null = pick;
+  const written = await writeByeoliPost(env, {
+    targetLabel: meta.targetLabel ?? null,
+    byeoliAction: meta.byeoliAction ?? null,
+    skyPhase: meta.skyPhase ?? null,
+    weather: meta.weather ?? null,
+    diaryLines: meta.diaryLines ?? [],
+    recentTexts: feed.slice(0, 5).map((p) => p.text ?? '').filter(Boolean),
+  });
+  if (written) { text = written; textIndex = null; }
+
   await env.PLANET.put(FEED_KEY, JSON.stringify([{
-    id: `bot-${now}`, t: now, title: '', text: chosen.text, img, icon: '🌏',
+    id: `bot-${now}`, t: now, title: '', text, img, icon: '🌏',
     likes: Math.floor(Math.random() * 12) + 1, comments: [],
   }, ...feed].slice(0, MAX_POSTS)));
-  await env.PLANET.put(RECENT_KEY, JSON.stringify([pick, ...recent].slice(0, RECENT_KEEP)));
+  if (textIndex !== null) {
+    await env.PLANET.put(RECENT_KEY, JSON.stringify([pick, ...recent].slice(0, RECENT_KEEP)));
+  }
 
-  const threads = await dispatchToThreads(env, chosen.text, img, false);
+  const threads = await dispatchToThreads(env, text, img, false);
 
   await appendPublishLog(env, {
     invokedAt: now,
     result: threads.ok ? 'success' : 'threads_failed',
     httpStatus: 200,
-    textIndex: pick,
+    textIndex,
     imageKey: meta.r2Key,
     threads: { attempted: threads.attempted, ok: threads.ok, errorCode: threads.errorCode, requestId: threads.requestId },
   }).catch(() => {});
 
-  console.log(`ops/publish-now by=${requestedBy} capture=${meta.captureId} ok=${threads.ok}`);
-  return json(200, { ok: true, textIndex: pick, threads: { ok: threads.ok, errorCode: threads.errorCode } });
+  console.log(`ops/publish-now by=${requestedBy} capture=${meta.captureId} ok=${threads.ok} generated=${textIndex === null}`);
+  return json(200, { ok: true, textIndex, generated: textIndex === null, text, threads: { ok: threads.ok, errorCode: threads.errorCode } });
 };

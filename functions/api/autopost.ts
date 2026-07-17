@@ -7,6 +7,7 @@
 
 import byeolliPosts from './byeolli_posts.json';
 import { appendPublishLog, bump401Bucket } from './_publish-log';
+import { writeByeoliPost } from './_byeoli-writer';
 
 // 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
 // 크론 경로의 동작은 그대로 — export만 추가 (자율 시스템 무변경 원칙).
@@ -18,6 +19,7 @@ export interface Env {
   THREADS_APP_SECRET?: string;   // BUILD 417: 토큰 자동 갱신용 (threads-auth.ts와 동일 앱)
   THREADS_TOKEN?: string;        // BUILD 417: (선택) 대시보드 토큰 생성기로 만든 장기 토큰 — 첫 실행 시 KV로 이관
   THREADS_USER_ID?: string;      // BUILD 417: (미사용 — /me 자동 조회로 대체. 남아 있어도 무해)
+  ANTHROPIC_API_KEY?: string;    // BUILD 425-D: 별이 문장 작가 (없으면 문장 풀 폴백)
 }
 
 const FEED_KEY = 'feed';
@@ -233,14 +235,42 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ? imgPool[Math.floor(Math.random() * imgPool.length)]
     : null;
 
-  // 피드에 prepend
+  // 피드 로드 (425-D 작가의 반복 방지 문맥 + 아래 prepend에 재사용)
   const feedRaw = await env.PLANET.get(FEED_KEY);
-  const feed: unknown[] = feedRaw ? JSON.parse(feedRaw) : [];
+  const feed: { text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
+
+  // BUILD 425-D: 엽서(메타 있는 이미지) 발행이면 Claude가 그 장면의 글을 쓴다.
+  // 어떤 실패도 발행을 막지 않는다 — 문장 풀 폴백이 항상 살아 있다 (자율 시스템 보호).
+  let text = chosen.text;
+  let textIndex: number | null = pick;
+  if (img) {
+    try {
+      const key = img.match(/captures\/[^?#]+/)?.[0];
+      const cmRaw = key ? await env.PLANET.get('capture_meta') : null;
+      const cm = cmRaw
+        ? (JSON.parse(cmRaw) as { r2Key: string; targetLabel?: string | null; byeoliAction?: string | null; skyPhase?: string | null; weather?: string | null; diaryLines?: string[] }[])
+          .find((m) => m.r2Key === key)
+        : null;
+      if (cm) {
+        const written = await writeByeoliPost(env, {
+          targetLabel: cm.targetLabel ?? null,
+          byeoliAction: cm.byeoliAction ?? null,
+          skyPhase: cm.skyPhase ?? null,
+          weather: cm.weather ?? null,
+          diaryLines: cm.diaryLines ?? [],
+          recentTexts: feed.slice(0, 5).map((p) => p.text ?? '').filter(Boolean),
+        });
+        if (written) { text = written; textIndex = null; } // 풀 인덱스 아님 — 별이가 새로 쓴 글
+      }
+    } catch { /* 폴백 유지 */ }
+  }
+
+  // 피드에 prepend
   const post = {
     id: `bot-${Date.now()}`,
     t: Date.now(),
     title: '',
-    text: chosen.text,
+    text,
     img,
     icon: '🌏',
     likes: Math.floor(Math.random() * 12) + 1,
@@ -249,14 +279,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const nextFeed = [post, ...feed].slice(0, MAX_POSTS);
   await env.PLANET.put(FEED_KEY, JSON.stringify(nextFeed));
 
-  // 최근 인덱스 갱신
-  const nextRecent = [pick, ...recent].slice(0, RECENT_KEEP);
-  await env.PLANET.put(RECENT_KEY, JSON.stringify(nextRecent));
+  // 최근 인덱스 갱신 — 풀 문장을 실제로 썼을 때만 (생성 글이면 풀 로테이션 아끼기)
+  if (textIndex !== null) {
+    const nextRecent = [pick, ...recent].slice(0, RECENT_KEEP);
+    await env.PLANET.put(RECENT_KEY, JSON.stringify(nextRecent));
+  }
 
   // BUILD 417: 같은 내용을 진짜 Threads로. ?draft=1 이면 초안으로만.
   const url = new URL(request.url);
   const draft = url.searchParams.get('draft') === '1';
-  const threads = await dispatchToThreads(env, chosen.text, img, draft);
+  const threads = await dispatchToThreads(env, text, img, draft);
 
   // 정상 실행 1건 기록 — Layer1(운영)·Layer2(별이 일지) 소스 모두 담는다. draft는 로그 제외.
   if (!draft) {
@@ -264,13 +296,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       invokedAt: Date.now(),
       result: threads.ok ? 'success' : 'threads_failed',
       httpStatus: 200,
-      textIndex: pick,
+      textIndex,
       imageKey: img ? (img.match(/captures\/[^?#]+/)?.[0] ?? null) : null,
       threads: { attempted: threads.attempted, ok: threads.ok, errorCode: threads.errorCode, requestId: threads.requestId },
     }).catch(() => {});
   }
 
-  return new Response(JSON.stringify({ ok: true, posted: chosen.text, index: pick, img: !!img, threads }), {
+  return new Response(JSON.stringify({ ok: true, posted: text, index: textIndex, generated: textIndex === null, img: !!img, threads }), {
     status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
   });
 };

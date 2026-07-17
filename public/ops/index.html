@@ -607,7 +607,9 @@ async function publishPostcard(m){
   const r = await postPublishNow(m.captureId);
   if (!r.ok) { alert(`발행 실패: ${r.error ?? '알 수 없음'}`); return; }
   alert(r.threads.ok
-    ? `발행됐다 ✓ — ${r.textIndex}번째 문장과 함께.`
+    ? (r.generated
+      ? `발행됐다 ✓ — 별이가 이 장면의 글을 새로 썼다:\n\n${r.text}`
+      : `발행됐다 ✓ — ${r.textIndex}번째 문장과 함께.`)
     : `내부 피드에는 실렸지만 Threads가 거부했다 (${r.threads.errorCode ?? '?'}) — 운영 로그를 보자.`);
   await pollFeed();
   await pollPublishLog();
@@ -930,9 +932,11 @@ async function pollPublishLog(){
     if (r.result === 'key_missing') {
       lines.push('열쇠가 설정돼 있지 않아 나서지 못했다. (503)');
     } else {
-      if (typeof r.textIndex === 'number') {
+      {
         const post = feed.find(p => Math.abs((p.t ?? 0) - r.invokedAt) < 120000);
-        lines.push(`별이가 ${r.textIndex}번째 문장을 골랐다.` + (post?.text ? ` — “${post.text}”` : ''));
+        lines.push((typeof r.textIndex === 'number'
+          ? `별이가 ${r.textIndex}번째 문장을 골랐다.`
+          : '별이가 오늘의 문장을 새로 썼다.') + (post?.text ? ` — “${post.text}”` : ''));
       }
       if (r.imageKey) {
         const cm = lastCaptures.find(c => c.r2Key === r.imageKey);
