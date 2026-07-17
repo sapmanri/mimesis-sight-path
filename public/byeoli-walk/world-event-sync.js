@@ -32,3 +32,4 @@
   window.setInterval(poll, 15000);
   window.setTimeout(poll, 3000); // 초기 진입 직후 한 번 (모듈 로드 여유)
 })();
+// deploy-marker: e538774-followup 1784305712
