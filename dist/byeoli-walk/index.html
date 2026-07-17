@@ -6959,6 +6959,12 @@ const WorldEventStage = {
   _finish(active){ this._maybeLog(active); },
 };
 const WorldEventPlayer = WorldEventStage;  // 하위 호환 별칭 (기존 참조 유지)
+// BUILD 423-EVENTS: World Director 소비 훅 — 외부 폴링 스크립트(world-event-sync.js)가
+// 모두에게 같은 인스턴스를 무대에 올린다. start/isActive 최소 표면만 노출(상태 조작 아님).
+window.__worldEventStage = {
+  start:(env)=>WorldEventPlayer.start(env),
+  isActive:()=>!!WorldEventStage.active,
+};
 
 // Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla|meteor-shower|ufo[&eventOffset=초]
 // ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
@@ -7111,5 +7117,6 @@ document.addEventListener('visibilitychange', ()=>{
 boot();
 requestAnimationFrame(loop);
 </script>
+<script src="/byeoli-walk/world-event-sync.js" defer></script>
 </body>
 </html>

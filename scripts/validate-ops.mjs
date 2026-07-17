@@ -16,10 +16,10 @@ const registrySource = await readFile(registryPath, 'utf8');
 
 const errors = [];
 
-// ── 1. 쓰기 네트워크 호출 0건 ─────────────────────────────
-// 콘솔의 네트워크 수단은 옵션 없는 fetch(GET)뿐이어야 한다.
+// ── 1. 쓰기 네트워크 호출 — 명시적 예외 1곳(이벤트 예약)만 ──
+// 콘솔의 네트워크 수단은 fetch뿐. 쓰기는 postEventSchedule() 단 한 곳:
+// 423-EVENTS 예약(의도 기록)은 read-only 원칙의 선언된 예외다(§5-2 · Vase 판정 2026-07-17).
 for (const [pattern, why] of [
-  [/method\s*:/, 'fetch에 method 옵션 사용(쓰기 가능성)'],
   [/XMLHttpRequest/, 'XMLHttpRequest 사용'],
   [/sendBeacon/, 'sendBeacon 사용'],
   [/new\s+WebSocket/, 'WebSocket 사용'],
@@ -28,13 +28,25 @@ for (const [pattern, why] of [
 ]) {
   if (pattern.test(html)) errors.push(`쓰기 경로 금지 위반: ${why}`);
 }
+const methodUses = [...html.matchAll(/method\s*:\s*['"]([A-Z]+)['"]/g)];
+if (methodUses.length !== 1 || methodUses[0][1] !== 'POST') {
+  errors.push(`fetch method 옵션은 예약 POST 1곳만 허용 (발견 ${methodUses.length}건: ${methodUses.map((m) => m[1]).join(',')})`);
+}
+if (!/fetch\(API\.eventSchedule,\s*\{\s*\n?\s*method:\s*'POST'/.test(html)) {
+  errors.push('예약 POST가 postEventSchedule(API.eventSchedule) 형태가 아니다 — 쓰기 표면은 한 곳으로 고정');
+}
+if ((html.match(/method\s*:/g) ?? []).length !== 1) {
+  errors.push('method: 사용이 postEventSchedule 밖에도 있다');
+}
 
-// fetch 대상은 read-only 4종 허용목록만.
+// fetch 대상은 허용목록만 (읽기 5종 + 쓰기 예외 1종).
 const ALLOWED_APIS = new Set([
   '/api/byeoli/state',
   '/api/byeoli/health',
   '/api/ops/publish-log',
   '/api/feed',
+  '/api/ops/event-schedule', // 쓰기 예외 — POST는 위 규칙이 1곳으로 제한
+  '/api/world-event/active',
 ]);
 for (const m of html.matchAll(/['"](\/api\/[^'"]*)['"]/g)) {
   if (!ALLOWED_APIS.has(m[1])) errors.push(`허용목록 밖 API 경로: ${m[1]}`);
@@ -126,6 +138,27 @@ if (!middleware.includes("host === OPS_HOST && url.pathname === '/live'")
 // 콘솔 iframe은 same-origin /live만 가리켜야 한다 (공개 호스트 직접 참조 금지)
 if (!html.includes('src="/live?mode=live"')) {
   errors.push('live iframe이 same-origin /live?mode=live를 가리키지 않는다');
+}
+
+// ── 7. 423-EVENTS 소비 경로 (걷기 앱) ─────────────────────
+const walkHtml = await readFile(new URL('../public/byeoli-walk/index.html', import.meta.url), 'utf8');
+const syncJs = await readFile(new URL('../public/byeoli-walk/world-event-sync.js', import.meta.url), 'utf8').catch(() => '');
+if (!walkHtml.includes('world-event-sync.js')) {
+  errors.push('걷기 앱에 world-event-sync.js 태그가 없다');
+}
+if (!walkHtml.includes('window.__worldEventStage')) {
+  errors.push('걷기 앱에 World Director 소비 훅(window.__worldEventStage)이 없다');
+}
+if (!syncJs.includes('/api/world-event/active')) {
+  errors.push('world-event-sync.js가 active 엔드포인트를 폴링하지 않는다');
+}
+if (/method\s*:|XMLHttpRequest|sendBeacon/.test(syncJs)) {
+  errors.push('world-event-sync.js는 읽기 전용이어야 한다 (쓰기 수단 발견)');
+}
+// 감사 하드룰: 예약 API는 Access 이메일을 기록해야 한다
+const schedTs = await readFile(new URL('../functions/api/ops/event-schedule.ts', import.meta.url), 'utf8').catch(() => '');
+if (!schedTs.includes('cf-access-authenticated-user-email')) {
+  errors.push('event-schedule API에 감사 기록(Access 이메일)이 없다');
 }
 
 if (errors.length) {
