@@ -119,6 +119,14 @@ if (!middleware.includes("url.pathname === '/ops'")) {
 if (!middleware.includes("host === OPS_HOST && url.pathname === '/'")) {
   errors.push('미들웨어에 Ops 호스트 루트 콘솔 서빙 분기가 없다');
 }
+if (!middleware.includes("host === OPS_HOST && url.pathname === '/live'")
+  || !middleware.includes('mimesis.byeoli.onboarding.v1')) {
+  errors.push('미들웨어에 Ops 호스트 /live(온보딩 주입) 분기가 없다');
+}
+// 콘솔 iframe은 same-origin /live만 가리켜야 한다 (공개 호스트 직접 참조 금지)
+if (!html.includes('src="/live?mode=live"')) {
+  errors.push('live iframe이 same-origin /live?mode=live를 가리키지 않는다');
+}
 
 if (errors.length) {
   console.error(`validate:ops FAIL — ${errors.length}건`);

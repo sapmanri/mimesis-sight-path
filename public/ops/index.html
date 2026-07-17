@@ -107,8 +107,11 @@
   <aside class="live">
     <h1>BYEOLI OPS<span class="ro">관측소 · read-only</span></h1>
     <div class="frame">
-      <iframe id="liveFrame" src="https://byeoli.sapmanri.com/?mode=live"
-              sandbox="allow-scripts allow-same-origin" title="별이 라이브"></iframe>
+      <!-- same-origin /live — 미들웨어가 온보딩 플래그를 주입해 게이트 없이 바로 라이브.
+           Wake Lock은 콘솔에서 불필요 → 명시적으로 거부(설계 §1). -->
+      <iframe id="liveFrame" src="/live?mode=live"
+              sandbox="allow-scripts allow-same-origin"
+              allow="screen-wake-lock 'none'" title="별이 라이브"></iframe>
       <div class="shield" title="콘솔에서는 조작할 수 없습니다"></div>
     </div>
     <div class="liveMeta">
@@ -197,6 +200,7 @@ const API = {
 
 const EVENTS = JSON.parse(document.getElementById('ops-events').textContent);
 const ACT_KO = { observe:'관찰', rest:'쉼', record:'사진', wonder:'궁금' };
+const STATE_KO = { walk:'걷는 중', acting:'행동 중' }; // 실제 값은 walk/acting (walking 아님 — 코드 확인 2026-07-17)
 const PHASE_KO = { dawn:'새벽', day:'낮', dusk:'해질녘', night:'밤' };
 const WEATHER_KO = { clear:'맑음', rain:'비', snow:'눈', fog:'안개', cloudy:'흐림' };
 const IMG_BASE = 'https://pub-8ec6440aae5545379fcfdd50a243847a.r2.dev/';
@@ -253,14 +257,14 @@ function renderState(s){
   $('seqLine').textContent = `seq ${s.sequence ?? '—'} · ${typeof s.updatedAt === 'number' ? ago(s.updatedAt) : '—'} 갱신`;
 
   const acting = b.state === 'acting' && b.actAction;
-  const verb = acting ? `${ko(ACT_KO, b.actAction)} 중` : (b.state === 'walking' ? '걷는 중' : (b.state ?? '—'));
+  const verb = acting ? `${ko(ACT_KO, b.actAction)} 중` : (STATE_KO[b.state] ?? b.state ?? '—');
   $('tdAction').textContent = sessionStartedAt
     ? `${verb} · 이번 세션 ${dur(Date.now() - sessionStartedAt)}`
     : verb;
   $('tdCounts').textContent =
     `기억 ${tel.memories ?? '—'} · 일기 ${tel.diary ?? '—'} (누적)`;
 
-  $('stAction').textContent = acting ? `${ko(ACT_KO, b.actAction)} (${b.actAction})` : (b.state ?? '—');
+  $('stAction').textContent = acting ? `${ko(ACT_KO, b.actAction)} (${b.actAction})` : (STATE_KO[b.state] ?? b.state ?? '—');
   $('stTarget').textContent = b.actTarget ?? '—';
   $('stFatigue').textContent = typeof tel.fatigue === 'number' ? tel.fatigue.toFixed(3) : '—';
 
@@ -330,12 +334,32 @@ async function pollHealth(){
   } catch (e) { /* 유지 */ }
 }
 
+/* ── feed: 오늘 사진 (60s) — publish-log와 독립 렌더 ── */
+let lastFeed = [];
+async function pollFeed(){
+  try { lastFeed = await getJson(API.feed); } catch (e) { return; }
+  const todayKey = kstDayKey(Date.now());
+  const todayPosts = lastFeed.filter(p => typeof p.t === 'number' && kstDayKey(p.t) === todayKey);
+  const imgs = todayPosts.map(p => p.img).filter(Boolean);
+  $('tdPhotos').textContent = `사진 ${imgs.length}장 — 오늘 발행 기준`;
+  const shots = $('shots'); shots.textContent = '';
+  for (const u of imgs) {
+    const img = document.createElement('img');
+    img.loading = 'lazy'; img.alt = '오늘 발행 사진';
+    img.src = u.startsWith('http') ? u : IMG_BASE + u.replace(/^\//,'');
+    shots.appendChild(img);
+  }
+  if (!imgs.length) {
+    const p = document.createElement('div'); p.className = 'note';
+    p.textContent = '오늘 발행에 실린 사진이 아직 없다.'; shots.appendChild(p);
+  }
+}
+
 /* ── publish-log: 슬롯 · 별이 일지 · 운영 로그 (60s) ── */
 async function pollPublishLog(){
   let log = null;
   try { log = await getJson(API.publishLog); } catch (e) { return; }
-  let feed = [];
-  try { feed = await getJson(API.feed); } catch (e) { /* 문장 원문 없이 표시 */ }
+  const feed = lastFeed; // 문장 원문 대조용 — 실패 시 원문 없이 표시
 
   const todayKey = kstDayKey(Date.now());
   const missed = new Set(log.missedSlots ?? []);
@@ -412,21 +436,6 @@ async function pollPublishLog(){
     tbody.appendChild(tr);
   }
 
-  /* 오늘 사진 — 오늘 feed의 img */
-  const todayPosts = feed.filter(p => typeof p.t === 'number' && kstDayKey(p.t) === todayKey);
-  const imgs = todayPosts.map(p => p.img).filter(Boolean);
-  $('tdPhotos').textContent = `사진 ${imgs.length}장 — 오늘 발행 기준`;
-  const shots = $('shots'); shots.textContent = '';
-  for (const u of imgs) {
-    const img = document.createElement('img');
-    img.loading = 'lazy'; img.alt = '오늘 발행 사진';
-    img.src = u.startsWith('http') ? u : IMG_BASE + u.replace(/^\//,'');
-    shots.appendChild(img);
-  }
-  if (!imgs.length) {
-    const p = document.createElement('div'); p.className = 'note';
-    p.textContent = '오늘 발행에 실린 사진이 아직 없다.'; shots.appendChild(p);
-  }
 }
 
 function iso10(dayKey){
@@ -435,9 +444,11 @@ function iso10(dayKey){
   return `${y}-${p(mo+1)}-${p(d)}`;
 }
 
-pollState(); pollHealth(); pollPublishLog();
+pollState(); pollHealth();
+pollFeed().then(pollPublishLog); // 일지의 문장 원문 대조는 feed가 먼저
 setInterval(pollState, 5000);
 setInterval(pollHealth, 60000);
+setInterval(pollFeed, 60000);
 setInterval(pollPublishLog, 60000);
 </script>
 </body>

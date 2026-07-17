@@ -73,6 +73,25 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return htmlResponse(await asset.text(), asset);
   }
 
+  // 422-OPS-B: 콘솔 iframe용 same-origin 라이브 — 공개 앱과 같은 변환(CATALOG → 셸)에
+  // 온보딩 완료 플래그만 주입한다. 원본 무변경, 공개 호스트 무영향. 조작은 콘솔 오버레이가 차단.
+  if (host === OPS_HOST && url.pathname === '/live') {
+    const asset = await context.env.ASSETS.fetch(new URL('/byeoli-walk/', url));
+    if (!asset.ok) return asset;
+    let html = await asset.text();
+    try {
+      html = transformWalkHtml(html);
+    } catch (err) {
+      return new Response(err instanceof Error ? err.message : String(err), { status: 500 });
+    }
+    html = transformWalkShell(html, url);
+    html = html.replace(
+      '<head>',
+      `<head>\n<script>try{localStorage.setItem('mimesis.byeoli.onboarding.v1','1')}catch(e){}</script>`,
+    );
+    return htmlResponse(html, asset);
+  }
+
   // manifest는 한 파일이 원본. 앱이 사는 위치가 호스트마다 다르므로 start_url/scope/id만
   // 그 호스트에 맞게 조정해 내보낸다 (공개 도메인=루트, pages.dev=/byeoli-walk/).
   if (url.pathname === MANIFEST_PATH) {
