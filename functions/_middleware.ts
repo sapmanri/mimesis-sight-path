@@ -8,6 +8,7 @@ import { transformWalkHtml } from './byeoli-walk/_middleware';
  * pages.dev 의 루트(3D 앱)와 /byeoli-walk/ 는 변화 없음.
  */
 const PUBLIC_WALK_HOST = 'byeoli.sapmanri.com';
+const OPS_HOST = 'byeoli-ops.sapmanri.com';
 const MANIFEST_PATH = '/byeoli-walk/manifest.webmanifest';
 /** 앱이 pages.dev에서 실제로 사는 경로 — 커스텀 도메인에서는 루트 */
 const WALK_BASE = '/byeoli-walk/';
@@ -51,6 +52,14 @@ interface Env {
 export const onRequest: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url);
   const host = (context.request.headers.get('host') ?? url.hostname).toLowerCase();
+
+  // 422-OPS: Ops API는 운영 호스트 전용. 다른 호스트에서 /api/ops/*는 존재 자체를 숨긴다(404).
+  // 인증(Cloudflare Access)은 운영 호스트 앞단에서 처리 — 여기 도달했다면 Access 통과분.
+  if (url.pathname.startsWith('/api/ops/') && host !== OPS_HOST) {
+    return new Response(JSON.stringify({ error: 'not_found' }), {
+      status: 404, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    });
+  }
 
   // manifest는 한 파일이 원본. 앱이 사는 위치가 호스트마다 다르므로 start_url/scope/id만
   // 그 호스트에 맞게 조정해 내보낸다 (공개 도메인=루트, pages.dev=/byeoli-walk/).
