@@ -1651,7 +1651,11 @@ function update(dt){
   if(flash.on) flash.timer-=dt, flash.timer<=0 && (flash.on=false);
   if(byeoli.state==='acting'){
     byeoli.actTimer-=dt; brain.tick(dt,false);
-    if(byeoli.actTimer<=0){ byeoli.state='walk'; byeoli.actAction=null; }
+    if(byeoli.actTimer<=0){
+      // BUILD 426: '사진' 행동을 마치는 순간, 그 장면이 진짜 사진이 된다 (로컬 앨범)
+      if(byeoli.actAction==='record' && typeof AlbumCapture!=='undefined') AlbumCapture.onRecordDone();
+      byeoli.state='walk'; byeoli.actAction=null;
+    }
     return;
   }
   brain.tick(dt,true);
@@ -7052,7 +7056,9 @@ function composePostcard(opts){
   const sig=[acting?actKo(byeoli.actAction):null, targetLabel, dur].filter(Boolean).join(' · ');
   g.font='30px '+FONT;
   if(sig){ g.fillStyle='#A7B49A'; g.fillText(sig,64,CH-64); }
-  g.fillStyle='#5d6a5f'; g.textAlign='right'; g.fillText('별이 산책',CW-64,CH-64); g.textAlign='left';
+  g.fillStyle='#5d6a5f'; g.textAlign='right';
+  g.font='24px '+FONT; g.fillText('별이 산책 · byeoli.sapmanri.com',CW-64,CH-64); // 엽서가 어디서 왔는지 — 공유의 귀환 주소
+  g.textAlign='left';
   const meta={
     capturedAt:Date.now(),
     zonePct: worldLen ? Math.round(byeoli.worldX/worldLen*1000)/10 : null,
@@ -7065,6 +7071,172 @@ function composePostcard(opts){
   };
   return new Promise(res=>c.toBlob(b=>res(b?{blob:b,meta}:null),'image/jpeg',0.92));
 }
+
+/* =====================================================================
+   BUILD 426 — 별이의 사진첩 (로컬 앨범 + 공유)
+   별이가 '사진' 행동을 마칠 때마다 그 장면의 엽서가 이 브라우저의 IndexedDB에
+   쌓인다. 서버 전송 없음 — 전부 관찰자의 것. 공유는 Web Share(이미지)로,
+   엽서에는 코드·키·개인 데이터가 그려지지 않는다 (composePostcard 계약).
+   ===================================================================== */
+const Album={
+  DBNAME:'byeoli-album', STORE:'shots', MAX:30, _db:null,
+  open(){ return new Promise((res,rej)=>{
+    if(this._db) return res(this._db);
+    const rq=indexedDB.open(this.DBNAME,1);
+    rq.onupgradeneeded=()=>{ rq.result.createObjectStore(this.STORE,{keyPath:'id'}); };
+    rq.onsuccess=()=>{ this._db=rq.result; res(this._db); };
+    rq.onerror=()=>rej(rq.error);
+  }); },
+  async add(shot){
+    const db=await this.open();
+    await new Promise((res,rej)=>{
+      const tx=db.transaction(this.STORE,'readwrite');
+      tx.objectStore(this.STORE).put(shot);
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+    });
+    const all=await this.list();
+    for(const s of all.slice(this.MAX)) await this.remove(s.id);   // 오래된 것부터 흘려보냄
+  },
+  async list(){
+    const db=await this.open();
+    return new Promise((res,rej)=>{
+      const rq=db.transaction(this.STORE,'readonly').objectStore(this.STORE).getAll();
+      rq.onsuccess=()=>res((rq.result||[]).sort((a,b)=>b.at-a.at));
+      rq.onerror=()=>rej(rq.error);
+    });
+  },
+  async remove(id){
+    const db=await this.open();
+    return new Promise((res,rej)=>{
+      const tx=db.transaction(this.STORE,'readwrite');
+      tx.objectStore(this.STORE).delete(id);
+      tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+    });
+  },
+};
+
+const AlbumCapture={
+  lastAt:0,
+  async onRecordDone(){
+    const now=Date.now();
+    if(now-this.lastAt<60000) return;          // 셔터 과열 방지 — 1분에 한 장이면 충분
+    try{
+      const shot=await composePostcard({force:true});
+      if(!shot) return;
+      await Album.add({ id:'shot-'+now, at:now, blob:shot.blob, meta:shot.meta });
+      this.lastAt=now;
+      AlbumUi.refreshChip();
+      AlbumUi.flash();                          // 조용한 셔터 표시
+    }catch(e){ /* 앨범 실패가 산책을 방해하지 않는다 */ }
+  },
+};
+
+const AlbumUi={
+  _chip:null, _overlay:null, _count:0,
+  init(){
+    const chip=document.createElement('button');
+    chip.id='albumChip'; chip.type='button';
+    chip.style.cssText='position:fixed;left:8px;bottom:8px;z-index:49;min-height:44px;display:none;align-items:center;gap:6px;padding:8px 12px;border:1px solid #4f5d4f;border-radius:8px;background:rgba(10,18,11,.88);color:#b9c7b5;font:11px ui-monospace,monospace;cursor:pointer;-webkit-tap-highlight-color:transparent';
+    chip.addEventListener('click',()=>this.openOverlay());
+    document.body.appendChild(chip); this._chip=chip;
+    this.refreshChip();
+  },
+  async refreshChip(){
+    try{
+      const shots=await Album.list();
+      this._count=shots.length;
+      if(this._count>0){ this._chip.style.display='flex'; this._chip.textContent=`📷 별이의 사진첩 ${this._count}`; }
+      else this._chip.style.display='none';
+    }catch(e){}
+  },
+  flash(){
+    const f=document.createElement('div');
+    f.style.cssText='position:fixed;inset:0;background:#fff;opacity:.18;z-index:48;pointer-events:none;transition:opacity .5s';
+    document.body.appendChild(f);
+    requestAnimationFrame(()=>{ f.style.opacity='0'; setTimeout(()=>f.remove(),600); });
+  },
+  async openOverlay(){
+    this.closeOverlay();
+    const shots=await Album.list();
+    const ov=document.createElement('div');
+    ov.id='albumOverlay';
+    ov.style.cssText='position:fixed;inset:0;z-index:120;background:rgba(8,12,9,.96);overflow-y:auto;padding:18px 14px 40px;font-family:ui-monospace,monospace;color:#b9c7b5';
+    const head=document.createElement('div');
+    head.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
+    head.innerHTML='<span style="font-size:13px;letter-spacing:.08em;color:#A7B49A">📷 별이의 사진첩</span>';
+    const close=document.createElement('button'); close.type='button'; close.textContent='닫기';
+    close.style.cssText='min-height:40px;padding:6px 16px;border:1px solid #2b352a;border-radius:8px;background:none;color:#5d6a5f;cursor:pointer';
+    close.addEventListener('click',()=>this.closeOverlay());
+    head.appendChild(close); ov.appendChild(head);
+    if(!shots.length){
+      const p=document.createElement('div'); p.style.cssText='color:#5d6a5f;font-size:12px';
+      p.textContent='아직 찍은 사진이 없어요. 별이가 무언가를 사진에 담으면 여기에 남습니다.';
+      ov.appendChild(p);
+    }else{
+      const grid=document.createElement('div');
+      grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px';
+      for(const s of shots){
+        const img=document.createElement('img');
+        img.src=URL.createObjectURL(s.blob);
+        img.style.cssText='width:100%;aspect-ratio:4/5;object-fit:cover;border:1px solid #2b352a;border-radius:4px;cursor:pointer;display:block';
+        img.addEventListener('click',()=>this.openViewer(s));
+        grid.appendChild(img);
+      }
+      ov.appendChild(grid);
+      const note=document.createElement('div');
+      note.style.cssText='margin-top:12px;font-size:10px;color:#5d6a5f';
+      note.textContent=`이 브라우저에만 저장됩니다 · 최근 ${Album.MAX}장 보관`;
+      ov.appendChild(note);
+    }
+    document.body.appendChild(ov); this._overlay=ov;
+  },
+  closeOverlay(){
+    if(this._overlay){ this._overlay.remove(); this._overlay=null; }
+    const v=document.getElementById('albumViewer'); if(v) v.remove();
+  },
+  openViewer(shot){
+    const old=document.getElementById('albumViewer'); if(old) old.remove();
+    const v=document.createElement('div');
+    v.id='albumViewer';
+    v.style.cssText='position:fixed;inset:0;z-index:130;background:rgba(5,8,6,.97);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px';
+    const img=document.createElement('img');
+    img.src=URL.createObjectURL(shot.blob);
+    img.style.cssText='max-height:72vh;max-width:92vw;border:1px solid #2b352a;border-radius:4px';
+    v.appendChild(img);
+    const cap=document.createElement('div');
+    cap.style.cssText='font:11px ui-monospace,monospace;color:#5d6a5f';
+    const d=new Date(shot.at);
+    cap.textContent=`${d.getMonth()+1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`+(shot.meta&&shot.meta.targetLabel?` · ${shot.meta.targetLabel}`:'');
+    v.appendChild(cap);
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;gap:10px';
+    const mk=(label,primary,fn)=>{
+      const b=document.createElement('button'); b.type='button'; b.textContent=label;
+      b.style.cssText=`min-height:44px;padding:8px 18px;border-radius:8px;cursor:pointer;font:12px ui-monospace,monospace;border:1px solid ${primary?'#A7B49A':'#2b352a'};background:${primary?'#A7B49A':'none'};color:${primary?'#0d1114':'#5d6a5f'}`;
+      b.addEventListener('click',fn); row.appendChild(b);
+    };
+    mk('공유',true,async ()=>{
+      const file=new File([shot.blob],'byeoli-postcard.jpg',{type:'image/jpeg'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        try{ await navigator.share({files:[file]}); }catch(e){ /* 사용자 취소 */ }
+      }else{
+        const a=document.createElement('a'); a.href=URL.createObjectURL(shot.blob);
+        a.download='byeoli-postcard.jpg'; a.click();
+      }
+    });
+    mk('저장',false,()=>{
+      const a=document.createElement('a'); a.href=URL.createObjectURL(shot.blob);
+      a.download='byeoli-postcard.jpg'; a.click();
+    });
+    mk('삭제',false,async ()=>{ await Album.remove(shot.id); v.remove(); this.openOverlay(); this.refreshChip(); });
+    mk('닫기',false,()=>v.remove());
+    v.appendChild(row);
+    document.body.appendChild(v);
+  },
+};
+try{ AlbumUi.init(); }catch(e){ /* 앨범 UI 실패가 산책을 막지 않는다 */ }
+// QA 훅 (421-A 실기기 점검용): 촬영·열기만 노출, 데이터 접근 표면 아님
+window.__album={ shoot:()=>AlbumCapture.onRecordDone(), open:()=>AlbumUi.openOverlay() };
 
 // Sandbox 전용 테스트 훅: /byeoli-walk/?event=godzilla|meteor-shower|ufo[&eventOffset=초]
 // ⚠ Production Live(mode==='live')에서는 query가 Authority보다 우선하면 안 되므로 무시.
