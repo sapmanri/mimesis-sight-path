@@ -38,7 +38,7 @@ KV 저장 (시간대별 분할: morning / afternoon / sunset / night)
 |---|---|---|
 | **429-A** | **Genome Interface — 완료.** `ByeoliWriter.write(context) → DiaryEntry` 경계 승격 + `_genome.ts` 계약 + `validate:writer` 회귀 게이트 | 배포됨 |
 | 429-B | Writing Studio Prompt — 문체 추출 → 문장집 생성 2단 프롬프트 계약 (425-D 문체 계약 상속) | |
-| **429-C** | **엽서 수집 탈-DOM** — `pcCollectLines`를 archive/DiaryEntry 기반으로 전환 (Vase 판정: 문장집 적용 **전에** 한다) | |
+| **429-C** | **엽서 수집 탈-DOM — 완료.** archive를 별이의 기억 원본으로 승격 + `selectDiaryEntriesForCapture` + `validate:postcard` | 배포됨 |
 | 429-D | 시간대별 문장집 생성 + KV 캐시 — `book:<YYYY-MM-DD>:<slot>` 4분할 | |
 | 429-E | 클라이언트 교체 — `ByeoliWriter.write` 내부만 문장집 우선, 실패 시 Rule | |
 | 429-F | Rule Brain **영구 폴백** + 회귀 검증 | |
@@ -53,6 +53,20 @@ KV 저장 (시간대별 분할: morning / afternoon / sunset / night)
 - **폴백**: `null`·예외·Promise·빈 문장·공백·`observer` 불일치·`source` 불량·길이 초과(>120) → 전부 즉시 Rule.
 - **경계 바깥 불변**: `pushMsg`·`Profile.bumpDiary`·`tally`·`archive`·`maybeDiary` 조건/확률·900ms 타이밍 전부 그대로.
 - QA 훅 `window.__writer.fail(true)` — 실기기에서 폴백 경로를 직접 검증.
+
+## 3-C. 429-C 확정 계약 (Vase 보정 반영, 배포됨)
+
+**archive = 별이의 기억 원본(Source of Truth)** — UI 저장소가 아니라 관찰의 연대기. 엽서·Threads·Writing Studio·OPS·통계가 전부 여기서 읽는다.
+
+- **DiaryEntry 최종 스키마**: `observer · kind · eventId · action · targetType · targetName · targetLabel · duration · mood · createdAt · date · epoch · line · source · bookId · bookSlot · intent`
+  - `kind`: `diary | act | rare | world | return` (pass는 관찰이 아니므로 기록 안 함)
+  - `mood`: `observe | wonder | rest | photo` — Writing Studio(429-B)가 그대로 읽는다
+  - `targetType`(dandelion, 기계용) ≠ `targetName`(홀씨, 문장집이 바로 씀)
+- **immutable 계약**: 항목은 `Object.freeze`로 얼려서 **추가만** 한다. 문장을 나중에 바꾸지 않는다(기억이므로). 상한 **365**(별이력 1년).
+- **`selectDiaryEntriesForCapture({entries,capturedAt,eventId,targetType,limit})`** — 순수 함수, 별이+빼콩 합성 엽서의 확장점. 우선순위 **같은 eventId → 최근(시간) → 같은 targetType** (30분 전 관찰은 지금 사진과 무관). 창 5분, 빼콩 제외, 중복 제거, limit 6.
+- **capture_meta v2**: `diaryVersion:'2'` + `diaryEventIds · diarySources · diaryTargetTypes`. `diaryLines`는 유지 → autopost·`_byeoli-writer`는 **하위 호환**(옛 엽서도 동작).
+- **DOM 제거**: `pcCollectLines`·`pcOwnText` 삭제, `'· '` 라벨 파싱 제거. `validate:postcard`가 `#stream` 조회·`'· '` 파싱·잔존 함수를 게이트로 금지.
+- QA 훅 `window.__writer.entries()` — 새 DiaryEntry 구조 확인.
 
 ## 4. 계약 (429-A에서 고정)
 

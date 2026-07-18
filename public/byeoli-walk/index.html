@@ -1165,17 +1165,24 @@ function updateEncounters(dt){
     byeoli.actTargetType=nearest.type;   // 428-B: 소품 종류가 행동의 '버전'을 정한다 (벤치=앉기, 나무=기대기)
     // 430: 남의 흔적 — 누가 그랬는지는 모른다. 세상이 조금 달라져 있을 뿐.
     const trace=readTrace(nearest,'byeoli');
+    const obsMeta={ eventId:intent.id, action:intent.action, targetId:nearest.id,
+      targetType:nearest.type, targetName:def.ko, targetLabel:def.ko,
+      duration:intent.duration, intent };
     if(nearest.rare){
       // 희귀 = Signature Moment 후보
-      pushMsg('rare', `${def.emoji} ${def.ko}! 오늘 운 좋다`, null, def.ko);
+      const rareLine=`${def.emoji} ${def.ko}! 오늘 운 좋다`;
+      pushMsg('rare', rareLine, null, def.ko);
+      logObservation('rare', rareLine, obsMeta);   // 429-C: 화면과 짝, 데이터는 기억에
       diaryFor(intent, nearest, def, {rare:true, firstOfKind});
       if(!dec.passed) startAction(intent, nearest);
     } else if(dec.passed){
-      pushMsg('pass', `${def.emoji} ${def.ko} 그냥 지나침`, null);
+      pushMsg('pass', `${def.emoji} ${def.ko} 그냥 지나침`, null);   // pass는 관찰이 아니다 — 기억에 안 남김(현행 유지)
       maybeDiary(intent, nearest, def, {passed:true, firstOfKind, trace});
     } else {
       startAction(intent, nearest);
-      pushMsg('act', `${def.emoji} <span class="k">${actKo(intent.action)}</span> · ${def.ko}`, `${intent.duration}초`);
+      const actLine=`${def.emoji} <span class="k">${actKo(intent.action)}</span> · ${def.ko}`;
+      pushMsg('act', actLine, `${intent.duration}초`);
+      logObservation('act', `${def.emoji} ${actKo(intent.action)} · ${def.ko}`, obsMeta);  // 표시용 span 제거한 순수 문장
       tally.memories++; Profile.bumpMemory(); lastWinDrive=intent.action;
       maybeDiary(intent, nearest, def, {passed:false, firstOfKind, trace});
       PpaeBrain.parallel(intent, nearest); // 427: 같은 이벤트, 빼콩의 다른 기록 (공유 eventId=intent.id)
@@ -1281,11 +1288,16 @@ function normalizeTrace(trace){
   return { type:trace.kind, ageMs:Math.max(0, Date.now()-trace.at) };
 }
 const RECENT_MAX=8, DIARY_LINE_MAX=120;
+/* mood — Writing Studio(429-B)가 그대로 읽는다. 행동을 별이의 마음결로 옮긴 값. */
+const MOOD_BY_ACTION={ observe:'observe', wonder:'wonder', rest:'rest', record:'photo' };
 function buildWriterContext(intent, item, def, meta){
   return {
     event:{ eventId:intent.id??null, drive:intent.drive??null, action:intent.action??null,
       duration:intent.duration??null, targetId:intent.targetId??item.id??null,
-      targetType:item.type??null, variant:item.variant??null,
+      targetType:item.type??null,                 // 기계용 종류 (dandelion)
+      targetName:(def&&def.ko)??null,             // 사람 말 (홀씨) — 문장집이 바로 쓴다
+      mood:MOOD_BY_ACTION[intent.action]??intent.action??null,
+      variant:item.variant??null,
       rare:!!meta.rare, passed:!!meta.passed, firstOfKind:!!meta.firstOfKind,
       trace:normalizeTrace(meta.trace) },
     world:{ skyPhase:sky.phase, weather:sky.weather, season:bgSeason(byeoliDayEpoch()),
@@ -1308,9 +1320,11 @@ function validateDiaryEntry(e){
 }
 function makeDiaryEntry(ctx, line, source, bookId, bookSlot){
   const ev=ctx.event;
-  return { observer:'byeoli', eventId:ev.eventId, line,
-    targetId:ev.targetId, targetType:ev.targetType, action:ev.action,
-    date:ctx.world.byeoliDate, epoch:ctx.world.epoch,
+  return { observer:'byeoli', kind:'diary', eventId:ev.eventId, line,
+    action:ev.action, targetId:ev.targetId, targetType:ev.targetType,
+    targetName:ev.targetName, targetLabel:ev.targetName,   // 지금은 같은 값(홀씨). 분리 필드로 보존
+    duration:ev.duration, mood:ev.mood,
+    createdAt:Date.now(), date:ctx.world.byeoliDate, epoch:ctx.world.epoch,
     source, bookId:bookId??null, bookSlot:bookSlot??null,
     intent:ctx._raw.intent };   // 기존 호환용 — 새 기능은 eventId·명시 필드를 읽는다
 }
@@ -1325,6 +1339,31 @@ const ByeoliWriter={
   },
 };
 /* --- 429-A 경계 끝 (validate:writer가 여기까지를 추출해 회귀 검사한다) --- */
+
+/* =====================================================================
+   BUILD 429-C — archive는 별이의 기억 원본(Source of Truth)이다.
+   UI 저장소가 아니라 별이가 세상을 살아오며 남긴 관찰의 연대기.
+   계약: **immutable** — 항목은 얼려서 추가만 한다. 문장을 나중에 바꾸지 않는다(기억이므로).
+   엽서·Threads·Writing Studio·OPS·통계가 전부 여기서 읽는다. DOM은 표현일 뿐 데이터가 아니다.
+   ===================================================================== */
+const ARCHIVE_MAX=365;   // 별이력 1년치
+function pushArchive(entry){
+  Object.freeze(entry);              // 관찰 기록은 수정 금지 (immutable 계약)
+  archive.unshift(entry);
+  if(archive.length>ARCHIVE_MAX) archive.length=ARCHIVE_MAX;   // 오래된 것부터 흘려보냄
+  return entry;
+}
+/* 일기가 아닌 관찰 줄(act·rare·world·return)도 기억에 남긴다 — 엽서가 DOM 대신 여기서 읽도록.
+   화면 표시(pushMsg)와 짝을 이루지만, 데이터는 이 구조가 정본이다. */
+function logObservation(kind, line, o){
+  o=o||{};
+  return pushArchive({ observer:'byeoli', kind, eventId:o.eventId??null, line,
+    action:o.action??null, targetId:o.targetId??null, targetType:o.targetType??null,
+    targetName:o.targetName??null, targetLabel:o.targetLabel??o.targetName??null,
+    duration:o.duration??null, mood:o.mood??(o.action?MOOD_BY_ACTION[o.action]:null)??null,
+    createdAt:Date.now(), date:formatByeoliDate(), epoch:byeoliDayEpoch(),
+    source:'rule', bookId:null, bookSlot:null, intent:o.intent??null });
+}
 
 function maybeDiary(intent, item, def, meta){
   if(walkClock-lastDiaryAt<5) return;
@@ -1346,7 +1385,7 @@ function diaryFor(intent, item, def, meta){
   const out=()=>{
     pushMsg('diary', entry.line, null);
     tally.diary++; Profile.bumpDiary();
-    archive.unshift(entry);   // Life Archive — 기존 {line,intent,date,epoch}의 상위집합
+    pushArchive(entry);   // 기억 원본에 남긴다 (immutable, 상한 365)
     updateTally();
   };
   // 428: 행동 일기는 '바라봄' 뒤에 나온다 — 발견→멈춤→바라봄→기록. (지나침·희귀는 즉시)
@@ -7546,7 +7585,9 @@ const WorldEventStage = {
     const def=(typeof WORLD_EVENT_DEFS!=='undefined')?WORLD_EVENT_DEFS[active.eventId]:null;
     const lines=(def&&def.journalLines)||['오늘, 하늘에 무슨 일이 있었다.'];
     const idx=((active.sequence||0)>>>0)%lines.length;
-    if(typeof pushMsg==='function') pushMsg('diary','🌑 '+lines[idx],null);
+    const wl='🌑 '+lines[idx];
+    if(typeof pushMsg==='function') pushMsg('diary',wl,null);
+    if(typeof logObservation==='function') logObservation('world', wl, { eventId:active.eventInstanceId||null });  // 429-C
   },
   _finish(active){ this._maybeLog(active); },
 };
@@ -7567,41 +7608,39 @@ window.__worldEventStage = {
    정본: docs/BUILD_425_THREADS_CAPTURE_AND_REPLY.md §3
    ===================================================================== */
 window.__postcard = { compose: composePostcard };
-/* 별이 줄에서 별이의 말만 꺼낸다 — .sub(지속시간)과 .ppaeSide(빼콩 말)는 제거.
-   빼콩 문장이 별이 엽서에 섞이면 별이가 안 본 것을 봤다고 말하게 된다 (427 하드룰). */
-function pcOwnText(n){
-  let text=n.textContent;
-  const sub=n.querySelector('.sub');   if(sub)  text=text.replace(sub.textContent,'');
-  const side=n.querySelector('.ppaeSide'); if(side) text=text.replace(side.textContent,'');
-  return text.trim();
-}
-function pcCollectLines(targetLabel){
-  const nodes=[...document.querySelectorAll('#stream .msg')];   // [0]=최신
-  const seen=new Set(); const rel=[]; const rest=[];
-  for(const n of nodes){
-    if(!/\b(act|diary|rare)\b/.test(n.className)) continue;     // pass('그냥 지나침')·day 제외
-    const text=pcOwnText(n);
-    if(!text || seen.has(text)) continue;
-    seen.add(text);
-    (targetLabel && text.includes(targetLabel) ? rel : rest).push(text);
-    if(rel.length+rest.length>=14) break;
-  }
-  return rel.concat(rest).slice(0,6);
+/* BUILD 429-C — 엽서 수집은 기억 원본(archive)에서 읽는다. DOM 문자열 파싱 금지.
+   우선순위(Vase 판정): 같은 eventId → 가장 최근(시간) → 같은 targetType.
+   같은 꽃이라도 30분 전 관찰은 지금 사진과 상관없다 — 시간이 종류보다 앞선다.
+   빼콩(observer!=='byeoli')은 기본 엽서에서 제외 (427 하드룰). 순수 함수 — validate:postcard가 추출. */
+const CAPTURE_WINDOW_MS=300000;   // 5분 — 이 창 밖의 관찰은 '지금 이 순간'이 아니다
+function selectDiaryEntriesForCapture(o){
+  const entries=o.entries||[], capturedAt=o.capturedAt||Date.now();
+  const eventId=o.eventId||null, targetType=o.targetType||null, limit=o.limit||6;
+  const pool=entries.filter(e=> e && e.observer==='byeoli'
+    && /^(act|diary|rare|world|return)$/.test(e.kind||'diary')
+    && typeof e.line==='string' && e.line.trim()
+    && (e.createdAt==null || (capturedAt-e.createdAt<=CAPTURE_WINDOW_MS && e.createdAt-capturedAt<=1000)));
+  pool.sort((a,b)=>
+      ( (eventId&&b.eventId===eventId?1:0) - (eventId&&a.eventId===eventId?1:0) )   // 1) 같은 사건
+   || ( (b.createdAt||0) - (a.createdAt||0) )                                        // 2) 가장 최근
+   || ( (targetType&&b.targetType===targetType?1:0) - (targetType&&a.targetType===targetType?1:0) )); // 3) 같은 종류
+  const seen=new Set(), out=[];
+  for(const e of pool){ if(seen.has(e.line)) continue; seen.add(e.line); out.push(e); if(out.length>=limit) break; }
+  return out;
 }
 function composePostcard(opts){
   opts=opts||{};
   const CW=1080, CH=1350, SCENE_H=750, SW=216;                  // 216×150 → ×5 = 1080×750
   const acting = byeoli.state==='acting' && byeoli.actAction;
   const tProp = byeoli.actTarget ? (props||[]).find(p=>p.id===byeoli.actTarget) : null;
-  // 최근 act 줄에서 대상 라벨·지속시간 (화면과 같은 표기 유지)
-  const lastAct=document.querySelector('#stream .msg.act');
-  let targetLabel=null, dur=null;
-  if(lastAct){
-    const s=lastAct.querySelector('.sub'); dur=s?s.textContent.trim():null;
-    const t=pcOwnText(lastAct);   // .sub·.ppaeSide 제거 — 빼콩 말이 라벨을 오염하지 않게
-    const i=t.lastIndexOf('· '); if(i>=0) targetLabel=t.slice(i+2).trim();
-  }
-  const lines=pcCollectLines(targetLabel);
+  // 현재/직전 별이 관찰 — 기억 원본에서 (라벨·지속시간을 문자열 파싱하지 않는다)
+  const capturedAt=Date.now();
+  const lastAct=archive.find(e=>e.observer==='byeoli' && (e.kind==='act'||e.kind==='rare'));
+  const targetLabel=lastAct?lastAct.targetLabel:null;
+  const dur=(lastAct&&lastAct.duration!=null)?`${lastAct.duration}초`:null;
+  const sel=selectDiaryEntriesForCapture({ entries:archive, capturedAt,
+    eventId:lastAct?lastAct.eventId:null, targetType:lastAct?lastAct.targetType:null, limit:6 });
+  const lines=sel.map(e=>e.line);
   if(lines.length<3 && !opts.force) return Promise.resolve(null);  // 좋은 순간이 아니면 찍지 않는다
   if(!lines.length) return Promise.resolve(null);
   const c=document.createElement('canvas'); c.width=CW; c.height=CH;
@@ -7640,6 +7679,11 @@ function composePostcard(opts){
     targetType: tProp ? tProp.type : null,
     targetLabel: targetLabel,
     diaryLines: lines,
+    // 429-C: 구조화 출처 — 서버가 v1/v2 혼용을 분기할 수 있게
+    diaryVersion: '2',
+    diaryEventIds: sel.map(e=>e.eventId??null),
+    diarySources: sel.map(e=>e.source??'rule'),
+    diaryTargetTypes: sel.map(e=>e.targetType??null),
   };
   return new Promise(res=>c.toBlob(b=>res(b?{blob:b,meta}:null),'image/jpeg',0.92));
 }
@@ -8064,7 +8108,8 @@ document.addEventListener('visibilitychange', ()=>{
     // 복귀 연출: 별이력으로 며칠 흘렀으면 알려준다 (Memory는 안 만듦)
     if(daysPassed>=1){
       pushMsg('day', `— ${formatByeoliDate()} · 그새 ${daysPassed}일이 흘렀다 —`, null);
-      if(daysPassed>=3) pushMsg('diary', `🌙 오랜만이다. 별이는 그동안 조용히 지냈다`, null);
+      if(daysPassed>=3){ const rl='🌙 오랜만이다. 별이는 그동안 조용히 지냈다';
+        pushMsg('diary', rl, null); logObservation('return', rl, {}); }   // 429-C
     }
   }
 });
