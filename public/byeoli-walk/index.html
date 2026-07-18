@@ -6808,7 +6808,11 @@ function drawByeoliToon(byeoli){
     toonRR(x+4.5,bodyY-10,2.4,6,1,TOON.skin);
     ctx.fillStyle='#f4d06a'; ctx.fillRect(x+5.5,bodyY-12.5,2,2);
   } else if(!(acting&&byeoli.actAction==='rest')){
-    toonRR(x-7,bodyY-5.5,2.4,6,1,TOON.skin); toonRR(x+4.6,bodyY-5.5,2.4,6,1,TOON.skin);
+    // 반팔: 민트 소매 + 바깥으로 나온 살색 팔뚝. 걸을 땐 다리와 반대 반동.
+    const sw = acting?0:(legF?0.7:-0.7);
+    toonRR(x-8.2,bodyY-6,3.2,3.6,1.5,TOON.tee); toonRR(x+5,bodyY-6,3.2,3.6,1.5,TOON.tee);
+    toonRR(x-7.9,bodyY-3+(sw>0?sw:0),2.7,5.2,1.3,TOON.skin);
+    toonRR(x+5.2,bodyY-3+(sw<0?-sw:0),2.7,5.2,1.3,TOON.skin);
   }
   const hy=bodyY-11;
   toonEll(x+0.3,hy-1,6,5.2,TOON.hair);
