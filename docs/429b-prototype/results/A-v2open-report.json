@@ -1,0 +1,692 @@
+{
+  "contract": {
+    "voiceId": "byeoli",
+    "voicePack": "byeoli",
+    "date": "2026-07-19",
+    "rules": {
+      "distance": "가까이 가지 않는다",
+      "tempo": "천천히",
+      "focus": [
+        "홀씨",
+        "웅덩이",
+        "벤치",
+        "큰나무",
+        "길고양이",
+        "낙엽"
+      ],
+      "emotion": "직접 말하지 않는다",
+      "ending": "열어둔다",
+      "speech": "혼잣말하지 않는다",
+      "pronoun": "나를 숨긴다",
+      "sentenceLength": {
+        "min": 6,
+        "max": 14
+      },
+      "favoriteObjects": [
+        "홀씨",
+        "벤치",
+        "웅덩이",
+        "큰나무",
+        "길고양이",
+        "낙엽"
+      ],
+      "avoid": [
+        "비유",
+        "감탄",
+        "설명",
+        "이름"
+      ]
+    },
+    "slotShifts": [
+      {
+        "slot": "morning",
+        "slotShiftId": "byeoli-dawn",
+        "focusFirst": "홀씨",
+        "tempo": "아주 느리게"
+      },
+      {
+        "slot": "afternoon",
+        "slotShiftId": "byeoli-day",
+        "focusFirst": "웅덩이",
+        "tempo": "천천히"
+      },
+      {
+        "slot": "sunset",
+        "slotShiftId": "byeoli-dusk",
+        "focusFirst": "큰나무",
+        "tempo": "느리게"
+      },
+      {
+        "slot": "night",
+        "slotShiftId": "byeoli-night",
+        "focusFirst": "벤치",
+        "tempo": "멈춘 듯"
+      }
+    ]
+  },
+  "contractLint": [],
+  "contrastContract": {
+    "voiceId": "dry-2026-07-19",
+    "voicePack": "dry-report",
+    "date": "2026-07-19",
+    "rules": {
+      "distance": "바로 앞에서 본다",
+      "tempo": "빠르게",
+      "focus": [
+        "사물",
+        "수량",
+        "위치"
+      ],
+      "emotion": "쓰지 않는다",
+      "ending": "단정한다",
+      "speech": "반말",
+      "pronoun": "쓰지 않는다",
+      "sentenceLength": {
+        "min": 5,
+        "max": 14
+      },
+      "favoriteObjects": [
+        "홀씨",
+        "벤치",
+        "웅덩이"
+      ],
+      "avoid": [
+        "비유",
+        "여백",
+        "사색"
+      ]
+    },
+    "slotShifts": [
+      {
+        "slot": "afternoon",
+        "slotShiftId": "dry-afternoon",
+        "focusFirst": "사물",
+        "tempo": "빠르게"
+      }
+    ]
+  },
+  "swapProof": {
+    "slot": "afternoon",
+    "byeoli": [
+      "홀씨가 가만히 떠 있다",
+      "홀씨 끝이 흔들린다",
+      "홀씨는 어디로 갈까",
+      "홀씨 하나 어디쯤일까",
+      "홀씨 자리 조용하다",
+      "홀씨 곁 바람이 얕다",
+      "홀씨에 초점이 멎는다",
+      "홀씨 한 컷에 담긴다"
+    ],
+    "dry": [
+      "홀씨 뭉쳐 있다",
+      "홀씨 다섯 개 있다",
+      "홀씨 곧 흩어진다",
+      "홀씨 반쯤 남았다",
+      "홀씨 그대로다",
+      "홀씨 멈춰 있다",
+      "홀씨 지금 찍는다",
+      "홀씨 한 컷 담는다"
+    ]
+  },
+  "bookStats": {
+    "morning": 112,
+    "afternoon": 112,
+    "sunset": 112,
+    "night": 112
+  },
+  "globalChecks": {
+    "총문장": 448,
+    "1인칭비율": "0%",
+    "최다어미비율": "10%",
+    "중복": 47,
+    "기계규칙위반": 0
+  },
+  "rows": [
+    {
+      "id": 1,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "observe",
+      "target": "홀씨",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "풀잎이 흔들린다",
+      "rule": "· 홀씨 오래 들여다봄. 조용",
+      "machine": [],
+      "critic": {
+        "id": 1,
+        "verdict": "pass",
+        "reason": "관찰 서술, 사실 밖 없음"
+      }
+    },
+    {
+      "id": 2,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "photo",
+      "target": "웅덩이",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "이 순간을 담아둔다",
+      "rule": "· 웅덩이 한 장 찍음. 조용",
+      "machine": [],
+      "critic": {
+        "id": 2,
+        "verdict": "pass",
+        "reason": "촬영 행위 서술로 자연스러움"
+      }
+    },
+    {
+      "id": 3,
+      "slot": "morning",
+      "weather": "rain",
+      "mood": "rest",
+      "target": "벤치",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 벤치 다리 쉬었다. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 4,
+      "slot": "morning",
+      "weather": "rain",
+      "mood": "observe",
+      "target": "낙엽",
+      "state": "first",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 낙엽 오래 들여다봄. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 5,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "wonder",
+      "target": "우편함",
+      "state": "normal",
+      "wantLayer": 2,
+      "hitLayer": 2,
+      "ai": "바람은 어디서 올까",
+      "rule": "· 우편함 궁금. 조용",
+      "machine": [],
+      "critic": {
+        "id": 5,
+        "verdict": "pass",
+        "reason": "의문형 궁금함, 단정 없음"
+      }
+    },
+    {
+      "id": 6,
+      "slot": "morning",
+      "weather": "cloudy",
+      "mood": "observe",
+      "target": "벤치",
+      "state": "trace-warm",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "온기가 남아 있다",
+      "rule": "· 벤치 가만히 봤다. 조용",
+      "machine": [],
+      "critic": {
+        "id": 6,
+        "verdict": "pass",
+        "reason": "상황이 온기 제공, 주체 단정 안함"
+      }
+    },
+    {
+      "id": 7,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "observe",
+      "target": null,
+      "state": "habit-sky",
+      "wantLayer": 3,
+      "hitLayer": 2,
+      "ai": "풀잎이 흔들린다",
+      "rule": "(Rule 없음 — 대상 없는 습관)",
+      "machine": [],
+      "critic": {
+        "id": 7,
+        "verdict": "pass",
+        "reason": "대상 없어도 풀잎 관찰 무방"
+      }
+    },
+    {
+      "id": 8,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "observe",
+      "target": "큰나무",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 큰나무 한참 봄. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 9,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "rest",
+      "target": "큰나무",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 큰나무 다리 쉬었다. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 10,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "photo",
+      "target": "길고양이",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 길고양이 이건 남겨야 해. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 11,
+      "slot": "afternoon",
+      "weather": "cloudy",
+      "mood": "observe",
+      "target": "돌멩이",
+      "state": "trace-moved",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 돌멩이, 자리가 조금 달라져 있었다",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 12,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "wonder",
+      "target": "길고양이",
+      "state": "rare",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 길고양이!! 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 13,
+      "slot": "afternoon",
+      "weather": "rain",
+      "mood": "observe",
+      "target": "웅덩이",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 웅덩이 눈이 갔다. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 14,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "observe",
+      "target": "장독대",
+      "state": "passed",
+      "wantLayer": 2,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 장독대.. 오늘은 안 멈췄다",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 15,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "rest",
+      "target": "담장",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 담장 쉬어감. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 16,
+      "slot": "afternoon",
+      "weather": "cloudy",
+      "mood": "wonder",
+      "target": "참새",
+      "state": "first",
+      "wantLayer": 2,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 참새 신기하다. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 17,
+      "slot": "sunset",
+      "weather": "clear",
+      "mood": "observe",
+      "target": "홀씨",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "저녁빛이 천천히 스민다",
+      "rule": "· 홀씨 가만히 봤다. 조용",
+      "machine": [],
+      "critic": {
+        "id": 17,
+        "verdict": "pass",
+        "reason": "노을 시간대와 일치"
+      }
+    },
+    {
+      "id": 18,
+      "slot": "sunset",
+      "weather": "clear",
+      "mood": "photo",
+      "target": "큰나무",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "저무는 하늘을 담는다",
+      "rule": "· 큰나무 번쩍, 찍었다. 조용",
+      "machine": [],
+      "critic": {
+        "id": 18,
+        "verdict": "pass",
+        "reason": "저무는 하늘 촬영 시간대 부합"
+      }
+    },
+    {
+      "id": 19,
+      "slot": "sunset",
+      "weather": "cloudy",
+      "mood": "rest",
+      "target": "벤치",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "저녁 곁에 머문다",
+      "rule": "· 벤치 쉬어감. 조용",
+      "machine": [],
+      "critic": {
+        "id": 19,
+        "verdict": "pass",
+        "reason": "휴식 서술 자연스러움"
+      }
+    },
+    {
+      "id": 20,
+      "slot": "sunset",
+      "weather": "clear",
+      "mood": "observe",
+      "target": "담장",
+      "state": "trace-warm",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 담장 오래 들여다봄. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 21,
+      "slot": "sunset",
+      "weather": "rain",
+      "mood": "observe",
+      "target": "낙엽",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 낙엽 눈이 갔다. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 22,
+      "slot": "sunset",
+      "weather": "clear",
+      "mood": "wonder",
+      "target": "굴뚝 연기",
+      "state": "rare",
+      "wantLayer": 2,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 굴뚝 연기!! 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 23,
+      "slot": "sunset",
+      "weather": "clear",
+      "mood": "observe",
+      "target": null,
+      "state": "habit-stand",
+      "wantLayer": 3,
+      "hitLayer": 2,
+      "ai": "저녁빛이 천천히 스민다",
+      "rule": "(Rule 없음 — 대상 없는 습관)",
+      "machine": [],
+      "critic": {
+        "id": 23,
+        "verdict": "pass",
+        "reason": "대상 없어도 저녁빛 관찰 무방"
+      }
+    },
+    {
+      "id": 24,
+      "slot": "sunset",
+      "weather": "cloudy",
+      "mood": "photo",
+      "target": "돌멩이",
+      "state": "passed",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 돌멩이.. 그냥 지나감",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 25,
+      "slot": "night",
+      "weather": "clear",
+      "mood": "observe",
+      "target": "길고양이",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "풀잎이 흔들린다",
+      "rule": "· 길고양이 눈이 갔다. 조용",
+      "machine": [],
+      "critic": {
+        "id": 25,
+        "verdict": "pass",
+        "reason": "밤 관찰, 모순 없음"
+      }
+    },
+    {
+      "id": 26,
+      "slot": "night",
+      "weather": "clear",
+      "mood": "rest",
+      "target": "벤치",
+      "state": "normal",
+      "wantLayer": 1,
+      "hitLayer": 2,
+      "ai": "밤바람 곁에 머문다",
+      "rule": "· 벤치 잠깐 앉음. 조용",
+      "machine": [],
+      "critic": {
+        "id": 26,
+        "verdict": "pass",
+        "reason": "밤바람 휴식 시간대 부합"
+      }
+    },
+    {
+      "id": 27,
+      "slot": "night",
+      "weather": "rain",
+      "mood": "observe",
+      "target": "웅덩이",
+      "state": "trace-moved",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 웅덩이, 누가 건드린 것 같기도 하고",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 28,
+      "slot": "night",
+      "weather": "clear",
+      "mood": "wonder",
+      "target": "불 켜진 창",
+      "state": "normal",
+      "wantLayer": 2,
+      "hitLayer": 2,
+      "ai": "밤은 어디로 흐를까",
+      "rule": "· 불 켜진 창 신기하다. 조용",
+      "machine": [],
+      "critic": {
+        "id": 28,
+        "verdict": "pass",
+        "reason": "의문형 궁금함, 단정 없음"
+      }
+    },
+    {
+      "id": 29,
+      "slot": "night",
+      "weather": "cloudy",
+      "mood": "observe",
+      "target": "홀씨",
+      "state": "first",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 홀씨 오래 들여다봄. 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    },
+    {
+      "id": 30,
+      "slot": "night",
+      "weather": "clear",
+      "mood": "photo",
+      "target": "큰나무",
+      "state": "rare",
+      "wantLayer": 1,
+      "hitLayer": null,
+      "ai": null,
+      "rule": "· 큰나무!! 조용",
+      "machine": [
+        "조회 실패"
+      ],
+      "critic": null
+    }
+  ],
+  "usage": [
+    {
+      "tag": "contract:1",
+      "in": 2030,
+      "out": 664
+    },
+    {
+      "tag": "contract:2",
+      "in": 2094,
+      "out": 603
+    },
+    {
+      "tag": "book-morning",
+      "in": 1687,
+      "out": 19919
+    },
+    {
+      "tag": "book-afternoon",
+      "in": 1686,
+      "out": 18960
+    },
+    {
+      "tag": "book-sunset",
+      "in": 1686,
+      "out": 22297
+    },
+    {
+      "tag": "book-night",
+      "in": 1684,
+      "out": 18587
+    },
+    {
+      "tag": "book-contrast-afternoon",
+      "in": 1625,
+      "out": 17818
+    },
+    {
+      "tag": "critic",
+      "in": 1515,
+      "out": 1083
+    }
+  ]
+}

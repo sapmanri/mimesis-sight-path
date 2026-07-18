@@ -1,0 +1,28 @@
+{
+  "date": "2026-07-19",
+  "season": "summer",
+  "weatherMix": { "clear": 0.5, "cloudy": 0.2, "rain": 0.3 },
+  "map": "byeoli-town",
+  "observeCount": 41,
+  "photoCount": 9,
+  "moodMix": { "observe": 0.44, "wonder": 0.24, "rest": 0.2, "photo": 0.12 },
+  "targetBasis": "previous_day",
+  "sampleWindow": "2026-07-18",
+  "topTargets": [
+    { "type": "dandelion", "name": "홀씨", "cat": "nature", "count": 7 },
+    { "type": "bench", "name": "벤치", "cat": "rest", "count": 6 },
+    { "type": "puddle", "name": "웅덩이", "cat": "nature", "count": 5 },
+    { "type": "oldtree", "name": "큰나무", "cat": "nature", "count": 5 },
+    { "type": "streetcat", "name": "길고양이", "cat": "animal", "count": 4 },
+    { "type": "leaves", "name": "낙엽", "cat": "nature", "count": 4 },
+    { "type": "stone", "name": "돌멩이", "cat": "nature", "count": 3 },
+    { "type": "wall", "name": "담장", "cat": "rest", "count": 3 }
+  ],
+  "slotPhaseHint": {
+    "morning": "dawn",
+    "afternoon": "day",
+    "sunset": "dusk",
+    "night": "night"
+  },
+  "events": []
+}

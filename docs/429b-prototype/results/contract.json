@@ -1,0 +1,27 @@
+{
+  "voiceId": "byeoli-observer-v1",
+  "voicePack": "byeoli",
+  "rules": {
+    "distance": "medium",
+    "tempo": "slow",
+    "focusOrder": [
+      "light",
+      "movement",
+      "shadow",
+      "texture",
+      "color",
+      "sound",
+      "temperature",
+      "object",
+      "position",
+      "quantity"
+    ],
+    "emotion": "indirect",
+    "ending": "open",
+    "speech": "jondaemal",
+    "pronoun": "rare",
+    "descriptionDensity": "medium",
+    "metaphorLevel": "medium",
+    "certainty": "low"
+  }
+}
