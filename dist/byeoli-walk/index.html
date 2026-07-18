@@ -6836,8 +6836,11 @@ function drawMap(map,pal,ox,oy,flip){
     for(let i=0;i<row.length;i++){ const ch=row[i]; if(ch==='.') continue;
       const c=pal[ch]; if(c) px(ox+(flip? row.length-1-i : i), oy+j, 1, 1, c); } }
 }
-const SOFT_BY_PAL={ o:'#33291f', h:'#4a372a', s:'#eed0b0', t:'#b8ded6', p:'#7d8657' };
-const SOFT_BY_MAP=[
+/* 별이 soft v2 (Vase 판정): 사람이 아니라 상징 — 반바지·신발·손 제거, 4색(외곽선·머리·얼굴·옷).
+   생명은 그림이 아니라 움직임에서: 6프레임 걷기 · 옷자락은 다리 반대 · 머리는 반 박자 늦게 ·
+   가끔 고개 갸웃. 귀여움은 빼콩 몫 — 별이는 조용함. */
+const SOFT_BY_PAL={ o:'#33291f', h:'#4a372a', s:'#eed0b0', t:'#b8ded6' };
+const SOFT_BY_HEAD=[
   '..oooooo..',
   '.ohhhhhho.',
   'ohhhhhhhho',
@@ -6846,35 +6849,44 @@ const SOFT_BY_MAP=[
   'ohsossosho',
   'ohssssssho',
   '.ossoosso.',
-  '.osssssso.',
+];
+const SOFT_BY_ROBE=[
   '..otttto..',
   '.otttttto.',
-  'sottttttos',
   '.otttttto.',
-  '.oppppppo.',
-  '.oppppppo.',
-  '..oppppo..',
+  '.otttttto.',
+  '.otttttto.',
+];
+const SOFT_BY_HEM=[
+  'otttttttto',
+  'otttttttto',
 ];
 function drawByeoliSoft(byeoli){
   const x=byeoli.screenX, y=GROUND_Y, acting=byeoli.state==='acting';
+  const walking=!acting;
   const breathe=acting? -(Math.sin(AMB.t*0.0022)>0.6?1:0) : 0;
   const bob=(acting?0:Math.round(Math.sin(byeoli.walkPhase)))+breathe;
   const yy=y+bob, rest=acting&&byeoli.actAction==='rest';
   ctx.fillStyle='rgba(20,30,24,.25)'; ctx.fillRect(x-5,y-1,12,2);
-  const ox=x-5, oy=rest? yy-20 : yy-22;
-  drawMap(SOFT_BY_MAP,SOFT_BY_PAL,ox,oy,false);
+  const ox=x-5, base= rest? yy-19 : yy-21;
+  const k=walking? Math.floor(byeoli.walkPhase*1.5)%6 : 0;
+  const lo=[0,-1,-1,0,1,1][k];
+  const hem=walking? -lo : 0;
+  let hd=walking? Math.round(Math.sin(byeoli.walkPhase-0.9))-Math.round(Math.sin(byeoli.walkPhase)) : 0;
+  hd=Math.max(-1,Math.min(1,hd));
+  const tilt=Math.sin(AMB.t*0.00035+1.7)>0.992 ? 1 : 0;
+  drawMap(SOFT_BY_HEAD,SOFT_BY_PAL,ox+tilt,base+hd,false);
+  drawMap(SOFT_BY_ROBE,SOFT_BY_PAL,ox,base+8,false);
+  drawMap(SOFT_BY_HEM,SOFT_BY_PAL,ox+hem,base+13,false);
   if(rest){
-    px(ox+2,yy-4,6,2,SOFT_BY_PAL.s); px(ox+2,yy-2,3,1,SOFT_BY_PAL.o); px(ox+5,yy-2,3,1,SOFT_BY_PAL.o);
+    px(ox+2,yy-4,6,2,SOFT_BY_PAL.s);
   } else {
-    const k=acting?0:Math.floor(byeoli.walkPhase)%4;
-    const lo=k===1?-1:(k===3?1:0);
-    px(ox+3+lo,yy-6,2,5,SOFT_BY_PAL.s); px(ox+6-lo,yy-6,2,5,SOFT_BY_PAL.s);
-    px(ox+2+lo,yy-1,3,1,SOFT_BY_PAL.o); px(ox+5-lo,yy-1,3,1,SOFT_BY_PAL.o);
+    px(ox+3+lo,yy-6,2,6,SOFT_BY_PAL.s); px(ox+6-lo,yy-6,2,6,SOFT_BY_PAL.s);
   }
-  if(acting&&byeoli.actAction==='record'){ px(x+2,yy-16,5,3,'#2b2b2b'); px(x+6,yy-15,1,1,'#8a8a8a'); }
-  else if(acting&&byeoli.actAction==='wonder'){ px(x+5,yy-19,2,2,'#f4d06a'); }
+  if(acting&&byeoli.actAction==='record'){ px(x+2,yy-15,5,3,'#2b2b2b'); px(x+6,yy-14,1,1,'#8a8a8a'); }
+  else if(acting&&byeoli.actAction==='wonder'){ px(x+5,yy-18,2,2,'#f4d06a'); }
   if(acting){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
-    px(x-2,yy-30,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-28,3,2,ic); }
+    px(x-2,yy-29,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-27,3,2,ic); }
 }
 function drawByeoli(b){
   if(CHAR_STYLE==='toon') drawByeoliToon(b);
@@ -7692,12 +7704,15 @@ function drawPpaeSoft(ppae){
   ctx.fillStyle='rgba(20,30,24,.2)'; ctx.fillRect(x-6,y-1,12,2);
   const ox=x-5, flip=f<0;
   drawMap(SOFT_CAT_MAP,SOFT_CAT_PAL,ox,yy-10,flip);
+  // 다리는 몸통과 같은 흰색 (고양이는 반바지를 입지 않는다 — Vase 정정)
   const legF=Math.floor(ppae.phase)%2, move=ppae.mode!=='idle';
-  px(ox+2+(move&&legF?-1:0),yy-4,2,3,SOFT_CAT_PAL.d);
-  px(ox+7+(move&&!legF?1:0),yy-4,2,3,SOFT_CAT_PAL.d);
+  px(ox+2+(move&&legF?-1:0),yy-4,2,4,SOFT_CAT_PAL.w);
+  px(ox+7+(move&&!legF?1:0),yy-4,2,4,SOFT_CAT_PAL.w);
   const tsw=Math.round(Math.abs(Math.sin(ppae.phase*0.7))*2);
   const tx=flip? ox+11 : ox-1;
   px(tx,yy-9-tsw,1,4,SOFT_CAT_PAL.o);
+  // 가끔 귀 쫑긋 — 살아있는 작은 신호
+  if(Math.sin(AMB.t*0.0006+3)>0.99){ const ec=flip? 4 : 6; px(ox+ec,yy-11,1,1,SOFT_CAT_PAL.o); }
 }
 function drawPpae(p){
   if(CHAR_STYLE==='toon') drawPpaeToon(p);
