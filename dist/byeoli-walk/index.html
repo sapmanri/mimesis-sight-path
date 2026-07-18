@@ -755,8 +755,8 @@ const sky={
     if(this.weatherTimer<=0){
       const r=rng();
       if(this.weather==='clear'){
-        // 맑음 → 가끔 비/눈. 밤/추운 느낌이면 눈 확률 ↑ (임시로 랜덤)
-        if(r<0.28){ this.weather = rng()<0.5?'rain':'snow'; this.cloudDark = this.weather==='rain';
+        // 맑음 → 가끔 비/눈. 비:눈=7:3 (Vase 판정 2026-07-18 — 눈 입자가 느려 체감 빈도가 높아 보정)
+        if(r<0.28){ this.weather = rng()<0.7?'rain':'snow'; this.cloudDark = this.weather==='rain';
                     for(const c of this.clouds) c.dark=this.cloudDark&&rng()<0.7;
                     Sound.startWeather(this.weather); }
         this.weatherTimer=10+rng()*14;
@@ -1151,6 +1151,26 @@ const D={
 };
 function pickA(a){ return a[(rng()*a.length)|0]; }
 
+/* BUILD 429-A — Byeol Voice 경계면 (427 빼콩 F항과 동일 규율)
+   별이 일기의 문장 조립은 이 경계 하나를 지난다: compose(intent,item,def,meta) → line.
+   429-E에서 안쪽이 Genome 문장집(오늘의 문체) 우선으로 바뀌어도 UI·archive·pushMsg는 불변.
+   하드룰: 걷는 중 생성 API 호출 금지 — book은 캐시된 JSON일 뿐이며,
+   book 부재·불량·슬롯 불일치는 조용히 rule()로 폴백한다 (429-F: Rule Brain은 영구 폴백). */
+const ByeolVoice={
+  book:null,   // 429-E: SentenceBook(시간대별) 로드 시 교체 — 지금은 항상 null
+  compose(intent,item,def,meta){
+    return this.rule(intent,item,def,meta);
+  },
+  rule(intent,item,def,meta){
+    const tag = def.jtags ? pickA(def.jtags) : '';
+    if(meta.rare) return `${def.emoji} ${def.ko}!! ${tag}`;
+    if(meta.passed) return `${def.emoji} ${def.ko}.. ${rng()<0.5?'그냥 지나감':'오늘은 안 멈췄다'}`;
+    const r=pickA(D[intent.drive]||['음..']);
+    const vtxt = item.variant ? item.variant+' ' : '';
+    return `${def.emoji} ${vtxt}${def.ko} ${r}. ${tag}`;
+  }
+};
+
 function maybeDiary(intent, item, def, meta){
   if(walkClock-lastDiaryAt<5) return;
   let write=false;
@@ -1161,17 +1181,7 @@ function maybeDiary(intent, item, def, meta){
 }
 function diaryFor(intent, item, def, meta){
   lastDiaryAt=walkClock;
-  const tag = def.jtags ? pickA(def.jtags) : '';
-  let line;
-  if(meta.rare){
-    line = `${def.emoji} ${def.ko}!! ${tag}`;
-  } else if(meta.passed){
-    line = `${def.emoji} ${def.ko}.. ${rng()<0.5?'그냥 지나감':'오늘은 안 멈췄다'}`;
-  } else {
-    const r=pickA(D[intent.drive]||['음..']);
-    const vtxt = item.variant ? item.variant+' ' : '';
-    line = `${def.emoji} ${vtxt}${def.ko} ${r}. ${tag}`;
-  }
+  const line = ByeolVoice.compose(intent, item, def, meta);   // 429-A 경계면 — 조립은 저 안에서만
   pushMsg('diary', line, null);
   tally.diary++; Profile.bumpDiary();
   archive.unshift({ line, intent, date:formatByeoliDate(), epoch:byeoliDayEpoch() }); // Life Archive(별이력 날짜 포함)
