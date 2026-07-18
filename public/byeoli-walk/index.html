@@ -205,6 +205,10 @@
   .msg.ppae{color:#cfc9ae;text-align:right}
   .msg.ppae .k{color:#b5c49a}
   .msg.ppae .sub{margin-left:0;margin-right:22px}
+  /* QC3: 색만으로는 부족 — 누가 말했는지 항상 이름표 (캐릭터가 늘어도 안 헷갈리게) */
+  .msg.ppae .who{color:#8a917b;font-size:9px;letter-spacing:.12em;margin-right:7px;vertical-align:1px}
+  /* QC4: 같은 eventId — "둘이 같은 걸 봤다" 표시 */
+  .msg.ppae .link{font-size:9px;opacity:.65;margin-left:4px}
   @media (max-width:640px){ .msg.ppae{display:none} } /* v1: UI만 숨김 — 데이터 생성은 계속(판정 A) */
 </style>
 </head>
@@ -959,6 +963,7 @@ const PPAE_CONFIG={
   orbitSoft:120, orbitMax:200,   // 느슨한 궤도 — 강제 경계가 아니라 복귀 성향의 기준
   awayChance:0.02, awayMaxMs:45000,  // 화면 밖 외출 확률(모드 전환당)·최대 부재
   propCooldownMs:180000,         // 같은 소품 재기록 쿨다운
+  voiceRatioMax:0.4,             // QC5: 별이 100 대비 빼콩 말수 상한(30~40) — 주인공은 별이다
 };
 
 /* 빼콩 일기 — 별이 archive와 완전 분리. localStorage 별도 키(백업 blob 제외). */
@@ -969,7 +974,9 @@ const ppaeDiary={
     this.archive.unshift(entry); this.archive=this.archive.slice(0,this.KEEP);
     try{ localStorage.setItem(this.LS, JSON.stringify(this.archive)); }catch(e){}
     // 모바일에서도 데이터는 계속 쌓인다 — CSS가 표시만 숨김(판정 A)
-    pushMsg('ppae', `${entry.emoji||'🐾'} ${entry.text}`, null);
+    const em = entry.emoji && entry.emoji!=='🐾' ? entry.emoji+' ' : '';
+    const link = entry.eventId ? ' <span class="link" title="별이와 같은 것을 보았다">🔗</span>' : '';
+    pushMsg('ppae', `<span class="who">🐾 빼콩</span>${em}${entry.text}${link}`, null);
   },
 };
 
@@ -1008,6 +1015,13 @@ const PpaeBrain={
   observe(ctx){
     const now=Date.now();
     if(ctx.trigger!=='return' && !this._gapOk(now)) return null;
+    // QC5: 말수 비율 — 화면의 별이 발화 대비 상한. 별이가 조용하면 빼콩도 조용하다.
+    // (return은 예외 — 상태 근거가 있는 드문 사건이라 침묵시키지 않는다)
+    if(ctx.trigger!=='return'){
+      const by=document.querySelectorAll('#stream .msg.act, #stream .msg.diary, #stream .msg.rare').length;
+      const pp=document.querySelectorAll('#stream .msg.ppae').length;
+      if(by===0 || pp/by>=PPAE_CONFIG.voiceRatioMax) return null;
+    }
     let entry=null;
     if(ctx.trigger==='return'){
       // 근거 있는 일기만: 비(awayWet)+부재+복귀가 모두 실제 상태로 존재할 때만 '젖은 발'
