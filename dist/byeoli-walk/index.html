@@ -860,7 +860,28 @@ const byeoli={ worldX:0, screenX:90, speed:62, baseSpeed:62,
   state:'walk', actAction:null, actTarget:null, actTimer:0, walkPhase:0,
   gazeT:0,                              // 428: 행동 전 '바라봄' — 발견→멈춤→바라봄→기록
   actVariant:null, actTargetType:null,  // 428-B: 같은 행동의 여러 버전 (소품 종류 우선)
-  resumeT:0 };                          // 428-C: 눈 오는 날 다시 걷기까지의 뜸 (표현만)
+  resumeT:0,                            // 428-C: 눈 오는 날 다시 걷기까지의 뜸 (표현만)
+  passT:0, stepAside:0 };               // 430: 스쳐 지나감 · 비켜서기 (기록 없음)
+
+/* =====================================================================
+   BUILD 430 — Parallel Lives
+   같은 세상을 살지만 서로의 세상이 되지는 않는다.
+   하드룰(430 최상위): **세계는 둘보다 크다.** 둘이 스쳐도 하늘·구름·날씨·새는
+   멈추지 않는다 (sky.tick은 어떤 경우에도 건너뛰지 않는다).
+   그리고 427 하드룰 유지: 서로를 기록하지 않는다 — 일기에 상대가 등장하지 않는다.
+   남는 것은 '흔적'뿐이고, 누가 남겼는지는 아무도 모른다.
+   ===================================================================== */
+const PARALLEL={ passChance:0.9, passHold:0.35, asideHold:0.5, traceTtlMs:120000, coincidence:0.01 };
+/* 흔적: 소품에 남는 익명의 자국. 남긴 주체는 저장하되 **문장에는 절대 등장하지 않는다**
+   (판정용으로만 쓰고, 상대를 지목하는 문장은 검증기가 금지한다 — validate:parallel) */
+let lastPassAt=0;   // 430: 스쳐 지나감은 드물어야 한다 (최소 20초 간격)
+function leaveTrace(prop, by, kind){ if(prop) prop.trace={ by, kind, at:Date.now() }; }
+function readTrace(prop, notBy){
+  const t=prop&&prop.trace;
+  if(!t || t.by===notBy) return null;
+  if(Date.now()-t.at>PARALLEL.traceTtlMs) return null;
+  return t;
+}
 
 /* =====================================================================
    빼콩이 — 흰 고양이 companion. 자유 로밍.
@@ -954,12 +975,25 @@ const ppae={
         const act=(PPAE_RULES.find(r=>r.m.test(this.targetProp.type))||{}).action||null;
         this.pauseAct=act;
         this.pauseT = act==='ignore'?0 : act==='chase'?0.25 : 0.5+rng()*0.4;
+        // 430: 앞발로 툭 건드리면 자리가 달라진다 — 나중에 누군가 그걸 본다
+        if(act==='pickup'||act==='interest') leaveTrace(this.targetProp,'ppae','moved');
         PpaeBrain.selfEncounter(this.targetProp); this.targetProp=null;
       }
       else if(sx<10||sx>W-10) this.targetProp=null;   // 스크롤에 흘러가면 포기
     }
-    // 428: 둘의 만남 — 스치면 아주 가끔 0.5초 멈춰 본다. 말은 없다 (별이 경로는 불변 — 427 하드룰)
-    if(this.mode!=='away' && Math.abs(this.x-byeoli.screenX)<10 && rng()<dt*0.05) this.pauseT=0.5;
+    /* 430 ①② 스쳐 지나감 · 비켜가기 — 둘 다 0.3~0.5초 멈춘다.
+       대화 없음. 기록 없음. 그냥 지나간다. (일기 호출이 여기 없다는 것이 계약이다) */
+    if(this.mode!=='away' && this.pauseT<=0 && byeoli.passT<=0 && byeoli.state==='walk'
+       && Math.abs(this.x-byeoli.screenX)<9 && Date.now()-lastPassAt>20000
+       && rng()<PARALLEL.passChance*dt){
+      lastPassAt=Date.now();
+      this.pauseT=PARALLEL.passHold+rng()*0.15;
+      byeoli.passT=PARALLEL.passHold+rng()*0.15;
+      if(rng()<0.5){                       // 가끔은 서로 조금 비켜선다 — 사람도 길에서 그렇게 한다
+        byeoli.stepAside=PARALLEL.asideHold;
+        this.targetY=GROUND_Y-5; this.modeTimer=Math.max(this.modeTimer,0.6);
+      }
+    }
     // 428-C: 빼콩도 눈에 반응하되 별이와 다른 비율·다른 방식 (별이는 무겁게, 빼콩은 발만 조심스럽게)
     this.phase+=dt*(this.mode==='dash'?16:8)*(isSnowing()?SNOW_PACE.ppaeGait:1);
   }
@@ -1026,6 +1060,9 @@ const PPAE_FALLBACK={ action:'watch', emotion:'무심',
   lines:['킁킁대다 지나갔다.','별 거 아니었다.','한 번 쳐다보고 말았다.','그 옆 그림자가 더 신경 쓰였다.'],
   short:['킁킁.','……'] };
 
+/* 430: 빼콩이 읽는 흔적 — 온기·냄새만 남았다. 누구였는지는 문장에 없다(계약, validate:parallel). */
+const PPAE_TRACE_WARM=['아직 따뜻했다.','사람 냄새가 남아 있었다.','여기 뭔가 있었던 것 같다.','한참 앉아 있었다.'];
+
 const PpaeBrain={
   nextOkAt:0, propSeen:new Map(), lineIdx:new Map(),
   _gapOk(now){ return now>=this.nextOkAt; },
@@ -1061,9 +1098,11 @@ const PpaeBrain={
     } else {
       const def=CATALOG[ctx.type]||RARE[ctx.type];
       const rule=PPAE_RULES.find(r=>r.m.test(ctx.type))||PPAE_FALLBACK;
+      // 430: 남은 온기를 읽는다 — 누가 앉아 있었는지는 모른다 (상대 지목 금지)
+      const traceWarm = ctx.trace && ctx.trace.kind==='warm';
       entry={ observer:'bbaekkong', targetId:ctx.targetId??null, targetType:ctx.type,
-        action:rule.action, duration:null, emotion:rule.emotion,
-        text:this._pickLine(rule,ctx.type), createdAt:now,
+        action:traceWarm?'trace':rule.action, duration:null, emotion:traceWarm?'궁금':rule.emotion,
+        text:traceWarm?pickA(PPAE_TRACE_WARM):this._pickLine(rule,ctx.type), createdAt:now,
         eventId:ctx.eventId??null, emoji:(def&&def.emoji)||'🐾' };
     }
     this._bumpGap(now);
@@ -1075,7 +1114,7 @@ const PpaeBrain={
     const seen=this.propSeen.get(prop.id);
     if(seen && now-seen<PPAE_CONFIG.propCooldownMs) return;
     this.propSeen.set(prop.id, now);
-    this.observe({ trigger:'self', type:prop.type, targetId:prop.id });
+    this.observe({ trigger:'self', type:prop.type, targetId:prop.id, trace:readTrace(prop,'ppae') });
   },
   /* 같은 이벤트 다른 기록(판정 B) — 별이 intent.id를 공유 eventId로 */
   parallel(intent, item){
@@ -1124,27 +1163,37 @@ function updateEncounters(dt){
     seenKindsToday.add(nearest.type);
 
     byeoli.actTargetType=nearest.type;   // 428-B: 소품 종류가 행동의 '버전'을 정한다 (벤치=앉기, 나무=기대기)
+    // 430: 남의 흔적 — 누가 그랬는지는 모른다. 세상이 조금 달라져 있을 뿐.
+    const trace=readTrace(nearest,'byeoli');
     if(nearest.rare){
       // 희귀 = Signature Moment 후보
       pushMsg('rare', `${def.emoji} ${def.ko}! 오늘 운 좋다`, null, def.ko);
       diaryFor(intent, nearest, def, {rare:true, firstOfKind});
-      if(!dec.passed) startAction(intent);
+      if(!dec.passed) startAction(intent, nearest);
     } else if(dec.passed){
       pushMsg('pass', `${def.emoji} ${def.ko} 그냥 지나침`, null);
-      maybeDiary(intent, nearest, def, {passed:true, firstOfKind});
+      maybeDiary(intent, nearest, def, {passed:true, firstOfKind, trace});
     } else {
-      startAction(intent);
+      startAction(intent, nearest);
       pushMsg('act', `${def.emoji} <span class="k">${actKo(intent.action)}</span> · ${def.ko}`, `${intent.duration}초`);
       tally.memories++; Profile.bumpMemory(); lastWinDrive=intent.action;
-      maybeDiary(intent, nearest, def, {passed:false, firstOfKind});
+      maybeDiary(intent, nearest, def, {passed:false, firstOfKind, trace});
       PpaeBrain.parallel(intent, nearest); // 427: 같은 이벤트, 빼콩의 다른 기록 (공유 eventId=intent.id)
     }
     updateTally();
   }
 }
-function startAction(intent){
+function startAction(intent, prop){
   byeoli.state='acting'; byeoli.actAction=intent.action;
   byeoli.actTarget=intent.targetId; byeoli.actTimer=intent.duration;
+  // 430: 별이가 앉았던 자리엔 온기가 남는다 — 별이는 이걸 모른다
+  if(intent.action==='rest') leaveTrace(prop,'byeoli','warm');
+  // 430 우연(1%): 사진 찍는 순간 빼콩이 프레임을 가로지른다. 별이는 모르고, 보는 사람만 안다.
+  if(intent.action==='record' && rng()<PARALLEL.coincidence){
+    ppae.mode='dash'; ppae.modeTimer=0.9; ppae.pauseT=0;
+    ppae.targetX = ppae.x<byeoli.screenX ? byeoli.screenX+70 : byeoli.screenX-70;
+    ppae.targetY = GROUND_Y;
+  }
   // 428-B: 같은 행동도 여러 버전 — 소품 종류 우선, 아니면 그날의 기분(rng)
   const tt=byeoli.actTargetType||'', vr=rng();
   if(intent.action==='rest'){
@@ -1180,6 +1229,9 @@ const D={
 };
 function pickA(a){ return a[(rng()*a.length)|0]; }
 
+/* 430: 별이가 읽는 흔적 문장 — 주체 없는 관찰만. 상대의 이름이 들어가면 계약 위반이다. */
+const BYEOL_TRACE_MOVED=['한쪽으로 굴러 있었다','자리가 조금 달라져 있었다','누가 건드린 것 같기도 하고'];
+
 /* BUILD 429-A — Byeol Voice 경계면 (427 빼콩 F항과 동일 규율)
    별이 일기의 문장 조립은 이 경계 하나를 지난다: compose(intent,item,def,meta) → line.
    429-E에서 안쪽이 Genome 문장집(오늘의 문체) 우선으로 바뀌어도 UI·archive·pushMsg는 불변.
@@ -1192,6 +1244,10 @@ const ByeolVoice={
   },
   rule(intent,item,def,meta){
     const tag = def.jtags ? pickA(def.jtags) : '';
+    // 430: 남이 남긴 흔적을 본다 — 누가 그랬는지는 끝내 모른다 (상대를 지목하는 문장 금지)
+    if(meta && meta.trace && meta.trace.kind==='moved' && !meta.rare){
+      return `${def.emoji} ${def.ko}, ${pickA(BYEOL_TRACE_MOVED)}`;
+    }
     if(meta.rare) return `${def.emoji} ${def.ko}!! ${tag}`;
     if(meta.passed) return `${def.emoji} ${def.ko}.. ${rng()<0.5?'그냥 지나감':'오늘은 안 멈췄다'}`;
     const r=pickA(D[intent.drive]||['음..']);
@@ -1915,6 +1971,10 @@ function update(dt){
     updateEncounters(dt);
     return;
   }
+  /* 430: 스쳐 지나가는 순간 — 멈추는 것은 별이의 걸음뿐이다.
+     하늘·구름·날씨·빼콩은 이 함수 맨 위에서 이미 흘렀다 (세계는 둘보다 크다). */
+  if(byeoli.stepAside>0) byeoli.stepAside-=dt;
+  if(byeoli.passT>0){ byeoli.passT-=dt; updateEncounters(dt); return; }
   habitT-=dt;
   if(habitT<=0){
     habitT=25+rng()*35;
@@ -6947,8 +7007,8 @@ function drawByeoliSoft(byeoli){
   if(rest&&v) drop = v==='squat'?3 : (v==='lean'||v==='shoegaze')?0 : 2;
   else if(acting&&byeoli.actAction==='record'){ if(v==='kneel') drop=2; else if(v==='tiptoe') drop=-1; }
   const lean = v==='lean'?1:0;                            // 나무에 살짝 기울여 기댐
-  const ox=x-5, base=yy-21+drop;
-  const moving=walking && habitHold<=0;
+  const ox=x-5+(byeoli.stepAside>0?1:0), base=yy-21+drop;   // 430: 비켜선 한 발
+  const moving=walking && habitHold<=0 && byeoli.passT<=0;   // 430: 스칠 땐 걸음도 멈춘다
   const k=moving? Math.floor(byeoli.walkPhase*1.5)%6 : 0;
   const lo=[0,-1,-1,0,1,1][k];
   // 428-C 보류분: wind 렌더링 훅만 — 소스가 없으므로 ENV.wind는 항상 0이고 아무 움직임도 만들지 않는다
