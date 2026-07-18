@@ -1,5 +1,7 @@
 # BUILD 429-B — MIMESIS Genome Architecture
 
+> ⚠ **정본은 [BUILD_429_GENOME_SEASONS.md](BUILD_429_GENOME_SEASONS.md)** — 이 문서는 429-B 세션 상세 기록(부록)이다.
+>
 > **Genome은 문체를 저장하지 않는다. 세상을 바라보는 방식을 저장한다.**
 > **문체는 Generation 단계에서 자연스럽게 발생하는 결과일 뿐이다.**
 >
@@ -128,7 +130,10 @@ critic이 고쳐 쓰게 하면 원문보다 나쁜 문장이 슬쩍 들어온다
 | 특수 플래그 폴백 | **0** |
 | TopTarget Normal Exact | **384/384 = 100%** |
 | 평가 30건 조회 | **30/30** |
-| Observation Grammar | **위반 0** |
+
+⚠ 정정 (2026-07-19 재측정): Observation Grammar는 위반 0이 아니었다 — 3슬롯에서 과점
+(감각형 36~37%, night 존재형 41%). 재사용 위반·메타 자기모순 잔존 수치 포함 실측 정본은
+SEASONS §6-2.
 
 ## 7. 남은 것
 
