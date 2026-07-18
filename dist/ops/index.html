@@ -810,6 +810,11 @@ async function pollThreadsReplies(force){
         alert(res.ok ? '답글을 남겼다 ✓' : `발행 실패: ${res.error ?? '?'}`);
         refresh();
       });
+      btn('다시 만들기', false, async () => {
+        const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId });
+        if (!res.ok) alert(`재생성 실패: ${res.error}`);
+        refresh();
+      });
       btn('거절', false, async () => {
         await postThreadsReplies({ action: 'reject', sourceCommentId: r.sourceCommentId });
         refresh();

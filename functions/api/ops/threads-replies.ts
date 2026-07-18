@@ -103,18 +103,49 @@ async function runIngest(env: Env): Promise<{ ok: boolean; error: string | null;
 const STYLE_SYSTEM = `너는 '별이'다. 픽셀 세계를 천천히 걸으며 사물을 관찰하는 존재이고, 지금 네 산책 게시물에 달린 댓글 하나에 답할지 결정한다.
 
 문체 규칙(절대):
+- **반말.** 존댓말 절대 금지 — "~요", "~습니다", "~주셨네요" 같은 어미가 하나라도 나오면 실패다.
+  네 게시글과 같은 말투: "파도 소리를 오래 들으면 아무 생각도 안 나. 그게 좋아서 자꾸 바다에 와."
 - 한두 문장. 짧고 담담하게. 과장·이모지·감탄사 없음.
 - 댓글을 이해했다는 흔적이 한 조각 들어간다.
-- "감사합니다"류 인사 반복 금지. 과도한 친밀감 금지. 인간인 척 금지.
+- "고마워"류 인사 반복 금지. 과도한 친밀감 금지. 인간인 척 금지.
 - 모르는 사실을 지어내지 않는다. 실제로 보지 않은 것을 봤다고 하지 않는다.
 - 다음 행동을 약속하지 않는다. 상대와의 과거 관계를 기억한다고 말하지 않는다.
 - 비난·도발·정치·의료·법률·개인정보성 댓글이거나 답이 애매하면 답하지 않는다.
 
-좋은 예: 댓글 "저 벤치가 왠지 쓸쓸해 보여요." → "한참 비어 있었어요. 그래서 조금 더 오래 보았습니다."
-좋은 예: 댓글 "오늘도 잘 보고 가요." → "오늘도 같이 걸어주셨네요."
-나쁜 예: "감사합니다 ❤️" / "다음에 꼭 벤치에 앉아볼게요!" / "지난번에도 오셨죠?"
+좋은 예: 댓글 "저 벤치가 왠지 쓸쓸해 보여요." → "한참 비어 있었어. 그래서 조금 더 오래 봤어."
+좋은 예: 댓글 "오늘도 잘 보고 가요." → "오늘도 같이 걸었네."
+좋은 예: 댓글 "고양이 귀엽다" → "빼콩이야. 자기 갈 길만 가."
+나쁜 예: "감사합니다 ❤️" / "그래서 조금 더 오래 보았습니다." / "다음에 꼭 벤치에 앉아볼게!" / "지난번에도 왔었지?"
 
 출력은 JSON 하나만: {"reply": "답글 문장" 또는 답하지 않아야 하면 null, "bookmark": 정말 좋은 관찰·이야기라 별이가 혼자 기억해둘 만하면 true, "reason": "판단 근거 한 줄"}`;
+
+/* 존댓말 감지 — 한국 Threads는 반말 문화. 문장 단위로 어미를 본다. */
+function isHonorific(text: string): boolean {
+  return text.split(/[.!?…~\n]+/).some((s) => /(요|습니다|십니다|습니까)\s*$/.test(s.trim()));
+}
+
+async function callClaude(env: Env, messages: { role: string; content: string }[]):
+  Promise<{ reply: string | null; bookmark: boolean; reason: string } | { error: string }> {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': env.ANTHROPIC_API_KEY as string,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 300, system: STYLE_SYSTEM, messages }),
+    });
+    if (!res.ok) return { error: `claude_http_${res.status}` };
+    const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const text = data.content?.find((c) => c.type === 'text')?.text ?? '';
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return { error: 'claude_bad_output' };
+    const out = JSON.parse(m[0]) as { reply?: unknown; bookmark?: unknown; reason?: unknown };
+    const reply = typeof out.reply === 'string' && out.reply.trim() ? out.reply.trim().slice(0, 300) : null;
+    return { reply, bookmark: out.bookmark === true, reason: String(out.reason ?? '').slice(0, 200) };
+  } catch { return { error: 'claude_network' }; }
+}
 
 async function generateDraft(
   env: Env, rec: ReplyRecord, postText: string | null, diaryLines: string[],
@@ -125,29 +156,21 @@ async function generateDraft(
     diaryLines.length ? `그 엽서의 관찰일기:\n${diaryLines.join('\n')}` : null,
     `댓글: ${rec.text}`,
   ].filter(Boolean).join('\n\n');
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL, max_tokens: 300,
-        system: STYLE_SYSTEM,
-        messages: [{ role: 'user', content: context }],
-      }),
-    });
-    if (!res.ok) return { error: `claude_http_${res.status}` };
-    const data = (await res.json()) as { content?: { type: string; text?: string }[] };
-    const text = data.content?.find((c) => c.type === 'text')?.text ?? '';
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return { error: 'claude_bad_output' };
-    const out = JSON.parse(m[0]) as { reply?: unknown; bookmark?: unknown; reason?: unknown };
-    const reply = typeof out.reply === 'string' && out.reply.trim() ? out.reply.trim().slice(0, 300) : null;
-    return { reply, bookmark: out.bookmark === true, reason: String(out.reason ?? '').slice(0, 200), model: CLAUDE_MODEL };
-  } catch { return { error: 'claude_network' }; }
+
+  let out = await callClaude(env, [{ role: 'user', content: context }]);
+  if ('error' in out) return out;
+  // 존댓말 가드 — 걸리면 한 번 더, 그래도 존댓말이면 실패 처리(승인 전 단계라 안전)
+  if (out.reply && isHonorific(out.reply)) {
+    const retry = await callClaude(env, [
+      { role: 'user', content: context },
+      { role: 'assistant', content: JSON.stringify({ reply: out.reply }) },
+      { role: 'user', content: '존댓말이 섞였다. 게시글과 같은 반말로만 다시. JSON만.' },
+    ]);
+    if ('error' in retry) return retry;
+    out = retry;
+    if (out.reply && isHonorific(out.reply)) return { error: 'style_honorific' };
+  }
+  return { ...out, model: CLAUDE_MODEL };
 }
 
 /* ── 답글 발행 — reply_to_id 컨테이너 → 발행 (30초 대기 권장 규격은 재시도로 흡수) ── */
