@@ -755,8 +755,8 @@ const sky={
     if(this.weatherTimer<=0){
       const r=rng();
       if(this.weather==='clear'){
-        // 맑음 → 가끔 비/눈. 밤/추운 느낌이면 눈 확률 ↑ (임시로 랜덤)
-        if(r<0.28){ this.weather = rng()<0.5?'rain':'snow'; this.cloudDark = this.weather==='rain';
+        // 맑음 → 가끔 비/눈. 비:눈=7:3 (Vase 판정 2026-07-18 — 눈 입자가 느려 체감 빈도가 높아 보정)
+        if(r<0.28){ this.weather = rng()<0.7?'rain':'snow'; this.cloudDark = this.weather==='rain';
                     for(const c of this.clouds) c.dark=this.cloudDark&&rng()<0.7;
                     Sound.startWeather(this.weather); }
         this.weatherTimer=10+rng()*14;
