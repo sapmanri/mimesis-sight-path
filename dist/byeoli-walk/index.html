@@ -6769,7 +6769,7 @@ function drawByeoliPixel(byeoli){
    픽셀 렌더러(drawByeoliPixel/drawPpaePixel)는 삭제 금지 — 영구 보존. */
 const CHAR_STYLE_DEFAULT='toon';
 const CHAR_STYLE=(()=>{ try{ const q=new URLSearchParams(location.search).get('chars');
-  if(q==='pixel'||q==='toon') return q; }catch(e){} return CHAR_STYLE_DEFAULT; })();
+  if(q==='pixel'||q==='toon'||q==='soft') return q; }catch(e){} return CHAR_STYLE_DEFAULT; })();
 if(!CanvasRenderingContext2D.prototype.roundRect){
   CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
     r=Math.min(r,w/2,h/2);
@@ -6827,7 +6827,60 @@ function drawByeoliToon(byeoli){
   if(acting){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
     px(x-2,yy-38,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-36,3,2,ic); }
 }
-function drawByeoli(b){ if(CHAR_STYLE==='toon') drawByeoliToon(b); else drawByeoliPixel(b); }
+/* ===== 'soft' — 홈즈 버전 (2026-07-18): 손그림처럼 생긴 픽셀 캐릭터 =====
+   둥근 실루엣 · 점 두 개+짧은 입 · 색 면 3~5 · 1px 짙은 갈색 외곽선 ·
+   기존보다 ~24% 작게 · 걷기 4프레임. 해상도는 세계와 동일(1px 그리드) —
+   "약간 높은 해상도"는 캔버스 백킹 2x가 필요해 캡처 파이프라인 이관과 함께 별도 판정. */
+function drawMap(map,pal,ox,oy,flip){
+  for(let j=0;j<map.length;j++){ const row=map[j];
+    for(let i=0;i<row.length;i++){ const ch=row[i]; if(ch==='.') continue;
+      const c=pal[ch]; if(c) px(ox+(flip? row.length-1-i : i), oy+j, 1, 1, c); } }
+}
+const SOFT_BY_PAL={ o:'#33291f', h:'#4a372a', s:'#eed0b0', t:'#b8ded6', p:'#7d8657' };
+const SOFT_BY_MAP=[
+  '..oooooo..',
+  '.ohhhhhho.',
+  'ohhhhhhhho',
+  'ohhhhhhhho',
+  'ohssssssho',
+  'ohsossosho',
+  'ohssssssho',
+  '.ossoosso.',
+  '.osssssso.',
+  '..otttto..',
+  '.otttttto.',
+  'sottttttos',
+  '.otttttto.',
+  '.oppppppo.',
+  '.oppppppo.',
+  '..oppppo..',
+];
+function drawByeoliSoft(byeoli){
+  const x=byeoli.screenX, y=GROUND_Y, acting=byeoli.state==='acting';
+  const breathe=acting? -(Math.sin(AMB.t*0.0022)>0.6?1:0) : 0;
+  const bob=(acting?0:Math.round(Math.sin(byeoli.walkPhase)))+breathe;
+  const yy=y+bob, rest=acting&&byeoli.actAction==='rest';
+  ctx.fillStyle='rgba(20,30,24,.25)'; ctx.fillRect(x-5,y-1,12,2);
+  const ox=x-5, oy=rest? yy-20 : yy-22;
+  drawMap(SOFT_BY_MAP,SOFT_BY_PAL,ox,oy,false);
+  if(rest){
+    px(ox+2,yy-4,6,2,SOFT_BY_PAL.s); px(ox+2,yy-2,3,1,SOFT_BY_PAL.o); px(ox+5,yy-2,3,1,SOFT_BY_PAL.o);
+  } else {
+    const k=acting?0:Math.floor(byeoli.walkPhase)%4;
+    const lo=k===1?-1:(k===3?1:0);
+    px(ox+3+lo,yy-6,2,5,SOFT_BY_PAL.s); px(ox+6-lo,yy-6,2,5,SOFT_BY_PAL.s);
+    px(ox+2+lo,yy-1,3,1,SOFT_BY_PAL.o); px(ox+5-lo,yy-1,3,1,SOFT_BY_PAL.o);
+  }
+  if(acting&&byeoli.actAction==='record'){ px(x+2,yy-16,5,3,'#2b2b2b'); px(x+6,yy-15,1,1,'#8a8a8a'); }
+  else if(acting&&byeoli.actAction==='wonder'){ px(x+5,yy-19,2,2,'#f4d06a'); }
+  if(acting){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
+    px(x-2,yy-30,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-28,3,2,ic); }
+}
+function drawByeoli(b){
+  if(CHAR_STYLE==='toon') drawByeoliToon(b);
+  else if(CHAR_STYLE==='soft') drawByeoliSoft(b);
+  else drawByeoliPixel(b);
+}
 /* ===== BUILD 410-C: 고질라 화면 전체 World Event ==========================
    진짜 고질라는 로컬 랜덤이 아니라 Authority가 보낸 하나의 사건을, 모든 시청자가
    같은 시간축(startedAt~endsAt, epoch ms)으로 보는 화면 전체 방송 이벤트다.
@@ -7622,7 +7675,35 @@ function drawPpaeToon(ppae){
   ctx.fillStyle='#e08a8a'; ctx.fillRect(6.9,yy-7.8,1.1,0.8);
   ctx.restore();
 }
-function drawPpae(p){ if(CHAR_STYLE==='toon') drawPpaeToon(p); else drawPpaePixel(p); }
+/* soft 빼콩 — 낮고 둥근 식빵 자세, 코는 바닥 쪽, 안경은 호박색 점 2개 */
+const SOFT_CAT_PAL={ o:'#33291f', w:'#f2f0ea', d:'#cfccc2', r:'#c94b3f', g:'#e8b23c', n:'#33291f' };
+const SOFT_CAT_MAP=[
+  '......o.o..',
+  '.ooooooooo.',
+  'owwwwrwwwwo',
+  'owwwwrwgwgo',
+  'owwwwrwwwwo',
+  '.owwwwwwwno',
+];
+function drawPpaeSoft(ppae){
+  const x=Math.round(ppae.x), y=Math.round(ppae.y), f=ppae.facing;
+  const bounce=ppae.mode==='dash'?Math.round(Math.sin(ppae.phase)*1.5):Math.round(Math.abs(Math.sin(ppae.phase))*1);
+  const yy=y-bounce;
+  ctx.fillStyle='rgba(20,30,24,.2)'; ctx.fillRect(x-6,y-1,12,2);
+  const ox=x-5, flip=f<0;
+  drawMap(SOFT_CAT_MAP,SOFT_CAT_PAL,ox,yy-10,flip);
+  const legF=Math.floor(ppae.phase)%2, move=ppae.mode!=='idle';
+  px(ox+2+(move&&legF?-1:0),yy-4,2,3,SOFT_CAT_PAL.d);
+  px(ox+7+(move&&!legF?1:0),yy-4,2,3,SOFT_CAT_PAL.d);
+  const tsw=Math.round(Math.abs(Math.sin(ppae.phase*0.7))*2);
+  const tx=flip? ox+11 : ox-1;
+  px(tx,yy-9-tsw,1,4,SOFT_CAT_PAL.o);
+}
+function drawPpae(p){
+  if(CHAR_STYLE==='toon') drawPpaeToon(p);
+  else if(CHAR_STYLE==='soft') drawPpaeSoft(p);
+  else drawPpaePixel(p);
+}
 
 
 /* =====================================================================
