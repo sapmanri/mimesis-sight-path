@@ -51,27 +51,36 @@ test('30% 상한: 오늘 신규 10건 → cap 3', () => {
   assert.equal(used, 0);
 });
 
-test('draftEligibility: 카테고리·숙성·상한·쿨다운', () => {
+test('draftEligibility: 수동은 전부 개방, 정책은 자동(automated) 전용', () => {
   const base: ReplyRecord[] = [];
   for (let i = 0; i < 10; i++) base.push(rec({ sourceCommentId: `c${i}`, authorIdHash: `h${i}`, commentCreatedAt: NOW - (i + 2) * 600000 }));
+  const AUTO = { automated: true };
 
-  assert.equal(draftEligibility(rec({ category: 'spam' }), base, NOW), 'category_spam');
-  assert.equal(draftEligibility(rec({ category: 'sensitive' }), base, NOW), 'category_sensitive');
-  assert.equal(draftEligibility(rec({ category: 'light' }), base, NOW), 'category_light');
-  assert.equal(draftEligibility(rec({ commentCreatedAt: NOW - 60000 }), base, NOW), 'aging');
-  assert.equal(draftEligibility(rec(), base, NOW), null); // 통과
+  // 수동(기본값): 이미 답한 것만 막는다 (Vase 판정 07-19 "사람이 할 때는 풀어놔")
+  assert.equal(draftEligibility(rec({ category: 'spam' }), base, NOW), null);
+  assert.equal(draftEligibility(rec({ category: 'sensitive' }), base, NOW), null);
+  assert.equal(draftEligibility(rec({ commentCreatedAt: NOW - 60000 }), base, NOW), null);
+  assert.equal(draftEligibility(rec({ decision: 'published' }), base, NOW), 'already_published');
 
-  // 30% 상한은 자동 전용(enforceDailyCap) — 수동(기본값)은 상한 없음 (Vase 판정 07-19)
-  // (다른 게시물로 두어 per_post 규칙과 분리 — 상한 규칙만 검증)
+  // 자동: 정책 전부 강제
+  assert.equal(draftEligibility(rec({ category: 'spam' }), base, NOW, AUTO), 'category_spam');
+  assert.equal(draftEligibility(rec({ category: 'sensitive' }), base, NOW, AUTO), 'category_sensitive');
+  assert.equal(draftEligibility(rec({ category: 'light' }), base, NOW, AUTO), 'category_light');
+  assert.equal(draftEligibility(rec({ commentCreatedAt: NOW - 60000 }), base, NOW, AUTO), 'aging');
+  assert.equal(draftEligibility(rec(), base, NOW, AUTO), null); // 조건 없으면 자동도 통과
+
+  // 30% 상한 (per_post·per_account와 분리된 픽스처)
   const capped = base.map((r, i) => (i < 3 ? { ...r, publishedAt: NOW - 1000, decision: 'published' as const } : r));
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'x', sourcePostId: 'other', authorIdHash: 'hx' }), capped, NOW, { enforceDailyCap: true }), 'daily_cap');
+  assert.equal(draftEligibility(rec({ sourceCommentId: 'x', sourcePostId: 'other', authorIdHash: 'hx' }), capped, NOW, AUTO), 'daily_cap');
   assert.equal(draftEligibility(rec({ sourceCommentId: 'x', sourcePostId: 'other', authorIdHash: 'hx' }), capped, NOW), null);
 
-  // 같은 게시물 2건 발행 → per_post_cap
+  // 같은 게시물 2건 발행 → per_post_cap (자동만)
   const perPost = base.map((r, i) => (i < 2 ? { ...r, sourcePostId: 'pp', publishedAt: NOW - 1000 } : r));
-  assert.equal(draftEligibility(rec({ sourcePostId: 'pp', sourceCommentId: 'y' }), perPost, NOW), 'per_post_cap');
+  assert.equal(draftEligibility(rec({ sourcePostId: 'pp', sourceCommentId: 'y' }), perPost, NOW, AUTO), 'per_post_cap');
+  assert.equal(draftEligibility(rec({ sourcePostId: 'pp', sourceCommentId: 'y' }), perPost, NOW), null);
 
-  // 같은 계정 24h 내 발행 → cooldown
+  // 같은 계정 24h 내 발행 → cooldown (자동만)
   const sameAuthor = [rec({ sourceCommentId: 'z0', authorIdHash: 'hh', publishedAt: NOW - 3600_000 }), ...base];
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'z1', authorIdHash: 'hh' }), sameAuthor, NOW), 'per_account_cooldown');
+  assert.equal(draftEligibility(rec({ sourceCommentId: 'z1', authorIdHash: 'hh' }), sameAuthor, NOW, AUTO), 'per_account_cooldown');
+  assert.equal(draftEligibility(rec({ sourceCommentId: 'z1', authorIdHash: 'hh' }), sameAuthor, NOW), null);
 });

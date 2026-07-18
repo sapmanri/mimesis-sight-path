@@ -73,28 +73,30 @@ export function dailyReplyCap(log: ReplyRecord[], now: number): { cap: number; u
   return { cap: Math.ceil(todayNew * REPLY_RATIO), used, todayNew };
 }
 
-/** 이 댓글에 답글 후보를 만들어도 되는가 — 정책 전부를 한 곳에서 판정.
- *  30% 상한(daily_cap)은 **자동 발행 전용**(Vase 판정 07-19): 사람이 직접 승인할 때는
- *  적용하지 않는다. Phase 2 자동 경로는 반드시 enforceDailyCap:true로 호출할 것. */
+/** 이 댓글에 답글 후보를 만들어도 되는가.
+ *  정책 전부(30% 상한·10분 숙성·게시물당 2·계정당 24h·카테고리 필터)는
+ *  **자동 발행 전용**이다(Vase 판정 07-19: "사람이 할 때는 그냥 풀어놔").
+ *  수동(기본값)은 이미 답한 댓글만 막는다 — 판단은 승인 버튼을 쥔 사람의 것.
+ *  Phase 2 자동 경로는 반드시 automated:true로 호출할 것 (enforceDailyCap 포함 개념). */
 export function draftEligibility(
   rec: ReplyRecord, log: ReplyRecord[], now: number,
-  opts: { enforceDailyCap?: boolean } = {},
+  opts: { automated?: boolean } = {},
 ): string | null {
   if (rec.decision === 'published') return 'already_published';
+  if (!opts.automated) return null; // 수동: 전부 개방 — 카테고리는 라벨로만 보인다
+
   if (rec.category === 'spam') return 'category_spam';
   if (rec.category === 'sensitive') return 'category_sensitive'; // 자동 경로 금지 (지시서 C)
   if (rec.category === 'light') return 'category_light';
   if (now - rec.commentCreatedAt < AGING_MS) return 'aging';     // 10분 숙성
-  if (opts.enforceDailyCap) {
-    const { cap, used } = dailyReplyCap(log, now);
-    if (used >= cap) return 'daily_cap';                         // 자동만: 오늘 30% 소진
-  }
+  const { cap, used } = dailyReplyCap(log, now);
+  if (used >= cap) return 'daily_cap';                           // 오늘 30% 소진 (enforceDailyCap)
   const samePost = log.filter((r) => r.sourcePostId === rec.sourcePostId && r.publishedAt).length;
   if (samePost >= PER_POST_MAX) return 'per_post_cap';
   const sameAuthor = log.some((r) =>
     r.authorIdHash === rec.authorIdHash && r.publishedAt && now - r.publishedAt < PER_ACCOUNT_MS);
   if (sameAuthor) return 'per_account_cooldown';                 // 같은 계정 24h 1회
-  return null; // 후보 생성 가능
+  return null;
 }
 
 export const repliesConfig = {

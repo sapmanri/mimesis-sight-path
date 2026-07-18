@@ -235,9 +235,13 @@ if (!repliesTs) {
 }
 const repliesLogic = await readFile(new URL('../functions/api/_replies.ts', import.meta.url), 'utf8').catch(() => '');
 if (!/REPLY_RATIO\s*=\s*0\.3/.test(repliesLogic)) errors.push('답글: 30% 상한 상수가 없다');
-// 30% 상한은 자동 발행 전용(Vase 07-19) — 수동 승인은 무제한. 자동화용 스위치는 남아 있어야 한다.
-if (!repliesLogic.includes('enforceDailyCap')) {
-  errors.push('답글: 자동 발행용 30% 상한 스위치(enforceDailyCap)가 사라졌다');
+// 모든 정속 규칙(30%·숙성·게시물당·계정당·카테고리)은 자동 발행 전용(Vase 07-19).
+// 수동은 전부 개방 — 단 자동화용 스위치(automated)가 정책 모듈에 남아 있어야 한다.
+if (!repliesLogic.includes('automated')) {
+  errors.push('답글: 자동 발행용 정책 스위치(automated)가 사라졌다');
+}
+if (!/if \(!opts\.automated\) return null/.test(repliesLogic)) {
+  errors.push('답글: 수동 개방 계약(!automated → null)이 사라졌다');
 }
 if (!repliesLogic.includes("'category_sensitive'")) errors.push('답글: 민감 카테고리 차단이 없다');
 
