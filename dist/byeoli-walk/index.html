@@ -7602,20 +7602,20 @@ function drawPpaeToon(ppae){
   toonRR(2.2+(move&&!legF?0.8:0),yy-2.2,2.4,2.6,1,TOON.catShade);
   toonRR(-7,yy-8.2,13.5,6.6,3.2,TOON.cat);
   ctx.strokeStyle=TOON.line; ctx.lineWidth=1; ctx.fillStyle=TOON.cat;
-  ctx.beginPath(); ctx.moveTo(2.8,yy-12.4); ctx.lineTo(3.8,yy-16.4); ctx.lineTo(6.6,yy-13); ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(7.2,yy-13.2); ctx.lineTo(9.8,yy-16.2); ctx.lineTo(10.2,yy-12.4); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(3.2,yy-12.6); ctx.lineTo(4.2,yy-15.8); ctx.lineTo(6.4,yy-12.9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(7.0,yy-13); ctx.lineTo(9.2,yy-15.6); ctx.lineTo(9.8,yy-12.3); ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.fillStyle='#f4b8c0';
-  ctx.beginPath(); ctx.moveTo(3.8,yy-13.2); ctx.lineTo(4.3,yy-15.2); ctx.lineTo(5.8,yy-13.4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(4.1,yy-13.2); ctx.lineTo(4.6,yy-14.8); ctx.lineTo(5.8,yy-13.3); ctx.closePath(); ctx.fill();
   toonEll(6.4,yy-9.8,4.6,4.1,TOON.cat);
-  toonRR(2.6,yy-6.6,7.8,1.8,0.9,TOON.collar);
-  ctx.beginPath(); ctx.arc(4.7,yy-10,1.8,0,Math.PI*2);
-  ctx.fillStyle=TOON.lens; ctx.fill(); ctx.strokeStyle=TOON.line; ctx.lineWidth=0.8; ctx.stroke();
-  ctx.beginPath(); ctx.arc(8.6,yy-10,1.8,0,Math.PI*2);
+  toonRR(1.2,yy-5.6,6,1.4,0.7,TOON.collar);
+  ctx.beginPath(); ctx.arc(4.9,yy-10.2,1.25,0,Math.PI*2);
+  ctx.fillStyle=TOON.lens; ctx.fill(); ctx.strokeStyle=TOON.line; ctx.lineWidth=0.6; ctx.stroke();
+  ctx.beginPath(); ctx.arc(7.9,yy-10.2,1.25,0,Math.PI*2);
   ctx.fillStyle=TOON.lens; ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(6.5,yy-10); ctx.lineTo(6.8,yy-10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6.15,yy-10.2); ctx.lineTo(6.65,yy-10.2); ctx.stroke();
   ctx.fillStyle=TOON.line;
-  ctx.beginPath(); ctx.arc(4.7,yy-10,0.55,0,Math.PI*2); ctx.arc(8.6,yy-10,0.55,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='#e08a8a'; ctx.fillRect(6.2,yy-7.9,1.2,0.9);
+  ctx.beginPath(); ctx.arc(4.9,yy-10.2,0.45,0,Math.PI*2); ctx.arc(7.9,yy-10.2,0.45,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#e08a8a'; ctx.fillRect(6.9,yy-7.8,1.1,0.8);
   ctx.restore();
 }
 function drawPpae(p){ if(CHAR_STYLE==='toon') drawPpaeToon(p); else drawPpaePixel(p); }
