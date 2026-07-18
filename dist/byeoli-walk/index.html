@@ -184,10 +184,14 @@
     letter-spacing:.14em;color:var(--dim);text-transform:uppercase;
     display:flex;justify-content:space-between;border-top:1px solid var(--line);}
   .stream-head .tally{color:var(--sage)}
-  #stream{flex:1 1 auto;overflow:hidden;background:var(--panel);
-    padding:2px 9px 10px;display:flex;flex-direction:column;gap:0;
+  /* 427-QC2: 병렬 두 레인 — 별이 라인은 끊기지 않고 왼쪽에 연속, 빼콩은 오른쪽 자기 흐름.
+     최신이 위라 두 레인의 '지금'이 상단에서 나란히 만난다. */
+  #streamWrap{flex:1 1 auto;overflow:hidden;background:var(--panel);
+    padding:2px 9px 10px;display:flex;gap:12px;
     -webkit-mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);
             mask-image:linear-gradient(to bottom,#000 62%,transparent 100%);}
+  #stream{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:0}
+  #ppaeStream{width:36%;min-width:140px;display:flex;flex-direction:column;gap:0}
   /* 최신이 위(맨 앞). 아래로 갈수록 mask로 희미 */
   .msg{font-size:12px;line-height:1.5;padding:2px 0;animation:pop .25s ease;}
   @keyframes pop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
@@ -205,11 +209,11 @@
   .msg.ppae{color:#cfc9ae;text-align:right}
   .msg.ppae .k{color:#b5c49a}
   .msg.ppae .sub{margin-left:0;margin-right:22px}
-  /* QC3: 색만으로는 부족 — 누가 말했는지 항상 이름표 (캐릭터가 늘어도 안 헷갈리게) */
-  .msg.ppae .who{color:#8a917b;font-size:9px;letter-spacing:.12em;margin-right:7px;vertical-align:1px}
+  /* QC3: 색만으로는 부족 — 이름표가 항상 자기 줄로 붙는다 (채팅형) */
+  .msg.ppae .who{display:block;color:#8a917b;font-size:9px;letter-spacing:.12em;margin-bottom:1px}
   /* QC4: 같은 eventId — "둘이 같은 걸 봤다" 표시 */
   .msg.ppae .link{font-size:9px;opacity:.65;margin-left:4px}
-  @media (max-width:640px){ .msg.ppae{display:none} } /* v1: UI만 숨김 — 데이터 생성은 계속(판정 A) */
+  @media (max-width:640px){ #ppaeStream{display:none} #stream{flex-basis:100%} } /* v1: UI만 숨김 — 데이터 생성은 계속(판정 A) */
 </style>
 </head>
 <body>
@@ -241,7 +245,10 @@
     <span>별의 산책</span>
     <span class="tally" id="tally">기억 0 · 일기 0</span>
   </div>
-  <div id="stream"></div>
+  <div id="streamWrap">
+    <div id="stream"></div>
+    <div id="ppaeStream"></div>
+  </div>
 </div>
 
 <!-- BUILD 413-A: 별과 함께 발견한 것들 (개인 기록 시트)
@@ -964,6 +971,7 @@ const PPAE_CONFIG={
   awayChance:0.02, awayMaxMs:45000,  // 화면 밖 외출 확률(모드 전환당)·최대 부재
   propCooldownMs:180000,         // 같은 소품 재기록 쿨다운
   voiceRatioMax:0.4,             // QC5: 별이 100 대비 빼콩 말수 상한(30~40) — 주인공은 별이다
+  terseChance:0.4,               // 가끔 동물처럼 — 단문("킁킁.")이 나올 확률
 };
 
 /* 빼콩 일기 — 별이 archive와 완전 분리. localStorage 별도 키(백업 blob 제외). */
@@ -974,41 +982,52 @@ const ppaeDiary={
     this.archive.unshift(entry); this.archive=this.archive.slice(0,this.KEEP);
     try{ localStorage.setItem(this.LS, JSON.stringify(this.archive)); }catch(e){}
     // 모바일에서도 데이터는 계속 쌓인다 — CSS가 표시만 숨김(판정 A)
-    const em = entry.emoji && entry.emoji!=='🐾' ? entry.emoji+' ' : '';
+    const em = entry.emoji ? entry.emoji+' ' : '';   // 행동 아이콘은 항상 (QC 피드백 4)
     const link = entry.eventId ? ' <span class="link" title="별이와 같은 것을 보았다">🔗</span>' : '';
     pushMsg('ppae', `<span class="who">🐾 빼콩</span>${em}${entry.text}${link}`, null);
   },
 };
 
-/* 룰 표: Target Type → Rule → Diary. 문장 풀은 별이와 완전 분리 — 같은 문장 불가 구조 */
+/* 룰 표: Target Type → Rule → Diary. 문장 풀은 별이와 완전 분리 — 같은 문장 불가 구조.
+   별이는 항상 문장, 빼콩은 가끔 동물처럼(short) — 캐릭터의 결 (QC 피드백 5) */
 const PPAE_RULES=[
   { m:/flower|blossom|lavender|camellia|dandelion|cosmos|rose|herb|clover/, action:'sniff', emotion:'궁금',
-    lines:['향기를 맡아봤다. 코가 간지럽다.','꽃잎을 앞발로 살짝 건드렸다.','벌이 있어서 한 발 물러났다.'] },
+    lines:['향기를 맡아봤다. 코가 간지럽다.','꽃잎을 앞발로 살짝 건드렸다.','벌이 있어서 한 발 물러났다.'],
+    short:['킁킁.','벌 있었다.'] },
   { m:/acorn|chestnut|nut|berry|fruit|seed/, action:'pickup', emotion:'신남',
-    lines:['도토리 하나를 주웠다.','도토리는 없었다.','굴려봤다. 잘 굴러간다.'] },
+    lines:['도토리 하나를 주웠다.','도토리는 없었다.','굴려봤다. 잘 굴러간다.'],
+    short:['하나 먹었다.','없었다.'] },
   { m:/butterfly|moth|bird|crow|sparrow|magpie|swallow/, action:'chase', emotion:'신남',
-    lines:['조금 쫓아가다 말았다.','푸드덕 소리에 귀가 섰다.','저건 잡을 수 있을 것 같았는데.'] },
+    lines:['조금 쫓아가다 말았다.','푸드덕 소리에 귀가 섰다.','저건 잡을 수 있을 것 같았는데.'],
+    short:['놓쳤다.','다음엔 잡는다.'] },
   { m:/bug|beetle|ant|snail|worm|frog|toad|grasshopper|cricket/, action:'watch', emotion:'궁금',
-    lines:['한참 구경했다. 만지진 않았다.','움직임이 수상하다.','앞발을 들었다가 그만뒀다.'] },
+    lines:['한참 구경했다. 만지진 않았다.','움직임이 수상하다.','앞발을 들었다가 그만뒀다.'],
+    short:['……가만.','움직였다.'] },
   { m:/rice|sack|jar|jangdok|pot|kimchi|food|fish|bread/, action:'interest', emotion:'관심',
-    lines:['냄새가 났다. 못 먹는 거였다.','뚜껑 밑이 궁금하다.','한 바퀴 돌아보고 왔다.'] },
+    lines:['냄새가 났다. 못 먹는 거였다.','뚜껑 밑이 궁금하다.','한 바퀴 돌아보고 왔다.'],
+    short:['냄새만.','못 먹는 거.'] },
   { m:/bench|chair|stool|table/, action:'ignore', emotion:'무심',
-    lines:['그냥 지나쳤다.','앉을 생각은 없다.','그 밑이 더 아늑해 보였다.'] },
+    lines:['그냥 지나쳤다.','앉을 생각은 없다.','그 밑이 더 아늑해 보였다.'],
+    short:['흥.'] },
   { m:/scarecrow|statue|person|human|mailbox/, action:'wary', emotion:'경계',
-    lines:['조금 떨어져서 봤다.','움직이면 도망갈 준비를 했다.'] },
+    lines:['조금 떨어져서 봤다.','움직이면 도망갈 준비를 했다.'],
+    short:['……수상하다.'] },
 ];
 const PPAE_FALLBACK={ action:'watch', emotion:'무심',
-  lines:['킁킁대다 지나갔다.','별 거 아니었다.','한 번 쳐다보고 말았다.','그 옆 그림자가 더 신경 쓰였다.'] };
+  lines:['킁킁대다 지나갔다.','별 거 아니었다.','한 번 쳐다보고 말았다.','그 옆 그림자가 더 신경 쓰였다.'],
+  short:['킁킁.','……'] };
 
 const PpaeBrain={
   nextOkAt:0, propSeen:new Map(), lineIdx:new Map(),
   _gapOk(now){ return now>=this.nextOkAt; },
   _bumpGap(now){ this.nextOkAt=now+PPAE_CONFIG.minGapMs+rng()*PPAE_CONFIG.gapJitterMs; },
   _pickLine(rule,type){
-    const key=type, prev=this.lineIdx.get(key);
-    let i=(rng()*rule.lines.length)|0;
-    if(rule.lines.length>1 && i===prev) i=(i+1)%rule.lines.length;
-    this.lineIdx.set(key,i); return rule.lines[i];
+    // 가끔 동물처럼 — 단문 풀 우선 (별이는 항상 문장, 빼콩은 가끔 "킁킁.")
+    const pool = (rule.short && rng()<PPAE_CONFIG.terseChance) ? rule.short : rule.lines;
+    const key=type+':'+pool.length, prev=this.lineIdx.get(key);
+    let i=(rng()*pool.length)|0;
+    if(pool.length>1 && i===prev) i=(i+1)%pool.length;
+    this.lineIdx.set(key,i); return pool[i];
   },
   /* 유일한 경계면 — 향후 AI 엔진이 이 시그니처만 구현하면 된다.
      context: {trigger:'self'|'parallel'|'return', type?, targetId?, eventId?, awayMs?, wet?} */
@@ -1019,7 +1038,7 @@ const PpaeBrain={
     // (return은 예외 — 상태 근거가 있는 드문 사건이라 침묵시키지 않는다)
     if(ctx.trigger!=='return'){
       const by=document.querySelectorAll('#stream .msg.act, #stream .msg.diary, #stream .msg.rare').length;
-      const pp=document.querySelectorAll('#stream .msg.ppae').length;
+      const pp=document.querySelectorAll('#ppaeStream .msg.ppae').length;
       if(by===0 || pp/by>=PPAE_CONFIG.voiceRatioMax) return null;
     }
     let entry=null;
@@ -1167,13 +1186,17 @@ const archive=[];
    STREAM UI
    ===================================================================== */
 const streamEl=document.getElementById('stream');
-const MAXMSG=40;
+const ppaeStreamEl=document.getElementById('ppaeStream');
+const MAXMSG=40, MAXMSG_PPAE=24;
 function pushMsg(cls, html, sub){
   const d=document.createElement('div');
   d.className='msg '+cls;
   d.innerHTML = html + (sub?`<div class="sub">${sub}</div>`:'');
-  streamEl.prepend(d);              // column-reverse라 prepend=아래(최신)
-  while(streamEl.children.length>MAXMSG) streamEl.removeChild(streamEl.lastChild);
+  // 427-QC2: 빼콩은 자기 레인 — 별이 라인은 절대 끊기지 않는다
+  const lane = cls.indexOf('ppae')>=0 ? ppaeStreamEl : streamEl;
+  const cap  = lane===ppaeStreamEl ? MAXMSG_PPAE : MAXMSG;
+  lane.prepend(d);                  // 최신이 위
+  while(lane.children.length>cap) lane.removeChild(lane.lastChild);
 }
 /* BUILD 413-A: tally는 항상 현재 관찰자의 로컬 누적값만 표시한다.
    인자를 받지 않으므로 Authority 전체 telemetry가 이 UI를 덮어쓸 수 없다.
