@@ -858,7 +858,8 @@ function buildWorld(){
 
 const byeoli={ worldX:0, screenX:90, speed:62, baseSpeed:62,
   state:'walk', actAction:null, actTarget:null, actTimer:0, walkPhase:0,
-  gazeT:0 };   // 428: 행동 전 '바라봄' — 발견→멈춤→바라봄→기록
+  gazeT:0,                              // 428: 행동 전 '바라봄' — 발견→멈춤→바라봄→기록
+  actVariant:null, actTargetType:null };// 428-B: 같은 행동의 여러 버전 (소품 종류 우선)
 
 /* =====================================================================
    빼콩이 — 흰 고양이 companion. 자유 로밍.
@@ -1114,6 +1115,7 @@ function updateEncounters(dt){
     const firstOfKind=!seenKindsToday.has(nearest.type);
     seenKindsToday.add(nearest.type);
 
+    byeoli.actTargetType=nearest.type;   // 428-B: 소품 종류가 행동의 '버전'을 정한다 (벤치=앉기, 나무=기대기)
     if(nearest.rare){
       // 희귀 = Signature Moment 후보
       pushMsg('rare', `${def.emoji} ${def.ko}! 오늘 운 좋다`, null, def.ko);
@@ -1135,6 +1137,17 @@ function updateEncounters(dt){
 function startAction(intent){
   byeoli.state='acting'; byeoli.actAction=intent.action;
   byeoli.actTarget=intent.targetId; byeoli.actTimer=intent.duration;
+  // 428-B: 같은 행동도 여러 버전 — 소품 종류 우선, 아니면 그날의 기분(rng)
+  const tt=byeoli.actTargetType||'', vr=rng();
+  if(intent.action==='rest'){
+    byeoli.actVariant = /bench|chair|stool|table/.test(tt)?'sit'
+      : /tree|trunk|bamboo/.test(tt)?'lean'
+      : (vr<0.4?'sit' : vr<0.7?'squat' : 'shoegaze');
+  } else if(intent.action==='record'){
+    byeoli.actVariant = vr<0.3?'kneel' : vr<0.5?'tiptoe' : 'stand';
+  } else if(intent.action==='observe'){
+    byeoli.actVariant = vr<0.45?'lean-in' : 'stand';
+  } else byeoli.actVariant=null;
   // 428: 바라봄 — 어떤 행동이든 기록 전에 잠깐 멈춰 그저 본다
   const gz=0.7+rng()*0.5; byeoli.gazeT=gz;
   // 사운드 + 카메라
@@ -6895,8 +6908,15 @@ function drawByeoliSoft(byeoli){
   const breathe=acting? -(Math.sin(AMB.t*0.0022)>0.6?1:0) : 0;
   const bob=(acting?0:Math.round(Math.sin(byeoli.walkPhase)))+breathe;
   const yy=y+bob, rest=acting&&byeoli.actAction==='rest';
+  const gazing=acting && byeoli.gazeT>0;
+  const v=(acting&&!gazing)? byeoli.actVariant : null;   // 428-B: 바라봄 뒤에야 자세가 갈린다
   ctx.fillStyle='rgba(20,30,24,.25)'; ctx.fillRect(x-5,y-1,12,2);
-  const ox=x-5, base= rest? yy-19 : yy-21;
+  // 몸 높이: 앉기 -2 · 쪼그리기 -3 · 무릎 -2 · 까치발 +1
+  let drop=0;
+  if(rest&&v) drop = v==='squat'?3 : (v==='lean'||v==='shoegaze')?0 : 2;
+  else if(acting&&byeoli.actAction==='record'){ if(v==='kneel') drop=2; else if(v==='tiptoe') drop=-1; }
+  const lean = v==='lean'?1:0;                            // 나무에 살짝 기울여 기댐
+  const ox=x-5, base=yy-21+drop;
   const moving=walking && habitHold<=0;
   const k=moving? Math.floor(byeoli.walkPhase*1.5)%6 : 0;
   const lo=[0,-1,-1,0,1,1][k];
@@ -6904,23 +6924,37 @@ function drawByeoliSoft(byeoli){
   let hd=moving? Math.round(Math.sin(byeoli.walkPhase-0.9))-Math.round(Math.sin(byeoli.walkPhase)) : 0;
   if(sky.weather==='rain') hd+=1;                       // 428: 비 — 고개를 조금 숙인다
   if(habitHold>0 && habitKind==='sky') hd-=2;           // 428: 이유 없이 하늘을 본다
+  if(v==='shoegaze') hd+=2;                             // 428-B: 신발을 본다
+  else if(v==='lean-in') hd+=1;                         // 428-B: 가까이 들여다본다
   hd=Math.max(-2,Math.min(2,hd));
-  const tilt=Math.sin(AMB.t*0.00035+1.7)>0.992 ? 1 : 0;
+  const tilt=(Math.sin(AMB.t*0.00035+1.7)>0.992 ? 1 : 0) + lean;
   drawMap(SOFT_BY_HEAD,SOFT_BY_PAL,ox+tilt,base+hd,false);
   // 428: 눈 깜빡임 — 아주 가끔, 한 프레임
   if(Math.sin(AMB.t*0.0021+0.5)>0.995){
     px(ox+tilt+3,base+hd+5,1,1,SOFT_BY_PAL.s); px(ox+tilt+6,base+hd+5,1,1,SOFT_BY_PAL.s);
   }
-  drawMap(SOFT_BY_ROBE,SOFT_BY_PAL,ox,base+8,false);
-  drawMap(SOFT_BY_HEM,SOFT_BY_PAL,ox+hem,base+13,false);
-  if(rest){
+  drawMap(SOFT_BY_ROBE,SOFT_BY_PAL,ox+lean,base+8,false);
+  drawMap(SOFT_BY_HEM,SOFT_BY_PAL,ox+hem+lean,base+13,false);
+  // 다리 — 자세별
+  if(rest&&v==='squat'){
+    /* 쪼그리기: 옷자락이 바닥까지 — 다리 없음 */
+  } else if(rest&&(v==='lean'||v==='shoegaze')){
+    px(ox+3,yy-6,2,6,SOFT_BY_PAL.s); px(ox+6,yy-6,2,6,SOFT_BY_PAL.s);
+  } else if(rest){
+    // 앉기 + 발 흔들기 (428-B)
+    const sw2=Math.sin(AMB.t*0.006)>0?1:0;
     px(ox+2,yy-4,6,2,SOFT_BY_PAL.s);
+    px(ox+3,yy-2+sw2,2,2,SOFT_BY_PAL.s); px(ox+6,yy-2+(1-sw2),2,2,SOFT_BY_PAL.s);
+  } else if(acting&&byeoli.actAction==='record'&&v==='kneel'){
+    px(ox+3,yy-4,5,3,SOFT_BY_PAL.s);
+  } else if(acting&&byeoli.actAction==='record'&&v==='tiptoe'){
+    px(ox+3,yy-7,2,7,SOFT_BY_PAL.s); px(ox+6,yy-7,2,7,SOFT_BY_PAL.s);
   } else {
     px(ox+3+lo,yy-6,2,6,SOFT_BY_PAL.s); px(ox+6-lo,yy-6,2,6,SOFT_BY_PAL.s);
   }
   // 428: 바라봄 동안엔 소품도 말풍선도 없다 — 그저 서서 본다
-  const gazing=acting && byeoli.gazeT>0;
-  if(acting&&!gazing&&byeoli.actAction==='record'){ px(x+2,yy-15,5,3,'#2b2b2b'); px(x+6,yy-14,1,1,'#8a8a8a'); }
+  const camY=yy-15+drop;                                 // 몸 높이 따라 카메라도
+  if(acting&&!gazing&&byeoli.actAction==='record'){ px(x+2,camY,5,3,'#2b2b2b'); px(x+6,camY+1,1,1,'#8a8a8a'); }
   else if(acting&&!gazing&&byeoli.actAction==='wonder'){ px(x+5,yy-18,2,2,'#f4d06a'); }
   if(acting&&!gazing){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
     px(x-2,yy-29,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-27,3,2,ic); }
