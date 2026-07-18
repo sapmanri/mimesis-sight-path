@@ -232,13 +232,13 @@ if (!repliesTs) {
   if (!repliesTs.includes('pepperHash')) errors.push('답글: username 해시 저장이 아니다');
   if (!repliesTs.includes('draftEligibility')) errors.push('답글: 정책 판정(draftEligibility)을 거치지 않는다');
   if (!repliesTs.includes("decision !== 'drafted'")) errors.push('답글: 승인은 drafted 상태에서만 가능해야 한다');
-  // 승인 경로 전용 마커 — GET의 상한 표시와 별개로, approve가 직접 daily_cap을 거부해야 한다
-  if (!repliesTs.includes("error: 'daily_cap'")) {
-    errors.push('답글: 승인 경로에 30% 상한 재확인(daily_cap 거부)이 없다');
-  }
 }
 const repliesLogic = await readFile(new URL('../functions/api/_replies.ts', import.meta.url), 'utf8').catch(() => '');
 if (!/REPLY_RATIO\s*=\s*0\.3/.test(repliesLogic)) errors.push('답글: 30% 상한 상수가 없다');
+// 30% 상한은 자동 발행 전용(Vase 07-19) — 수동 승인은 무제한. 자동화용 스위치는 남아 있어야 한다.
+if (!repliesLogic.includes('enforceDailyCap')) {
+  errors.push('답글: 자동 발행용 30% 상한 스위치(enforceDailyCap)가 사라졌다');
+}
 if (!repliesLogic.includes("'category_sensitive'")) errors.push('답글: 민감 카테고리 차단이 없다');
 
 // ── 12. 425-D 별이 문장 작가 — 폴백 안전 계약 ─────────────

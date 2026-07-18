@@ -282,8 +282,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (body.action === 'approve') {
     if (rec.decision !== 'drafted' || !rec.generatedText) return json(409, { ok: false, error: 'not_drafted' });
-    const capInfo = dailyReplyCap(log, now);
-    if (capInfo.used >= capInfo.cap) return json(409, { ok: false, error: 'daily_cap' });
+    // 30% 상한은 자동 발행 전용(Vase 판정 07-19) — 사람의 승인은 막지 않는다.
+    // Phase 2 자동 발행 경로가 생기면 그쪽에서 dailyReplyCap으로 daily_cap을 강제할 것.
     const result = await publishReply(env, rec.sourceCommentId, rec.generatedText);
     rec.approvedAt = now;
     rec.threads = { errorCode: result.errorCode, requestId: result.requestId };

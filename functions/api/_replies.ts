@@ -73,15 +73,22 @@ export function dailyReplyCap(log: ReplyRecord[], now: number): { cap: number; u
   return { cap: Math.ceil(todayNew * REPLY_RATIO), used, todayNew };
 }
 
-/** 이 댓글에 답글 후보를 만들어도 되는가 — 정책 전부를 한 곳에서 판정 */
-export function draftEligibility(rec: ReplyRecord, log: ReplyRecord[], now: number): string | null {
+/** 이 댓글에 답글 후보를 만들어도 되는가 — 정책 전부를 한 곳에서 판정.
+ *  30% 상한(daily_cap)은 **자동 발행 전용**(Vase 판정 07-19): 사람이 직접 승인할 때는
+ *  적용하지 않는다. Phase 2 자동 경로는 반드시 enforceDailyCap:true로 호출할 것. */
+export function draftEligibility(
+  rec: ReplyRecord, log: ReplyRecord[], now: number,
+  opts: { enforceDailyCap?: boolean } = {},
+): string | null {
   if (rec.decision === 'published') return 'already_published';
   if (rec.category === 'spam') return 'category_spam';
   if (rec.category === 'sensitive') return 'category_sensitive'; // 자동 경로 금지 (지시서 C)
   if (rec.category === 'light') return 'category_light';
   if (now - rec.commentCreatedAt < AGING_MS) return 'aging';     // 10분 숙성
-  const { cap, used } = dailyReplyCap(log, now);
-  if (used >= cap) return 'daily_cap';                           // 오늘 30% 소진
+  if (opts.enforceDailyCap) {
+    const { cap, used } = dailyReplyCap(log, now);
+    if (used >= cap) return 'daily_cap';                         // 자동만: 오늘 30% 소진
+  }
   const samePost = log.filter((r) => r.sourcePostId === rec.sourcePostId && r.publishedAt).length;
   if (samePost >= PER_POST_MAX) return 'per_post_cap';
   const sameAuthor = log.some((r) =>

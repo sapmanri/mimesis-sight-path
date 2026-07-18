@@ -61,9 +61,10 @@ test('draftEligibility: 카테고리·숙성·상한·쿨다운', () => {
   assert.equal(draftEligibility(rec({ commentCreatedAt: NOW - 60000 }), base, NOW), 'aging');
   assert.equal(draftEligibility(rec(), base, NOW), null); // 통과
 
-  // 오늘 3건 발행됨(=cap) → daily_cap
+  // 30% 상한은 자동 전용(enforceDailyCap) — 수동(기본값)은 상한 없음 (Vase 판정 07-19)
   const capped = base.map((r, i) => (i < 3 ? { ...r, publishedAt: NOW - 1000, decision: 'published' as const } : r));
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'x' }), capped, NOW), 'daily_cap');
+  assert.equal(draftEligibility(rec({ sourceCommentId: 'x' }), capped, NOW, { enforceDailyCap: true }), 'daily_cap');
+  assert.equal(draftEligibility(rec({ sourceCommentId: 'x' }), capped, NOW), null);
 
   // 같은 게시물 2건 발행 → per_post_cap
   const perPost = base.map((r, i) => (i < 2 ? { ...r, sourcePostId: 'pp', publishedAt: NOW - 1000 } : r));
