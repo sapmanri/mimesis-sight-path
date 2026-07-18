@@ -857,7 +857,8 @@ function buildWorld(){
 }
 
 const byeoli={ worldX:0, screenX:90, speed:62, baseSpeed:62,
-  state:'walk', actAction:null, actTarget:null, actTimer:0, walkPhase:0 };
+  state:'walk', actAction:null, actTarget:null, actTimer:0, walkPhase:0,
+  gazeT:0 };   // 428: 행동 전 '바라봄' — 발견→멈춤→바라봄→기록
 
 /* =====================================================================
    빼콩이 — 흰 고양이 companion. 자유 로밍.
@@ -873,7 +874,8 @@ const ppae={
   targetX:130, targetY:GROUND_Y,
   targetProp:null,          // 427: 지금 향하는 소품 (자기 만남용)
   awaySince:0, awayWet:false, // 427: 부재 시작 시각 · 부재 중 비를 맞았는가(일기 근거)
-  reset(){ this.x=byeoli.screenX+40; this.y=GROUND_Y; this.mode='roam'; this.modeTimer=1+rng()*2; this.pickTarget(); },
+  pauseT:0,                 // 428: 킁킁 — 멈춰서 들여다보는 시간
+  reset(){ this.x=byeoli.screenX+40; this.y=GROUND_Y; this.mode='roam'; this.modeTimer=1+rng()*2; this.pauseT=0; this.pickTarget(); },
   pickTarget(){
     const bx=byeoli.screenX;
     if(this.mode==='follow'){ this.targetX=bx-10-rng()*20; this.targetY=GROUND_Y; }
@@ -895,6 +897,8 @@ const ppae={
     }
   },
   tick(dt){
+    // 428: 멈춰서 들여다보는 시간 — 이동·변덕 모두 정지, 꼬리만 천천히
+    if(this.pauseT>0){ this.pauseT-=dt; this.phase+=dt*3; return; }
     this.modeTimer-=dt;
     if(this.modeTimer<=0){
       if(this.mode==='away'){ this.modeTimer=1.5; } // 외출 중엔 변덕 없음 — 복귀는 아래 시간 제한이
@@ -943,9 +947,11 @@ const ppae={
     if(this.targetProp){
       const camShift=byeoli.worldX-byeoli.screenX;
       const sx=this.targetProp.x-camShift;
-      if(Math.abs(this.x-sx)<12){ PpaeBrain.selfEncounter(this.targetProp); this.targetProp=null; }
+      if(Math.abs(this.x-sx)<12){ this.pauseT=0.5+rng()*0.4; PpaeBrain.selfEncounter(this.targetProp); this.targetProp=null; }
       else if(sx<10||sx>W-10) this.targetProp=null;   // 스크롤에 흘러가면 포기
     }
+    // 428: 둘의 만남 — 스치면 아주 가끔 0.5초 멈춰 본다. 말은 없다 (별이 경로는 불변 — 427 하드룰)
+    if(this.mode!=='away' && Math.abs(this.x-byeoli.screenX)<10 && rng()<dt*0.05) this.pauseT=0.5;
     this.phase+=dt*(this.mode==='dash'?16:8);
   }
 };
@@ -1129,10 +1135,12 @@ function updateEncounters(dt){
 function startAction(intent){
   byeoli.state='acting'; byeoli.actAction=intent.action;
   byeoli.actTarget=intent.targetId; byeoli.actTimer=intent.duration;
+  // 428: 바라봄 — 어떤 행동이든 기록 전에 잠깐 멈춰 그저 본다
+  const gz=0.7+rng()*0.5; byeoli.gazeT=gz;
   // 사운드 + 카메라
   if(intent.action==='record'){
-    // 별이는 사진 찍는 걸 좋아한다 — 잠깐 뜸 들였다 번쩍+찰칵
-    setTimeout(()=>{ flash.trigger(); Sound.shutter(); }, 260);
+    // 별이는 사진 찍는 걸 좋아한다 — 바라본 뒤에야 카메라를 들고, 뜸 들였다 번쩍+찰칵
+    setTimeout(()=>{ flash.trigger(); Sound.shutter(); }, gz*1000+260);
   } else {
     Sound.act(intent.action);
   }
@@ -1182,10 +1190,14 @@ function maybeDiary(intent, item, def, meta){
 function diaryFor(intent, item, def, meta){
   lastDiaryAt=walkClock;
   const line = ByeolVoice.compose(intent, item, def, meta);   // 429-A 경계면 — 조립은 저 안에서만
-  pushMsg('diary', line, null);
-  tally.diary++; Profile.bumpDiary();
-  archive.unshift({ line, intent, date:formatByeoliDate(), epoch:byeoliDayEpoch() }); // Life Archive(별이력 날짜 포함)
-  updateTally();
+  const out=()=>{
+    pushMsg('diary', line, null);
+    tally.diary++; Profile.bumpDiary();
+    archive.unshift({ line, intent, date:formatByeoliDate(), epoch:byeoliDayEpoch() }); // Life Archive(별이력 날짜 포함)
+    updateTally();
+  };
+  // 428: 행동 일기는 '바라봄' 뒤에 나온다 — 발견→멈춤→바라봄→기록. (지나침·희귀는 즉시)
+  if(meta.passed || meta.rare) out(); else setTimeout(out, 900);
 }
 const archive=[];
 
@@ -1841,11 +1853,16 @@ Onboarding.init();
    UPDATE
    ===================================================================== */
 let paused=false,lastT=0,acc=0,speedMul=1,stepTimer=0.42;
+/* BUILD 428: 작은 습관 — 가끔 이유 없이 멈춰 하늘을 보거나 그냥 서 있는다.
+   대상 없는 멈춤만 허용 (없는 소품을 지어내지 않는다 — 일기도 안 쓴다). */
+let habitT=20+rng()*25, habitHold=0, habitKind=null;
 function update(dt){
   sky.tick(dt);            // 시간·날씨는 별이가 뭘 하든 흐른다
   ppae.tick(dt);           // 빼콩이도 항상 제멋대로 돌아다닌다
   if(flash.on) flash.timer-=dt, flash.timer<=0 && (flash.on=false);
   if(byeoli.state==='acting'){
+    // 428: 바라봄이 먼저 — 이 시간엔 아무것도 하지 않고 그저 본다
+    if(byeoli.gazeT>0){ byeoli.gazeT-=dt; brain.tick(dt,false); return; }
     byeoli.actTimer-=dt; brain.tick(dt,false);
     if(byeoli.actTimer<=0){
       // BUILD 426: '사진' 행동을 마치는 순간, 그 장면이 진짜 사진이 된다 (로컬 앨범)
@@ -1856,6 +1873,17 @@ function update(dt){
   }
   brain.tick(dt,true);
   walkClock+=dt;
+  // 428: 습관 멈춤 중 — 걷지 않고 발소리도 없다. 세계와 만남 감지는 계속 흐른다.
+  if(habitHold>0){
+    habitHold-=dt; if(habitHold<=0) habitKind=null;
+    updateEncounters(dt);
+    return;
+  }
+  habitT-=dt;
+  if(habitT<=0){
+    habitT=25+rng()*35;
+    if(!currentTarget || currentTarget.phase==='unseen'){ habitHold=0.9+rng()*0.6; habitKind=rng()<0.6?'sky':'feel'; }
+  }
   byeoli.worldX+=byeoli.speed*dt;
   byeoli.walkPhase+=dt*8;
   // 발소리: 실제 걸음 간격(약 0.42초마다 한 걸음). 배속 1일 때만.
@@ -6767,7 +6795,7 @@ function drawByeoliPixel(byeoli){
    별이·빼콩 둘만 그림체 교체 — 세계(소품·배경)는 픽셀 유지.
    롤백: CHAR_STYLE_DEFAULT='pixel' 한 줄 (배포 없이 비교하려면 URL ?chars=pixel).
    픽셀 렌더러(drawByeoliPixel/drawPpaePixel)는 삭제 금지 — 영구 보존. */
-const CHAR_STYLE_DEFAULT='toon';
+const CHAR_STYLE_DEFAULT='soft';   // Vase 판정 2026-07-18 저녁: soft v2로 통일
 const CHAR_STYLE=(()=>{ try{ const q=new URLSearchParams(location.search).get('chars');
   if(q==='pixel'||q==='toon'||q==='soft') return q; }catch(e){} return CHAR_STYLE_DEFAULT; })();
 if(!CanvasRenderingContext2D.prototype.roundRect){
@@ -6869,13 +6897,20 @@ function drawByeoliSoft(byeoli){
   const yy=y+bob, rest=acting&&byeoli.actAction==='rest';
   ctx.fillStyle='rgba(20,30,24,.25)'; ctx.fillRect(x-5,y-1,12,2);
   const ox=x-5, base= rest? yy-19 : yy-21;
-  const k=walking? Math.floor(byeoli.walkPhase*1.5)%6 : 0;
+  const moving=walking && habitHold<=0;
+  const k=moving? Math.floor(byeoli.walkPhase*1.5)%6 : 0;
   const lo=[0,-1,-1,0,1,1][k];
-  const hem=walking? -lo : 0;
-  let hd=walking? Math.round(Math.sin(byeoli.walkPhase-0.9))-Math.round(Math.sin(byeoli.walkPhase)) : 0;
-  hd=Math.max(-1,Math.min(1,hd));
+  const hem=moving? -lo : 0;
+  let hd=moving? Math.round(Math.sin(byeoli.walkPhase-0.9))-Math.round(Math.sin(byeoli.walkPhase)) : 0;
+  if(sky.weather==='rain') hd+=1;                       // 428: 비 — 고개를 조금 숙인다
+  if(habitHold>0 && habitKind==='sky') hd-=2;           // 428: 이유 없이 하늘을 본다
+  hd=Math.max(-2,Math.min(2,hd));
   const tilt=Math.sin(AMB.t*0.00035+1.7)>0.992 ? 1 : 0;
   drawMap(SOFT_BY_HEAD,SOFT_BY_PAL,ox+tilt,base+hd,false);
+  // 428: 눈 깜빡임 — 아주 가끔, 한 프레임
+  if(Math.sin(AMB.t*0.0021+0.5)>0.995){
+    px(ox+tilt+3,base+hd+5,1,1,SOFT_BY_PAL.s); px(ox+tilt+6,base+hd+5,1,1,SOFT_BY_PAL.s);
+  }
   drawMap(SOFT_BY_ROBE,SOFT_BY_PAL,ox,base+8,false);
   drawMap(SOFT_BY_HEM,SOFT_BY_PAL,ox+hem,base+13,false);
   if(rest){
@@ -6883,9 +6918,11 @@ function drawByeoliSoft(byeoli){
   } else {
     px(ox+3+lo,yy-6,2,6,SOFT_BY_PAL.s); px(ox+6-lo,yy-6,2,6,SOFT_BY_PAL.s);
   }
-  if(acting&&byeoli.actAction==='record'){ px(x+2,yy-15,5,3,'#2b2b2b'); px(x+6,yy-14,1,1,'#8a8a8a'); }
-  else if(acting&&byeoli.actAction==='wonder'){ px(x+5,yy-18,2,2,'#f4d06a'); }
-  if(acting){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
+  // 428: 바라봄 동안엔 소품도 말풍선도 없다 — 그저 서서 본다
+  const gazing=acting && byeoli.gazeT>0;
+  if(acting&&!gazing&&byeoli.actAction==='record'){ px(x+2,yy-15,5,3,'#2b2b2b'); px(x+6,yy-14,1,1,'#8a8a8a'); }
+  else if(acting&&!gazing&&byeoli.actAction==='wonder'){ px(x+5,yy-18,2,2,'#f4d06a'); }
+  if(acting&&!gazing){ const ic={observe:'#A7B49A',rest:'#8fa9d9',record:'#d98a4a',wonder:'#f4d06a'}[byeoli.actAction];
     px(x-2,yy-29,7,5,'#f4f0e7'); ctx.fillStyle=ic; px(x,yy-27,3,2,ic); }
 }
 function drawByeoli(b){
@@ -7713,6 +7750,8 @@ function drawPpaeSoft(ppae){
   px(tx,yy-9-tsw,1,4,SOFT_CAT_PAL.o);
   // 가끔 귀 쫑긋 — 살아있는 작은 신호
   if(Math.sin(AMB.t*0.0006+3)>0.99){ const ec=flip? 4 : 6; px(ox+ec,yy-11,1,1,SOFT_CAT_PAL.o); }
+  // 428: 킁킁 — 멈춰 있는 동안 코가 바닥 쪽으로 내려간다
+  if(ppae.pauseT>0){ px(ox+(flip?1:9),yy-5,1,1,SOFT_CAT_PAL.n); }
 }
 function drawPpae(p){
   if(CHAR_STYLE==='toon') drawPpaeToon(p);
