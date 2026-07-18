@@ -875,8 +875,8 @@ const ppae={
   targetX:130, targetY:GROUND_Y,
   targetProp:null,          // 427: 지금 향하는 소품 (자기 만남용)
   awaySince:0, awayWet:false, // 427: 부재 시작 시각 · 부재 중 비를 맞았는가(일기 근거)
-  pauseT:0,                 // 428: 킁킁 — 멈춰서 들여다보는 시간
-  reset(){ this.x=byeoli.screenX+40; this.y=GROUND_Y; this.mode='roam'; this.modeTimer=1+rng()*2; this.pauseT=0; this.pickTarget(); },
+  pauseT:0, pauseAct:null,  // 428: 킁킁 — 멈춰서 들여다보는 시간 · 428-D: 그 멈춤의 방식(룰 action)
+  reset(){ this.x=byeoli.screenX+40; this.y=GROUND_Y; this.mode='roam'; this.modeTimer=1+rng()*2; this.pauseT=0; this.pauseAct=null; this.pickTarget(); },
   pickTarget(){
     const bx=byeoli.screenX;
     if(this.mode==='follow'){ this.targetX=bx-10-rng()*20; this.targetY=GROUND_Y; }
@@ -948,7 +948,13 @@ const ppae={
     if(this.targetProp){
       const camShift=byeoli.worldX-byeoli.screenX;
       const sx=this.targetProp.x-camShift;
-      if(Math.abs(this.x-sx)<12){ this.pauseT=0.5+rng()*0.4; PpaeBrain.selfEncounter(this.targetProp); this.targetProp=null; }
+      if(Math.abs(this.x-sx)<12){
+        // 428-D: 룰의 action이 멈춤의 방식을 정한다 — 무시는 안 멈춤, 쫓기는 짧게, 나머진 들여다봄
+        const act=(PPAE_RULES.find(r=>r.m.test(this.targetProp.type))||{}).action||null;
+        this.pauseAct=act;
+        this.pauseT = act==='ignore'?0 : act==='chase'?0.25 : 0.5+rng()*0.4;
+        PpaeBrain.selfEncounter(this.targetProp); this.targetProp=null;
+      }
       else if(sx<10||sx>W-10) this.targetProp=null;   // 스크롤에 흘러가면 포기
     }
     // 428: 둘의 만남 — 스치면 아주 가끔 0.5초 멈춰 본다. 말은 없다 (별이 경로는 불변 — 427 하드룰)
@@ -7779,13 +7785,25 @@ function drawPpaeSoft(ppae){
   const legF=Math.floor(ppae.phase)%2, move=ppae.mode!=='idle';
   px(ox+2+(move&&legF?-1:0),yy-4,2,4,SOFT_CAT_PAL.w);
   px(ox+7+(move&&!legF?1:0),yy-4,2,4,SOFT_CAT_PAL.w);
-  const tsw=Math.round(Math.abs(Math.sin(ppae.phase*0.7))*2);
+  // 428-D: watch("가만.")일 땐 꼬리도 멈춘다
+  const frozen=ppae.pauseT>0 && ppae.pauseAct==='watch';
+  const tsw=frozen? 1 : Math.round(Math.abs(Math.sin(ppae.phase*0.7))*2);
   const tx=flip? ox+11 : ox-1;
   px(tx,yy-9-tsw,1,4,SOFT_CAT_PAL.o);
   // 가끔 귀 쫑긋 — 살아있는 작은 신호
   if(Math.sin(AMB.t*0.0006+3)>0.99){ const ec=flip? 4 : 6; px(ox+ec,yy-11,1,1,SOFT_CAT_PAL.o); }
-  // 428: 킁킁 — 멈춰 있는 동안 코가 바닥 쪽으로 내려간다
-  if(ppae.pauseT>0){ px(ox+(flip?1:9),yy-5,1,1,SOFT_CAT_PAL.n); }
+  // 428/428-D: 멈춤의 방식 — 킁킁(코 실룩) · 앞발 툭 · 가만히
+  if(ppae.pauseT>0){
+    const a=ppae.pauseAct;
+    if(a==='pickup'||a==='interest'){
+      px(ox+(flip?1:9),yy-5,1,1,SOFT_CAT_PAL.n);
+      px(ox+(flip?-1:11),yy-2,2,2,SOFT_CAT_PAL.w);   // 앞발을 뻗어 툭 건드린다
+    } else if(a==='watch'){
+      px(ox+(flip?1:9),yy-5,1,1,SOFT_CAT_PAL.n);      // 가만히 — 코만 낮게, 아무 움직임 없음
+    } else {
+      px(ox+(flip?1:9),yy-5+(Math.sin(AMB.t*0.02)>0?0:1),1,1,SOFT_CAT_PAL.n);  // 킁킁 실룩
+    }
+  }
 }
 function drawPpae(p){
   if(CHAR_STYLE==='toon') drawPpaeToon(p);
