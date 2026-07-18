@@ -39,7 +39,15 @@ npm run build
 - **자율 시스템 건드리지 말 것**: Threads 봇(크론 실발행 중) · Authority DO(관찰자 무지 유지가 설계 원칙).
 - 범위 확장 금지 — 오픈 차단 기준은 홈즈 작업표 원문 기준.
 
-## 현재 단계 (2026-07-18 기준)
-422-OPS(관측소 B~E)·423-EVENTS(예약+자연발생)·425(엽서·댓글답글·문장작가)·426(사진첩·공유)·427(빼콩 병렬 관찰자) 전부 배포됨.
-**다음: 421-A 실기기 QA(월요일 공개 유일 차단)** — 최신 상태·함정 목록은 vault `HANDOFF_20260718.md`가 정본.
-콘솔 쓰기 표면 4곳 고정(validate:ops) · 답글 정책은 자동 전용(`automated` 스위치) · 게이트 12단+테스트 43개.
+## 현재 단계 (2026-07-19 기준)
+422-OPS·423·425·426·427 배포 완료. 이후 **428 Living Motion(종료)** · **430 Parallel Lives** ·
+**429-A/C**(ByeoliWriter 경계 · archive=기억 원본 · 엽서 탈-DOM) 배포됨. 캐릭터는 `soft` 통일(`?chars=`로 롤백).
+
+**429-B에서 아키텍처가 확정됨 — 정본: `docs/BUILD_429B_GENOME_ARCHITECTURE.md`**
+> Genome은 문체를 저장하지 않는다. 세상을 바라보는 방식을 저장한다.
+```
+World → Request → Execution Contract → Selection → Observation(Identity+Daily) → Generation → Validation → Resolution
+```
+**다음: 슬롯간 중복 해결 → B/C/D 비교 → 4축 판정 → 429-D/E/F.**
+최신 상태·함정·교훈은 vault `HANDOFF_20260719.md`가 정본.
+게이트 15단(`validate:writer`·`validate:postcard`·`validate:parallel` 포함) · 콘솔 쓰기 표면 4곳 고정.
