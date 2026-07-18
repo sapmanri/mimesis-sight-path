@@ -200,6 +200,12 @@
   .msg.rare{color:#f0d98a}
   .msg.day{color:var(--sage);font-size:10px;letter-spacing:.1em;padding:5px 0 3px;border-top:1px dashed var(--line);margin-top:3px}
   .msg .sub{color:var(--dim);font-size:10px;margin-left:22px}
+  /* BUILD 427 — 빼콩(Bbaekkong, internal key: ppae) 일기: 우측 정렬 + 옅은 연갈.
+     한 타임라인에 두 시선 — 컬럼 분리가 아니라 같은 흐름의 좌/우. */
+  .msg.ppae{color:#cfc9ae;text-align:right}
+  .msg.ppae .k{color:#b5c49a}
+  .msg.ppae .sub{margin-left:0;margin-right:22px}
+  @media (max-width:640px){ .msg.ppae{display:none} } /* v1: UI만 숨김 — 데이터 생성은 계속(판정 A) */
 </style>
 </head>
 <body>
@@ -857,30 +863,50 @@ const ppae={
   x:130, y:GROUND_Y,        // 화면좌표
   vx:0, vy:0,
   facing:1, phase:0,
-  mode:'roam',              // roam | follow | idle | dash
+  mode:'roam',              // roam | follow | idle | dash | away(427: 화면 밖 외출)
   modeTimer:1.5,
   targetX:130, targetY:GROUND_Y,
+  targetProp:null,          // 427: 지금 향하는 소품 (자기 만남용)
+  awaySince:0, awayWet:false, // 427: 부재 시작 시각 · 부재 중 비를 맞았는가(일기 근거)
   reset(){ this.x=byeoli.screenX+40; this.y=GROUND_Y; this.mode='roam'; this.modeTimer=1+rng()*2; this.pickTarget(); },
   pickTarget(){
     const bx=byeoli.screenX;
     if(this.mode==='follow'){ this.targetX=bx-10-rng()*20; this.targetY=GROUND_Y; }
     else if(this.mode==='dash'){ this.targetX=clamp(bx + (rng()<0.5?-1:1)*(50+rng()*70), 20, W-20); this.targetY=GROUND_Y; }
     else if(this.mode==='idle'){ this.targetX=this.x; this.targetY=GROUND_Y; }
-    else { // roam: 별이 주변 아무데나 (앞뒤, 살짝 위아래=폴짝)
-      this.targetX=clamp(bx + (rng()*160-80), 20, W-20);
+    else { // roam — 427: 소품 지향. 별이를 따르는 게 아니라 자기 관심사를 향해 간다
+      const camShift=byeoli.worldX-byeoli.screenX;
+      const cands=props.filter(p=>{ const sx=p.x-camShift;
+        return sx>20 && sx<W-20 && Math.abs(sx-bx)<PPAE_CONFIG.orbitMax; });
+      if(cands.length && rng()<0.6){
+        const p=cands[(rng()*cands.length)|0];
+        this.targetX=clamp(p.x-camShift + (rng()*16-8), 20, W-20);
+        this.targetProp=p;
+      } else {
+        this.targetX=clamp(bx + (rng()*160-80), 20, W-20);
+        this.targetProp=null;
+      }
       this.targetY=GROUND_Y - (rng()<0.3?(8+rng()*12):0); // 가끔 폴짝
     }
   },
   tick(dt){
     this.modeTimer-=dt;
     if(this.modeTimer<=0){
-      // 모드 전환: 고양이답게 변덕
-      const r=rng();
-      this.mode = r<0.34?'roam' : r<0.55?'follow' : r<0.72?'idle' : 'dash';
-      this.modeTimer = this.mode==='idle'?(0.6+rng()*1.4)
-                     : this.mode==='dash'?(0.3+rng()*0.4)
-                     : (0.8+rng()*1.8);
-      this.pickTarget();
+      if(this.mode==='away'){ this.modeTimer=1.5; } // 외출 중엔 변덕 없음 — 복귀는 아래 시간 제한이
+      else {
+        // 모드 전환: 고양이답게 변덕. 아주 가끔 화면 밖 외출(427)
+        const r=rng();
+        if(r<PPAE_CONFIG.awayChance){
+          this.mode='away'; this.modeTimer=4+rng()*3;
+          this.targetX = rng()<0.5 ? -40 : W+40; this.targetY=GROUND_Y; this.targetProp=null;
+        } else {
+          this.mode = r<0.36?'roam' : r<0.55?'follow' : r<0.72?'idle' : 'dash';
+          this.modeTimer = this.mode==='idle'?(0.6+rng()*1.4)
+                         : this.mode==='dash'?(0.3+rng()*0.4)
+                         : (0.8+rng()*1.8);
+          this.pickTarget();
+        }
+      }
     }
     // 목표로 이동 (dash는 빠르게)
     const sp = this.mode==='dash'?150 : this.mode==='follow'?70 : 48;
@@ -891,11 +917,133 @@ const ppae={
     else this.y += (GROUND_Y-this.y)*Math.min(1,dt*6);
     // 목표 도달하면 roam은 새 목표
     if(this.mode==='roam' && Math.abs(dx)<3 && rng()<0.04) this.pickTarget();
-    // 별이한테서 너무 멀어지면 따라오기
-    if(Math.abs(this.x-byeoli.screenX)>150){ this.mode='follow'; this.pickTarget(); }
+    // 427 느슨한 궤도: 강제 복귀 없음 — 멀수록 별이 쪽으로 향할 '성향'만 커진다 (판정 3)
+    if(this.mode!=='away'){
+      const dist=Math.abs(this.x-byeoli.screenX);
+      if(dist>PPAE_CONFIG.orbitSoft && rng() < dt*Math.min(1.2,(dist-PPAE_CONFIG.orbitSoft)/70)){
+        this.mode='follow'; this.pickTarget();
+      }
+    }
+    // 427 외출·복귀: 부재는 허용, 최대 시간 제한. 복귀는 별도 행동 로그(근거 있는 일기만)
+    const off=this.x<-10||this.x>W+10;
+    if(this.mode==='away'){
+      if(off && !this.awaySince){ this.awaySince=Date.now(); this.awayWet=false; }
+      if(this.awaySince && sky.weather==='rain') this.awayWet=true;
+      if(this.awaySince && Date.now()-this.awaySince>PPAE_CONFIG.awayMaxMs){ this.mode='follow'; this.pickTarget(); }
+    } else if(this.awaySince && !off){
+      PpaeBrain.returned(Date.now()-this.awaySince, this.awayWet);
+      this.awaySince=0; this.awayWet=false;
+    }
+    // 427 자기 만남: 향하던 소품에 닿으면 빼콩의 시선 한 줄
+    if(this.targetProp){
+      const camShift=byeoli.worldX-byeoli.screenX;
+      const sx=this.targetProp.x-camShift;
+      if(Math.abs(this.x-sx)<12){ PpaeBrain.selfEncounter(this.targetProp); this.targetProp=null; }
+      else if(sx<10||sx>W-10) this.targetProp=null;   // 스크롤에 흘러가면 포기
+    }
     this.phase+=dt*(this.mode==='dash'?16:8);
   }
 };
+
+/* =====================================================================
+   BUILD 427 — Bbaekkong Parallel Observer   (Bbaekkong / internal key: ppae)
+   같은 세계를 두 존재가 다른 시선으로 본다. 이번 단계는 AI 없음 — Rule 기반.
+   경계면은 PpaeBrain.observe(context) → DiaryEntry 하나뿐: 향후 이 안쪽을
+   Genome→Writing Studio→Claude로 교체해도 UI·저장은 불변(F항).
+   하드룰: 빼콩 일기는 별이의 엽서(.msg 클래스 비공유)·관찰자 카운트·백업 blob에
+   절대 섞이지 않는다. 별이 경로는 한 치도 바꾸지 않는다.
+   ===================================================================== */
+const PPAE_CONFIG={
+  parallelObservationRate:0.3,   // 같은 이벤트 다른 기록 확률 — 설정값(판정 C, 하드코딩 금지)
+  minGapMs:25000, gapJitterMs:20000, // 일기 최소 간격(화면 소음 방지)
+  orbitSoft:120, orbitMax:200,   // 느슨한 궤도 — 강제 경계가 아니라 복귀 성향의 기준
+  awayChance:0.02, awayMaxMs:45000,  // 화면 밖 외출 확률(모드 전환당)·최대 부재
+  propCooldownMs:180000,         // 같은 소품 재기록 쿨다운
+};
+
+/* 빼콩 일기 — 별이 archive와 완전 분리. localStorage 별도 키(백업 blob 제외). */
+const ppaeDiary={
+  archive:[], LS:'mimesis.ppae.diary.v1', KEEP:60,
+  load(){ try{ this.archive=JSON.parse(localStorage.getItem(this.LS)||'[]'); }catch(e){ this.archive=[]; } },
+  push(entry){
+    this.archive.unshift(entry); this.archive=this.archive.slice(0,this.KEEP);
+    try{ localStorage.setItem(this.LS, JSON.stringify(this.archive)); }catch(e){}
+    // 모바일에서도 데이터는 계속 쌓인다 — CSS가 표시만 숨김(판정 A)
+    pushMsg('ppae', `${entry.emoji||'🐾'} ${entry.text}`, null);
+  },
+};
+
+/* 룰 표: Target Type → Rule → Diary. 문장 풀은 별이와 완전 분리 — 같은 문장 불가 구조 */
+const PPAE_RULES=[
+  { m:/flower|blossom|lavender|camellia|dandelion|cosmos|rose|herb|clover/, action:'sniff', emotion:'궁금',
+    lines:['향기를 맡아봤다. 코가 간지럽다.','꽃잎을 앞발로 살짝 건드렸다.','벌이 있어서 한 발 물러났다.'] },
+  { m:/acorn|chestnut|nut|berry|fruit|seed/, action:'pickup', emotion:'신남',
+    lines:['도토리 하나를 주웠다.','도토리는 없었다.','굴려봤다. 잘 굴러간다.'] },
+  { m:/butterfly|moth|bird|crow|sparrow|magpie|swallow/, action:'chase', emotion:'신남',
+    lines:['조금 쫓아가다 말았다.','푸드덕 소리에 귀가 섰다.','저건 잡을 수 있을 것 같았는데.'] },
+  { m:/bug|beetle|ant|snail|worm|frog|toad|grasshopper|cricket/, action:'watch', emotion:'궁금',
+    lines:['한참 구경했다. 만지진 않았다.','움직임이 수상하다.','앞발을 들었다가 그만뒀다.'] },
+  { m:/rice|sack|jar|jangdok|pot|kimchi|food|fish|bread/, action:'interest', emotion:'관심',
+    lines:['냄새가 났다. 못 먹는 거였다.','뚜껑 밑이 궁금하다.','한 바퀴 돌아보고 왔다.'] },
+  { m:/bench|chair|stool|table/, action:'ignore', emotion:'무심',
+    lines:['그냥 지나쳤다.','앉을 생각은 없다.','그 밑이 더 아늑해 보였다.'] },
+  { m:/scarecrow|statue|person|human|mailbox/, action:'wary', emotion:'경계',
+    lines:['조금 떨어져서 봤다.','움직이면 도망갈 준비를 했다.'] },
+];
+const PPAE_FALLBACK={ action:'watch', emotion:'무심',
+  lines:['킁킁대다 지나갔다.','별 거 아니었다.','한 번 쳐다보고 말았다.','그 옆 그림자가 더 신경 쓰였다.'] };
+
+const PpaeBrain={
+  nextOkAt:0, propSeen:new Map(), lineIdx:new Map(),
+  _gapOk(now){ return now>=this.nextOkAt; },
+  _bumpGap(now){ this.nextOkAt=now+PPAE_CONFIG.minGapMs+rng()*PPAE_CONFIG.gapJitterMs; },
+  _pickLine(rule,type){
+    const key=type, prev=this.lineIdx.get(key);
+    let i=(rng()*rule.lines.length)|0;
+    if(rule.lines.length>1 && i===prev) i=(i+1)%rule.lines.length;
+    this.lineIdx.set(key,i); return rule.lines[i];
+  },
+  /* 유일한 경계면 — 향후 AI 엔진이 이 시그니처만 구현하면 된다.
+     context: {trigger:'self'|'parallel'|'return', type?, targetId?, eventId?, awayMs?, wet?} */
+  observe(ctx){
+    const now=Date.now();
+    if(ctx.trigger!=='return' && !this._gapOk(now)) return null;
+    let entry=null;
+    if(ctx.trigger==='return'){
+      // 근거 있는 일기만: 비(awayWet)+부재+복귀가 모두 실제 상태로 존재할 때만 '젖은 발'
+      const sec=Math.round(ctx.awayMs/1000);
+      const text=ctx.wet ? '어디 갔다 왔는지 발이 젖어 있다.'
+        : (sec>25 ? '한참 만에 돌아왔다. 아무 말 없다.' : '담장 너머를 보고 왔다.');
+      entry={ observer:'bbaekkong', targetId:null, targetType:null, action:'return',
+        duration:sec, emotion:'무심', text, createdAt:now, eventId:null, emoji:'🐾' };
+    } else {
+      const def=CATALOG[ctx.type]||RARE[ctx.type];
+      const rule=PPAE_RULES.find(r=>r.m.test(ctx.type))||PPAE_FALLBACK;
+      entry={ observer:'bbaekkong', targetId:ctx.targetId??null, targetType:ctx.type,
+        action:rule.action, duration:null, emotion:rule.emotion,
+        text:this._pickLine(rule,ctx.type), createdAt:now,
+        eventId:ctx.eventId??null, emoji:(def&&def.emoji)||'🐾' };
+    }
+    this._bumpGap(now);
+    ppaeDiary.push(entry);
+    return entry;
+  },
+  selfEncounter(prop){
+    const now=Date.now();
+    const seen=this.propSeen.get(prop.id);
+    if(seen && now-seen<PPAE_CONFIG.propCooldownMs) return;
+    this.propSeen.set(prop.id, now);
+    this.observe({ trigger:'self', type:prop.type, targetId:prop.id });
+  },
+  /* 같은 이벤트 다른 기록(판정 B) — 별이 intent.id를 공유 eventId로 */
+  parallel(intent, item){
+    if(rng()>=PPAE_CONFIG.parallelObservationRate) return;
+    setTimeout(()=>{ this.observe({ trigger:'parallel', type:item.type, targetId:item.id, eventId:intent.id }); },
+      1200+rng()*2500);
+  },
+  returned(awayMs, wet){ this.observe({ trigger:'return', awayMs, wet }); },
+};
+ppaeDiary.load();
 
 const SEEN_D=190, INTEREST_D=110, ENCOUNTER_D=42;
 let currentTarget=null, lastWinDrive=null;
@@ -943,6 +1091,7 @@ function updateEncounters(dt){
       pushMsg('act', `${def.emoji} <span class="k">${actKo(intent.action)}</span> · ${def.ko}`, `${intent.duration}초`);
       tally.memories++; Profile.bumpMemory(); lastWinDrive=intent.action;
       maybeDiary(intent, nearest, def, {passed:false, firstOfKind});
+      PpaeBrain.parallel(intent, nearest); // 427: 같은 이벤트, 빼콩의 다른 기록 (공유 eventId=intent.id)
     }
     updateTally();
   }
@@ -7233,6 +7382,8 @@ const AlbumUi={
 try{ AlbumUi.init(); }catch(e){ /* 앨범 UI 실패가 산책을 막지 않는다 */ }
 // QA 훅 (421-A 실기기 점검용): 촬영·열기만 노출, 데이터 접근 표면 아님
 window.__album={ shoot:()=>AlbumCapture.onRecordDone(), open:()=>AlbumUi.openOverlay() };
+// 427 QA 훅: 빼콩 브레인 경계면 — AI 교체 시에도 이 시그니처가 유지되는지의 시금석
+window.__ppae={ observe:(ctx)=>PpaeBrain.observe(ctx), config:PPAE_CONFIG, archive:()=>ppaeDiary.archive.slice(0,10) };
 
 /* BUILD 426-B — 컨트롤 자동 페이드: 산책을 방해하지 않게 6초 뒤 흐려지고,
    화면을 만지면 깨어난다. 대상: 우상단 컨트롤(.ctrls) + 좌하단 보관함 도크. */
