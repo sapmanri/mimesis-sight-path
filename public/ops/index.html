@@ -827,6 +827,12 @@ async function pollThreadsReplies(force){
       const s = document.createElement('span'); s.className = 'note';
       s.textContent = `${r.decision === 'failed' ? '실패' : '무응답'} — ${r.reason ?? ''}`;
       act.appendChild(s);
+      // 거절·실패는 봉인이 아니다 — 언제든 다시 후보를 만들 수 있다 (정책 위반이면 서버가 사유로 거부)
+      btn('후보 만들기', false, async () => {
+        const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId });
+        if (!res.ok) alert(`후보 실패: ${res.error}`);
+        refresh();
+      });
     }
     btn('⭐', false, async () => {
       await postThreadsReplies({ action: 'bookmark', sourceCommentId: r.sourceCommentId });
