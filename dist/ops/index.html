@@ -748,7 +748,7 @@ async function pollThreadsReplies(force){
   $('thrSummary').textContent = [
     `누적 ${d.replies.length}건`,
     `오늘 새 댓글 ${d.cap.todayNew}건`,
-    `오늘 답글 ${d.cap.used}/${d.cap.cap}`,
+    `오늘 답글 ${d.cap.used} (자동화 상한 ${d.cap.cap} — 수동은 무제한)`,
     `⭐ 오늘 별이가 기억한 댓글 ${bookmarkedToday}개`,
     `Phase 2 검토 ${reviewed}/30${reviewed ? ` · 승인율 ${Math.round(published / reviewed * 100)}%` : ''}`,
     d.lastIngestAt ? `마지막 확인 ${ago(d.lastIngestAt)}` : null,

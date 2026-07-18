@@ -62,9 +62,10 @@ test('draftEligibility: 카테고리·숙성·상한·쿨다운', () => {
   assert.equal(draftEligibility(rec(), base, NOW), null); // 통과
 
   // 30% 상한은 자동 전용(enforceDailyCap) — 수동(기본값)은 상한 없음 (Vase 판정 07-19)
+  // (다른 게시물로 두어 per_post 규칙과 분리 — 상한 규칙만 검증)
   const capped = base.map((r, i) => (i < 3 ? { ...r, publishedAt: NOW - 1000, decision: 'published' as const } : r));
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'x' }), capped, NOW, { enforceDailyCap: true }), 'daily_cap');
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'x' }), capped, NOW), null);
+  assert.equal(draftEligibility(rec({ sourceCommentId: 'x', sourcePostId: 'other', authorIdHash: 'hx' }), capped, NOW, { enforceDailyCap: true }), 'daily_cap');
+  assert.equal(draftEligibility(rec({ sourceCommentId: 'x', sourcePostId: 'other', authorIdHash: 'hx' }), capped, NOW), null);
 
   // 같은 게시물 2건 발행 → per_post_cap
   const perPost = base.map((r, i) => (i < 2 ? { ...r, sourcePostId: 'pp', publishedAt: NOW - 1000 } : r));
