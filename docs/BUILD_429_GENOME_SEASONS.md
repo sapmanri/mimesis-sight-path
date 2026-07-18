@@ -36,12 +36,23 @@ KV 저장 (시간대별 분할: morning / afternoon / sunset / night)
 
 | 단계 | 내용 | 상태 |
 |---|---|---|
-| **429-A** | Genome Interface — 경계면만. 클라 `ByeolVoice` 경계 + Genome·문장집 JSON 계약(`_genome.ts`) + 검증기·음성 테스트 | 이 커밋 |
+| **429-A** | **Genome Interface — 완료.** `ByeoliWriter.write(context) → DiaryEntry` 경계 승격 + `_genome.ts` 계약 + `validate:writer` 회귀 게이트 | 배포됨 |
 | 429-B | Writing Studio Prompt — 문체 추출 → 문장집 생성 2단 프롬프트 계약 (425-D 문체 계약 상속) | |
-| 429-C | 오늘의 문장집 생성 — 서버 크론/lazy, Genome 수집 포함 (홈즈 안건: 소스 = Authority vs publish_log·capture_meta) | |
-| 429-D | KV 캐시 — `book:<YYYY-MM-DD>:<slot>` 4분할. 밤에 아침 문장이 나오지 않게 | |
-| 429-E | 클라이언트 교체 — `ByeolVoice.compose`가 문장집 우선 선택, 실패 시 Rule | |
-| 429-F | Rule Brain **영구 폴백** — 폐기 금지. 문장집 부재·형식 불량·슬롯 불일치 = 조용히 Rule | |
+| **429-C** | **엽서 수집 탈-DOM** — `pcCollectLines`를 archive/DiaryEntry 기반으로 전환 (Vase 판정: 문장집 적용 **전에** 한다) | |
+| 429-D | 시간대별 문장집 생성 + KV 캐시 — `book:<YYYY-MM-DD>:<slot>` 4분할 | |
+| 429-E | 클라이언트 교체 — `ByeoliWriter.write` 내부만 문장집 우선, 실패 시 Rule | |
+| 429-F | Rule Brain **영구 폴백** + 회귀 검증 | |
+
+## 3-A. 429-A 확정 계약 (Vase 보정 반영, 배포됨)
+
+- **DiaryEntry**: `{observer:'byeoli', eventId, line, targetId, targetType, action, date, epoch, source:'rule'|'book', bookId, bookSlot, intent}` — `intent`는 **기존 호환용으로만** 보존하고 새 기능은 `eventId`·명시 필드를 읽는다.
+- **슬롯 단일 결정**: `resolveDiarySlot(skyPhase)` 한 곳. 기준은 **별이 세계시간(sky.phase)** — 화면의 하늘과 문장이 모순되면 안 되므로 KST가 아니다. 날짜 경계는 archive와 같은 `byeoliDayEpoch`. ⚠ 429-D의 서버 문장집은 KST 날짜 키이므로 **세계시간↔KST 매핑을 그때 문서에 고정**할 것.
+- **recent**: 최근 8개의 `{line, targetType, source}`만. 개인 상태가 문장 계층으로 새지 않는다.
+- **trace 정규화**: `{type:'warm'|'moved'|null, ageMs}` — 생성 주체(`by`)는 넘기지 않는다(430 계약과 동일).
+- **동기 계약**: `write()`는 동기. 429-D 이후에도 클라는 KV에서 내려온 캐시를 읽으므로 동기 유지.
+- **폴백**: `null`·예외·Promise·빈 문장·공백·`observer` 불일치·`source` 불량·길이 초과(>120) → 전부 즉시 Rule.
+- **경계 바깥 불변**: `pushMsg`·`Profile.bumpDiary`·`tally`·`archive`·`maybeDiary` 조건/확률·900ms 타이밍 전부 그대로.
+- QA 훅 `window.__writer.fail(true)` — 실기기에서 폴백 경로를 직접 검증.
 
 ## 4. 계약 (429-A에서 고정)
 
