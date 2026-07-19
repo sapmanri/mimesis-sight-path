@@ -11,6 +11,8 @@ import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, manualProvider, workersAiProvider,
 } from './_image-provider.ts';
 import { validateTrialInput, hashPrompt, supportsReference } from './ops/sketch-trial.ts';
+import { isTrialKey } from './ops/sketch-image.ts';
+import { groupByPrompt } from './ops/sketch-board.ts';
 
 const DATE = '9100-04-10';
 let t = 1_700_000_000_000;
@@ -147,6 +149,22 @@ test('참조를 못 받는 모델은 후보가 아니라 대조군이다', () =>
   assert.equal(supportsReference('@cf/black-forest-labs/flux-2-dev'), true);
   assert.equal(supportsReference('@cf/black-forest-labs/flux-1-schnell'), false);
   assert.equal(supportsReference('@cf/unknown/model'), false, '모르는 모델은 지원 안 함으로 본다');
+});
+
+test('이미지 라우트는 sketch-trials/ 밖을 읽지 않는다', () => {
+  assert.equal(isTrialKey('sketch-trials/2026-07-19-abcd/flux-0.png'), true);
+  assert.equal(isTrialKey('captures/walk/1.jpg'), false, '운영 캡처를 읽으면 안 된다');
+  assert.equal(isTrialKey('sketch-trials/../captures/walk/1.jpg'), false, '경로 탈출');
+  assert.equal(isTrialKey('sketch-trials//x.png'), false);
+  assert.equal(isTrialKey(null), false);
+});
+
+test('스타일 보드는 같은 프롬프트끼리만 묶는다', () => {
+  const r = (promptHash: string, role: 'candidate' | 'control') =>
+    ({ promptHash, role, model: 'm', r2Key: null } as never);
+  const g = groupByPrompt([r('aaa', 'control'), r('bbb', 'candidate'), r('aaa', 'candidate')]);
+  assert.equal(g.size, 2);
+  assert.equal(g.get('aaa')!.length, 2);
 });
 
 test('스타일 비교는 프롬프트가 같아야 성립한다 — 해시가 그걸 보증', () => {
