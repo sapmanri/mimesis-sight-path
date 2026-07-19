@@ -245,3 +245,11 @@ test('Character Identity는 세부 항목으로 쪼개져 있다', () => {
   assert.ok(CHARACTER_IDENTITY_CHECKS.includes('빼콩'));
   assert.ok(CHARACTER_IDENTITY_CHECKS.includes('같은 아이처럼 보이는가'));
 });
+
+test('참조가 있을 때만 image 0을 지칭한다 (Character Identity의 핵심 한 줄)', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  assert.ok(!buildImagePrompt(m, null, 'a pot', ['flower pot'], 0).includes('image 0'));
+  const withRef = buildImagePrompt(m, null, 'a pot', ['flower pot'], 1);
+  assert.match(withRef, /same girl and the same cat as in image 0/);
+  assert.match(withRef, /same hair shape, same face, same clothes/);
+});

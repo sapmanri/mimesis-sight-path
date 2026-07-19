@@ -32,6 +32,8 @@ export interface SketchRequest {
   model: string;
   params: Record<string, unknown>;
   seed?: number;
+  /** 실제로 읽힌 기준 그림. 비어 있으면 참조 없이 생성된다(= 대조군). */
+  references?: ReferenceImage[];
 }
 
 /** 재현성을 위해 모델명·파라미터를 반드시 함께 남긴다 (판정의 근거가 된다). */
@@ -64,17 +66,53 @@ export interface ImageProvider {
    ⚠ 로컬 Wrangler 추론조차 사용량 한도에 포함된다. */
 
 export const WORKERS_AI_CANDIDATES = {
-  'flux-1-schnell': { model: '@cf/black-forest-labs/flux-1-schnell', supportsReference: false },
-  'flux-2-dev': { model: '@cf/black-forest-labs/flux-2-dev', supportsReference: true },
+  // 입력 방식이 다르다: schnell은 평범한 JSON({prompt, steps}),
+  // flux-2 계열은 multipart FormData를 {multipart:{body,contentType}}로 감싼다.
+  'flux-1-schnell': { model: '@cf/black-forest-labs/flux-1-schnell', supportsReference: false, multipart: false },
+  'flux-2-dev': { model: '@cf/black-forest-labs/flux-2-dev', supportsReference: true, multipart: true },
 } as const;
+
+/** 참조는 input_image_0 ... input_image_3 (최대 4장, 512×512). 프롬프트에서 인덱스로 지칭 가능. */
+export const MAX_REFERENCE_IMAGES = 4;
+export const referenceField = (i: number) => `input_image_${i}`;
+
+export function usesMultipart(model: string): boolean {
+  return Object.values(WORKERS_AI_CANDIDATES).some((c) => c.model === model && c.multipart);
+}
+
+/** R2에서 읽어 온 기준 그림. 키만 넘기면 존재 여부를 알 수 없어 바이트로 넘긴다. */
+export interface ReferenceImage {
+  name: string;
+  bytes: ArrayBuffer;
+  contentType: string;
+}
 
 export const workersAiProvider: ImageProvider = {
   id: 'workers-ai',
   available: (env) => Boolean(env.AI),
   async generate(env, req) {
     if (!env.AI) return { error: 'ai_binding_missing' };
-    const input: Record<string, unknown> = { prompt: req.plan.prompt, ...req.params };
-    if (req.seed !== undefined) input.seed = req.seed;
+    let input: Record<string, unknown>;
+    if (usesMultipart(req.model)) {
+      // flux-2 계열은 FormData를 직렬화해 넘긴다 (docs의 공식 호출 형태).
+      const form = new FormData();
+      form.append('prompt', req.plan.prompt);
+      for (const [k, v] of Object.entries(req.params)) form.append(k, String(v));
+      if (req.seed !== undefined) form.append('seed', String(req.seed));
+      (req.references ?? []).slice(0, MAX_REFERENCE_IMAGES).forEach((r, i) => {
+        form.append(referenceField(i), new Blob([r.bytes], { type: r.contentType }), `${r.name}-${i}`);
+      });
+      const formResponse = new Response(form);
+      input = {
+        multipart: {
+          body: formResponse.body,
+          contentType: formResponse.headers.get('content-type') ?? 'multipart/form-data',
+        },
+      };
+    } else {
+      input = { prompt: req.plan.prompt, ...req.params };
+      if (req.seed !== undefined) input.seed = req.seed;
+    }
     try {
       const out = await env.AI.run(req.model, input);
       const bytes = await coerceImageBytes(out);

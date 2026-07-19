@@ -13,8 +13,8 @@
 //   - autopost·publish·threads 어떤 경로와도 연결되지 않는다
 
 import {
-  selectProvider, trialKey, TRIAL_R2_PREFIX, WORKERS_AI_CANDIDATES,
-  type ImageProviderId, type ImageProviderEnv, type DailySketchPlan,
+  selectProvider, trialKey, TRIAL_R2_PREFIX, WORKERS_AI_CANDIDATES, MAX_REFERENCE_IMAGES,
+  type ImageProviderId, type ImageProviderEnv, type DailySketchPlan, type ReferenceImage,
 } from '../_image-provider.ts';
 import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, type MemoryEvent } from '../_daily-sketch.ts';
 
@@ -153,21 +153,38 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sceneEn = (typeof (body as Record<string, unknown>).sceneEn === 'string'
     ? (body as Record<string, string>).sceneEn
     : await translateScene(env, memory.lines).catch(() => null));
-  const prompt = buildImagePrompt(memory, null, sceneEn, subjects);
   const promptKo = buildSketchPrompt(memory, null);   // 사람이 검토할 원본
+  // 기준 그림을 **실제로 읽는다.** 키만 믿으면 없는 파일을 넘기고도 candidate로 기록돼
+  // 결과가 거짓말을 한다(4차 사고: .png로 요청했는데 저장된 건 .jpg였다).
+  const references: ReferenceImage[] = [];
+  const refErrors: string[] = [];
+  for (const key of referenceKeys.slice(0, MAX_REFERENCE_IMAGES)) {
+    const obj = await env.CAPTURES.get(key);
+    if (!obj) { refErrors.push(`reference_missing: ${key}`); continue; }
+    references.push({
+      name: key.split('/').pop() ?? 'ref',
+      bytes: await obj.arrayBuffer(),
+      contentType: obj.httpMetadata?.contentType ?? 'image/png',
+    });
+  }
+  const prompt = buildImagePrompt(memory, null, sceneEn, subjects, references.length);
   const plan: DailySketchPlan = { memory, prompt, referenceKeys };
   const provider = selectProvider(providerId, env);
   const trialId = `${new Date().toISOString().slice(0, 10)}-${hashPrompt(prompt)}`;
   const promptHash = hashPrompt(prompt);
 
   const made: TrialRecord[] = [];
-  const errors: string[] = [];
+  const errors: string[] = [...refErrors];
   for (const model of models) {
     for (let n = 0; n < count; n++) {
       // 참조를 못 받는 모델에 참조를 넘기지 않는다. 넘긴 척도 하지 않는다.
-      const refOk = referenceKeys.length > 0 && supportsReference(model);
-      const params = { steps: 4, ...(refOk ? { reference_images: referenceKeys } : {}) };
-      const art = await provider.generate(env, { plan, model, params, seed: seed === undefined ? undefined : seed + n });
+      // 실제로 읽힌 참조가 있을 때만 후보다. 모델이 못 받거나 파일이 없으면 대조군.
+      const refOk = references.length > 0 && supportsReference(model);
+      const params = { steps: 4, width: 1024, height: 1024 };
+      const art = await provider.generate(env, {
+        plan, model, params, references: refOk ? references : [],
+        seed: seed === undefined ? undefined : seed + n,
+      });
       if ('error' in art) { errors.push(`${model}#${n}: ${art.error}`); continue; }
       let r2Key: string | null = null;
       if (art.bytes) {
@@ -190,6 +207,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ok: true, trialId, prompt, promptKo, promptHash,
     provider: provider.id,
     generated: made.length, records: made, errors,
+    referencesLoaded: references.map((r) => r.name),
     reminder: '시험 산출물이다. 게시·크론 연결 금지. 스타일 판정 후에만 provider 승격.',
   });
 };

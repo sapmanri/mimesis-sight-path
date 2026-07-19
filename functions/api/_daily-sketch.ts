@@ -230,7 +230,7 @@ const FOCUS_DRAW_EN: Record<string, string> = {
  */
 export function buildImagePrompt(
   memory: MemoryEvent, genome: GenomeContext | null, sceneEn: string | null,
-  subjects: string[] = [],
+  subjects: string[] = [], referenceCount = 0,
 ): string {
   const d = SKETCH_DENSITY[memory.density];
   const focus = (genome?.selection ?? []).map((f) => FOCUS_DRAW_EN[f]).filter(Boolean).slice(0, 2);
@@ -245,6 +245,11 @@ export function buildImagePrompt(
     subjectClause(subjects, d.maxSubjects),
     focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
     `Style: ${SKETCH_RULES_EN.join(', ')}.`,
+    // 참조가 실제로 들어갈 때만 인덱스로 지칭한다. flux-2는 image 0..3 으로 참조를 읽는다.
+    // 이 한 줄이 Character Identity의 핵심 — 스타일이 아니라 **같은 아이**를 요구한다.
+    referenceCount > 0
+      ? 'Keep the same girl and the same cat as in image 0 — same hair shape, same face, same clothes, same line style.'
+      : '',
     `${SKETCH_POSITIVE.join(', ')}.`,
   ].filter((l) => l !== '').join('\n');
 }
