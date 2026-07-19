@@ -9,6 +9,8 @@ import byeolliPosts from './byeolli_posts.json';
 import { appendPublishLog, bump401Bucket } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, type GenomeProvenance } from './_genome-identity';
+import { resolvePostText, slotForPhase } from './_genome-fallback';
+import { bookKey } from './_genome';
 
 // 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
 // 크론 경로의 동작은 그대로 — export만 추가 (자율 시스템 무변경 원칙).
@@ -255,16 +257,33 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           .find((m) => m.r2Key === key)
         : null;
       if (cm) {
+        const recentTexts = feed.slice(0, 5).map((p) => p.text ?? '').filter(Boolean);
         const written = await writeByeoliPost(env, {
           targetLabel: cm.targetLabel ?? null,
           byeoliAction: cm.byeoliAction ?? null,
           skyPhase: cm.skyPhase ?? null,
           weather: cm.weather ?? null,
           diaryLines: cm.diaryLines ?? [],
-          recentTexts: feed.slice(0, 5).map((p) => p.text ?? '').filter(Boolean),
+          recentTexts,
         });
-        // 429-E: 성공하면 Genome을 탄 글이다. 출처를 남겨 나중에 역추적할 수 있게 한다.
-        if (written) { text = written.text; textIndex = null; genomeSource = written.provenance; }
+        // 429-F: genome-live → genome-book → rule-fallback. 세 순위를 순서대로 내려간다.
+        const date = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); // KST
+        const slot = slotForPhase(cm.skyPhase ?? null);
+        let bookRaw: unknown = null;
+        if (!written && slot) {
+          try { bookRaw = JSON.parse((await env.PLANET.get(bookKey(date, slot))) ?? 'null'); }
+          catch { /* 문장집을 못 읽으면 다음 순위로 */ }
+        }
+        const resolved = resolvePostText({
+          liveText: written?.text ?? null,
+          book: bookRaw,
+          poolText: text,
+          ctx: { targetLabel: cm.targetLabel ?? null, diaryLines: cm.diaryLines ?? [], recentTexts, date, slot },
+        });
+        text = resolved.text;
+        genomeSource = resolved.provenance;
+        // 풀 인덱스는 실제로 풀 문장을 썼을 때만 유지 (로테이션 아끼기)
+        if (resolved.provenance.generationSource !== 'rule-fallback') textIndex = null;
       }
     } catch { /* 폴백 유지 */ }
   }
