@@ -8,6 +8,7 @@
 import byeolliPosts from './byeolli_posts.json';
 import { appendPublishLog, bump401Bucket } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
+import { provenance, type GenomeProvenance } from './_genome-identity';
 
 // 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
 // 크론 경로의 동작은 그대로 — export만 추가 (자율 시스템 무변경 원칙).
@@ -243,6 +244,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // 어떤 실패도 발행을 막지 않는다 — 문장 풀 폴백이 항상 살아 있다 (자율 시스템 보호).
   let text = chosen.text;
   let textIndex: number | null = pick;
+  // 429-F 준비: 어느 경로로 나온 글인지. 기본은 풀 폴백이고, Writer가 성공하면 덮인다.
+  let genomeSource: GenomeProvenance = provenance('rule-fallback', true);
   if (img) {
     try {
       const key = img.match(/captures\/[^?#]+/)?.[0];
@@ -260,7 +263,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           diaryLines: cm.diaryLines ?? [],
           recentTexts: feed.slice(0, 5).map((p) => p.text ?? '').filter(Boolean),
         });
-        if (written) { text = written; textIndex = null; } // 풀 인덱스 아님 — 별이가 새로 쓴 글
+        // 429-E: 성공하면 Genome을 탄 글이다. 출처를 남겨 나중에 역추적할 수 있게 한다.
+        if (written) { text = written.text; textIndex = null; genomeSource = written.provenance; }
       }
     } catch { /* 폴백 유지 */ }
   }
@@ -275,6 +279,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     icon: '🌏',
     likes: Math.floor(Math.random() * 12) + 1,
     comments: [],
+    // 429-F: "이게 정말 Genome을 탄 글인지" 나중에 확인할 수 있어야 한다.
+    genome: genomeSource,
   };
   const nextFeed = [post, ...feed].slice(0, MAX_POSTS);
   await env.PLANET.put(FEED_KEY, JSON.stringify(nextFeed));
