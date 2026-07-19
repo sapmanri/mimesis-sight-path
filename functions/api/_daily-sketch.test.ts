@@ -136,6 +136,13 @@ test('빈 기억으로는 시험할 수 없다', () => {
   assert.equal(validateTrialInput({ confirm: 'trial', memory: { lines: [] }, models: ['m'] }).ok, false);
 });
 
+test('density가 어긋나면 프롬프트 조립 전에 막는다 (500 대신 400)', () => {
+  const memory = { ...buildMemoryEvent([e()], DATE)!, density: 'huge' as never };
+  const r = validateTrialInput({ confirm: 'trial', memory, models: ['m'], count: 1 });
+  assert.equal(r.ok, false);
+  assert.match((r as { error: string }).error, /bad_density/);
+});
+
 test('참조를 못 받는 모델은 후보가 아니라 대조군이다', () => {
   assert.equal(supportsReference('@cf/black-forest-labs/flux-2-dev'), true);
   assert.equal(supportsReference('@cf/black-forest-labs/flux-1-schnell'), false);

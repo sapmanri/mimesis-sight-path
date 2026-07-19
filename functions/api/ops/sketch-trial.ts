@@ -16,7 +16,7 @@ import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, WORKERS_AI_CANDIDATES,
   type ImageProviderId, type ImageProviderEnv, type DailySketchPlan,
 } from '../_image-provider.ts';
-import { buildSketchPrompt, SKETCH_RULES, SKETCH_VERSION, type MemoryEvent } from '../_daily-sketch.ts';
+import { buildSketchPrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, type MemoryEvent } from '../_daily-sketch.ts';
 
 interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
@@ -73,6 +73,10 @@ export function validateTrialInput(body: unknown): { ok: true; value: {
   const memory = b.memory as MemoryEvent | undefined;
   if (!memory || typeof memory !== 'object' || !Array.isArray(memory.lines) || !memory.lines.length) {
     return { ok: false, error: 'memory_required: MemoryEvent with non-empty lines' };
+  }
+  // density가 어긋나면 프롬프트 조립에서 터진다 — 시험 한 번을 날리느니 여기서 잡는다
+  if (!Object.prototype.hasOwnProperty.call(SKETCH_DENSITY, memory.density)) {
+    return { ok: false, error: `bad_density: ${Object.keys(SKETCH_DENSITY).join(' | ')} 중 하나` };
   }
   const models = Array.isArray(b.models) ? b.models.filter((m): m is string => typeof m === 'string' && !!m) : [];
   if (!models.length) return { ok: false, error: `models_required: 예) ${Object.values(WORKERS_AI_CANDIDATES).map((c) => c.model).join(', ')}` };
