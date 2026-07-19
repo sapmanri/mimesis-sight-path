@@ -8,7 +8,7 @@
 import byeolliPosts from './byeolli_posts.json';
 import { appendPublishLog, bump401Bucket } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
-import { provenance, type GenomeProvenance } from './_genome-identity';
+import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
 import { bookKey } from './_genome';
 
@@ -171,10 +171,16 @@ export const onRequestOptions: PagesFunction<Env> = async () =>
   new Response(null, { status: 204, headers: CORS });
 
 // GET — 상태 확인용 (문장 개수, 최근 발행 수). 발행은 안 함.
+// 429-F: genomeVersion·chain을 함께 노출한다. 발행을 트리거하지 않고 "지금 라이브에
+// 어떤 Genome이 걸려 있는가"를 밖에서 확인할 수 있어야 한다 — 배포 검증의 유일한 무해 경로.
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const recentRaw = await env.PLANET.get(RECENT_KEY);
   const recent: number[] = recentRaw ? JSON.parse(recentRaw) : [];
-  return new Response(JSON.stringify({ ok: true, poolSize: POSTS.length, recentCount: recent.length, images: IMAGE_POOL.length }), {
+  return new Response(JSON.stringify({
+    ok: true, poolSize: POSTS.length, recentCount: recent.length, images: IMAGE_POOL.length,
+    genomeVersion: GENOME_VERSION,
+    chain: [...GENERATION_SOURCES],
+  }), {
     status: 200, headers: { ...CORS, 'Content-Type': 'application/json' },
   });
 };
