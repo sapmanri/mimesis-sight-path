@@ -16,7 +16,7 @@ import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, WORKERS_AI_CANDIDATES,
   type ImageProviderId, type ImageProviderEnv, type DailySketchPlan,
 } from '../_image-provider.ts';
-import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, type MemoryEvent } from '../_daily-sketch.ts';
+import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, type MemoryEvent } from '../_daily-sketch.ts';
 
 interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
@@ -134,6 +134,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
       '모눈종이 배경', '낙서 배치', '장면보다 기억의 강조', '7일 연속 놓았을 때 같은 화가처럼 보이는가',
       'Style Identity — 같은 아이가 그린 것 같은가 (예쁜 그림이 아니라 별이의 그림인가)',
     ],
+    characterIdentityChecks: CHARACTER_IDENTITY_CHECKS,
+    referenceHowTo: 'GET/POST /api/ops/sketch-reference — sketch-trials/reference/ 에 기준 그림 등록',
     records: records.slice(0, META_KEEP),
   });
 };

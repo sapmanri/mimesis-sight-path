@@ -40,7 +40,7 @@ export const SKETCH_RULES = [
  * 오해한다(1차 시험 실패: 노란 접시에 깨진 한글이 나왔다). 인덱스가 SKETCH_RULES와 1:1이어야 한다.
  */
 export const SKETCH_RULES_EN = [
-  'pale graph-paper background with faint grid lines',
+  'pale graph paper with clearly visible grid lines',
   'rough navy-blue ink outlines',
   'a flat palette of four to six colors',
   'flat even fills, plain shapes',
@@ -58,7 +58,7 @@ export const SKETCH_RULES_EN = [
  * 원하지 않는 것을 말하는 대신 **원하는 결과 상태만** 서술한다.
  */
 export const SKETCH_POSITIVE = [
-  'an unmarked sketchbook page',
+  'drawn on unmarked pale graph paper',
   'flat scan, top-down, the drawing fills the frame',
 ] as const;
 
@@ -71,6 +71,16 @@ export function subjectClause(subjects: string[], max: number): string {
   if (list.length === 1) return `${named} Only this one subject, nothing else.`;
   return `${named} Only these ${NUM_WORD[Math.min(list.length, 5)]} subjects, nothing else.`;
 }
+
+/**
+ * Character Identity 체크리스트 — Style Identity를 PASS/FAIL 한 덩어리로 보지 않는다.
+ * 세부로 쪼개야 "왜 같은 아이처럼 안 보이는지"를 추적할 수 있다 (Vase, 참조 단계 진입 시).
+ * 대조군에서는 판정하지 않는다 — 참조 없이 같은 아이가 나올 이유가 없다.
+ */
+export const CHARACTER_IDENTITY_CHECKS = [
+  '머리 모양', '얼굴 비율', '눈', '옷', '빼콩',
+  '선 느낌', '색감', '기억의 단순화', '같은 아이처럼 보이는가',
+] as const;
 
 /** 기억한 만큼만 그린다 — 하루의 밀도가 그림의 복잡도가 된다. */
 export const SKETCH_DENSITY = {
@@ -228,7 +238,9 @@ export function buildImagePrompt(
   return [
     // "A page from a girl's diary"로 시작하면 모델이 '공책을 찍은 사진'을 만든다(2차 실패).
     // 그림 자체를 말한다 — sketch / drawing / illustration 비중을 앞으로.
-    'A simple hand-drawn sketch. Flat illustration, notebook-style doodle drawn from memory.',
+    // 'sketchbook page' / 'notebook-style'는 **물건 이름**이라 모델이 스프링 공책을
+    // 성실히 그려 넣는다(3차: 제본과 책상이 찍혔다). 물건이 아니라 표면만 말한다.
+    'A simple hand-drawn sketch. Flat illustration drawn from memory.',
     `Scene: ${scene}`,
     subjectClause(subjects, d.maxSubjects),
     focus.length ? `Emphasis: ${focus.join('; ')}.` : '',

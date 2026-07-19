@@ -8,6 +8,7 @@
 // 둘을 같은 줄에서 비교하면 판정이 틀어진다.
 
 import type { TrialRecord } from './sketch-trial.ts';
+import { CHARACTER_IDENTITY_CHECKS } from '../_daily-sketch.ts';
 
 interface Env { PLANET: KVNamespace }
 
@@ -89,12 +90,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   figcaption small{font-size:10px;color:#5d6a5f}
   .params{word-break:break-all}
   ul.judge{margin:0;padding-left:18px;color:#7d8a76;font-size:12px}
+  ul.cid{list-style:none;padding-left:0;display:flex;flex-wrap:wrap;gap:4px 16px}
   .empty{color:#7d8a76}
   .note{margin-top:32px;padding:12px;border:1px solid #3a2a2a;border-radius:6px;color:#c8a0a0;font-size:12px}
 </style></head><body>
 <h1>별이가 기억한 오늘 — 스타일 보드</h1>
 <p class="lead">판정 질문: <b>이 한 장이 예쁜가</b>가 아니라 <b>같은 아이가 매일 그린 그림처럼 보이는가</b>.</p>
 <ul class="judge">${JUDGING.map((j) => `<li>${esc(j)}</li>`).join('')}</ul>
+<h2>Character Identity — 후보(참조 O)에만 적용</h2>
+<p class="lead">PASS/FAIL 한 덩어리로 보지 않는다. 세부로 쪼개야 <b>왜 같은 아이처럼 안 보이는지</b>를 추적할 수 있다.</p>
+<ul class="judge cid">${CHARACTER_IDENTITY_CHECKS.map((c) => `<li>□ ${esc(c)}</li>`).join('')}</ul>
 ${body}
 <p class="note">시험 산출물이다. 게시·크론 연결 금지. 스타일 판정 후에만 provider 승격.</p>
 </body></html>`;
