@@ -1,0 +1,688 @@
+{
+  "identity": {
+    "voice": "banmal",
+    "selfPresence": "rare",
+    "observer": "first_person",
+    "closure": "open",
+    "emotion": "indirect",
+    "distance": "medium",
+    "observationDensity": "medium",
+    "association": "low",
+    "judgement": "low"
+  },
+  "daily": {
+    "tempo": "slow",
+    "focusOrder": [
+      "light",
+      "movement",
+      "texture"
+    ]
+  },
+  "composed": {
+    "voice": "banmal",
+    "selfPresence": "rare",
+    "observer": "first_person",
+    "closure": "open",
+    "emotion": "indirect",
+    "distance": "medium",
+    "observationDensity": "medium",
+    "association": "low",
+    "judgement": "low",
+    "tempo": "slow",
+    "focusOrder": [
+      "light",
+      "movement",
+      "texture"
+    ]
+  },
+  "gates": {
+    "morning": {
+      "pass": true,
+      "status": "adopted",
+      "dropReasons": [],
+      "criticRounds": 1,
+      "criticError": null,
+      "unresolved": [],
+      "verdict": [],
+      "coverageRate": 1,
+      "missing": [],
+      "orphans": [],
+      "sim": {
+        "counts": {
+          "primaryNormal": {
+            "n": 96,
+            "exact": 96
+          },
+          "special": {
+            "n": 120,
+            "resolved": 120
+          },
+          "generic": {
+            "n": 48,
+            "resolved": 48
+          }
+        },
+        "byLayer": {
+          "exact": 96,
+          "category-special": 120,
+          "category": 48
+        },
+        "ruleFallback": 0,
+        "targetExactRate": 1,
+        "specialResolutionRate": 1,
+        "genericResolutionRate": 1
+      },
+      "reuse": [],
+      "meta": [],
+      "grammar": [],
+      "grammarWarnings": [],
+      "critic": [],
+      "diversity": [
+        "질문형 22% (상한 15%)",
+        "(dandelion|wonder) formGroup 중복: question, question",
+        "(bench|wonder) formGroup 중복: question, question",
+        "(puddle|wonder) formGroup 중복: question, question",
+        "(oldtree|wonder) formGroup 중복: question, question",
+        "(streetcat|wonder) formGroup 중복: question, question",
+        "(leaves|wonder) formGroup 중복: question, question",
+        "(stone|wonder) formGroup 중복: question, question"
+      ],
+      "honorific": 0
+    },
+    "afternoon": {
+      "pass": true,
+      "status": "adopted",
+      "dropReasons": [],
+      "criticRounds": 1,
+      "criticError": null,
+      "unresolved": [],
+      "verdict": [],
+      "coverageRate": 1,
+      "missing": [],
+      "orphans": [],
+      "sim": {
+        "counts": {
+          "primaryNormal": {
+            "n": 96,
+            "exact": 96
+          },
+          "special": {
+            "n": 120,
+            "resolved": 120
+          },
+          "generic": {
+            "n": 48,
+            "resolved": 48
+          }
+        },
+        "byLayer": {
+          "exact": 96,
+          "category-special": 120,
+          "category": 48
+        },
+        "ruleFallback": 0,
+        "targetExactRate": 1,
+        "specialResolutionRate": 1,
+        "genericResolutionRate": 1
+      },
+      "reuse": [],
+      "meta": [],
+      "grammar": [],
+      "grammarWarnings": [],
+      "critic": [],
+      "diversity": [
+        "질문형이 wonder 밖에서 1건 — 예: \"놓인 자리가 조금 옆으로 물러나\"",
+        "(-|observe) formGroup 중복: state, detail, detail, state, detail, detail, change, change, change, change",
+        "(-|wonder) formGroup 중복: question, discovery, question, discovery, question, discovery, question, discovery, question, question",
+        "(-|rest) formGroup 중복: sense, state, sense, state, sense, sense, state, state",
+        "(-|photo) formGroup 중복: change, detail, change, detail, change, detail, detail, change",
+        "(-|any) formGroup 중복: detail, state, change, detail, state, change, detail, state, change, detail, state, change, trace, trace, trace, trace, trace, trace, trace, trace",
+        "(-|any) 핵심 동사 중복: 비쳐, 나가, 번져, 꺼져, 펼쳐져, 스쳐, 배어, 잡아, 따라와, 새겨져, 놓여, 반짝, 고여, 남아, 물러나, 따끈해, 바뀌어, 데워져, 있어, 있어"
+      ],
+      "honorific": 0
+    },
+    "sunset": {
+      "pass": false,
+      "status": "dropped",
+      "dropReasons": [
+        "critic_residual"
+      ],
+      "criticRounds": 2,
+      "criticError": null,
+      "unresolved": [],
+      "verdict": [
+        "critic: nature 카테고리는 무엇에나 성립해야 하나 '굽어'는 식물처럼 휘는 대상에만 성립하고 돌·웅덩이·고양이 등에는 성립하지 않음 — \"그늘 쪽으로 조금 굽어\"",
+        "critic: '닫힐까'는 꽃(홀씨) 등 오므라드는 대상에만 성립하고 돌·나무·고양이 등 카테고리 전반에 성립하지 않음 — \"밤이 오면 어떻게 닫힐까\"",
+        "critic: '오므라들어'는 꽃·잎에만 성립하고 돌·웅덩이·고양이 등 카테고리 무엇에나 성립하지 않음 — \"속이 조금씩 오므라들어\"",
+        "critic: 담장을 관찰한 서술이 아니라 벽 너머의 소리를 말하고 있어 대상 정합에 어긋난다. — \"벽 너머로 소리가 옅게 넘어와\""
+      ],
+      "coverageRate": 1,
+      "missing": [],
+      "orphans": [],
+      "sim": {
+        "counts": {
+          "primaryNormal": {
+            "n": 96,
+            "exact": 96
+          },
+          "special": {
+            "n": 120,
+            "resolved": 120
+          },
+          "generic": {
+            "n": 48,
+            "resolved": 48
+          }
+        },
+        "byLayer": {
+          "exact": 96,
+          "category-special": 120,
+          "category": 48
+        },
+        "ruleFallback": 0,
+        "targetExactRate": 1,
+        "specialResolutionRate": 1,
+        "genericResolutionRate": 1
+      },
+      "reuse": [],
+      "meta": [],
+      "grammar": [],
+      "grammarWarnings": [],
+      "critic": [
+        {
+          "key": "sunset:cat.nature:observe:normal:none",
+          "line": "그늘 쪽으로 조금 굽어",
+          "reason": "nature 카테고리는 무엇에나 성립해야 하나 '굽어'는 식물처럼 휘는 대상에만 성립하고 돌·웅덩이·고양이 등에는 성립하지 않음"
+        },
+        {
+          "key": "sunset:cat.nature:wonder:normal:none",
+          "line": "밤이 오면 어떻게 닫힐까",
+          "reason": "'닫힐까'는 꽃(홀씨) 등 오므라드는 대상에만 성립하고 돌·나무·고양이 등 카테고리 전반에 성립하지 않음"
+        },
+        {
+          "key": "sunset:cat.nature:wonder:normal:none",
+          "line": "속이 조금씩 오므라들어",
+          "reason": "'오므라들어'는 꽃·잎에만 성립하고 돌·웅덩이·고양이 등 카테고리 무엇에나 성립하지 않음"
+        },
+        {
+          "key": "sunset:wall:photo:normal:none",
+          "line": "벽 너머로 소리가 옅게 넘어와",
+          "reason": "담장을 관찰한 서술이 아니라 벽 너머의 소리를 말하고 있어 대상 정합에 어긋난다."
+        }
+      ],
+      "diversity": [
+        "질문형 23% (상한 15%)",
+        "질문형이 wonder 밖에서 6건 — 예: \"발바닥 살이 분홍으로 드러나\"",
+        "(dandelion|wonder) formGroup 중복: question, question",
+        "(bench|wonder) formGroup 중복: question, question",
+        "(puddle|wonder) formGroup 중복: question, question",
+        "(oldtree|wonder) formGroup 중복: question, question",
+        "(streetcat|wonder) formGroup 중복: question, question",
+        "(leaves|wonder) formGroup 중복: question, question"
+      ],
+      "honorific": 0
+    },
+    "night": {
+      "pass": false,
+      "status": "dropped",
+      "dropReasons": [
+        "contract",
+        "chunk_unresolved"
+      ],
+      "criticRounds": 1,
+      "criticError": null,
+      "unresolved": [
+        {
+          "contractKey": null,
+          "stage": "묶음3",
+          "chunkTries": 4,
+          "reason": [
+            "묶음 내 관찰 방식 3종 (최소 4) — {\"발견형\":8,\"감각형\":2,\"질문형\":2}"
+          ],
+          "lastCandidate": null
+        },
+        {
+          "contractKey": null,
+          "stage": "묶음3",
+          "chunkTries": 4,
+          "reason": [
+            "묶음 내 첫 두 어절 반복 \"처음 보는\" 3회 — \"처음 보는 꽃대가 곧게 피어\" · \"처음 보는 무늬가 면을 가로질러\" · \"처음 보는 몸짓으로 이쪽을 향해\""
+          ],
+          "lastCandidate": null
+        },
+        {
+          "contractKey": "night:cat.thing:any:normal:moved",
+          "stage": "묶음3→단건",
+          "chunkTries": 4,
+          "reason": [
+            "trace moved인데 이동 흔적이 없다: \"밀린 흔적만 두고 옆으로 비스듬히 물러나\""
+          ],
+          "lastCandidate": "밀린 흔적만 두고 옆으로 비스듬히 물러나"
+        }
+      ],
+      "verdict": [
+        "필수 키 충족률 98.6% (100% 필요) — 누락 1",
+        "묶음 미해결 3건"
+      ],
+      "coverageRate": 0.9857142857142858,
+      "missing": [
+        "night:cat.thing:any:normal:moved (필요 1, 있음 0)"
+      ],
+      "orphans": [],
+      "sim": {
+        "counts": {
+          "primaryNormal": {
+            "n": 96,
+            "exact": 96
+          },
+          "special": {
+            "n": 120,
+            "resolved": 120
+          },
+          "generic": {
+            "n": 48,
+            "resolved": 48
+          }
+        },
+        "byLayer": {
+          "exact": 96,
+          "category-special": 120,
+          "category": 48
+        },
+        "ruleFallback": 0,
+        "targetExactRate": 1,
+        "specialResolutionRate": 1,
+        "genericResolutionRate": 1
+      },
+      "reuse": [],
+      "meta": [],
+      "grammar": [],
+      "grammarWarnings": [],
+      "critic": [],
+      "diversity": [
+        "질문형 18% (상한 15%)",
+        "(dandelion|wonder) formGroup 중복: question, question",
+        "(bench|wonder) formGroup 중복: question, question",
+        "(puddle|wonder) formGroup 중복: question, question",
+        "(oldtree|wonder) formGroup 중복: question, question",
+        "(streetcat|wonder) formGroup 중복: question, question",
+        "(leaves|wonder) formGroup 중복: question, question",
+        "(stone|wonder) formGroup 중복: question, question"
+      ],
+      "honorific": 0
+    }
+  },
+  "adopted": {
+    "morning": true,
+    "afternoon": true,
+    "sunset": false,
+    "night": false
+  },
+  "rows": [
+    {
+      "id": 1,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "observe",
+      "state": "normal",
+      "target": "홀씨",
+      "line": "홀씨 몇 개가 아직 매달렸어",
+      "layer": "exact",
+      "formGroup": "state",
+      "focus": "quantity"
+    },
+    {
+      "id": 2,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "photo",
+      "state": "normal",
+      "target": "웅덩이",
+      "line": "가장자리에만 밝음이 걸렸어",
+      "layer": "exact",
+      "formGroup": "detail",
+      "focus": "light"
+    },
+    {
+      "id": 3,
+      "slot": "morning",
+      "weather": "rain",
+      "mood": "rest",
+      "state": "normal",
+      "target": "벤치",
+      "line": "판자 위로 미지근한 기운이 남았어",
+      "layer": "exact",
+      "formGroup": "sense",
+      "focus": "temperature"
+    },
+    {
+      "id": 4,
+      "slot": "morning",
+      "weather": "rain",
+      "mood": "observe",
+      "state": "first",
+      "target": "낙엽",
+      "line": "위쪽에 옅은 밝음이 걸쳐",
+      "layer": "category-special",
+      "formGroup": "change",
+      "focus": "light"
+    },
+    {
+      "id": 5,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "wonder",
+      "state": "normal",
+      "target": "우편함",
+      "line": "누가 여기 두고 갔을까",
+      "layer": "category",
+      "formGroup": "question",
+      "focus": "position"
+    },
+    {
+      "id": 6,
+      "slot": "morning",
+      "weather": "cloudy",
+      "mood": "observe",
+      "state": "trace-warm",
+      "target": "벤치",
+      "line": "머물던 자리만 아직 미지근해",
+      "layer": "category-special",
+      "formGroup": "trace",
+      "focus": "temperature"
+    },
+    {
+      "id": 7,
+      "slot": "morning",
+      "weather": "clear",
+      "mood": "observe",
+      "state": "habit-sky",
+      "target": null,
+      "line": "흐린 빛이 끝쪽으로 번져 갔다",
+      "layer": "generic",
+      "formGroup": "change",
+      "focus": "light"
+    },
+    {
+      "id": 8,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "observe",
+      "state": "normal",
+      "target": "큰나무",
+      "line": "밑동에 이끼가 얇게 앉았다",
+      "layer": "exact",
+      "formGroup": "state",
+      "focus": "texture"
+    },
+    {
+      "id": 9,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "rest",
+      "state": "normal",
+      "target": "큰나무",
+      "line": "나무 밑이 한결 선선하다",
+      "layer": "exact",
+      "formGroup": "sense",
+      "focus": "temperature"
+    },
+    {
+      "id": 10,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "photo",
+      "state": "normal",
+      "target": "길고양이",
+      "line": "수염이 한쪽으로 늘어졌다",
+      "layer": "exact",
+      "formGroup": "detail",
+      "focus": "texture"
+    },
+    {
+      "id": 11,
+      "slot": "afternoon",
+      "weather": "cloudy",
+      "mood": "observe",
+      "state": "trace-moved",
+      "target": "돌멩이",
+      "line": "놓였던 자리에서 옆으로 밀려나 있어",
+      "layer": "category-special",
+      "formGroup": "trace",
+      "focus": "position"
+    },
+    {
+      "id": 12,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "wonder",
+      "state": "rare",
+      "target": "길고양이",
+      "line": "등에 옅은 줄무늬 배어",
+      "layer": "category-special",
+      "formGroup": "detail",
+      "focus": "color"
+    },
+    {
+      "id": 13,
+      "slot": "afternoon",
+      "weather": "rain",
+      "mood": "observe",
+      "state": "normal",
+      "target": "웅덩이",
+      "line": "수면에 흐린 빛이 번진다",
+      "layer": "exact",
+      "formGroup": "state",
+      "focus": "light"
+    },
+    {
+      "id": 14,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "observe",
+      "state": "passed",
+      "target": "장독대",
+      "line": "지나는 길에 표면 흐릿하게 반짝",
+      "layer": "category-special",
+      "formGroup": "change",
+      "focus": "light"
+    },
+    {
+      "id": 15,
+      "slot": "afternoon",
+      "weather": "clear",
+      "mood": "rest",
+      "state": "normal",
+      "target": "담장",
+      "line": "등에 닿는 면이 까슬해",
+      "layer": "exact",
+      "formGroup": "sense",
+      "focus": "texture"
+    },
+    {
+      "id": 16,
+      "slot": "afternoon",
+      "weather": "cloudy",
+      "mood": "wonder",
+      "state": "first",
+      "target": "참새",
+      "line": "구석에 가만히 자리 잡아",
+      "layer": "category-special",
+      "formGroup": "state",
+      "focus": "position"
+    },
+    {
+      "id": 17,
+      "slot": "sunset",
+      "state": "normal",
+      "target": "홀씨",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 18,
+      "slot": "sunset",
+      "state": "normal",
+      "target": "큰나무",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 19,
+      "slot": "sunset",
+      "state": "normal",
+      "target": "벤치",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 20,
+      "slot": "sunset",
+      "state": "trace-warm",
+      "target": "담장",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 21,
+      "slot": "sunset",
+      "state": "normal",
+      "target": "낙엽",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 22,
+      "slot": "sunset",
+      "state": "rare",
+      "target": "굴뚝 연기",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 23,
+      "slot": "sunset",
+      "state": "habit-stand",
+      "target": null,
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 24,
+      "slot": "sunset",
+      "state": "passed",
+      "target": "돌멩이",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 25,
+      "slot": "night",
+      "state": "normal",
+      "target": "길고양이",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 26,
+      "slot": "night",
+      "state": "normal",
+      "target": "벤치",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 27,
+      "slot": "night",
+      "state": "trace-moved",
+      "target": "웅덩이",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 28,
+      "slot": "night",
+      "state": "normal",
+      "target": "불 켜진 창",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 29,
+      "slot": "night",
+      "state": "first",
+      "target": "홀씨",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    },
+    {
+      "id": 30,
+      "slot": "night",
+      "state": "rare",
+      "target": "큰나무",
+      "line": null,
+      "layer": "RULE(슬롯 폐기)"
+    }
+  ],
+  "totals": {
+    "문장": 479,
+    "중복": 0,
+    "관찰중복": 0,
+    "존댓말": 0,
+    "평가조회": "16/30",
+    "exact": 8,
+    "특수폴백": 6
+  },
+  "usage": [
+    {
+      "tag": "sunset#repair(sunset:wall:photo:normal:none):1",
+      "in": 3841,
+      "out": 509
+    },
+    {
+      "tag": "sunset#repair(sunset:cat.nature:observe:normal:none):1",
+      "in": 4343,
+      "out": 494
+    },
+    {
+      "tag": "sunset#repair(sunset:cat.nature:wonder:normal:none):1",
+      "in": 4423,
+      "out": 526
+    },
+    {
+      "tag": "sunset:critic1.1",
+      "in": 3612,
+      "out": 4420
+    },
+    {
+      "tag": "sunset:critic1.2",
+      "in": 4377,
+      "out": 8466
+    },
+    {
+      "tag": "sunset#critic-fix:1",
+      "in": 6132,
+      "out": 2798
+    },
+    {
+      "tag": "sunset:critic2.1",
+      "in": 3613,
+      "out": 6192
+    },
+    {
+      "tag": "sunset:critic2.2",
+      "in": 4395,
+      "out": 12707
+    },
+    {
+      "tag": "night#repair(night:cat.thing:any:normal:moved):1",
+      "in": 4254,
+      "out": 93
+    },
+    {
+      "tag": "night:critic1.1",
+      "in": 3355,
+      "out": 2871
+    }
+  ]
+}

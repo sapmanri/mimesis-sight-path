@@ -150,10 +150,10 @@ export function lintMetaConsistency(book) {
     if ((s.eventFlags || []).includes('rare') && WEATHER_ONLY.test(L.trim())) {
       e.push(`rare가 날씨 묘사다(사건이어야 한다) — "${L}"`);
     }
-    if (s.traceType === 'warm' && !/(따뜻|온기|남아|자리|눌린|아직)/.test(L)) {
+    if (s.traceType === 'warm' && !/(따뜻|온기|남아|자리|눌린|아직|미열|감돌|배어)/.test(L)) {
       e.push(`trace warm인데 남은 흔적이 없다 — "${L}"`);
     }
-    if (s.traceType === 'moved' && !/(굴러|자리|달라|옮겨|밀려|기울)/.test(L)) {
+    if (s.traceType === 'moved' && !/(굴러|자리|달라|옮겨|밀려|밀린|기울|물러나|비켜|어긋나|돌아가)/.test(L)) {
       e.push(`trace moved인데 이동 흔적이 없다 — "${L}"`);
     }
     if ((s.eventFlags || []).includes('passed') && /(가까이|들여다|앉|만졌|담았|찍)/.test(L)) {

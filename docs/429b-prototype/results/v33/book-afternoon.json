@@ -1,0 +1,2609 @@
+{
+  "slot": "afternoon",
+  "sentences": [
+    {
+      "key": "afternoon:dandelion:observe:normal:none",
+      "line": "갓 하나가 옆으로 처져 있다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "갓 하나 옆으로 처짐",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:dandelion:observe:normal:none",
+      "line": "성근 자리가 한쪽에 몰렸다",
+      "formGroup": "discovery",
+      "focus": "position",
+      "core": "성근 자리 한쪽 몰림",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:dandelion:wonder:normal:none",
+      "line": "다음 바람에 어디로 흩어지려나",
+      "formGroup": "question",
+      "focus": "movement",
+      "core": "다음 바람 흩어짐 방향",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:dandelion:wonder:normal:none",
+      "line": "흐린 빛에 솜털이 뿌옇다",
+      "formGroup": "state",
+      "focus": "light",
+      "core": "흐린 빛 솜털 뿌염",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:dandelion:rest:normal:none",
+      "line": "솜털이 천천히 기울었다",
+      "formGroup": "change",
+      "focus": "movement",
+      "core": "솜털 천천히 기욺",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:dandelion:rest:normal:none",
+      "line": "씨앗 스치는 소리가 낮다",
+      "formGroup": "sense",
+      "focus": "sound",
+      "core": "씨앗 스침 낮은 소리",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:dandelion:photo:normal:none",
+      "line": "갓털 그림자가 줄기에 겹친다",
+      "formGroup": "detail",
+      "focus": "shadow",
+      "core": "갓털 그림자 줄기 겹침",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:dandelion:photo:normal:none",
+      "line": "머리 쪽만 색이 옅다",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "머리 쪽 색 옅음",
+      "slot": "afternoon",
+      "targetType": "dandelion",
+      "targetName": "홀씨",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:observe:normal:none",
+      "line": "나무결이 세로로 길게 이어졌다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "나무결 세로 이어짐",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:wonder:normal:none",
+      "line": "어느 쪽에 더 많이 앉았을까",
+      "formGroup": "question",
+      "focus": "position",
+      "core": "많이 앉은 쪽 의문",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:wonder:normal:none",
+      "line": "판자마다 색이 조금씩 다르다",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "판자별 색 차이",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:rest:normal:none",
+      "line": "그늘 든 자리가 서늘하다",
+      "formGroup": "sense",
+      "focus": "temperature",
+      "core": "그늘 든 자리 서늘함",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:rest:normal:none",
+      "line": "옆판까지 그늘이 번졌다",
+      "formGroup": "change",
+      "focus": "shadow",
+      "core": "옆판 그늘 번짐",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:photo:normal:none",
+      "line": "못 머리가 결 위로 튀어나왔다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "못 머리 튀어나옴",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:photo:normal:none",
+      "line": "한쪽 끝에 잎 한 장 놓였다",
+      "formGroup": "trace",
+      "focus": "object",
+      "core": "끝에 잎 한 장",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:observe:normal:none",
+      "line": "수면에 흐린 빛이 번진다",
+      "formGroup": "state",
+      "focus": "light",
+      "core": "수면 흐린 빛 번짐",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:observe:normal:none",
+      "line": "한쪽 귀퉁이가 유난히 깊다",
+      "formGroup": "detail",
+      "focus": "position",
+      "core": "귀퉁이 깊음",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:wonder:normal:none",
+      "line": "바닥의 흙이 언제 가라앉으려나",
+      "formGroup": "question",
+      "focus": "movement",
+      "core": "바닥 흙 가라앉음 의문",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:wonder:normal:none",
+      "line": "가운데가 가장자리보다 어둡다",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "가운데 더 어두움",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:rest:normal:none",
+      "line": "물 위로 소리가 잦아든다",
+      "formGroup": "sense",
+      "focus": "sound",
+      "core": "물 위 소리 잦아듦",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:rest:normal:none",
+      "line": "표면이 잔잔하게 퍼진다",
+      "formGroup": "state",
+      "focus": "movement",
+      "core": "표면 잔잔히 퍼짐",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:photo:normal:none",
+      "line": "가장자리 선이 또렷하게 남는다",
+      "formGroup": "detail",
+      "focus": "light",
+      "core": "가장자리 선 또렷함",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:puddle:photo:normal:none",
+      "line": "비친 구름이 천천히 흐른다",
+      "formGroup": "change",
+      "focus": "movement",
+      "core": "비친 구름 흐름",
+      "slot": "afternoon",
+      "targetType": "puddle",
+      "targetName": "웅덩이",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:observe:normal:none",
+      "line": "밑동에 이끼가 얇게 앉았다",
+      "formGroup": "state",
+      "focus": "texture",
+      "core": "밑동 이끼 얇게 앉음",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:observe:normal:none",
+      "line": "낮은 가지 하나가 옆으로 뻗쳤다",
+      "formGroup": "detail",
+      "focus": "position",
+      "core": "낮은 가지 옆 뻗침",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:wonder:normal:none",
+      "line": "잎 스치는 소리가 어디서 오려나",
+      "formGroup": "question",
+      "focus": "sound",
+      "core": "잎 스침 소리 근원 의문",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:wonder:normal:none",
+      "line": "그늘이 둥치 쪽으로 모였다",
+      "formGroup": "change",
+      "focus": "shadow",
+      "core": "그늘 둥치 쪽 모임",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:rest:normal:none",
+      "line": "나무 밑이 한결 선선하다",
+      "formGroup": "sense",
+      "focus": "temperature",
+      "core": "나무 밑 선선함",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:rest:normal:none",
+      "line": "우듬지가 느리게 기운다",
+      "formGroup": "state",
+      "focus": "movement",
+      "core": "우듬지 느린 기욺",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:photo:normal:none",
+      "line": "껍질 틈이 세로로 갈라진다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "껍질 틈 세로 갈라짐",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:oldtree:photo:normal:none",
+      "line": "잎 그늘이 아래로 갈수록 짙다",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "잎 그늘 아래 짙음",
+      "slot": "afternoon",
+      "targetType": "oldtree",
+      "targetName": "큰나무",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:observe:normal:none",
+      "line": "앞발 털이 안쪽으로 접혔다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "앞발 털 안쪽 접힘",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:observe:normal:none",
+      "line": "몸을 둥글게 말고 웅크렸다",
+      "formGroup": "state",
+      "focus": "position",
+      "core": "몸 둥글게 웅크림",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:wonder:normal:none",
+      "line": "눈을 언제 다시 뜨려나",
+      "formGroup": "question",
+      "focus": "movement",
+      "core": "눈 뜨는 때 의문",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:wonder:normal:none",
+      "line": "발끝만 색이 하얗다",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "발끝 하얀 색",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:rest:normal:none",
+      "line": "숨소리가 고르게 이어진다",
+      "formGroup": "sense",
+      "focus": "sound",
+      "core": "숨소리 고른 이어짐",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:rest:normal:none",
+      "line": "귀가 한 번 접혔다 펴진다",
+      "formGroup": "change",
+      "focus": "movement",
+      "core": "귀 접혔다 펴짐",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:photo:normal:none",
+      "line": "수염이 한쪽으로 늘어졌다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "수염 한쪽 늘어짐",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:streetcat:photo:normal:none",
+      "line": "등 위로 흐린 빛이 얹힌다",
+      "formGroup": "state",
+      "focus": "light",
+      "core": "등 위 흐린 빛",
+      "slot": "afternoon",
+      "targetType": "streetcat",
+      "targetName": "길고양이",
+      "category": "animal",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:observe:normal:none",
+      "line": "잎 뒷면이 거칠게 일어났다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "잎 뒷면 일어남",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:observe:normal:none",
+      "line": "몇 장이 서로 포개졌다",
+      "formGroup": "state",
+      "focus": "quantity",
+      "core": "몇 장 포개짐",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:wonder:normal:none",
+      "line": "다음엔 어느 쪽으로 쏠리려나",
+      "formGroup": "question",
+      "focus": "movement",
+      "core": "다음 쏠림 방향 의문",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:wonder:normal:none",
+      "line": "마디마다 색이 옅어진다",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "마디별 색 옅어짐",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:rest:normal:none",
+      "line": "잎 끝이 바닥에 낮게 쓸린다",
+      "formGroup": "sense",
+      "focus": "sound",
+      "core": "잎 끝 낮게 쓸림",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:rest:normal:none",
+      "line": "잎면 위로 그늘이 옅게 깔린다",
+      "formGroup": "state",
+      "focus": "shadow",
+      "core": "잎면 위 옅은 그늘",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:photo:normal:none",
+      "line": "잎맥 사이가 우글쭈글하다",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "잎맥 사이 우글거림",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:leaves:photo:normal:none",
+      "line": "한쪽에 잎들이 몰려 쌓였다",
+      "formGroup": "trace",
+      "focus": "position",
+      "core": "한쪽 잎 쌓임",
+      "slot": "afternoon",
+      "targetType": "leaves",
+      "targetName": "낙엽",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:bench:observe:normal:none",
+      "line": "판자 틈으로 옅은 밝음이 스몄다",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "판자 틈 사이 빛 스밈",
+      "slot": "afternoon",
+      "targetType": "bench",
+      "targetName": "벤치",
+      "category": "rest",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:observe:normal:none",
+      "line": "윗면 한쪽이 유독 매끈해",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "윗면 한쪽 매끈함",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:observe:normal:none",
+      "line": "가장자리가 조금 더 밝아졌어",
+      "formGroup": "discovery",
+      "focus": "light",
+      "core": "가장자리 밝기 늘어남",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:wonder:normal:none",
+      "line": "이런 돌이 여기 몇이나 될까",
+      "formGroup": "question",
+      "focus": "quantity",
+      "core": "주변 돌 수 의문",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:wonder:normal:none",
+      "line": "안쪽 색이 겉보다 옅어",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "안쪽 겉보다 옅음",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:rest:normal:none",
+      "line": "결이 손바닥에 까끌해",
+      "formGroup": "sense",
+      "focus": "texture",
+      "core": "표면 결 까끌함",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:rest:normal:none",
+      "line": "낮은 자리에 가만히 놓여",
+      "formGroup": "state",
+      "focus": "position",
+      "core": "낮은 자리 놓임",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:photo:normal:none",
+      "line": "옅은 밝음이 윤곽을 세워",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "옅은 밝음 윤곽 세움",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:observe:normal:none",
+      "line": "표면 한 줄이 움푹 패여",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "벽면 한 줄 패임",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:observe:normal:none",
+      "line": "위쪽부터 밝음이 옅게 퍼져",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "위쪽 밝음 퍼짐",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:wonder:normal:none",
+      "line": "이 벽 끝은 어디쯤일까",
+      "formGroup": "question",
+      "focus": "position",
+      "core": "벽 끝 위치 의문",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:wonder:normal:none",
+      "line": "가까이 보니 결이 더 거칠어",
+      "formGroup": "discovery",
+      "focus": "texture",
+      "core": "결 거칠기 발견",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:rest:normal:none",
+      "line": "등에 닿는 면이 까슬해",
+      "formGroup": "sense",
+      "focus": "texture",
+      "core": "닿는 면 까슬함",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:rest:normal:none",
+      "line": "아래쪽으로 그늘이 얕게 고여",
+      "formGroup": "state",
+      "focus": "shadow",
+      "core": "아래 얕은 그늘",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:photo:normal:none",
+      "line": "한 구석만 색이 옅어",
+      "formGroup": "detail",
+      "focus": "color",
+      "core": "구석 색 옅음",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:observe:normal:none",
+      "line": "끝이 아주 천천히 기울어",
+      "formGroup": "state",
+      "focus": "movement",
+      "core": "끝 천천히 기욺",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:observe:normal:none",
+      "line": "표면에 잔결이 촘촘해",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "표면 잔결 촘촘함",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:wonder:normal:none",
+      "line": "빛이 언제 여기까지 닿았을까",
+      "formGroup": "question",
+      "focus": "light",
+      "core": "빛 도달 시점 의문",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:wonder:normal:none",
+      "line": "끝쪽이 안쪽보다 짙어",
+      "formGroup": "discovery",
+      "focus": "color",
+      "core": "끝쪽 짙음 발견",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:rest:normal:none",
+      "line": "손끝에 닿는 면이 보드라워",
+      "formGroup": "sense",
+      "focus": "texture",
+      "core": "닿는 면 보드라움",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:rest:normal:none",
+      "line": "바람 없이도 미세하게 떨려",
+      "formGroup": "state",
+      "focus": "movement",
+      "core": "미세한 떨림",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:photo:normal:none",
+      "line": "윤곽 위로 밝음이 얇게 앉아",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "윤곽 위 밝음 앉음",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:photo:normal:none",
+      "line": "가장자리 결이 잘게 갈라져",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "가장자리 결 갈라짐",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:observe:normal:none",
+      "line": "한쪽 모서리가 둥글게 깎여",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "모서리 둥글게 깎임",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:wonder:normal:none",
+      "line": "이 자리 얼마나 쓰였을까",
+      "formGroup": "question",
+      "focus": "texture",
+      "core": "사용 정도 의문",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:wonder:normal:none",
+      "line": "전보다 한쪽이 더 낮아",
+      "formGroup": "discovery",
+      "focus": "position",
+      "core": "한쪽 낮아짐 발견",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:rest:normal:none",
+      "line": "표면이 손바닥에 딱딱해",
+      "formGroup": "sense",
+      "focus": "texture",
+      "core": "표면 딱딱함",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:rest:normal:none",
+      "line": "면 위로 흐린 빛이 얹혀",
+      "formGroup": "state",
+      "focus": "light",
+      "core": "면 위 흐린 빛",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:photo:normal:none",
+      "line": "가장자리에 밝음이 잠깐 열려",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "가장자리 밝음 열림",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:photo:normal:none",
+      "line": "아래로 그늘이 넓게 퍼져",
+      "formGroup": "detail",
+      "focus": "shadow",
+      "core": "아래 넓은 그늘",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:observe:normal:none",
+      "line": "몸이 아주 느리게 뒤척여",
+      "formGroup": "state",
+      "focus": "movement",
+      "core": "몸 느린 뒤척임",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:observe:normal:none",
+      "line": "등 쪽 털이 결대로 누워",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "등털 결대로 누움",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:wonder:normal:none",
+      "line": "저 눈에 밝음이 얼마나 담길까",
+      "formGroup": "question",
+      "focus": "light",
+      "core": "눈에 담긴 밝음 의문",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:wonder:normal:none",
+      "line": "아까보다 몸을 더 웅크려",
+      "formGroup": "discovery",
+      "focus": "movement",
+      "core": "몸 더 웅크림 발견",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:rest:normal:none",
+      "line": "낮은 숨소리가 고르게 이어져",
+      "formGroup": "sense",
+      "focus": "sound",
+      "core": "고른 숨소리",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:photo:normal:none",
+      "line": "옅은 빛이 얼굴을 스쳐가",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "옅은 빛 얼굴 스침",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:photo:normal:none",
+      "line": "코끝이 작게 실룩여",
+      "formGroup": "detail",
+      "focus": "movement",
+      "core": "코끝 실룩임",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:observe:normal:none",
+      "line": "한 면에 얕은 홈이 파여",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "한 면 얕은 홈",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:observe:normal:none",
+      "line": "표면 위로 밝음이 미끄러져",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "표면 밝음 미끄러짐",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:wonder:normal:none",
+      "line": "여기 온 지 얼마나 됐을까",
+      "formGroup": "question",
+      "focus": "position",
+      "core": "머문 기간 의문",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:wonder:normal:none",
+      "line": "다시 보니 한 면만 무뎌",
+      "formGroup": "discovery",
+      "focus": "texture",
+      "core": "한 면 무딤 발견",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:rest:normal:none",
+      "line": "겉이 손끝에 서걱해",
+      "formGroup": "sense",
+      "focus": "texture",
+      "core": "겉면 서걱함",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:rest:normal:none",
+      "line": "몸통에 흐린 빛이 얕게 걸쳐",
+      "formGroup": "state",
+      "focus": "light",
+      "core": "몸통 흐린 빛",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:photo:normal:none",
+      "line": "한쪽 면 색이 유난히 짙어",
+      "formGroup": "detail",
+      "focus": "color",
+      "core": "한쪽 면 짙은 색",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:photo:normal:none",
+      "line": "밝음이 윗면을 얇게 덮어",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "윗면 밝음 덮음",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:observe:normal:none",
+      "line": "면 위로 흐린 밝음이 천천히 지나간다",
+      "formGroup": "change",
+      "focus": "movement",
+      "core": "흐린 빛 면 위 지나감",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:rest:normal:none",
+      "line": "흐린 빛이 감은 눈가에 머물러",
+      "formGroup": "state",
+      "focus": "light",
+      "core": "흐린 빛 눈가에 머묾",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "rest",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:any:rare:none",
+      "line": "속이 유난히 붉게 비쳐",
+      "formGroup": "detail",
+      "focus": "color",
+      "core": "속 붉게 비침",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "any",
+      "eventFlags": [
+        "rare"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:any:first:none",
+      "line": "여러 갈래로 뻗어 나가",
+      "formGroup": "state",
+      "focus": "movement",
+      "core": "여러 갈래로 뻗어감",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "any",
+      "eventFlags": [
+        "first"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:any:passed:none",
+      "line": "곁을 지나며 색이 얼핏 번져",
+      "formGroup": "change",
+      "focus": "color",
+      "core": "지날 때 색 얼핏 번짐",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "any",
+      "eventFlags": [
+        "passed"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:any:rare:none",
+      "line": "한가운데가 움푹 꺼져",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "가운데 움푹 꺼짐",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "any",
+      "eventFlags": [
+        "rare"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:any:first:none",
+      "line": "앉는 면이 제법 넓게 펼쳐져",
+      "formGroup": "state",
+      "focus": "position",
+      "core": "앉는 면 넓게 펼쳐짐",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "any",
+      "eventFlags": [
+        "first"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:any:passed:none",
+      "line": "지날 때 그늘만 잠깐 스쳐",
+      "formGroup": "change",
+      "focus": "shadow",
+      "core": "지날 때 그늘 스침",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "any",
+      "eventFlags": [
+        "passed"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:any:rare:none",
+      "line": "등에 옅은 줄무늬 배어",
+      "formGroup": "detail",
+      "focus": "color",
+      "core": "등 옅은 줄무늬",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "any",
+      "eventFlags": [
+        "rare"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:any:first:none",
+      "line": "구석에 가만히 자리 잡아",
+      "formGroup": "state",
+      "focus": "position",
+      "core": "구석에 자리 잡음",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "any",
+      "eventFlags": [
+        "first"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:any:passed:none",
+      "line": "발소리에 눈길만 슬쩍 따라와",
+      "formGroup": "change",
+      "focus": "movement",
+      "core": "발소리에 눈길 따라옴",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "any",
+      "eventFlags": [
+        "passed"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:any:rare:none",
+      "line": "밑면에 작은 글자 새겨져",
+      "formGroup": "detail",
+      "focus": "texture",
+      "core": "밑면 작은 글자",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "any",
+      "eventFlags": [
+        "rare"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:any:first:none",
+      "line": "구석에 홀로 놓여",
+      "formGroup": "state",
+      "focus": "position",
+      "core": "구석에 홀로 놓임",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "any",
+      "eventFlags": [
+        "first"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:any:passed:none",
+      "line": "지나는 길에 표면 흐릿하게 반짝",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "지날 때 표면 흐릿한 반짝",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "any",
+      "eventFlags": [
+        "passed"
+      ],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:any:normal:warm",
+      "line": "굽은 안쪽에 온기 조금 고여",
+      "formGroup": "trace",
+      "focus": "temperature",
+      "core": "안쪽에 온기 고임",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "warm",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:any:normal:warm",
+      "line": "앉던 자리에 온기 옅게 남아",
+      "formGroup": "trace",
+      "focus": "temperature",
+      "core": "앉던 자리 온기 옅음",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "warm",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.rest:any:normal:moved",
+      "line": "놓인 자리가 조금 옆으로 물러나",
+      "formGroup": "trace",
+      "focus": "position",
+      "core": "자리가 옆으로 물러남",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "rest",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "moved",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:any:normal:warm",
+      "line": "누웠던 자리가 아직 따끈해",
+      "formGroup": "trace",
+      "focus": "temperature",
+      "core": "누웠던 자리 따끈함",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "warm",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.animal:any:normal:moved",
+      "line": "누운 자리가 반대편으로 바뀌어",
+      "formGroup": "trace",
+      "focus": "position",
+      "core": "누운 자리 반대편으로 바뀜",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "animal",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "moved",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:any:normal:warm",
+      "line": "쥐던 자리가 미미하게 데워져",
+      "formGroup": "trace",
+      "focus": "temperature",
+      "core": "쥐던 자리 미미한 온기",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "warm",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.none:observe:normal:none",
+      "line": "흐린 빛이 위쪽으로 조금 올라",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "흐린 빛 위쪽으로 오름",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "none",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.none:observe:normal:none",
+      "line": "바닥 그늘이 조금씩 늘어",
+      "formGroup": "change",
+      "focus": "shadow",
+      "core": "바닥 그늘 조금씩 늚",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "none",
+      "mood": "observe",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.none:wonder:normal:none",
+      "line": "저 소리는 어디서 오는 걸까",
+      "formGroup": "question",
+      "focus": "sound",
+      "core": "저 소리 출처 의문",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "none",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.none:wonder:normal:none",
+      "line": "그늘은 어느 쪽으로 기울까",
+      "formGroup": "question",
+      "focus": "shadow",
+      "core": "그늘 기우는 방향 의문",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "none",
+      "mood": "wonder",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.nature:any:normal:moved",
+      "line": "놓였던 자리에서 옆으로 밀려나 있어",
+      "formGroup": "trace",
+      "focus": "position",
+      "core": "놓인 자리 옆으로 밀림",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "nature",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "moved",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:cat.thing:any:normal:moved",
+      "line": "처음 자리에서 한 뼘쯤 비껴 있어",
+      "formGroup": "trace",
+      "focus": "position",
+      "core": "처음 자리서 비껴남",
+      "slot": "afternoon",
+      "targetType": null,
+      "targetName": null,
+      "category": "thing",
+      "mood": "any",
+      "eventFlags": [],
+      "traceType": "moved",
+      "reusable": true,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:stone:photo:normal:none",
+      "line": "윗면에 작은 얼룩 하나 도드라져",
+      "formGroup": "detail",
+      "focus": "object",
+      "core": "윗면 작은 얼룩 도드라짐",
+      "slot": "afternoon",
+      "targetType": "stone",
+      "targetName": "돌멩이",
+      "category": "nature",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    },
+    {
+      "key": "afternoon:wall:photo:normal:none",
+      "line": "벽 아래쪽으로 밝음이 천천히 내려와",
+      "formGroup": "change",
+      "focus": "light",
+      "core": "아래쪽으로 밝음 내려옴",
+      "slot": "afternoon",
+      "targetType": "wall",
+      "targetName": "담장",
+      "category": "rest",
+      "mood": "photo",
+      "eventFlags": [],
+      "traceType": null,
+      "reusable": false,
+      "weatherAllowed": [
+        "clear",
+        "cloudy",
+        "rain"
+      ],
+      "weatherDenied": []
+    }
+  ],
+  "orphans": [],
+  "_gate": {
+    "pass": true,
+    "status": "adopted",
+    "dropReasons": [],
+    "criticRounds": 1,
+    "criticError": null,
+    "unresolved": [],
+    "verdict": [],
+    "coverageRate": 1,
+    "missing": [],
+    "orphans": [],
+    "sim": {
+      "counts": {
+        "primaryNormal": {
+          "n": 96,
+          "exact": 96
+        },
+        "special": {
+          "n": 120,
+          "resolved": 120
+        },
+        "generic": {
+          "n": 48,
+          "resolved": 48
+        }
+      },
+      "byLayer": {
+        "exact": 96,
+        "category-special": 120,
+        "category": 48
+      },
+      "ruleFallback": 0,
+      "targetExactRate": 1,
+      "specialResolutionRate": 1,
+      "genericResolutionRate": 1
+    },
+    "reuse": [],
+    "meta": [],
+    "grammar": [],
+    "grammarWarnings": [],
+    "critic": [],
+    "diversity": [
+      "질문형이 wonder 밖에서 1건 — 예: \"놓인 자리가 조금 옆으로 물러나\"",
+      "(-|observe) formGroup 중복: state, detail, detail, state, detail, detail, change, change, change, change",
+      "(-|wonder) formGroup 중복: question, discovery, question, discovery, question, discovery, question, discovery, question, question",
+      "(-|rest) formGroup 중복: sense, state, sense, state, sense, sense, state, state",
+      "(-|photo) formGroup 중복: change, detail, change, detail, change, detail, detail, change",
+      "(-|any) formGroup 중복: detail, state, change, detail, state, change, detail, state, change, detail, state, change, trace, trace, trace, trace, trace, trace, trace, trace",
+      "(-|any) 핵심 동사 중복: 비쳐, 나가, 번져, 꺼져, 펼쳐져, 스쳐, 배어, 잡아, 따라와, 새겨져, 놓여, 반짝, 고여, 남아, 물러나, 따끈해, 바뀌어, 데워져, 있어, 있어"
+    ],
+    "honorific": 0
+  },
+  "_meta": {
+    "regeneratedSlot": "afternoon",
+    "seededFromSlots": [
+      "morning"
+    ],
+    "excludedPriorVersion": false
+  }
+}

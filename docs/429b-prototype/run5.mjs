@@ -8,7 +8,7 @@
 //      usedCorePhrases(정규화 핵심 구문) · usedVerbs(대상별 핵심 동사)를 넘긴다.
 //      분포만 넘기면 같은 의미 문장이 다시 나온다 — v3.1 슬롯간 중복 16건.
 import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
 import { EVENTS, SLOT_PHASE } from './events.mjs';
 import { composeGenome, IDENTITY_GENOME, FORM_KEYS, FORM_GROUPS, lintDiversity, lengthRange,
   lintObservationGrammar, lintObservationWarnings, VOICE_ENUMS, coreVerb } from './v3.mjs';
@@ -130,6 +130,9 @@ ${Object.entries(GEN).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' > ') 
   - **확정 표현 금지**: 직사광·쏟아지는 볕·선명한 그림자처럼 한 날씨를 확정하는 서술.
   - 허용: 흐린 빛·잠깐 열린 밝음·옅은 그림자 같은 **불확정·일시적** 표현.
     (볕·그늘 자체가 금지가 아니다 — 강도와 확정성이 기준이다)
+  - 그림자·그늘·볕을 쓸 때는 옅은/희미한/잠깐 같은 **불확정 수식을 동반**하라.
+    선명한 윤곽·길게 늘어진 그늘·환하게 걸린 면·뚜렷한 선은 맑음 확정으로 읽힌다.
+  - 위 예시 문구("흐린 빛" 등)를 **그대로 반복해 쓰지 마라** — 기준이지 어휘 목록이 아니다.
 
 [표현 능력 — MediumGrammar]
 formGroup을 각 문장에 붙인다 (**내부 메타 — 문장 안에 이 단어를 쓰지 않는다**):
@@ -219,8 +222,8 @@ function validateChunk(ch, got) {
     // 메타 자기모순 — 슬롯 게이트까지 가기 전에 묶음에서 고친다
     if (kk?.eventFlag === 'rare' && WEATHER_ONLY.test(g.line.trim())) B(g, `rare가 날씨 묘사다: "${g.line}"`);
     if (kk?.eventFlag === 'passed' && /(가까이|들여다|앉|만졌|담았|찍)/.test(g.line)) B(g, `passed인데 행동을 말한다: "${g.line}"`);
-    if (kk?.traceType === 'warm' && !/(따뜻|온기|남아|자리|눌린|아직)/.test(g.line)) B(g, `trace warm인데 남은 흔적이 없다: "${g.line}"`);
-    if (kk?.traceType === 'moved' && !/(굴러|자리|달라|옮겨|밀려|기울)/.test(g.line)) B(g, `trace moved인데 이동 흔적이 없다: "${g.line}"`);
+    if (kk?.traceType === 'warm' && !/(따뜻|온기|남아|자리|눌린|아직|미열|감돌|배어)/.test(g.line)) B(g, `trace warm인데 남은 흔적이 없다: "${g.line}"`);
+    if (kk?.traceType === 'moved' && !/(굴러|자리|달라|옮겨|밀려|밀린|기울|물러나|비켜|어긋나|돌아가)/.test(g.line)) B(g, `trace moved인데 이동 흔적이 없다: "${g.line}"`);
   }
   // 묶음 내 중복 — 문장(표면) · exact 계열 · semanticSignature
   const seenL = new Set(), seenC = new Set(), seenS = new Set();
@@ -248,13 +251,16 @@ async function generateChunk(slot, ch, tag, extraNote = '') {
   do {
     n++;
     const retry = bad.length ? `\n\n**이전 시도 문제 — 반드시 고쳐라:**\n${bad.slice(0, 14).map((b) => b.msg).join('\n')}` : '';
-    const r = await ask({ system: system(slot), schema: OUT_SCHEMA, maxTokens: 24000, tag: `${tag}:${n}`,
+    const r = await ask({ system: system(slot), schema: OUT_SCHEMA, maxTokens: 32000, tag: `${tag}:${n}`,
       user: `요청 키 ${ch.length}개 (총 ${ch.reduce((a, k) => a + k.count, 0)}문장):\n${ch.map(keyLine).join('\n')}${historyNote(ch)}${extraNote}${retry}` });
     got = r.sentences;
     bad = validateChunk(ch, got);
     console.log(`  ${tag} 시도 ${n}: ${got.length}문장 · 문제 ${bad.length}`);
     for (const b of bad.slice(0, 4)) console.log(`      · ${b.msg}`);   // 로그만으로 원인 진단 가능해야 한다
-  } while (bad.length && n < 4);
+    // 비용 제어: 큰 묶음에서 소수 문제(≤3, 키·문장 특정 가능)는 묶음 전체 재시도 대신
+    // 단건 복구로 넘긴다 — 문제 1건에 48문장을 다시 만드는 것이 최대 낭비였다(E형).
+    // 묶음 전체 재시도는 문제가 많거나(4+) 묶음 수준 문제(균형 등, key·line 없음)일 때만.
+  } while (bad.length && n < 4 && (ch.length <= 3 || bad.length > 3 || bad.some((b) => !b.line && !b.key)));
   return { got, bad, tries: n };
 }
 
@@ -330,10 +336,18 @@ async function buildSlot(slot) {
     }
   }
 
-  /* critic 2라운드 — 위반이면 그 키만 교체 생성, 재위반이면 슬롯 탈락.
-     critic 실행 자체가 실패해도 생성물은 저장한다 — 조용한 유실 금지 (3차 실행에서 책 저장 전 크래시로 전량 유실). */
+  return finishSlot(slot, required, byKey, gen, unresolved);
+}
+
+/* critic → 게이트 → 저장 — 신규 생성(buildSlot)과 수리(repairSlot)가 공유한다.
+   critic 2라운드: 위반이면 그 키만 교체 생성, 재위반이면 슬롯 탈락.
+   critic 실행 자체가 실패해도 생성물은 저장한다 — 조용한 유실 금지 (3차 실행에서 책 저장 전 크래시로 전량 유실). */
+async function finishSlot(slot, required, byKey, gen, unresolved, repair = null) {
+  const p = `${OUT}/book-${slot}.json`;
   let criticLeft = [], criticError = null;
-  try {
+  if (unresolved.length) {
+    console.log(`  ${slot}: 묶음/단건 미해결 ${unresolved.length}건 — critic 생략 (슬롯 이미 탈락, 호출 절약)`);
+  } else try {
     for (let round = 1; round <= 2; round++) {
       const { sentences } = joinMeta(required, gen);
       criticLeft = await criticCheck(slot, sentences, `${slot}:critic${round}`);
@@ -375,26 +389,89 @@ async function buildSlot(slot) {
     reuse: gate.reuse.slice(0, 8), meta: gate.meta.slice(0, 8), grammar, grammarWarnings: lintObservationWarnings(sentences), critic: criticLeft,
     diversity: lintDiversity(sentences).slice(0, 8),
     honorific: sentences.filter((s) => HONORIFIC.test(s.line.trim())).length };
-  writeFileSync(p, JSON.stringify(book, null, 2));
+  /* 수리 모드의 원자적 저장 — 전부 통과할 때만 덮어쓴다. 실패한 수리가 기존 책을 지우면 안 된다. */
+  if (repair && !pass) {
+    writeFileSync(`${OUT}/repair-rejected-${slot}.json`, JSON.stringify({
+      repairStatus: 'rejected', preservedOriginal: true, attemptedKeys: repair.attemptedKeys,
+      reasons: book._gate.verdict, candidate: book }, null, 2));
+    console.log(`${slot}: 수리 거부 — 원본 보존, 후보는 repair-rejected-${slot}.json (${book._gate.verdict.length}건)`);
+    return repair.base;   // 원본 유지 (원본의 _gate 그대로)
+  }
+  const tmp = p + '.tmp';
+  writeFileSync(tmp, JSON.stringify(book, null, 2));
+  renameSync(tmp, p);
   console.log(`${slot}: ${sentences.length}문장 · 키 ${(gate.coverage.rate * 100).toFixed(1)}% · ${pass ? 'PASS' : 'FAIL(' + book._gate.verdict.length + ')'}`);
   return book;
 }
 
+/* 수리 모드 — 전체 재생성이 아니라 저장된 책에서 위반 문장만 교체한다 (최소 호출).
+   제거 대상: critic 잔존 + 구조/첫두어절 군집 초과분(3회 이상 → 2개만 보존).
+   보존 문장은 used 목록에 올리고, 부족분만 단건 생성 → critic 재검 → 게이트. */
+function keptOf(base) {
+  const offenders = new Set((base._gate?.critic || []).map((v) => v.key + '|' + v.line));
+  const heads = {}, st = {};
+  for (const s of base.sentences) {
+    if (s.traceType) continue;
+    (heads[s.line.trim().split(/\s+/).slice(0, 2).join(' ')] ||= []).push(s);
+    (st[`${s.focus}|${s.formGroup}|${coreVerb(s.line)}`] ||= []).push(s);
+  }
+  for (const group of [...Object.values(heads), ...Object.values(st)]) {
+    if (group.length >= 3) for (const s of group.slice(2)) offenders.add(s.key + '|' + s.line);
+  }
+  return base.sentences.filter((s) => !offenders.has(s.key + '|' + s.line));
+}
+
+async function repairSlot(slot, base) {
+  const required = buildRequiredKeys(slot, TOP, WEATHERS);
+  const byKey = Object.fromEntries(required.map((k) => [k.key, k]));
+  const kept = base._kept ?? keptOf(base);   // _kept이면 used 목록에 이미 선주입돼 있다
+  console.log(`${slot} 수리: 보존 ${kept.length} · 교체 ${base.sentences.length - kept.length}`);
+  let gen = kept.map((s) => ({ key: s.key, line: s.line, formGroup: s.formGroup, focus: s.focus, core: s.core }));
+  if (!base._kept) recordUsed(gen, slot);
+  const unresolved = [];
+  const have = {};
+  for (const g of gen) have[g.key] = (have[g.key] || 0) + 1;
+  const deficits = required.filter((k) => (have[k.key] || 0) < k.count).map((k) => ({ ...k, count: k.count - (have[k.key] || 0) }));
+  const reasons = {};
+  for (const v of base._gate?.critic || []) (reasons[v.key] ||= []).push(v.reason);
+  for (const dk of deficits) {
+    const note = reasons[dk.key]?.length ? `\n\n**직전 문장의 검수 탈락 사유 — 같은 실수 금지:**\n${reasons[dk.key].join('\n')}` : '';
+    const { got, bad } = await generateChunk(slot, [dk], `${slot}#repair(${dk.key})`, note);
+    recordUsed(got, slot);
+    const bl = new Set(bad.map((b) => b.line).filter(Boolean));
+    gen.push(...got.filter((g) => !bl.has(g.line)));
+    if (bad.length) unresolved.push({ contractKey: dk.key, stage: 'repair', reason: bad.map((x) => x.msg), lastCandidate: got.map((x) => x.line).join(' / ') || null });
+  }
+  return finishSlot(slot, required, byKey, gen, unresolved, { base, attemptedKeys: deficits.map((d) => d.key) });
+}
+
 /* 부분 재실행 — 보존 슬롯만 선주입하고, 재생성 대상 슬롯은 **이전 버전을 제외**한다.
    (폐기할 관찰까지 금지 목록에 넣으면 새 슬롯이 자기 이전 버전을 피하느라 불필요하게 좁아진다)
-   사용: node run5.mjs --regen=morning[,sunset] */
+   사용: node run5.mjs --regen=morning[,sunset] · 수리: --repair=morning[,sunset] */
 const REGEN = new Set(process.argv.filter((a) => a.startsWith('--regen=')).flatMap((a) => a.slice(8).split(',')));
+const REPAIR = new Set(process.argv.filter((a) => a.startsWith('--repair=')).flatMap((a) => a.slice(9).split(',')));
+const repairBase = {};
 const SEEDED = [];
 const books = {};
 for (const slot of SLOTS) {
   const p = `${OUT}/book-${slot}.json`;
   if (REGEN.has(slot)) { console.log(`${slot}: 재생성 대상 — 이전 버전 선주입 제외`); continue; }
+  if (REPAIR.has(slot)) {
+    if (existsSync(p)) { repairBase[slot] = JSON.parse(readFileSync(p, 'utf8')); console.log(`${slot}: 수리 대상 — 보존 문장은 수리 단계에서 선별 주입`); }
+    else console.log(`${slot}: 수리 대상인데 책이 없다 — 신규 생성으로 진행`);
+    continue;
+  }
   if (existsSync(p)) { books[slot] = JSON.parse(readFileSync(p, 'utf8')); recordUsed(books[slot].sentences, slot); SEEDED.push(slot); console.log(`${slot} 기존 책 로드 ${books[slot].sentences.length}문장`); }
+}
+/* 수리 대상들의 보존 문장을 생성 시작 전에 전부 선주입 — 수리 슬롯끼리도 서로를 알아야 한다 */
+for (const [slot, base] of Object.entries(repairBase)) {
+  base._kept = keptOf(base);
+  recordUsed(base._kept, slot);
 }
 for (const slot of SLOTS) {
   if (books[slot]) continue;
   try {
-    books[slot] = await buildSlot(slot);
+    books[slot] = repairBase[slot] ? await repairSlot(slot, repairBase[slot]) : await buildSlot(slot);
     books[slot]._meta = { regeneratedSlot: slot, seededFromSlots: [...SEEDED], excludedPriorVersion: REGEN.has(slot) };
     writeFileSync(`${OUT}/book-${slot}.json`, JSON.stringify(books[slot], null, 2));
     SEEDED.push(slot);
