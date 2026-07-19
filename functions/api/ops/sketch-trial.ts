@@ -16,11 +16,12 @@ import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, WORKERS_AI_CANDIDATES,
   type ImageProviderId, type ImageProviderEnv, type DailySketchPlan,
 } from '../_image-provider.ts';
-import { buildSketchPrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, type MemoryEvent } from '../_daily-sketch.ts';
+import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, type MemoryEvent } from '../_daily-sketch.ts';
 
 interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
   CAPTURES: R2Bucket;
+  ANTHROPIC_API_KEY?: string;   // 장면 번역용 (없으면 대상 이름으로 최소 구성)
 }
 
 const META_KEY = 'sketch_trial_meta';
@@ -54,6 +55,31 @@ export interface TrialRecord {
 /** 모델이 참조 입력을 지원하는지 — 등록된 후보표가 유일한 근거. 모르면 지원 안 함으로 본다. */
 export function supportsReference(model: string): boolean {
   return Object.values(WORKERS_AI_CANDIDATES).some((c) => c.model === model && c.supportsReference);
+}
+
+/**
+ * 관찰(한국어) → 장면(영어) 한 줄. 이미지 모델이 영어로 학습돼 있어서 필요한 단계일 뿐,
+ * 창작이 아니다 — 있는 것만 옮기고 없는 것을 더하지 않는다.
+ */
+export async function translateScene(env: { ANTHROPIC_API_KEY?: string }, lines: string[]): Promise<string | null> {
+  if (!env.ANTHROPIC_API_KEY || !lines.length) return null;
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-5', max_tokens: 120,
+      system: 'Translate the Korean observation notes into ONE short English clause describing only what is physically present. No interpretation, no added objects, no emotion words. Output the clause only.',
+      messages: [{ role: 'user', content: lines.join('\n') }],
+    }),
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+  const t = (data.content?.find((c) => c.type === 'text')?.text ?? '').trim();
+  return t || null;
 }
 
 /** 같은 프롬프트인지 한눈에 — 스타일 비교는 프롬프트가 같아야 성립한다. */
@@ -118,7 +144,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!checked.ok) return json(400, { error: checked.error });
   const { memory, models, count, providerId, referenceKeys, seed } = checked.value;
 
-  const prompt = buildSketchPrompt(memory, null);
+  // 모델에 나가는 프롬프트는 영어여야 한다(1차 실패: 한국어 프롬프트 → 글자가 그려진 접시).
+  // 관찰은 한국어가 원본이므로 장면만 영어로 옮긴다. 번역 실패는 치명적이지 않다 — 대상 이름으로 최소 구성.
+  const sceneEn = (typeof (body as Record<string, unknown>).sceneEn === 'string'
+    ? (body as Record<string, string>).sceneEn
+    : await translateScene(env, memory.lines).catch(() => null));
+  const prompt = buildImagePrompt(memory, null, sceneEn);
+  const promptKo = buildSketchPrompt(memory, null);   // 사람이 검토할 원본
   const plan: DailySketchPlan = { memory, prompt, referenceKeys };
   const provider = selectProvider(providerId, env);
   const trialId = `${new Date().toISOString().slice(0, 10)}-${hashPrompt(prompt)}`;
@@ -151,7 +183,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await env.PLANET.put(META_KEY, JSON.stringify([...made, ...prev].slice(0, META_KEEP)));
 
   return json(200, {
-    ok: true, trialId, prompt, promptHash,
+    ok: true, trialId, prompt, promptKo, promptHash,
     provider: provider.id,
     generated: made.length, records: made, errors,
     reminder: '시험 산출물이다. 게시·크론 연결 금지. 스타일 판정 후에만 provider 승격.',

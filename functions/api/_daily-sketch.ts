@@ -34,6 +34,30 @@ export const SKETCH_RULES = [
   '별이 자신은 얼굴을 세밀하게 그리지 않음',
 ] as const;
 
+/**
+ * 같은 규칙의 영어 렌더링. 한국어가 원본(사람이 읽고 고치는 계약)이고 영어는 **기계 번역본**이다.
+ * 이미지 모델은 영어로 학습돼 있어 한국어 프롬프트를 주면 "한글 텍스트가 들어간 그림"으로
+ * 오해한다(1차 시험 실패: 노란 접시에 깨진 한글이 나왔다). 인덱스가 SKETCH_RULES와 1:1이어야 한다.
+ */
+export const SKETCH_RULES_EN = [
+  'white or pale graph-paper background with faint grid lines',
+  'rough navy-blue ink outlines',
+  'only 4 to 6 flat colors total',
+  'almost no shading, no realistic volume or depth',
+  'only 1 to 3 main subjects, drawn large',
+  'small doodles nearby — stars, short strokes, dots',
+  'proportions need not be accurate; slightly wobbly hand-drawn lines',
+  'omit any background that did not matter that day',
+  'the cat companion is drawn a little smaller and more playful than life',
+  'the girl herself is drawn without detailed facial features',
+] as const;
+
+/** 이번 실패의 직접 원인 — 모델이 글자를 그리지 못하게 명시적으로 막는다. */
+export const SKETCH_NEGATIVE = [
+  'no text', 'no letters', 'no words', 'no captions', 'no watermark', 'no signature',
+  'not a photograph', 'not 3D render', 'no glossy ceramic', 'no realistic lighting',
+] as const;
+
 /** 기억한 만큼만 그린다 — 하루의 밀도가 그림의 복잡도가 된다. */
 export const SKETCH_DENSITY = {
   quiet: { maxSubjects: 1, note: '아무 일도 없던 날 — 화분 하나만' },
@@ -164,5 +188,35 @@ export function buildSketchPrompt(memory: MemoryEvent, genome: GenomeContext | n
     ...SKETCH_RULES.map((r) => `- ${r}`),
     '',
     '실제 장면을 정확히 복제하지 않는다. 오늘 중요하지 않았던 것은 그리지 않는다.',
+  ].filter((l) => l !== '').join('\n');
+}
+
+const FOCUS_DRAW_EN: Record<string, string> = {
+  light: 'draw whatever the light touched the largest',
+  movement: 'draw whatever moved the largest',
+  texture: 'draw whatever kept its texture the largest',
+  distance: 'let the sense of distance show',
+  shadow: 'draw the shadow large', color: 'draw whatever kept its color large',
+  sound: 'draw the side the sound came from large',
+};
+
+/**
+ * 모델에 실제로 나가는 프롬프트 — 영어. `sceneEn`은 그 순간의 관찰을 영어로 옮긴 것으로,
+ * 호출자가 넘긴다(없으면 대상 이름만으로 최소 구성). 규칙과 금지어는 여기서 붙인다.
+ */
+export function buildImagePrompt(
+  memory: MemoryEvent, genome: GenomeContext | null, sceneEn: string | null,
+): string {
+  const d = SKETCH_DENSITY[memory.density];
+  const focus = (genome?.selection ?? []).map((f) => FOCUS_DRAW_EN[f]).filter(Boolean).slice(0, 2);
+  const scene = (sceneEn ?? '').trim() || (memory.targetLabel ? 'a potted plant the girl stopped in front of' : 'a quiet small moment');
+  return [
+    "A page from a girl's hand-drawn diary — a memory sketch in a notebook, not a finished illustration.",
+    `Scene: ${scene}`,
+    `At most ${d.maxSubjects} main subject${d.maxSubjects > 1 ? 's' : ''}.`,
+    focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
+    `Style: ${SKETCH_RULES_EN.join(', ')}.`,
+    `Avoid: ${SKETCH_NEGATIVE.join(', ')}.`,
+    'It should look like it was drawn from memory, not copied from a photograph.',
   ].filter((l) => l !== '').join('\n');
 }

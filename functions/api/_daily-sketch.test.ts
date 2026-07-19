@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   selectMoment, densityOf, buildMemoryEvent, buildSketchPrompt,
-  SKETCH_RULES, type ArchiveEntry,
+  SKETCH_RULES, SKETCH_RULES_EN, buildImagePrompt, type ArchiveEntry,
 } from './_daily-sketch.ts';
 import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, manualProvider, workersAiProvider,
@@ -170,4 +170,30 @@ test('스타일 보드는 같은 프롬프트끼리만 묶는다', () => {
 test('스타일 비교는 프롬프트가 같아야 성립한다 — 해시가 그걸 보증', () => {
   assert.equal(hashPrompt('같은 프롬프트'), hashPrompt('같은 프롬프트'));
   assert.notEqual(hashPrompt('같은 프롬프트'), hashPrompt('다른 프롬프트'));
+});
+
+/* ── 1차 실패 회귀: 한국어 프롬프트가 모델에 나가면 안 된다 ── */
+
+test('모델 프롬프트는 영어다 (한국어를 주면 글자가 그려진다)', () => {
+  const m = buildMemoryEvent([e({ duration: 5 })], DATE)!;
+  const p = buildImagePrompt(m, null, 'a small potted plant on a step');
+  assert.ok(!/[가-힣]/.test(p), '한글이 남아 있다:\n' + p);
+  assert.match(p, /a small potted plant on a step/);
+});
+
+test('영어 규칙표는 한국어 원본과 1:1로 대응한다', () => {
+  assert.equal(SKETCH_RULES_EN.length, SKETCH_RULES.length);
+});
+
+test('글자·사진풍을 명시적으로 금지한다 (접시 사건 재발 방지)', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  const p = buildImagePrompt(m, null, 'a pot');
+  for (const bad of ['no text', 'no letters', 'not a photograph']) assert.ok(p.includes(bad), bad);
+});
+
+test('장면 번역이 없어도 프롬프트는 만들어진다 (번역 실패가 시험을 막지 않게)', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  const p = buildImagePrompt(m, null, null);
+  assert.ok(!/[가-힣]/.test(p));
+  assert.match(p, /Scene: /);
 });
