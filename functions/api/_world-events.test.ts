@@ -55,16 +55,46 @@ test('만기 + 조건 충족 → fired, 결정론 인스턴스', () => {
   assert.deepEqual(schedule[0].instance, activated);
 });
 
-test('조건 미충족(낮/비) → skipped(conditions), 세계 불변', () => {
+test('조건 미충족(낮/비) → 유예 안에서는 pending 유지, 세계 불변', () => {
   for (const ctx of [
     { now: NOW, phase: 'day', weather: 'clear', sequence: 1 },
     { now: NOW, phase: 'night', weather: 'rain', sequence: 1 },
   ]) {
-    const { schedule, activated } = resolveDue([res({})], ctx);
+    const { schedule, activated, changed } = resolveDue([res({})], ctx);
     assert.equal(activated, null);
-    assert.equal(schedule[0].status, 'skipped');
-    assert.equal(schedule[0].skipReason, 'conditions');
+    assert.equal(schedule[0].status, 'pending');   // 판결이 아니라 '아직'
+    assert.equal(schedule[0].skipReason, null);
+    assert.equal(changed, false);                  // 쓸 것이 없다 = KV 쓰기 없음
   }
+});
+
+test('조건 미충족으로 대기하다 조건이 오면 개시된다 (60초 하루의 핵심)', () => {
+  // 낮에 만기 → pending 유지 → 같은 예약이 밤 폴링에서 살아난다
+  const day = resolveDue([res({})], { now: NOW, phase: 'day', weather: 'clear', sequence: 1 });
+  assert.equal(day.schedule[0].status, 'pending');
+  const night = resolveDue(day.schedule, { now: NOW + 30_000, phase: 'night', weather: 'clear', sequence: 2 });
+  assert.ok(night.activated);
+  assert.equal(night.activated.eventInstanceId, 'res-r1');
+  assert.equal(night.schedule[0].status, 'fired');
+});
+
+test('유예를 넘기면 조건 대기도 끝난다 → expired', () => {
+  const { schedule, activated } = resolveDue(
+    [res({ fireAtMs: NOW - worldEventConfig.FIRE_GRACE_MS - 1 })],
+    { now: NOW, phase: 'day', weather: 'clear', sequence: 1 },
+  );
+  assert.equal(activated, null);
+  assert.equal(schedule[0].status, 'skipped');
+  assert.equal(schedule[0].skipReason, 'expired');
+});
+
+test('알 수 없는 이벤트는 대기하지 않는다 → skipped(conditions)', () => {
+  const { schedule } = resolveDue(
+    [res({ eventId: 'no-such-event' })],
+    { now: NOW, phase: 'night', weather: 'clear', sequence: 1 },
+  );
+  assert.equal(schedule[0].status, 'skipped');
+  assert.equal(schedule[0].skipReason, 'conditions');
 });
 
 test('유예(15분) 경과 → skipped(expired) — 조건이 맞아도 늦은 발사는 없다', () => {

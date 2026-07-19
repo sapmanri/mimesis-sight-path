@@ -110,10 +110,14 @@ export function resolveDue(
     }
     if (activated) continue; // 이번 턴 개시는 1건 — 나머지는 다음 폴링에서 재평가
     const def = getWorldEventById(r.eventId);
-    if (!def || !eligible(r.eventId, ctx.phase, ctx.weather)) {
+    if (!def) {
       r.status = 'skipped'; r.skipReason = 'conditions'; r.resolvedAt = ctx.now; changed = true;
       continue;
     }
+    // 조건 불일치는 판결이 아니라 '아직'이다. 별이의 하루는 60초라 유예(15분) 안에
+    // dusk/night가 여러 번 돌아온다 — pending을 유지하고 다음 폴링에서 다시 본다.
+    // (유예를 넘기면 위에서 expired로 확정된다.)
+    if (!eligible(r.eventId, ctx.phase, ctx.weather)) continue;
     const last = lastFiredAt(next, r.eventId);
     if (last !== null && ctx.now - last < def.cooldownSeconds * 1000) {
       r.status = 'skipped'; r.skipReason = 'cooldown'; r.resolvedAt = ctx.now; changed = true;
