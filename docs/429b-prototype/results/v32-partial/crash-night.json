@@ -1,0 +1,4 @@
+{
+  "slot": "night",
+  "error": "Error: 400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.\"},\"request_id\":\"req_011Cd9yg7Vk5tRLhCAeQKH3W\"}\n    at APIError.generate (file:///private/tmp/claude-501/-Users-vaselim-claudcode/bd32eb72-8cf9-4416-9392-472efee7ba74/scratchpad/429b-run/node_modules/@anthropic-ai/sdk/core/error.mjs:39:20)\n    at Anthropic.makeStatusError (file:///private/tmp/claude-501/-Users-vaselim-claudcode/bd32eb72-8cf9-4416-9392-472efee7ba74/scratchpad/429b-run/node_modules/@anthropic-ai/sdk/client.mjs:371:32)\n    at Anthropic.makeRequest (file:///private/tmp/claude-501/-Users-vaselim-claudcode/bd32eb72-8cf9-4416-9392-472efee7ba74/scratchpad/429b-run/node_modules/@anthropic-ai/sdk/client.mjs:595:30)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+}

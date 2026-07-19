@@ -34,7 +34,7 @@ export function joinMeta(required, gen) {
   for (const g of gen) {
     const k = byKey[g.key];
     if (!k) { orphans.push(g.key); continue; }
-    out.push({ key: g.key, line: g.line, formGroup: g.formGroup,
+    out.push({ key: g.key, line: g.line, formGroup: g.formGroup, focus: g.focus, core: g.core,
       slot: k.slot, targetType: k.targetType, targetName: k.targetName, category: k.category,
       mood: k.mood, eventFlags: k.eventFlag && k.eventFlag !== 'normal' ? [k.eventFlag] : [],
       traceType: k.traceType, reusable: !k.targetType,
@@ -119,12 +119,16 @@ export function lintCoverage(book, required) {
    "벤치 다리"·"홀씨"·"꽃잎"·"수염"·"발자국"처럼 특정 대상만 가리키는 말이 들어가면
    그 문장은 카테고리 전체에 못 쓴다 — 애초에 reusable이 아니다. */
 export const TARGET_VOCAB = ['벤치','홀씨','꽃잎','수염','발자국','다리','등받이','팔걸이','줄기','대가','밥그릇','꽁지','귀'];
+/* 부분 문자열 과잉 매칭 보정 — "잎사귀"·"귀퉁이"의 '귀'는 고양이 귀가 아니다 (2026-07-19 실측 오탐) */
+export const TARGET_VOCAB_EXCEPTIONS = ['잎사귀', '귀퉁이', '귀뚜라미'];
+export const cleanForVocab = (line) => TARGET_VOCAB_EXCEPTIONS.reduce((l, w) => l.split(w).join(''), line);
 export function lintReuse(book, topTargetNames = []) {
   const e = [], byLine = {};
   const vocab = [...new Set([...TARGET_VOCAB, ...topTargetNames])];
   for (const s of book.sentences) {
     if (!s.reusable) continue;
-    for (const w of vocab) if (s.line.includes(w)) { e.push(`reusable인데 고유 관찰어 "${w}": "${s.line}"`); break; }
+    const cleaned = cleanForVocab(s.line);
+    for (const w of vocab) if (cleaned.includes(w)) { e.push(`reusable인데 고유 관찰어 "${w}": "${s.line}"`); break; }
   }
   for (const s of book.sentences) (byLine[s.line] ||= []).push(s);
   for (const [line, list] of Object.entries(byLine)) {
@@ -207,7 +211,9 @@ export function gateReport({ book, required, evalRows, topTargets }) {
   if (cov.rate < PASS.requiredKeyRate) verdict.push(`필수 키 충족률 ${(cov.rate * 100).toFixed(1)}% (100% 필요) — 누락 ${cov.missing.length}`);
   if (evalMiss) verdict.push(`평가 세트 조회 실패 ${evalMiss}건`);
   if (evalSpecialMiss > PASS.specialRuleFallback) verdict.push(`특수 플래그 Rule 폴백 ${evalSpecialMiss}건`);
-  if (sim.exactRate < PASS.topTargetExact) verdict.push(`exact-hit ${(sim.exactRate * 100).toFixed(1)}% (${PASS.topTargetExact * 100}% 필요)`);
+  // 지표 분리(Vase 판정) 이후 exactRate는 존재하지 않는다 — undefined 비교는 게이트를 조용히 끈다
+  if (sim.targetExactRate < PASS.topTargetExact) verdict.push(`topTarget exact ${(sim.targetExactRate * 100).toFixed(1)}% (${PASS.topTargetExact * 100}% 필요)`);
+  if (sim.ruleFallback > 0) verdict.push(`시뮬레이션 Rule 폴백 ${sim.ruleFallback}건`);
   if (reuse.length) verdict.push(`재사용 위반 ${reuse.length}`);
   if (meta.length) verdict.push(`메타 자기모순 ${meta.length}`);
   return { pass: verdict.length === 0, verdict, coverage: cov, reuse, meta, sim };

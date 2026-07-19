@@ -221,7 +221,7 @@ const ending = (l) => l.trim().replace(/[.?!]$/, '').slice(-3);
 const firstTwo = (l) => l.trim().split(/\s+/).slice(0, 2).join(' ');
 const isQuestion = (l) => /(까|나|려나|을까|ㄹ까)\s*[?]?$/.test(l.trim());
 const subjectVerbForm = (l) => /^[^\s]+(이|가)\s+\S+(다|한다|났다|왔다)$/.test(l.trim());
-const coreVerb = (l) => { const w = l.trim().split(/\s+/); return w[w.length - 1].replace(/[.?!]$/, ''); };
+export const coreVerb = (l) => { const w = l.trim().split(/\s+/); return w[w.length - 1].replace(/[.?!]$/, ''); };
 
 /** 문형 다양성을 기계로 검사한다. "다양하게 써라" 한 줄로는 다시 실패한다. */
 export function lintDiversity(sentences) {
