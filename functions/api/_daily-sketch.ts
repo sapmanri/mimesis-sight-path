@@ -40,23 +40,37 @@ export const SKETCH_RULES = [
  * 오해한다(1차 시험 실패: 노란 접시에 깨진 한글이 나왔다). 인덱스가 SKETCH_RULES와 1:1이어야 한다.
  */
 export const SKETCH_RULES_EN = [
-  'white or pale graph-paper background with faint grid lines',
+  'pale graph-paper background with faint grid lines',
   'rough navy-blue ink outlines',
-  'only 4 to 6 flat colors total',
-  'almost no shading, no realistic volume or depth',
-  'only 1 to 3 main subjects, drawn large',
+  'a flat palette of four to six colors',
+  'flat even fills, plain shapes',
+  'one to three main subjects drawn large',
   'small doodles nearby — stars, short strokes, dots',
-  'proportions need not be accurate; slightly wobbly hand-drawn lines',
-  'omit any background that did not matter that day',
-  'the cat companion is drawn a little smaller and more playful than life',
-  'the girl herself is drawn without detailed facial features',
+  'loose wobbly hand-drawn proportions',
+  'bare background, only what mattered that day',
+  'the cat companion small and playful',
+  'the girl’s face left simple — a few dots and lines',
 ] as const;
 
-/** 이번 실패의 직접 원인 — 모델이 글자를 그리지 못하게 명시적으로 막는다. */
-export const SKETCH_NEGATIVE = [
-  'no text', 'no letters', 'no words', 'no captions', 'no watermark', 'no signature',
-  'not a photograph', 'not 3D render', 'no glossy ceramic', 'no realistic lighting',
+/**
+ * 부정문을 쓰지 않는다. 확산 모델에 `no text`라고 쓰면 "text" 개념이 오히려 활성화된다
+ * (2차 실패: no text를 넣었는데 모델이 "Ppaekong" 서명을 그려 넣었다).
+ * 원하지 않는 것을 말하는 대신 **원하는 결과 상태만** 서술한다.
+ */
+export const SKETCH_POSITIVE = [
+  'an unmarked sketchbook page',
+  'flat scan, top-down, the drawing fills the frame',
 ] as const;
+
+/** 숫자가 density보다 명확하다 — "2개 이내"는 해석의 여지가 있고 "one cat"은 없다. */
+const NUM_WORD = ['zero', 'one', 'two', 'three', 'four', 'five'];
+export function subjectClause(subjects: string[], max: number): string {
+  const list = subjects.slice(0, max).filter(Boolean);
+  if (!list.length) return `Exactly ${NUM_WORD[Math.min(max, 5)]} subject${max > 1 ? 's' : ''}, nothing else.`;
+  const named = `Subjects: ${list.map((s) => `one ${s}`).join(', ')}.`;
+  if (list.length === 1) return `${named} Only this one subject, nothing else.`;
+  return `${named} Only these ${NUM_WORD[Math.min(list.length, 5)]} subjects, nothing else.`;
+}
 
 /** 기억한 만큼만 그린다 — 하루의 밀도가 그림의 복잡도가 된다. */
 export const SKETCH_DENSITY = {
@@ -206,17 +220,19 @@ const FOCUS_DRAW_EN: Record<string, string> = {
  */
 export function buildImagePrompt(
   memory: MemoryEvent, genome: GenomeContext | null, sceneEn: string | null,
+  subjects: string[] = [],
 ): string {
   const d = SKETCH_DENSITY[memory.density];
   const focus = (genome?.selection ?? []).map((f) => FOCUS_DRAW_EN[f]).filter(Boolean).slice(0, 2);
-  const scene = (sceneEn ?? '').trim() || (memory.targetLabel ? 'a potted plant the girl stopped in front of' : 'a quiet small moment');
+  const scene = (sceneEn ?? '').trim() || 'a quiet small moment';
   return [
-    "A page from a girl's hand-drawn diary — a memory sketch in a notebook, not a finished illustration.",
+    // "A page from a girl's diary"로 시작하면 모델이 '공책을 찍은 사진'을 만든다(2차 실패).
+    // 그림 자체를 말한다 — sketch / drawing / illustration 비중을 앞으로.
+    'A simple hand-drawn sketch. Flat illustration, notebook-style doodle drawn from memory.',
     `Scene: ${scene}`,
-    `At most ${d.maxSubjects} main subject${d.maxSubjects > 1 ? 's' : ''}.`,
+    subjectClause(subjects, d.maxSubjects),
     focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
     `Style: ${SKETCH_RULES_EN.join(', ')}.`,
-    `Avoid: ${SKETCH_NEGATIVE.join(', ')}.`,
-    'It should look like it was drawn from memory, not copied from a photograph.',
+    `${SKETCH_POSITIVE.join(', ')}.`,
   ].filter((l) => l !== '').join('\n');
 }

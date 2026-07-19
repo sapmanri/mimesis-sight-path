@@ -92,7 +92,7 @@ export function hashPrompt(s: string): string {
 /** 요청 검증 — 실수로 운영처럼 쓰이는 것을 막는다. */
 export function validateTrialInput(body: unknown): { ok: true; value: {
   memory: MemoryEvent; models: string[]; count: number; providerId: ImageProviderId;
-  referenceKeys: string[]; seed?: number;
+  referenceKeys: string[]; seed?: number; subjects: string[];
 } } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.confirm !== 'trial') return { ok: false, error: 'confirm_required: {"confirm":"trial"}' };
@@ -112,9 +112,10 @@ export function validateTrialInput(body: unknown): { ok: true; value: {
     return { ok: false, error: `too_many: models×count ≤ ${MAX_PER_CALL} (사용량 한도 존중)` };
   }
   const providerId = (b.provider as ImageProviderId) ?? 'workers-ai';
+  const subjects = Array.isArray(b.subjects) ? b.subjects.filter((x): x is string => typeof x === 'string' && !!x) : [];
   const referenceKeys = Array.isArray(b.referenceKeys) ? b.referenceKeys.filter((k): k is string => typeof k === 'string') : [];
   const seed = b.seed === undefined ? undefined : Number(b.seed);
-  return { ok: true, value: { memory, models, count, providerId, referenceKeys, seed } };
+  return { ok: true, value: { memory, models, count, providerId, referenceKeys, seed, subjects } };
 }
 
 /** GET — 지금까지의 시험 기록 + 스타일 보드용 목록. 생성하지 않는다. */
@@ -131,6 +132,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     judgingCriteria: [
       '별이 얼굴과 머리 모양 유지', '빼콩이 생김새 유지', '남색 외곽선', '4~6색 제한',
       '모눈종이 배경', '낙서 배치', '장면보다 기억의 강조', '7일 연속 놓았을 때 같은 화가처럼 보이는가',
+      'Style Identity — 같은 아이가 그린 것 같은가 (예쁜 그림이 아니라 별이의 그림인가)',
     ],
     records: records.slice(0, META_KEEP),
   });
@@ -142,14 +144,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_json' }); }
   const checked = validateTrialInput(body);
   if (!checked.ok) return json(400, { error: checked.error });
-  const { memory, models, count, providerId, referenceKeys, seed } = checked.value;
+  const { memory, models, count, providerId, referenceKeys, seed, subjects } = checked.value;
 
   // 모델에 나가는 프롬프트는 영어여야 한다(1차 실패: 한국어 프롬프트 → 글자가 그려진 접시).
   // 관찰은 한국어가 원본이므로 장면만 영어로 옮긴다. 번역 실패는 치명적이지 않다 — 대상 이름으로 최소 구성.
   const sceneEn = (typeof (body as Record<string, unknown>).sceneEn === 'string'
     ? (body as Record<string, string>).sceneEn
     : await translateScene(env, memory.lines).catch(() => null));
-  const prompt = buildImagePrompt(memory, null, sceneEn);
+  const prompt = buildImagePrompt(memory, null, sceneEn, subjects);
   const promptKo = buildSketchPrompt(memory, null);   // 사람이 검토할 원본
   const plan: DailySketchPlan = { memory, prompt, referenceKeys };
   const provider = selectProvider(providerId, env);

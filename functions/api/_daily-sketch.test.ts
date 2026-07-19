@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   selectMoment, densityOf, buildMemoryEvent, buildSketchPrompt,
-  SKETCH_RULES, SKETCH_RULES_EN, buildImagePrompt, type ArchiveEntry,
+  SKETCH_RULES, SKETCH_RULES_EN, SKETCH_POSITIVE, buildImagePrompt, subjectClause, type ArchiveEntry,
 } from './_daily-sketch.ts';
 import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, manualProvider, workersAiProvider,
@@ -185,10 +185,31 @@ test('영어 규칙표는 한국어 원본과 1:1로 대응한다', () => {
   assert.equal(SKETCH_RULES_EN.length, SKETCH_RULES.length);
 });
 
-test('글자·사진풍을 명시적으로 금지한다 (접시 사건 재발 방지)', () => {
+test('부정문을 쓰지 않는다 — no/not 은 확산 모델에서 역효과 (2차 실패: 서명이 그려짐)', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  const p = buildImagePrompt(m, null, 'a pot', ['flower pot']);
+  // Avoid 줄만이 아니라 **프롬프트 전체**에 부정어가 없어야 한다 (규칙표 포함)
+  for (const neg of [/\bno\b/, /\bnot\b/, /\bwithout\b/, /\bavoid\b/i, /\bnever\b/]) {
+    assert.ok(!neg.test(p), `부정문이 남아 있다: ${neg}\n${p}`);
+  }
+  assert.ok(p.includes('an unmarked sketchbook page'), '원하는 상태를 긍정으로 서술해야 한다');
+});
+
+test('사진이 아니라 그림을 말한다 (2차 실패: 공책을 찍은 사진이 나옴)', () => {
   const m = buildMemoryEvent([e()], DATE)!;
   const p = buildImagePrompt(m, null, 'a pot');
-  for (const bad of ['no text', 'no letters', 'not a photograph']) assert.ok(p.includes(bad), bad);
+  assert.match(p, /^A simple hand-drawn sketch/);
+  assert.ok(p.includes('flat scan, top-down, the drawing fills the frame'));
+  assert.ok(!/A page from/.test(p), "'page from a diary'는 사진을 유도한다");
+});
+
+test('숫자가 density보다 명확하다 — 대상을 세어서 못박는다', () => {
+  assert.equal(subjectClause(['girl', 'cat', 'flower pot'], 3),
+    'Subjects: one girl, one cat, one flower pot. Only these three subjects, nothing else.');
+  assert.match(subjectClause(['girl', 'cat', 'flower pot'], 2), /Only these two subjects/);
+  assert.match(subjectClause([], 1), /Exactly one subject, nothing else\./);
+  // 단수 문법 — "Only these one subjects" 같은 문장이 모델에 나가면 안 된다
+  assert.equal(subjectClause(['flower pot'], 1), 'Subjects: one flower pot. Only this one subject, nothing else.');
 });
 
 test('장면 번역이 없어도 프롬프트는 만들어진다 (번역 실패가 시험을 막지 않게)', () => {

@@ -16,6 +16,7 @@ const META_KEY = 'sketch_trial_meta';
 const JUDGING = [
   '별이 얼굴과 머리 모양 유지', '빼콩이 생김새 유지', '남색 외곽선', '4~6색 제한',
   '모눈종이 배경', '낙서 배치', '장면보다 기억의 강조', '7일 연속 놓았을 때 같은 화가처럼 보이는가',
+  'Style Identity — 같은 아이가 그린 것 같은가 (예쁜 그림이 아니라 별이의 그림인가)',
 ];
 
 const esc = (s: unknown) => String(s ?? '')
