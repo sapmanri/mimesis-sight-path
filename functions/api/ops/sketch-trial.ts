@@ -42,6 +42,18 @@ export interface TrialRecord {
   promptHash: string;
   sketchVersion: string;
   note: string;
+  /** 참조 이미지가 실제로 들어갔는가. 모델이 못 받으면 false — 기록이 거짓말하면 안 된다. */
+  referenceApplied: boolean;
+  /**
+   * candidate = 참조를 받은 스타일 고정 후보 / control = 텍스트 프롬프트만으로
+   * 어디까지 유지되는지 보는 대조군. 둘을 같은 줄에 놓고 비교하면 판정이 틀어진다.
+   */
+  role: 'candidate' | 'control';
+}
+
+/** 모델이 참조 입력을 지원하는지 — 등록된 후보표가 유일한 근거. 모르면 지원 안 함으로 본다. */
+export function supportsReference(model: string): boolean {
+  return Object.values(WORKERS_AI_CANDIDATES).some((c) => c.model === model && c.supportsReference);
 }
 
 /** 같은 프롬프트인지 한눈에 — 스타일 비교는 프롬프트가 같아야 성립한다. */
@@ -112,7 +124,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const errors: string[] = [];
   for (const model of models) {
     for (let n = 0; n < count; n++) {
-      const params = { steps: 4, ...(referenceKeys.length ? { reference_images: referenceKeys } : {}) };
+      // 참조를 못 받는 모델에 참조를 넘기지 않는다. 넘긴 척도 하지 않는다.
+      const refOk = referenceKeys.length > 0 && supportsReference(model);
+      const params = { steps: 4, ...(refOk ? { reference_images: referenceKeys } : {}) };
       const art = await provider.generate(env, { plan, model, params, seed: seed === undefined ? undefined : seed + n });
       if ('error' in art) { errors.push(`${model}#${n}: ${art.error}`); continue; }
       let r2Key: string | null = null;
@@ -123,6 +137,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       made.push({
         trialId, createdAt: art.createdAt, providerId: art.providerId, model: art.model,
         params: art.params, seed: art.seed, r2Key, promptHash, sketchVersion: SKETCH_VERSION, note: art.note,
+        referenceApplied: refOk, role: refOk ? 'candidate' : 'control',
       });
     }
   }

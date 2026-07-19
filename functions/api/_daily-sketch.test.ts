@@ -10,7 +10,7 @@ import {
 import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, manualProvider, workersAiProvider,
 } from './_image-provider.ts';
-import { validateTrialInput, hashPrompt } from './ops/sketch-trial.ts';
+import { validateTrialInput, hashPrompt, supportsReference } from './ops/sketch-trial.ts';
 
 const DATE = '9100-04-10';
 let t = 1_700_000_000_000;
@@ -134,6 +134,12 @@ test('사용량 한도 존중 — 한 번에 많이 못 만든다', () => {
 
 test('빈 기억으로는 시험할 수 없다', () => {
   assert.equal(validateTrialInput({ confirm: 'trial', memory: { lines: [] }, models: ['m'] }).ok, false);
+});
+
+test('참조를 못 받는 모델은 후보가 아니라 대조군이다', () => {
+  assert.equal(supportsReference('@cf/black-forest-labs/flux-2-dev'), true);
+  assert.equal(supportsReference('@cf/black-forest-labs/flux-1-schnell'), false);
+  assert.equal(supportsReference('@cf/unknown/model'), false, '모르는 모델은 지원 안 함으로 본다');
 });
 
 test('스타일 비교는 프롬프트가 같아야 성립한다 — 해시가 그걸 보증', () => {
