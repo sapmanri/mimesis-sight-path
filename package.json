@@ -16,7 +16,7 @@
     "validate:parallel": "node scripts/validate-parallel-lives.mjs",
     "validate:writer": "node scripts/validate-byeoli-writer.mjs",
     "validate:postcard": "node scripts/validate-postcard.mjs",
-    "validate:ops": "node scripts/validate-ops.mjs && node --experimental-strip-types --test functions/api/_world-events.test.ts functions/api/_collective.test.ts functions/api/_replies.test.ts functions/api/_genome.test.ts",
+    "validate:ops": "node scripts/validate-ops.mjs && node --experimental-strip-types --test functions/api/_world-events.test.ts functions/api/_collective.test.ts functions/api/_replies.test.ts functions/api/_genome.test.ts functions/api/_genome-identity.test.ts",
     "build": "npm run validate:objects && npm run validate:world-events && npm run validate:strict && npm run validate:card && npm run validate:observer && npm run validate:brand && npm run validate:publish-log && npm run validate:zone && npm run validate:parallel && npm run validate:writer && npm run validate:postcard && npm run validate:ops && npm run validate:live:structure && vite build",
     "preview": "vite preview",
     "validate:live:structure": "node scripts/validate-live-structure.mjs",
