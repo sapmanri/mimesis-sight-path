@@ -50,6 +50,17 @@ export interface TrialRecord {
    * 어디까지 유지되는지 보는 대조군. 둘을 같은 줄에 놓고 비교하면 판정이 틀어진다.
    */
   role: 'candidate' | 'control';
+  /** 다중 장면 시험에서 어떤 하루였는지 */
+  sceneLabel?: string | null;
+}
+
+/** "다른 장면에서도 같은 아이인가" — 같은 참조로 서로 다른 하루를 그린다. */
+export interface TrialScene {
+  label?: string;
+  sceneEn?: string;
+  subjects?: string[];
+  targetLabel?: string;
+  lines?: string[];
 }
 
 /** 모델이 참조 입력을 지원하는지 — 등록된 후보표가 유일한 근거. 모르면 지원 안 함으로 본다. */
@@ -93,6 +104,7 @@ export function hashPrompt(s: string): string {
 export function validateTrialInput(body: unknown): { ok: true; value: {
   memory: MemoryEvent; models: string[]; count: number; providerId: ImageProviderId;
   referenceKeys: string[]; seed?: number; subjects: string[];
+  styleKeys: string[]; scenes: TrialScene[];
 } } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.confirm !== 'trial') return { ok: false, error: 'confirm_required: {"confirm":"trial"}' };
@@ -108,14 +120,21 @@ export function validateTrialInput(body: unknown): { ok: true; value: {
   if (!models.length) return { ok: false, error: `models_required: 예) ${Object.values(WORKERS_AI_CANDIDATES).map((c) => c.model).join(', ')}` };
   const count = Number(b.count ?? 3);
   if (!Number.isInteger(count) || count < 1) return { ok: false, error: 'count must be a positive integer' };
-  if (models.length * count > MAX_PER_CALL) {
-    return { ok: false, error: `too_many: models×count ≤ ${MAX_PER_CALL} (사용량 한도 존중)` };
+  const scenesN = Array.isArray(b.scenes) ? (b.scenes as unknown[]).length : 0;
+  const shots = models.length * (scenesN || count);
+  if (shots > MAX_PER_CALL) {
+    return { ok: false, error: `too_many: models×(scenes||count) ≤ ${MAX_PER_CALL} (사용량 한도 존중)` };
   }
   const providerId = (b.provider as ImageProviderId) ?? 'workers-ai';
   const subjects = Array.isArray(b.subjects) ? b.subjects.filter((x): x is string => typeof x === 'string' && !!x) : [];
+  const styleKeys = Array.isArray(b.styleKeys) ? b.styleKeys.filter((k): k is string => typeof k === 'string') : [];
+  // 다중 장면 — "다른 장면에서도 같은 아이인가"를 한 번에 본다
+  const scenes: TrialScene[] = Array.isArray(b.scenes)
+    ? (b.scenes as TrialScene[]).filter((x) => x && typeof x === 'object')
+    : [];
   const referenceKeys = Array.isArray(b.referenceKeys) ? b.referenceKeys.filter((k): k is string => typeof k === 'string') : [];
   const seed = b.seed === undefined ? undefined : Number(b.seed);
-  return { ok: true, value: { memory, models, count, providerId, referenceKeys, seed, subjects } };
+  return { ok: true, value: { memory, models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes } };
 }
 
 /** GET — 지금까지의 시험 기록 + 스타일 보드용 목록. 생성하지 않는다. */
@@ -146,7 +165,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_json' }); }
   const checked = validateTrialInput(body);
   if (!checked.ok) return json(400, { error: checked.error });
-  const { memory, models, count, providerId, referenceKeys, seed, subjects } = checked.value;
+  const { memory, models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes } = checked.value;
 
   // 모델에 나가는 프롬프트는 영어여야 한다(1차 실패: 한국어 프롬프트 → 글자가 그려진 접시).
   // 관찰은 한국어가 원본이므로 장면만 영어로 옮긴다. 번역 실패는 치명적이지 않다 — 대상 이름으로 최소 구성.
@@ -156,18 +175,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const promptKo = buildSketchPrompt(memory, null);   // 사람이 검토할 원본
   // 기준 그림을 **실제로 읽는다.** 키만 믿으면 없는 파일을 넘기고도 candidate로 기록돼
   // 결과가 거짓말을 한다(4차 사고: .png로 요청했는데 저장된 건 .jpg였다).
-  const references: ReferenceImage[] = [];
   const refErrors: string[] = [];
-  for (const key of referenceKeys.slice(0, MAX_REFERENCE_IMAGES)) {
-    const obj = await env.CAPTURES.get(key);
-    if (!obj) { refErrors.push(`reference_missing: ${key}`); continue; }
-    references.push({
-      name: key.split('/').pop() ?? 'ref',
-      bytes: await obj.arrayBuffer(),
-      contentType: obj.httpMetadata?.contentType ?? 'image/png',
-    });
-  }
-  const prompt = buildImagePrompt(memory, null, sceneEn, subjects, references.length);
+  const load = async (keys: string[]) => {
+    const out: ReferenceImage[] = [];
+    for (const key of keys) {
+      const obj = await env.CAPTURES.get(key);
+      if (!obj) { refErrors.push(`reference_missing: ${key}`); continue; }
+      out.push({
+        name: key.split('/').pop() ?? 'ref',
+        bytes: await obj.arrayBuffer(),
+        contentType: obj.httpMetadata?.contentType ?? 'image/png',
+      });
+    }
+    return out;
+  };
+  // 순서가 곧 프롬프트의 인덱스다: 캐릭터(image 0..) → 스타일(그다음)
+  const charRefs = await load(referenceKeys);
+  const styleRefs = await load(styleKeys);
+  const references = [...charRefs, ...styleRefs].slice(0, MAX_REFERENCE_IMAGES);
+  const nChar = Math.min(charRefs.length, MAX_REFERENCE_IMAGES);
+  const nStyle = Math.max(0, references.length - nChar);
+  // 장면이 여러 개면 각각 프롬프트를 만든다 — 같은 참조, 다른 하루
+  const shotPlans = (scenes.length ? scenes : [{ sceneEn: sceneEn ?? undefined, subjects }]).map((sc) => {
+    const mem = { ...memory, targetLabel: sc.targetLabel ?? memory.targetLabel, lines: sc.lines ?? memory.lines };
+    return {
+      label: sc.label ?? null,
+      prompt: buildImagePrompt(mem, null, sc.sceneEn ?? sceneEn, sc.subjects ?? subjects, { characters: nChar, styles: nStyle }),
+    };
+  });
+  const prompt = shotPlans[0].prompt;
   const plan: DailySketchPlan = { memory, prompt, referenceKeys };
   const provider = selectProvider(providerId, env);
   const trialId = `${new Date().toISOString().slice(0, 10)}-${hashPrompt(prompt)}`;
@@ -176,13 +212,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const made: TrialRecord[] = [];
   const errors: string[] = [...refErrors];
   for (const model of models) {
-    for (let n = 0; n < count; n++) {
+    const shots = scenes.length ? shotPlans.length : count;
+    for (let n = 0; n < shots; n++) {
+      const shot = shotPlans[scenes.length ? n : 0];
       // 참조를 못 받는 모델에 참조를 넘기지 않는다. 넘긴 척도 하지 않는다.
       // 실제로 읽힌 참조가 있을 때만 후보다. 모델이 못 받거나 파일이 없으면 대조군.
       const refOk = references.length > 0 && supportsReference(model);
       const params = { steps: 4, width: 1024, height: 1024 };
       const art = await provider.generate(env, {
-        plan, model, params, references: refOk ? references : [],
+        plan: { ...plan, prompt: shot.prompt }, model, params,
+        references: refOk ? references : [],
         seed: seed === undefined ? undefined : seed + n,
       });
       if ('error' in art) { errors.push(`${model}#${n}: ${art.error}`); continue; }
@@ -193,8 +232,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       }
       made.push({
         trialId, createdAt: art.createdAt, providerId: art.providerId, model: art.model,
-        params: art.params, seed: art.seed, r2Key, promptHash, sketchVersion: SKETCH_VERSION, note: art.note,
+        params: art.params, seed: art.seed, r2Key,
+        promptHash: hashPrompt(shot.prompt), sketchVersion: SKETCH_VERSION, note: art.note,
         referenceApplied: refOk, role: refOk ? 'candidate' : 'control',
+        sceneLabel: shot.label,
       });
     }
   }
@@ -207,7 +248,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ok: true, trialId, prompt, promptKo, promptHash,
     provider: provider.id,
     generated: made.length, records: made, errors,
-    referencesLoaded: references.map((r) => r.name),
+    referencesLoaded: { characters: charRefs.map((r) => r.name), styles: styleRefs.map((r) => r.name) },
+    scenes: shotPlans.map((p) => p.label),
     reminder: '시험 산출물이다. 게시·크론 연결 금지. 스타일 판정 후에만 provider 승격.',
   });
 };

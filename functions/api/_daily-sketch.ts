@@ -72,6 +72,45 @@ export function subjectClause(subjects: string[], max: number): string {
   return `${named} Only these ${NUM_WORD[Math.min(list.length, 5)]} subjects, nothing else.`;
 }
 
+/* ═══ 캐릭터 시트 — 그림체와 분리된 '누구인가' ═══════════════════
+   참조 그림이 스타일까지 먹어버리는 문제가 있어(5차 관찰), 캐릭터는 그림에만 맡기지 않고
+   문장으로도 고정한다. 참조가 흔들려도 이 문장은 흔들리지 않는다. */
+
+export const CHARACTER_SHEET = [
+  '별이: 볼터치 없이 맨 얼굴',
+  '빼콩이: 온몸이 흰 고양이 (올화이트)',
+] as const;
+
+export const CHARACTER_SHEET_EN = [
+  'the girl’s cheeks are plain bare skin, the same tone as the rest of her face',
+  'the cat is entirely white — all-white fur from head to tail',
+] as const;
+
+/* ═══ 스타일 시트 — 캐릭터와 독립 ════════════════════════════════
+   캐릭터 참조가 그림체까지 끌고 가므로, 그림체는 별도 축으로 계속 밀어 넣는다. */
+
+export const STYLE_SHEET_EN = [
+  'grid paper', 'blue ink', 'loose doodle', 'large empty space', 'child sketch',
+] as const;
+
+/* ═══ 낙서 언어 ══════════════════════════════════════════════════
+   별이 그림에는 항상 작은 낙서가 있다. 장식이 아니라 **그림일기의 언어**다 —
+   오늘 무엇을 봤는지가 기호로 남는다. */
+
+const DOODLE_BY_TOPIC: { match: RegExp; en: string }[] = [
+  { match: /비|빗방울|rain/, en: 'short slanted rain ticks and a few dots' },
+  { match: /달|밤|moon|night/, en: 'a few small stars scattered around' },
+  { match: /책|글|book/, en: 'a few short straight lines like written strokes' },
+  { match: /고양이|빼콩|cat/, en: 'small round paw dots trailing off' },
+  { match: /꽃|화분|잎|flower|plant/, en: 'a few tiny stars and small dots' },
+];
+
+export function doodleFor(memory: MemoryEvent): string {
+  const hay = [memory.targetLabel ?? '', ...memory.lines].join(' ');
+  for (const d of DOODLE_BY_TOPIC) if (d.match.test(hay)) return d.en;
+  return 'three small dots';
+}
+
 /**
  * Character Identity 체크리스트 — Style Identity를 PASS/FAIL 한 덩어리로 보지 않는다.
  * 세부로 쪼개야 "왜 같은 아이처럼 안 보이는지"를 추적할 수 있다 (Vase, 참조 단계 진입 시).
@@ -228,10 +267,20 @@ const FOCUS_DRAW_EN: Record<string, string> = {
  * 모델에 실제로 나가는 프롬프트 — 영어. `sceneEn`은 그 순간의 관찰을 영어로 옮긴 것으로,
  * 호출자가 넘긴다(없으면 대상 이름만으로 최소 구성). 규칙과 금지어는 여기서 붙인다.
  */
+export interface RefRoles {
+  /** 캐릭터 참조 장수 (image 0 부터) */
+  characters?: number;
+  /** 그림체 참조 장수 (캐릭터 다음 인덱스부터) */
+  styles?: number;
+}
+
 export function buildImagePrompt(
   memory: MemoryEvent, genome: GenomeContext | null, sceneEn: string | null,
-  subjects: string[] = [], referenceCount = 0,
+  subjects: string[] = [], refs: RefRoles | number = 0,
 ): string {
+  const roles: RefRoles = typeof refs === 'number' ? { characters: refs, styles: 0 } : refs;
+  const nChar = roles.characters ?? 0;
+  const nStyle = roles.styles ?? 0;
   const d = SKETCH_DENSITY[memory.density];
   const focus = (genome?.selection ?? []).map((f) => FOCUS_DRAW_EN[f]).filter(Boolean).slice(0, 2);
   const scene = (sceneEn ?? '').trim() || 'a quiet small moment';
@@ -245,11 +294,18 @@ export function buildImagePrompt(
     subjectClause(subjects, d.maxSubjects),
     focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
     `Style: ${SKETCH_RULES_EN.join(', ')}.`,
-    // 참조가 실제로 들어갈 때만 인덱스로 지칭한다. flux-2는 image 0..3 으로 참조를 읽는다.
-    // 이 한 줄이 Character Identity의 핵심 — 스타일이 아니라 **같은 아이**를 요구한다.
-    referenceCount > 0
-      ? 'Keep the same girl and the same cat as in image 0 — same hair shape, same face, same clothes, same line style.'
+    // 참조는 인덱스로 지칭한다(flux-2는 image 0..3). **캐릭터와 스타일을 분리**한다 —
+    // 5차 관찰: 캐릭터 참조 한 장이 그림체까지 먹어버려 상업 일러스트 쪽으로 갔다.
+    nChar > 0
+      ? `Keep the same girl and the same cat as in image 0 — same hair shape, same face, same body proportions, same clothes.`
       : '',
+    nStyle > 0
+      ? `Follow the drawing style of image ${nChar} — ${STYLE_SHEET_EN.join(', ')}.`
+      : `Drawing style: ${STYLE_SHEET_EN.join(', ')}.`,
+    // 캐릭터는 그림에만 맡기지 않는다. 참조가 흔들려도 이 문장은 흔들리지 않는다.
+    `${CHARACTER_SHEET_EN.join('. ')}.`,
+    // 낙서는 장식이 아니라 그림일기의 언어다 — 오늘 무엇을 봤는지가 기호로 남는다.
+    `Around the subjects add ${doodleFor(memory)}.`,
     `${SKETCH_POSITIVE.join(', ')}.`,
   ].filter((l) => l !== '').join('\n');
 }

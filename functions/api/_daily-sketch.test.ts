@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   selectMoment, densityOf, buildMemoryEvent, buildSketchPrompt,
   SKETCH_RULES, SKETCH_RULES_EN, SKETCH_POSITIVE, CHARACTER_IDENTITY_CHECKS,
+  CHARACTER_SHEET, CHARACTER_SHEET_EN, STYLE_SHEET_EN, doodleFor,
   buildImagePrompt, subjectClause, type ArchiveEntry,
 } from './_daily-sketch.ts';
 import {
@@ -251,5 +252,45 @@ test('참조가 있을 때만 image 0을 지칭한다 (Character Identity의 핵
   assert.ok(!buildImagePrompt(m, null, 'a pot', ['flower pot'], 0).includes('image 0'));
   const withRef = buildImagePrompt(m, null, 'a pot', ['flower pot'], 1);
   assert.match(withRef, /same girl and the same cat as in image 0/);
-  assert.match(withRef, /same hair shape, same face, same clothes/);
+  assert.match(withRef, /same hair shape, same face, same body proportions, same clothes/);
+});
+
+/* ── 5차 관찰: 참조가 스타일까지 먹는다 → 캐릭터/스타일 분리 ── */
+
+test('캐릭터 참조와 스타일 참조를 다른 인덱스로 지칭한다', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  const p = buildImagePrompt(m, null, 'a pot', ['flower pot'], { characters: 1, styles: 1 });
+  assert.match(p, /same girl and the same cat as in image 0/);
+  assert.match(p, /drawing style of image 1/);
+});
+
+test('스타일 참조가 없어도 그림체는 문장으로 계속 밀어 넣는다', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  const p = buildImagePrompt(m, null, 'a pot', [], { characters: 1, styles: 0 });
+  assert.match(p, /Drawing style: grid paper, blue ink, loose doodle/);
+});
+
+test('캐릭터 시트는 참조와 무관하게 항상 들어간다 (볼터치 없음 · 올화이트 빼콩)', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  for (const refs of [0, { characters: 1, styles: 1 }] as const) {
+    const p = buildImagePrompt(m, null, 'a pot', [], refs);
+    assert.match(p, /cheeks are plain bare skin/);
+    assert.match(p, /cat is entirely white/);
+  }
+  assert.equal(CHARACTER_SHEET.length, CHARACTER_SHEET_EN.length);
+  assert.equal(STYLE_SHEET_EN.length, 5);
+});
+
+test('낙서는 그림일기의 언어 — 오늘 본 것에 따라 기호가 달라진다', () => {
+  const mk = (line: string, label: string) => ({ ...buildMemoryEvent([e({ line, targetLabel: label })], DATE)! });
+  assert.match(doodleFor(mk('비가 오래 내렸다.', '창문')), /rain ticks/);
+  assert.match(doodleFor(mk('달이 낮게 떴다.', '달')), /small stars/);
+  assert.match(doodleFor(mk('책을 오래 봤다.', '책')), /short straight lines/);
+  assert.match(doodleFor(mk('화분 앞에 머물렀다.', '화분')), /tiny stars/);
+  assert.equal(doodleFor(mk('그냥 걸었다.', '길')), 'three small dots');
+});
+
+test('낙서 문구가 프롬프트에 실린다', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  assert.match(buildImagePrompt(m, null, 'a pot', [], 0), /Around the subjects add /);
 });
