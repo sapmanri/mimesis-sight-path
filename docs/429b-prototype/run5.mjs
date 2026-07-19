@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { EVENTS, SLOT_PHASE } from './events.mjs';
 import { composeGenome, IDENTITY_GENOME, FORM_KEYS, FORM_GROUPS, lintDiversity, lengthRange,
-  lintObservationGrammar, OBS_GRAMMAR, OBS_BALANCE, VOICE_ENUMS, coreVerb } from './v3.mjs';
+  lintObservationGrammar, lintObservationWarnings, VOICE_ENUMS, coreVerb } from './v3.mjs';
 import { buildRequiredKeys, joinMeta, lookup, gateReport, TARGET_VOCAB, cleanForVocab } from './execution.mjs';
 
 /* ── offline guard (Vase 지시 2026-07-19) ──────────────────────────
@@ -69,16 +69,23 @@ const CRITIC_SCHEMA = {
 /* ── 슬롯간 인계 저장소 — 문장 원문 전체는 넘기지 않는다 ────────── */
 const scopeOf = (key) => key.split(':')[1];                 // targetType 또는 cat.<category> — 계약 소유
 const normCore = (c) => (c || '').replace(/\s+/g, '').replace(/[.,!?"']/g, '');
-const usedSig = {};                 // scope → [{focus, formGroup, core}]  (usedObservationSignatures)
-const usedCore = {};                // scope → Set(정규화 core)            (usedCorePhrases)
+/* 서명 두 층 (Vase 확정 2026-07-19) — 둘 다 하드 실패:
+     exactSignature    = focus+formGroup+scope+core  → 같은 계약 안의 반복
+     semanticSignature = focus+formGroup+core        → 세계 전체에서 같은 관찰 반복
+   (실측: "몸을 둥글게 말고 있다"가 streetcat ↔ cat.animal로 재등장 — scope만 달랐다)
+   core 정규화가 정상적 유사 관찰까지 막을 수 있으므로 실패 기록에 충돌 원문 둘을 남긴다. */
+const usedSig = {};                 // scope → [{focus, formGroup, core}]  (usedObservationSignatures — 프롬프트 인계용)
+const usedCore = {};                // scope|normCore → {slot, line}       (usedCorePhrases, exact 계열)
+const usedSem = {};                 // focus|formGroup|normCore → {slot, scope, line}  (semanticSignature)
 const usedVerb = {};                // scope → Set(핵심 동사)              (usedVerbs)
 const usedLines = new Set();        // 전 슬롯 누적 line — 완전 중복 0 보증
-function recordUsed(got) {
+function recordUsed(got, slot = '?') {
   for (const g of got) {
     usedLines.add(g.line);
     const sc = scopeOf(g.key);
     (usedSig[sc] ||= []).push({ focus: g.focus, formGroup: g.formGroup, core: g.core });
-    (usedCore[sc] ||= new Set()).add(normCore(g.core));
+    usedCore[sc + '|' + normCore(g.core)] ??= { slot, line: g.line };
+    usedSem[`${g.focus}|${g.formGroup}|${normCore(g.core)}`] ??= { slot, scope: sc, line: g.line };
     (usedVerb[sc] ||= new Set()).add(coreVerb(g.line));
   }
 }
@@ -119,7 +126,10 @@ ${Object.entries(GEN).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' > ') 
 
 [오늘의 세계] 계절 ${genome.season} / 날씨 ${WEATHERS.join(',')} / 시간대 ${slot}(${SLOT_PHASE[slot]})
 ※ 오늘은 날씨가 섞인 날이다. 문장은 맑음·흐림·비 **어디서나 성립**해야 한다.
-  특정 날씨에만 맞는 서술(젖은/마른/비가/눈이)은 쓰지 않는다.
+  - 특정 날씨 전용 서술 금지: 젖은/마른/비가/눈이.
+  - **확정 표현 금지**: 직사광·쏟아지는 볕·선명한 그림자처럼 한 날씨를 확정하는 서술.
+  - 허용: 흐린 빛·잠깐 열린 밝음·옅은 그림자 같은 **불확정·일시적** 표현.
+    (볕·그늘 자체가 금지가 아니다 — 강도와 확정성이 기준이다)
 
 [표현 능력 — MediumGrammar]
 formGroup을 각 문장에 붙인다 (**내부 메타 — 문장 안에 이 단어를 쓰지 않는다**):
@@ -129,10 +139,14 @@ ${Object.entries(FORM_GROUPS).map(([k, g]) => `  ${k} (${g.name}) — 예: ${g.e
 - 길이: 기본 8~28자 / rare·trace 8~32자 / passed 6~22자. 길이를 채우려 수식어를 붙이지 않는다.
 - 같은 문장을 두 번 쓰지 않는다.
 
-[관찰 방식 균형]
-존재형(있다/남았다/놓여)·변화형·감각형·질문형·발견형·행동형이 고루 나와야 한다.
-한 방식이 묶음의 35%를 넘으면 실패다. 특히 '~있다'로 끝나는 존재형 몰림 금지 —
-상태를 말하고 싶으면 변화·감각·부분확대로 본 것을 말하라.
+[관찰 방식 균형 — 재설계]
+존재형·변화형·감각형·질문형·발견형·행동형 중 최소 4종이 나와야 한다.
+**감각 관찰이 많은 것은 결함이 아니다** — 너의 focusOrder가 빛을 먼저 보게 한다.
+대신 다음은 실패다:
+- 같은 감각 채널만 계속 보는 것 — 빛/온도/소리/냄새/촉감 중 한 채널이 45%를 넘으면 실패.
+  빛을 많이 봐도 되지만, 빛만 보지는 마라. 온기·소리·결도 있다.
+- 같은 구조의 반복 — 같은 focus×문형군×핵심 동사, 또는 같은 첫 두 어절이 3회 이상이면 실패.
+- '~있다' 존재형으로 도망가는 것.
 
 [관찰 서명 — focus·core]
 각 문장에 둘을 붙인다 (**내부 메타 — 문장에 그대로 옮기지 않는다**):
@@ -140,6 +154,7 @@ ${Object.entries(FORM_GROUPS).map(([k, g]) => `  ${k} (${g.name}) — 예: ${g.e
 - core: 관찰한 핵심 변화 6~16자 명사구. 예: "그림자가 등받이까지 이동"
 [이미 관찰한 장면]이 주어지면 **같은 core를 다시 만들지 않는다** — 같은 대상이라도
 다른 부분·다른 변화를 본다. 문장이 달라도 core가 같으면 중복이다.
+**다른 대상에게 했던 관찰을 대상만 바꿔 반복하는 것도 중복이다** (세계 전체에서 관찰은 유일하다).
 
 [상황 의미]
 rare   = 드물게 만난 대상의 **구체적 특징**. 날씨 묘사 금지. 놀랐다·행운 금지.
@@ -189,10 +204,13 @@ function validateChunk(ch, got) {
     const rg = lengthRange(st);
     if (g.line.length < rg.min || g.line.length > rg.max) B(g, `길이 ${g.line.length} (${st}: ${rg.min}~${rg.max}) "${g.line}"`);
     if (!g.core || g.core.trim().length < 4) B(g, `core 누락/빈약: "${g.line}"`);
-    // 슬롯간 완전 중복·의미 중복
+    // 슬롯간 완전 중복·의미 중복 — 실패 기록에 충돌 원문 둘을 남긴다 (core 정규화 과잉 여부를 사람이 판정)
     if (usedLines.has(g.line)) B(g, `이미 다른 슬롯/묶음에서 쓴 문장: "${g.line}"`);
     const sc = scopeOf(g.key);
-    if (usedCore[sc]?.has(normCore(g.core))) B(g, `이미 관찰한 장면: ${sc} core "${g.core}" — 다른 변화를 봐라`);
+    const ex = usedCore[sc + '|' + normCore(g.core)];
+    if (ex) B(g, `exact 계열 충돌(같은 대상, 같은 장면): ${sc} core "${g.core}" — 기존 ${ex.slot} "${ex.line}" ↔ 신규 "${g.line}"`);
+    const sem = usedSem[`${g.focus}|${g.formGroup}|${normCore(g.core)}`];
+    if (sem) B(g, `semanticSignature 충돌(세계 전체 같은 관찰): ${g.focus}/${g.formGroup} core "${g.core}" — 기존 ${sem.slot}·${sem.scope} "${sem.line}" ↔ 신규 "${g.line}"`);
     // reusable 대상 지목
     if (kk && !kk.targetType) {
       const cleaned = cleanForVocab(g.line);
@@ -204,22 +222,23 @@ function validateChunk(ch, got) {
     if (kk?.traceType === 'warm' && !/(따뜻|온기|남아|자리|눌린|아직)/.test(g.line)) B(g, `trace warm인데 남은 흔적이 없다: "${g.line}"`);
     if (kk?.traceType === 'moved' && !/(굴러|자리|달라|옮겨|밀려|기울)/.test(g.line)) B(g, `trace moved인데 이동 흔적이 없다: "${g.line}"`);
   }
-  // 묶음 내 중복 — 문장(표면)과 관찰(의미)
-  const seenL = new Set(), seenC = new Set();
+  // 묶음 내 중복 — 문장(표면) · exact 계열 · semanticSignature
+  const seenL = new Set(), seenC = new Set(), seenS = new Set();
   for (const g of got) {
     if (seenL.has(g.line)) B(g, `묶음 내 문장 중복: "${g.line}"`);
     seenL.add(g.line);
     const t = scopeOf(g.key) + '|' + normCore(g.core);
     if (seenC.has(t)) B(g, `묶음 내 관찰 중복: ${g.key} core "${g.core}"`);
     seenC.add(t);
+    const ts = `${g.focus}|${g.formGroup}|${normCore(g.core)}`;
+    if (seenS.has(ts)) B(g, `묶음 내 semanticSignature 충돌: ${ts} — "${g.line}"`);
+    seenS.add(ts);
   }
-  // 관찰 방식 균형 (묶음 단위 근사 — 슬롯 게이트 lintObservationGrammar의 예방층)
+  // 관찰 문법 (재설계판) — 채널 편중·구조 반복을 묶음 단계에서 미리 잡는다.
+  // 생성 출력에는 traceType이 없으므로 계약에서 조인해 넘긴다 (trace 키는 구조 검사 제외 대상)
   if (got.length >= 12) {
-    const hit = {};
-    for (const g of got) for (const [k, re] of Object.entries(OBS_GRAMMAR)) if (re.test(g.line)) hit[k] = (hit[k] || 0) + 1;
-    for (const [k, c] of Object.entries(hit)) if (c / got.length > OBS_BALANCE.max) {
-      bad.push({ msg: `관찰 방식 "${k}" ${(c / got.length * 100).toFixed(0)}% 과점 (상한 ${OBS_BALANCE.max * 100}%) — 일부를 다른 방식으로 바꿔라` });
-    }
+    const forLint = got.map((g) => ({ ...g, traceType: ch.find((x) => x.key === g.key)?.traceType ?? null }));
+    for (const m of lintObservationGrammar(forLint)) bad.push({ msg: `묶음 내 ${m}` });
   }
   return bad;
 }
@@ -244,7 +263,9 @@ function criticSystem(slot) {
   return `너는 검수자다. 문장을 고치지 않는다 — **탈락 문장과 이유만** 낸다.
 [세계] 계절 ${genome.season} / 오늘 날씨 ${WEATHERS.join('·')} 혼합 / 시간대 ${slot}(${SLOT_PHASE[slot]})
 각 문장의 계약 메타가 함께 주어진다. 다음 **사실성 위반만** 잡는다 (취향·문체 판단 금지):
-1. 혼합 날씨 위반 — 특정 날씨에서만 성립하는 서술(젖은/마른/비가/빗방울/마르지 않은 등)
+1. 혼합 날씨 위반 — 특정 날씨를 **확정**하는 서술만 위반이다 (젖은/마른/비가/직사광/쏟아지는 볕/선명한 그림자 등).
+   흐린 빛·잠깐 열린 밝음·옅은 그림자처럼 불확정·일시적 표현은 통과다.
+   '볕'·'그늘' 단어 유무가 아니라 **강도와 확정성**으로 판단한다.
 2. 시간대 불일치 — 이 시간대에 있을 수 없는 빛·현상
 3. rare 위반 — 날씨·분위기 묘사이거나 구체적 특징이 없다
 4. passed 위반 — 멈추지 않았는데 행동(가까이 봄·앉음·만짐·찍음)을 말한다
@@ -285,7 +306,7 @@ async function buildSlot(slot) {
   for (let ci = 0; ci < chunks.length; ci++) {
     const ch = chunks[ci];
     const { got, bad, tries } = await generateChunk(slot, ch, `${slot}#${ci + 1}`);
-    recordUsed(got);   // 문제 문장의 관찰도 기록 — 복구 생성이 같은 것을 다시 만들지 않게
+    recordUsed(got, slot);   // 문제 문장의 관찰도 기록 — 복구 생성이 같은 것을 다시 만들지 않게
     if (!bad.length) { gen.push(...got); continue; }
     // 문제 문장 제거 후 부족분만 단건 복구
     const badLines = new Set(bad.map((b) => b.line).filter(Boolean));
@@ -299,7 +320,7 @@ async function buildSlot(slot) {
       const priorFails = bad.filter((b) => b.key === dk.key).map((b) => b.msg);
       const note = priorFails.length ? `\n\n**이 키의 직전 실패 사유 — 같은 실수 금지:**\n${priorFails.join('\n')}` : '';
       const { got: g2, bad: b2 } = await generateChunk(slot, [dk], `${slot}#${ci + 1}-solo(${dk.key})`, note);
-      recordUsed(g2);
+      recordUsed(g2, slot);
       const bl2 = new Set(b2.map((b) => b.line).filter(Boolean));
       gen.push(...g2.filter((g) => !bl2.has(g.line)));
       if (b2.length) {
@@ -326,7 +347,7 @@ async function buildSlot(slot) {
       const note = `\n\n**검수 탈락 사유 — 같은 실수 금지:**\n${criticLeft.map((v) => `${v.key}: ${v.reason}`).join('\n')}`;
       const { got, bad } = await generateChunk(slot, repl, `${slot}#critic-fix`, note);
       if (bad.length) unresolved.push(...bad.map((b) => ({ contractKey: b.key ?? null, stage: 'critic교체', reason: [b.msg], lastCandidate: b.line ?? null })));
-      recordUsed(got);
+      recordUsed(got, slot);
       gen.push(...got);
     }
   } catch (e) {
@@ -351,7 +372,7 @@ async function buildSlot(slot) {
     coverageRate: gate.coverage.rate, missing: gate.coverage.missing.slice(0, 10), orphans: orphans.slice(0, 10),
     sim: { counts: gate.sim.counts, byLayer: gate.sim.byLayer, ruleFallback: gate.sim.ruleFallback,
       targetExactRate: gate.sim.targetExactRate, specialResolutionRate: gate.sim.specialResolutionRate, genericResolutionRate: gate.sim.genericResolutionRate },
-    reuse: gate.reuse.slice(0, 8), meta: gate.meta.slice(0, 8), grammar, critic: criticLeft,
+    reuse: gate.reuse.slice(0, 8), meta: gate.meta.slice(0, 8), grammar, grammarWarnings: lintObservationWarnings(sentences), critic: criticLeft,
     diversity: lintDiversity(sentences).slice(0, 8),
     honorific: sentences.filter((s) => HONORIFIC.test(s.line.trim())).length };
   writeFileSync(p, JSON.stringify(book, null, 2));
@@ -368,7 +389,7 @@ const books = {};
 for (const slot of SLOTS) {
   const p = `${OUT}/book-${slot}.json`;
   if (REGEN.has(slot)) { console.log(`${slot}: 재생성 대상 — 이전 버전 선주입 제외`); continue; }
-  if (existsSync(p)) { books[slot] = JSON.parse(readFileSync(p, 'utf8')); recordUsed(books[slot].sentences); SEEDED.push(slot); console.log(`${slot} 기존 책 로드 ${books[slot].sentences.length}문장`); }
+  if (existsSync(p)) { books[slot] = JSON.parse(readFileSync(p, 'utf8')); recordUsed(books[slot].sentences, slot); SEEDED.push(slot); console.log(`${slot} 기존 책 로드 ${books[slot].sentences.length}문장`); }
 }
 for (const slot of SLOTS) {
   if (books[slot]) continue;

@@ -4,7 +4,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { EVENTS } from './events.mjs';
 import { buildRequiredKeys, lookup, gateReport } from './execution.mjs';
-import { lintObservationGrammar, lintDiversity, coreVerb, FORM_KEYS } from './v3.mjs';
+import { lintObservationGrammar, lintObservationWarnings, SENSE_CHANNELS, lintDiversity, coreVerb, FORM_KEYS } from './v3.mjs';
 
 /* offline guard — 판정은 로컬 파일만 입출력한다. 네트워크는 전면 금지 (Vase 지시 2026-07-19). */
 globalThis.fetch = () => { throw new Error('offline guard: analyze6는 네트워크를 사용하지 않는다'); };
@@ -99,7 +99,12 @@ for (const s of present) {
   const fg = Object.entries(dist(S, (x) => x.formGroup)).sort((a, b) => b[1] - a[1])[0];
   const fc = Object.entries(dist(S, (x) => x.focus)).sort((a, b) => b[1] - a[1])[0];
   const gram = lintObservationGrammar(S);
-  console.log(`  ${s}: formGroup 최빈 ${fg[0]} ${pct(fg[1], S.length)} · focus 최빈 ${fc[0]} ${pct(fc[1], S.length)} · grammar ${gram.length ? '⚠ ' + gram.join(' / ') : 'OK'}`);
+  const warn = lintObservationWarnings(S);
+  const chan = {};
+  for (const x of S) for (const [k, re] of Object.entries(SENSE_CHANNELS)) if (re.test(x.line)) chan[k] = (chan[k] || 0) + 1;
+  console.log(`  ${s}: formGroup 최빈 ${fg[0]} ${pct(fg[1], S.length)} · focus 최빈 ${fc[0]} ${pct(fc[1], S.length)}`);
+  console.log(`      감각 채널: ${Object.entries(chan).sort((a, b) => b[1] - a[1]).map(([k, c]) => `${k} ${pct(c, S.length)}`).join(' · ') || '-'}`);
+  console.log(`      grammar(재설계판): ${gram.length ? '🔴 ' + gram.join(' / ') : 'PASS'}${warn.length ? ' · 경고: ' + warn.join(' / ') : ''}`);
 }
 
 /* ── 5. 관찰 품질 — 다른 말로 같은 생각을 반복했는가 ─────────── */

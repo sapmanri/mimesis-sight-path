@@ -165,10 +165,13 @@ export function lengthRange(state) {
   return { min: 8, max: 28 };
 }
 
-/* ═══ Observation Grammar ═══════════════════════════════════════
-   "있다 20% 이하" 같은 동사 금지는 실패한다 — 막으면 "남아 있다 / 놓여 있다 /
-   보인다 / 드러난다"로 도망갈 뿐이다. 동사가 아니라 **관찰 방식**의 균형을 본다.
-   formGroup(문형)이 '어떻게 쓰는가'라면, 이건 '어떻게 보는가'의 분포다. */
+/* ═══ Observation Grammar (재설계 — Vase 판정 2026-07-19) ═══════
+   "있다 20% 이하" 같은 동사 금지는 실패한다 — 막으면 "남아 있다 / 놓여 있다"로 도망갈 뿐.
+   그리고 **감각형 35% 일괄 상한도 실패였다** — 별이의 focusOrder가 빛을 먼저 보는데
+   빛·그늘·온기를 전부 감각형으로 잡아 35%로 막으니, Identity Genome이 하려는 행동을
+   Grammar가 금지하는 구조가 됐다 (v3.2 전 슬롯 dropped의 단일 원인).
+   별이가 빛을 먼저 보는 존재라면 감각 관찰이 많은 건 결함이 아니라 정체성이다.
+   문제는 감각형이 많은 것이 아니라, **감각형 안에서 같은 방식만 반복하는 것**이다. */
 export const OBS_GRAMMAR = {
   존재형: /(있다|없다|남았다|그대로다|서 있|놓여|붙어)/,
   변화형: /(졌다|진다|든다|온다|간다|스민다|번진다|기울|내려|올라|열린|닫힌)/,
@@ -177,22 +180,62 @@ export const OBS_GRAMMAR = {
   발견형: /(아까|처음|여전히|아직|이제|막|어느새|유난히)/,
   행동형: /(봤다|만졌다|앉았다|담았다|다가|멈췄다|돌아섰다|기울였다)/,
 };
-export const OBS_BALANCE = { max: 0.35, minKinds: 4 };   // 한 관찰 방식 과점 금지 · 최소 4종
+/* 감각 채널 — 감각형 내부의 편중을 본다 (분모는 전체 문장) */
+export const SENSE_CHANNELS = {
+  빛: /(빛|볕|그늘|그림자|밝|어둑|어둠|반짝|번들)/,
+  온도: /(온기|따뜻|차가|미열|데|식은|서늘|덥)/,
+  소리: /(소리|바스락|사각|울림|고요)/,
+  냄새: /(냄새|향)/,
+  촉감: /(축축|보드|까끌|매끈|물기|결)/,
+};
+export const OBS_LIMITS = {
+  typeWarn: 0.60, typeFail: 0.70,        // 관찰 방식: 하드 상한 크게 연다 (감각형 55%도 허용)
+  channelWarn: 0.35, channelFail: 0.45,  // 감각 채널 내부 편중
+  structRepeatFail: 3,                   // 동일 구조·동일 첫 두 어절 3회 이상 = 실패
+  minKinds: 4,
+};
+const _firstTwo = (l) => l.trim().split(/\s+/).slice(0, 2).join(' ');
 
+function obsDist(sentences, table) {
+  const hit = {};
+  for (const s of sentences) for (const [k, re] of Object.entries(table)) if (re.test(s.line)) hit[k] = (hit[k] || 0) + 1;
+  return hit;
+}
+
+/** 실패만 반환 — 경고는 lintObservationWarnings */
 export function lintObservationGrammar(sentences) {
   const e = [], n = sentences.length; if (!n) return e;
-  const hit = {}; let none = 0;
+  // ① 관찰 방식 — 최소 종수 + 극단 과점만 실패 (정체성 편향은 허용)
+  const hit = obsDist(sentences, OBS_GRAMMAR);
+  if (Object.keys(hit).length < OBS_LIMITS.minKinds) e.push(`관찰 방식 ${Object.keys(hit).length}종 (최소 ${OBS_LIMITS.minKinds}) — ${JSON.stringify(hit)}`);
+  for (const [k, c] of Object.entries(hit)) if (c / n > OBS_LIMITS.typeFail) e.push(`관찰 방식 "${k}" ${(c / n * 100).toFixed(0)}% (실패 상한 ${OBS_LIMITS.typeFail * 100}%)`);
+  // ② 감각 채널 내부 편중 — 빛만 계속 보는 것은 감각이 많은 것과 다르다
+  const ch = obsDist(sentences, SENSE_CHANNELS);
+  for (const [k, c] of Object.entries(ch)) if (c / n > OBS_LIMITS.channelFail) e.push(`감각 채널 "${k}" ${(c / n * 100).toFixed(0)}% (실패 상한 ${OBS_LIMITS.channelFail * 100}%)`);
+  // ③ 동일 구조 반복 — focus+formGroup+핵심동사 / 첫 두 어절, 3회 이상이면 실패.
+  //    단 trace 키는 제외 — 계약이 의미를 고정한 키(온기가 남음·자리가 달라짐 × 4카테고리)는
+  //    구조 반복이 계약의 결과다 (보존분 캘리브레이션에서 A형 상충으로 실측됨).
+  const st = {}, heads = {};
   for (const s of sentences) {
-    let matched = false;
-    for (const [k, re] of Object.entries(OBS_GRAMMAR)) if (re.test(s.line)) { hit[k] = (hit[k] || 0) + 1; matched = true; }
-    if (!matched) none++;
+    if (s.traceType) continue;
+    (st[`${s.focus}|${s.formGroup}|${coreVerb(s.line)}`] ||= []).push(s.line);
+    (heads[_firstTwo(s.line)] ||= []).push(s.line);
   }
-  const kinds = Object.keys(hit).length;
-  if (kinds < OBS_BALANCE.minKinds) e.push(`관찰 방식 ${kinds}종 (최소 ${OBS_BALANCE.minKinds}) — ${JSON.stringify(hit)}`);
-  for (const [k, c] of Object.entries(hit)) {
-    if (c / n > OBS_BALANCE.max) e.push(`관찰 방식 "${k}" ${(c / n * 100).toFixed(0)}% 과점 (상한 ${OBS_BALANCE.max * 100}%)`);
-  }
+  for (const [k, list] of Object.entries(st)) if (list.length >= OBS_LIMITS.structRepeatFail)
+    e.push(`동일 구조 [${k}] ${list.length}회 — ${list.slice(0, 3).map((l) => `"${l}"`).join(' · ')}`);
+  for (const [h, list] of Object.entries(heads)) if (list.length >= OBS_LIMITS.structRepeatFail)
+    e.push(`첫 두 어절 반복 "${h}" ${list.length}회 — ${list.slice(0, 3).map((l) => `"${l}"`).join(' · ')}`);
   return e;
+}
+
+/** 경고층 — 실패는 아니지만 다음 판정에서 지켜볼 분포 */
+export function lintObservationWarnings(sentences) {
+  const w = [], n = sentences.length; if (!n) return w;
+  const hit = obsDist(sentences, OBS_GRAMMAR);
+  for (const [k, c] of Object.entries(hit)) if (c / n > OBS_LIMITS.typeWarn && c / n <= OBS_LIMITS.typeFail) w.push(`관찰 방식 "${k}" ${(c / n * 100).toFixed(0)}% (경고 ${OBS_LIMITS.typeWarn * 100}%)`);
+  const ch = obsDist(sentences, SENSE_CHANNELS);
+  for (const [k, c] of Object.entries(ch)) if (c / n > OBS_LIMITS.channelWarn && c / n <= OBS_LIMITS.channelFail) w.push(`감각 채널 "${k}" ${(c / n * 100).toFixed(0)}% (경고 ${OBS_LIMITS.channelWarn * 100}%)`);
+  return w;
 }
 
 export const GENERIC_VERBS = ['바라본다', '머문다', '흔들린다', '있다', '보인다'];
