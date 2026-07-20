@@ -12,7 +12,7 @@ import {
 import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, manualProvider, workersAiProvider,
 } from './_image-provider.ts';
-import { validateTrialInput, hashPrompt, supportsReference } from './ops/sketch-trial.ts';
+import { validateTrialInput, hashPrompt, supportsReference, translateSubjects } from './ops/sketch-trial.ts';
 import { isTrialKey } from './ops/sketch-image.ts';
 import { groupByPrompt } from './ops/sketch-board.ts';
 import { referenceKeyFor } from './ops/sketch-reference.ts';
@@ -248,6 +248,18 @@ test('steps는 1~20 정수만 — 시험 한 번을 날리기 전에 잡는다',
   assert.ok(twelve.ok && twelve.value.steps === 12);
   const dflt = validateTrialInput(base);
   assert.ok(dflt.ok && dflt.value.steps === 4, '생략하면 기본 4');
+});
+
+test('Workers AI 경계는 전면 영어 — 한글 소품은 번역 불가 시 흘리지 않고 뺀다', async () => {
+  // 영어만 → 그대로, 조용히
+  const en = await translateSubjects({}, ['utility pole', 'broom']);
+  assert.deepEqual(en.subjects, ['utility pole', 'broom']);
+  assert.equal(en.notes.length, 0);
+  // 키 없음 + 한글 → 모델에 흘리는 대신 빼고, 뺀 사실을 남긴다 (조용한 삭제 금지)
+  const ko = await translateSubjects({}, ['utility pole', '빗자루']);
+  assert.deepEqual(ko.subjects, ['utility pole']);
+  assert.equal(ko.notes.length, 1);
+  assert.match(ko.notes[0], /빗자루/);
 });
 
 test('장면 번역이 없어도 프롬프트는 만들어진다 (번역 실패가 시험을 막지 않게)', () => {

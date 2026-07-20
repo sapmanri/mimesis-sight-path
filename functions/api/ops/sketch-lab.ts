@@ -117,7 +117,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       <button id="subjFromDay" title="하루의 targetLabel로 채움">하루에서</button>
     </div>
     <div id="subjChips" class="chips"></div>
-    <div class="muted" style="margin-top:4px">칩을 누르면 빠진다. <b>별이·빼콩이 수는 서버가 항상 못박는다</b>(9차) — 여긴 소품·대상만. 숫자를 붙여도 이중이 안 되게 서버가 걸러준다.</div>
+    <div class="muted" style="margin-top:4px">칩을 누르면 빠진다. <b>별이·빼콩이 수는 서버가 항상 못박는다</b>(9차) — 여긴 소품·대상만. 숫자를 붙여도 이중이 안 되게 서버가 걸러준다. <b>한글로 넣어도 된다</b> — 서버가 영어로 번역해 넘기고, 번역이 안 되면 빼고 알려준다(모델은 한글을 그림으로 취급). 한글 낙서 이벤트를 일부러 넣고 싶으면 ④의 장면 영문 지정에 한글을 직접 쓰면 그대로 나간다.</div>
   </div>
 
   <div class="panel">

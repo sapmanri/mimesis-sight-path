@@ -101,6 +101,57 @@ Proper nouns (use these exact renderings): ${glossaryLine()}.`,
   return t || null;
 }
 
+/**
+ * ⛔ Workers AI 경계는 전면 영어 (Vase 판정 2026-07-20).
+ * 모델은 한글을 언어가 아니라 그림으로 취급한다 — 칩의 "전봇대"가 그림 속
+ * "선봇못대" 낙서로 그려진 실사례. 한글 소품은 번역해서 넘기고, 번역이 불가하면
+ * 조용히 넣는 대신 **뺀 사실을 남긴다**.
+ * 한글 낙서는 이벤트로 보존한다(Vase) — 단 우연이 아니라 의도로만: sceneEn 직접
+ * 지정에 한글을 쓰면 그대로 나간다. 그 외 경로의 한글은 여기서 끝난다.
+ */
+export async function translateSubjects(
+  env: { ANTHROPIC_API_KEY?: string }, subjects: string[],
+): Promise<{ subjects: string[]; notes: string[] }> {
+  const korean = subjects.filter((s) => /[가-힣]/.test(s));
+  if (!korean.length) return { subjects, notes: [] };
+  if (env.ANTHROPIC_API_KEY) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-5', max_tokens: 120,
+          system: `Translate each Korean noun phrase into a short English noun phrase for an image prompt.
+One per line, same order, no numbering, no extra text.
+Proper nouns (use these exact renderings): ${glossaryLine()}.`,
+          messages: [{ role: 'user', content: korean.join('\n') }],
+        }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+        const lines = (data.content?.find((c) => c.type === 'text')?.text ?? '')
+          .split('\n').map((l) => l.trim()).filter(Boolean);
+        if (lines.length === korean.length) {
+          const map = new Map(korean.map((k, i) => [k, lines[i]]));
+          return {
+            subjects: subjects.map((s) => map.get(s) ?? s),
+            notes: korean.map((k) => `subject_translated: ${k} → ${map.get(k)}`),
+          };
+        }
+      }
+    } catch { /* 아래 폴백으로 */ }
+  }
+  // 번역 실패·키 없음 — 한글을 모델에 흘리느니 뺀다. 뺐다는 사실은 반드시 남긴다.
+  return {
+    subjects: subjects.filter((s) => !/[가-힣]/.test(s)),
+    notes: korean.map((k) => `subject_dropped_korean: ${k} (번역 불가 — 영어로 다시 넣을 것)`),
+  };
+}
+
 /** 같은 프롬프트인지 한눈에 — 스타일 비교는 프롬프트가 같아야 성립한다. */
 export function hashPrompt(s: string): string {
   let h = 0x811c9dc5;
@@ -183,7 +234,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_json' }); }
   const checked = validateTrialInput(body);
   if (!checked.ok) return json(400, { error: checked.error });
-  const { models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes, useMemory, steps } = checked.value;
+  const { models, count, providerId, referenceKeys, seed, styleKeys, useMemory, steps } = checked.value;
+  // 경계 봉쇄: EN 프롬프트로 들어가는 subjects는 top-level·scene 양쪽 다 영어로.
+  const subjTr = await translateSubjects(env, checked.value.subjects);
+  const subjects = subjTr.subjects;
+  const scenes: TrialScene[] = [];
+  for (const sc of checked.value.scenes) {
+    const scTr = sc.subjects?.length ? await translateSubjects(env, sc.subjects) : null;
+    if (scTr) subjTr.notes.push(...scTr.notes);
+    scenes.push(scTr ? { ...sc, subjects: scTr.subjects } : sc);
+  }
   // 저장된 하루가 있으면 그걸 쓴다. 이 한 줄이 "사람이 지어낸 하루"와 "별이의 하루"를 가른다.
   let memory = checked.value.memory;
   let memorySource = 'hand-fed';
@@ -237,6 +297,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     };
   });
   const prompt = shotPlans[0].prompt;
+  // 최후 방어선 — sceneEn에 사람이 일부러 쓴 한글(낙서 이벤트)만 통과, 그 외 한글은 경보.
+  const koreanIntended = typeof (body as Record<string, unknown>).sceneEn === 'string'
+    && /[가-힣]/.test((body as Record<string, string>).sceneEn);
+  if (!koreanIntended) {
+    for (const sp of shotPlans) {
+      if (/[가-힣]/.test(sp.prompt)) { subjTr.notes.push('korean_leak: EN 프롬프트에 한글이 남았다 — 경로 추적 필요'); break; }
+    }
+  }
   const plan: DailySketchPlan = { memory, prompt, referenceKeys };
   const provider = selectProvider(providerId, env);
   // trialId에는 참조 지문을 섞는다 — 프롬프트가 같아도 참조가 다르면 다른 실행이다.
@@ -247,7 +315,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const promptHash = hashPrompt(prompt);
 
   const made: TrialRecord[] = [];
-  const errors: string[] = [...refErrors];
+  const errors: string[] = [...refErrors, ...subjTr.notes];
   for (const model of models) {
     const shots = scenes.length ? shotPlans.length : count;
     for (let n = 0; n < shots; n++) {
