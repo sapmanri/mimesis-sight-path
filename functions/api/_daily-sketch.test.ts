@@ -294,3 +294,13 @@ test('낙서 문구가 프롬프트에 실린다', () => {
   const m = buildMemoryEvent([e()], DATE)!;
   assert.match(buildImagePrompt(m, null, 'a pot', [], 0), /Around the subjects add /);
 });
+
+test('스타일 참조가 여러 장이면 범위로 지칭하고 섞으라고 말한다', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  const one = buildImagePrompt(m, null, 'a pot', [], { characters: 1, styles: 1 });
+  assert.match(one, /Follow the drawing style of image 1 —/);
+  const many = buildImagePrompt(m, null, 'a pot', [], { characters: 1, styles: 3 });
+  assert.match(many, /Blend the drawing style of images 1–3 into one consistent hand/);
+  // 한 장만 가리키면 그 그림을 베낀다 — 여러 장일 때 단일 지칭이 남으면 안 된다
+  assert.ok(!/Follow the drawing style of image 1 —/.test(many));
+});

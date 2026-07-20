@@ -299,9 +299,13 @@ export function buildImagePrompt(
     nChar > 0
       ? `Keep the same girl and the same cat as in image 0 — same hair shape, same face, same body proportions, same clothes.`
       : '',
-    nStyle > 0
-      ? `Follow the drawing style of image ${nChar} — ${STYLE_SHEET_EN.join(', ')}.`
-      : `Drawing style: ${STYLE_SHEET_EN.join(', ')}.`,
+    // 스타일 참조가 여러 장이면 **범위로 지칭하고 섞으라고** 말한다.
+    // 한 장만 가리키면 그 그림 하나를 베끼게 되고, 결국 남의 그림체와 비슷해진다.
+    nStyle > 1
+      ? `Blend the drawing style of images ${nChar}–${nChar + nStyle - 1} into one consistent hand — ${STYLE_SHEET_EN.join(', ')}.`
+      : nStyle === 1
+        ? `Follow the drawing style of image ${nChar} — ${STYLE_SHEET_EN.join(', ')}.`
+        : `Drawing style: ${STYLE_SHEET_EN.join(', ')}.`,
     // 캐릭터는 그림에만 맡기지 않는다. 참조가 흔들려도 이 문장은 흔들리지 않는다.
     `${CHARACTER_SHEET_EN.join('. ')}.`,
     // 낙서는 장식이 아니라 그림일기의 언어다 — 오늘 무엇을 봤는지가 기호로 남는다.

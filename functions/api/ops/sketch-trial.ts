@@ -192,7 +192,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // 순서가 곧 프롬프트의 인덱스다: 캐릭터(image 0..) → 스타일(그다음)
   const charRefs = await load(referenceKeys);
   const styleRefs = await load(styleKeys);
-  const references = [...charRefs, ...styleRefs].slice(0, MAX_REFERENCE_IMAGES);
+  const allRefs = [...charRefs, ...styleRefs];
+  if (allRefs.length > MAX_REFERENCE_IMAGES) {
+    // 모델 상한(4장)을 넘으면 뒤가 잘린다. 조용히 버리면 판정이 틀어진다.
+    refErrors.push(`references_truncated: ${allRefs.length}장 중 앞 ${MAX_REFERENCE_IMAGES}장만 사용 (모델 상한)`);
+  }
+  const references = allRefs.slice(0, MAX_REFERENCE_IMAGES);
   const nChar = Math.min(charRefs.length, MAX_REFERENCE_IMAGES);
   const nStyle = Math.max(0, references.length - nChar);
   // 장면이 여러 개면 각각 프롬프트를 만든다 — 같은 참조, 다른 하루
