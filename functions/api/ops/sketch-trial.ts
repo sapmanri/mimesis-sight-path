@@ -17,6 +17,7 @@ import {
   type ImageProviderId, type ImageProviderEnv, type DailySketchPlan, type ReferenceImage,
 } from '../_image-provider.ts';
 import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, glossaryLine, type MemoryEvent } from '../_daily-sketch.ts';
+import { memoryKey, type DayMemory } from '../_memory-event.ts';
 
 interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
@@ -109,16 +110,21 @@ export function hashPrompt(s: string): string {
 export function validateTrialInput(body: unknown): { ok: true; value: {
   memory: MemoryEvent; models: string[]; count: number; providerId: ImageProviderId;
   referenceKeys: string[]; seed?: number; subjects: string[];
-  styleKeys: string[]; scenes: TrialScene[];
+  styleKeys: string[]; scenes: TrialScene[]; useMemory: string | null;
 } } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.confirm !== 'trial') return { ok: false, error: 'confirm_required: {"confirm":"trial"}' };
+  // useMemory가 있으면 저장된 하루를 쓴다 — 사람이 하루를 지어내지 않는다.
+  const useMemory = typeof b.useMemory === 'string' ? b.useMemory : null;
   const memory = b.memory as MemoryEvent | undefined;
-  if (!memory || typeof memory !== 'object' || !Array.isArray(memory.lines) || !memory.lines.length) {
-    return { ok: false, error: 'memory_required: MemoryEvent with non-empty lines' };
+  if (!useMemory && (!memory || typeof memory !== 'object' || !Array.isArray(memory.lines) || !memory.lines.length)) {
+    return { ok: false, error: 'memory_required: MemoryEvent with non-empty lines, 또는 useMemory:"YYYY-MM-DD"' };
+  }
+  if (useMemory && !/^\d{4}-\d{2}-\d{2}$/.test(useMemory)) {
+    return { ok: false, error: 'bad_useMemory: YYYY-MM-DD (KST)' };
   }
   // density가 어긋나면 프롬프트 조립에서 터진다 — 시험 한 번을 날리느니 여기서 잡는다
-  if (!Object.prototype.hasOwnProperty.call(SKETCH_DENSITY, memory.density)) {
+  if (!useMemory && !Object.prototype.hasOwnProperty.call(SKETCH_DENSITY, (memory as MemoryEvent).density)) {
     return { ok: false, error: `bad_density: ${Object.keys(SKETCH_DENSITY).join(' | ')} 중 하나` };
   }
   const models = Array.isArray(b.models) ? b.models.filter((m): m is string => typeof m === 'string' && !!m) : [];
@@ -139,7 +145,7 @@ export function validateTrialInput(body: unknown): { ok: true; value: {
     : [];
   const referenceKeys = Array.isArray(b.referenceKeys) ? b.referenceKeys.filter((k): k is string => typeof k === 'string') : [];
   const seed = b.seed === undefined ? undefined : Number(b.seed);
-  return { ok: true, value: { memory, models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes } };
+  return { ok: true, value: { memory: memory as MemoryEvent, models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes, useMemory } };
 }
 
 /** GET — 지금까지의 시험 기록 + 스타일 보드용 목록. 생성하지 않는다. */
@@ -170,7 +176,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_json' }); }
   const checked = validateTrialInput(body);
   if (!checked.ok) return json(400, { error: checked.error });
-  const { memory, models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes } = checked.value;
+  const { models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes, useMemory } = checked.value;
+  // 저장된 하루가 있으면 그걸 쓴다. 이 한 줄이 "사람이 지어낸 하루"와 "별이의 하루"를 가른다.
+  let memory = checked.value.memory;
+  let memorySource = 'hand-fed';
+  if (useMemory) {
+    const raw = await env.PLANET.get(memoryKey(useMemory));
+    if (!raw) return json(404, { error: `no_memory: ${useMemory} — POST /api/ops/memory 로 먼저 세운다` });
+    const day = JSON.parse(raw) as DayMemory;
+    memory = day.event;
+    memorySource = `stored:${useMemory}`;
+  }
 
   // 모델에 나가는 프롬프트는 영어여야 한다(1차 실패: 한국어 프롬프트 → 글자가 그려진 접시).
   // 관찰은 한국어가 원본이므로 장면만 영어로 옮긴다. 번역 실패는 치명적이지 않다 — 대상 이름으로 최소 구성.
@@ -255,7 +271,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await env.PLANET.put(META_KEY, JSON.stringify([...made, ...prev].slice(0, META_KEEP)));
 
   return json(200, {
-    ok: true, trialId, prompt, promptKo, promptHash,
+    ok: true, trialId, prompt, promptKo, promptHash, memorySource,
     provider: provider.id,
     generated: made.length, records: made, errors,
     referencesLoaded: { characters: charRefs.map((r) => r.name), styles: styleRefs.map((r) => r.name) },

@@ -16,6 +16,9 @@ import { validateTrialInput, hashPrompt, supportsReference } from './ops/sketch-
 import { isTrialKey } from './ops/sketch-image.ts';
 import { groupByPrompt } from './ops/sketch-board.ts';
 import { referenceKeyFor } from './ops/sketch-reference.ts';
+import {
+  capturesToEntries, buildDayMemory, attachBranch, validateDayMemory, kstDate,
+} from './_memory-event.ts';
 
 const DATE = '9100-04-10';
 let t = 1_700_000_000_000;
@@ -311,4 +314,58 @@ test('고유명사 사전 — 빼콩이는 강아지가 아니다 (6차 사고)'
   assert.match(g, /"빼콩이" = the white cat/);
   assert.match(g, /"별이" = the girl/);
   assert.ok(!/puppy|dog/i.test(g));
+});
+
+/* ── 431-M: 별이의 하루가 서버에 선다 ── */
+
+test('capture_meta → ArchiveEntry (관찰 줄이 그날의 조각이 된다)', () => {
+  const cap = [
+    { capturedAt: Date.parse('2026-07-20T01:00:00Z'), targetLabel: '라벤더', targetType: 'plant',
+      byeoliAction: 'observe', diaryLines: ['라벤더가 한쪽으로 기울어 있었다.', '바람은 없었다.'], r2Key: 'captures/a.jpg' },
+    { capturedAt: Date.parse('2026-07-19T01:00:00Z'), diaryLines: ['어제 것'] },   // 다른 날
+    { capturedAt: Date.parse('2026-07-20T02:00:00Z'), diaryLines: [] },            // 빈 관찰
+  ];
+  const entries = capturesToEntries(cap, '2026-07-20');
+  assert.equal(entries.length, 2, '오늘·비어있지 않은 것만');
+  assert.equal(entries[0].observer, 'byeoli');
+  assert.equal(entries[0].duration, 2, '대표 줄에만 대리 duration');
+  assert.equal(entries[1].duration, null);
+});
+
+test('하루를 세운다 — 같은 순간의 사진이 함께 잡힌다', () => {
+  const at = Date.parse('2026-07-20T01:00:00Z');
+  const cap = [{ capturedAt: at, targetLabel: '라벤더', diaryLines: ['라벤더가 기울어 있었다.'], r2Key: 'captures/a.jpg' }];
+  const day = buildDayMemory(cap, '2026-07-20');
+  assert.ok(day);
+  assert.equal(day!.event.targetLabel, '라벤더');
+  assert.equal(day!.photoKey, 'captures/a.jpg', '글·그림과 같은 순간을 가리켜야 한다');
+  assert.equal(day!.momentCount, 1);
+});
+
+test('관찰이 없으면 하루도 없다 — 빈 기억을 지어내지 않는다', () => {
+  assert.equal(buildDayMemory([], '2026-07-20'), null);
+  assert.equal(buildDayMemory([{ capturedAt: Date.now(), diaryLines: [] }], kstDate(Date.now())), null);
+});
+
+test('세 갈래는 같은 기억에 붙는다 (다른 사건을 만들면 실패)', () => {
+  const at = Date.parse('2026-07-20T01:00:00Z');
+  const day = buildDayMemory([{ capturedAt: at, targetLabel: '라벤더', diaryLines: ['기울어 있었다.'] }], '2026-07-20')!;
+  const withText = attachBranch(day, 'diaryText', '오늘은 라벤더가 한쪽으로만 기울어 있었다.');
+  const withBoth = attachBranch(withText, 'sketchDiary', 'sketch-trials/x.png');
+  assert.equal(withBoth.event.diaryText, '오늘은 라벤더가 한쪽으로만 기울어 있었다.');
+  assert.equal(withBoth.event.sketchDiary, 'sketch-trials/x.png');
+  assert.equal(withBoth.event.momentAt, day.event.momentAt, '같은 순간이어야 한다');
+});
+
+test('깨진 하루는 저장하지 않는다', () => {
+  assert.ok(validateDayMemory({}).length);
+  assert.ok(validateDayMemory({ date: '2026-7-20' }).length);
+  const at = Date.parse('2026-07-20T01:00:00Z');
+  const ok = buildDayMemory([{ capturedAt: at, diaryLines: ['x가 있었다.'] }], '2026-07-20')!;
+  assert.deepEqual(validateDayMemory(ok), []);
+});
+
+test('KST 경계 — UTC 오후는 다음날 KST다', () => {
+  assert.equal(kstDate(Date.parse('2026-07-19T15:30:00Z')), '2026-07-20');
+  assert.equal(kstDate(Date.parse('2026-07-19T14:00:00Z')), '2026-07-19');
 });
