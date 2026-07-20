@@ -10,6 +10,7 @@ import { appendPublishLog, bump401Bucket } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
+import { appendCaptureMeta, observationIdOf } from './_capture-meta';
 import { bookKey } from './_genome';
 
 // 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
@@ -254,15 +255,23 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let textIndex: number | null = pick;
   // 429-F 준비: 어느 경로로 나온 글인지. 기본은 풀 폴백이고, Writer가 성공하면 덮인다.
   let genomeSource: GenomeProvenance = provenance('rule-fallback', true);
+  // 431-M2: 발행에 **실제로 사용한** 엽서 문맥. 발행 성공 후 영수증으로만 쓴다.
+  // 여기에 새 조회·새 선택을 넣지 않는다 — 이미 고른 것만 담는다.
+  let usedCapture: {
+    captureId?: string; r2Key?: string; capturedAt?: number;
+    targetLabel?: string | null; byeoliAction?: string | null;
+    skyPhase?: string | null; weather?: string | null; diaryLines?: string[];
+  } | null = null;
   if (img) {
     try {
       const key = img.match(/captures\/[^?#]+/)?.[0];
       const cmRaw = key ? await env.PLANET.get('capture_meta') : null;
       const cm = cmRaw
-        ? (JSON.parse(cmRaw) as { r2Key: string; targetLabel?: string | null; byeoliAction?: string | null; skyPhase?: string | null; weather?: string | null; diaryLines?: string[] }[])
+        ? (JSON.parse(cmRaw) as { captureId?: string; r2Key: string; capturedAt?: number; targetLabel?: string | null; byeoliAction?: string | null; skyPhase?: string | null; weather?: string | null; diaryLines?: string[] }[])
           .find((m) => m.r2Key === key)
         : null;
       if (cm) {
+        usedCapture = cm;
         const recentTexts = feed.slice(0, 5).map((p) => p.text ?? '').filter(Boolean);
         const written = await writeByeoliPost(env, {
           targetLabel: cm.targetLabel ?? null,
@@ -320,6 +329,34 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const url = new URL(request.url);
   const draft = url.searchParams.get('draft') === '1';
   const threads = await dispatchToThreads(env, text, img, draft);
+
+  // 431-M2 (Vase 승인 범위): 발행이 **성공한 뒤에만**, 발행에 **이미 사용한 문맥**을
+  // MemoryObservation으로 사후 기록한다. Authority 추가 조회 없음, 새 관찰 선택 없음.
+  // 이건 새 관찰자가 아니라 이미 수행한 행동의 영수증이다.
+  // 실패해도 발행 결과를 뒤집지 않는다 — 자율 시스템 안전 계약.
+  let memoryAppendStatus: 'skipped' | 'ok' | 'duplicate' | 'failed' = 'skipped';
+  if (!draft && threads.ok && usedCapture) {
+    const runId = `autopost_${post.t}`;
+    const appended = await appendCaptureMeta(env, {
+      captureId: `auto_${post.t}`,
+      observationId: observationIdOf('autopost', runId, usedCapture.captureId ?? usedCapture.r2Key ?? null, usedCapture.capturedAt ?? post.t),
+      source: 'autopost',
+      sourceRunId: runId,
+      observedAt: usedCapture.capturedAt ?? post.t,
+      r2Key: usedCapture.r2Key ?? null,
+      photoKey: usedCapture.r2Key ?? null,
+      skyPhase: usedCapture.skyPhase ?? null,
+      weather: usedCapture.weather ?? null,
+      byeoliAction: usedCapture.byeoliAction ?? null,
+      targetId: null,
+      targetType: null,
+      targetLabel: usedCapture.targetLabel ?? null,
+      diaryLines: usedCapture.diaryLines ?? [],
+      uploadedBy: null,
+      uploadedAt: post.t,
+    });
+    memoryAppendStatus = appended.ok ? (appended.duplicate ? 'duplicate' : 'ok') : 'failed';
+  }
 
   // 정상 실행 1건 기록 — Layer1(운영)·Layer2(별이 일지) 소스 모두 담는다. draft는 로그 제외.
   if (!draft) {

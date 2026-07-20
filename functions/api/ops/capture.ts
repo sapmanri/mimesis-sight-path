@@ -14,6 +14,8 @@ interface Env {
   CAPTURES_PUBLIC_BASE?: string;
 }
 
+import { appendCaptureMeta, observationIdOf } from '../_capture-meta.ts';
+
 const META_KEY = 'capture_meta';
 const META_KEEP = 120;
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -100,16 +102,25 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const r2Key = `captures/walk/${ts}.jpg`;
   await env.CAPTURES.put(r2Key, bytes, { httpMetadata: { contentType: 'image/jpeg' } });
 
-  const record: CaptureMeta = {
-    captureId: `cap_${ts}`,
-    r2Key,
-    uploadedAt: ts,
-    uploadedBy,
-    ...sanitizeMeta(body.meta ?? {}),
-  };
-  const raw = await env.PLANET.get(META_KEY);
-  const list: CaptureMeta[] = raw ? JSON.parse(raw) : [];
-  await env.PLANET.put(META_KEY, JSON.stringify([record, ...list].slice(0, META_KEEP)));
+  // 431-M2: 저장은 공통 계약으로. ops와 autopost가 같은 자리에 같은 모양으로 쓴다.
+  const clean = sanitizeMeta(body.meta ?? {});
+  const captureId = `cap_${ts}`;
+  const appended = await appendCaptureMeta(env, {
+    captureId,
+    observationId: observationIdOf('ops-capture', null, captureId, clean.capturedAt),
+    source: 'ops-capture',
+    sourceRunId: null,
+    observedAt: clean.capturedAt,
+    r2Key, photoKey: r2Key,
+    zonePct: clean.zonePct,
+    skyPhase: clean.skyPhase, weather: clean.weather,
+    byeoliAction: clean.byeoliAction,
+    targetId: clean.targetId, targetType: clean.targetType, targetLabel: clean.targetLabel,
+    diaryLines: clean.diaryLines,
+    uploadedBy, uploadedAt: ts,
+  });
+  if (!appended.ok) return json(500, { ok: false, error: 'meta_append_failed', detail: appended.reason });
+  const record = { captureId, r2Key };
 
   const base = (env.CAPTURES_PUBLIC_BASE ?? '').replace(/\/$/, '');
   return json(200, { ok: true, captureId: record.captureId, r2Key, url: base ? `${base}/${r2Key}` : null });
