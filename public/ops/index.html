@@ -792,6 +792,7 @@ async function pollThreadsReplies(force){
         btn('후보 만들기', true, async () => {
           const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId });
           if (!res.ok) alert(`후보 실패: ${res.error}`);
+          else if (res.record && res.record.decision === 'ignored') alert(`별이가 무응답으로 판단했다:\n${res.record.reason ?? ''}\n\n(무응답 줄의 [후보 만들기]로 강제 후보를 만들 수 있다)`);
           refresh();
         });
       }
@@ -828,9 +829,12 @@ async function pollThreadsReplies(force){
       s.textContent = `${r.decision === 'failed' ? '실패' : '무응답'} — ${r.reason ?? ''}`;
       act.appendChild(s);
       // 거절·실패는 봉인이 아니다 — 언제든 다시 후보를 만들 수 있다 (정책 위반이면 서버가 사유로 거부)
+      // force: 사람이 무응답 판단을 뒤집는 요청이다. 재판단이 또 무응답이면 그 사유를
+      // 반드시 보여준다 — 조용히 같은 화면이면 버튼이 죽은 것처럼 보인다(실사고 2026-07-20).
       btn('후보 만들기', false, async () => {
-        const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId });
+        const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId, force: true });
         if (!res.ok) alert(`후보 실패: ${res.error}`);
+        else if (res.record && res.record.decision === 'ignored') alert(`별이가 다시 판단했지만 여전히 무응답:\n${res.record.reason ?? ''}`);
         refresh();
       });
     }

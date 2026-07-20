@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   categorize, maskUsername, mergeReplies, dailyReplyCap, draftEligibility,
-  type ReplyRecord,
+  WORLD_FACTS, FORCE_INSTRUCTION, type ReplyRecord,
 } from './_replies.ts';
 
 const NOW = Date.parse('2026-07-18T21:00:00+09:00');
@@ -83,4 +83,15 @@ test('draftEligibility: 수동은 전부 개방, 정책은 자동(automated) 전
   const sameAuthor = [rec({ sourceCommentId: 'z0', authorIdHash: 'hh', publishedAt: NOW - 3600_000 }), ...base];
   assert.equal(draftEligibility(rec({ sourceCommentId: 'z1', authorIdHash: 'hh' }), sameAuthor, NOW, AUTO), 'per_account_cooldown');
   assert.equal(draftEligibility(rec({ sourceCommentId: 'z1', authorIdHash: 'hh' }), sameAuthor, NOW), null);
+});
+
+/* ── 2026-07-20 실사고 회귀: "펫이 없으므로" 오판 ── */
+
+test('세계의 사실에 빼콩이가 선언돼 있다 — 지어내지 않기의 전제는 실제를 아는 것', () => {
+  // 빼콩이가 예시가 아니라 사실로 존재해야 한다 (예시 한 줄만 있던 것이 오판의 원인)
+  assert.match(WORLD_FACTS, /빼콩이/);
+  assert.match(WORLD_FACTS, /펫이 없다.*판단하지 마라|"데리고 다니는 펫이 없다"고 판단하지 마라/);
+  // 강제 후보도 정책 위반만은 못 뒤집는다
+  assert.match(FORCE_INSTRUCTION, /비난|정치|의료/);
+  assert.match(FORCE_INSTRUCTION, /null로 두지 말/);
 });

@@ -12,7 +12,7 @@
 import { getThreadsAuth, type Env as AutopostEnv } from '../autopost';
 import {
   categorize, maskUsername, mergeReplies, dailyReplyCap, draftEligibility,
-  repliesConfig, type ReplyRecord,
+  repliesConfig, WORLD_FACTS, FORCE_INSTRUCTION, type ReplyRecord,
 } from '../_replies';
 
 interface Env extends AutopostEnv {
@@ -100,7 +100,10 @@ async function runIngest(env: Env): Promise<{ ok: boolean; error: string | null;
 }
 
 /* ── 후보 생성 — 별이 문체 계약 (지시서 D) ── */
+
 const STYLE_SYSTEM = `너는 '별이'다. 픽셀 세계를 천천히 걸으며 사물을 관찰하는 존재이고, 지금 네 산책 게시물에 달린 댓글 하나에 답할지 결정한다.
+
+${WORLD_FACTS}
 
 문체 규칙(절대):
 - **반말.** 존댓말 절대 금지 — "~요", "~습니다", "~주셨네요" 같은 어미가 하나라도 나오면 실패다.
@@ -148,13 +151,14 @@ async function callClaude(env: Env, messages: { role: string; content: string }[
 }
 
 async function generateDraft(
-  env: Env, rec: ReplyRecord, postText: string | null, diaryLines: string[],
+  env: Env, rec: ReplyRecord, postText: string | null, diaryLines: string[], force = false,
 ): Promise<{ reply: string | null; bookmark: boolean; reason: string; model: string } | { error: string }> {
   if (!env.ANTHROPIC_API_KEY) return { error: 'claude_key_missing' };
   const context = [
     postText ? `원 게시물: ${postText}` : null,
     diaryLines.length ? `그 엽서의 관찰일기:\n${diaryLines.join('\n')}` : null,
     `댓글: ${rec.text}`,
+    force ? FORCE_INSTRUCTION : null,
   ].filter(Boolean).join('\n\n');
 
   let out = await callClaude(env, [{ role: 'user', content: context }]);
@@ -234,7 +238,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 };
 
 /* ── POST — draft / approve / reject / bookmark (쓰기 예외 4호, Access 감사) ── */
-interface PostBody { action?: string; sourceCommentId?: string; reason?: string }
+interface PostBody { action?: string; sourceCommentId?: string; reason?: string; force?: boolean }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const requestedBy = request.headers.get('cf-access-authenticated-user-email') ?? 'unknown';
@@ -267,7 +271,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         }
       }
     } catch { /* 문맥 없이도 생성 가능 */ }
-    const out = await generateDraft(env, rec, postText, diaryLines);
+    const out = await generateDraft(env, rec, postText, diaryLines, body.force === true);
     if ('error' in out) return json(502, { ok: false, error: out.error });
     rec.bookmarked = rec.bookmarked || out.bookmark;
     rec.modelVersion = out.model;
