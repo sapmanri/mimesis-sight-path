@@ -98,10 +98,14 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <div class="panel">
     <h2>② 참조 그림 <span class="muted">(역할을 줘야만 들어간다 · 순서: 캐릭터 → 스타일 · 총 4장)</span></h2>
     <div id="refs" class="refgrid"><span class="muted">불러오는 중…</span></div>
-    <div class="row" style="margin-top:10px">
-      <input type="text" id="refName" placeholder="이름 (소문자 슬러그: byeoli)" style="flex:1">
-      <input type="file" id="refFile" accept="image/png,image/jpeg,image/webp" style="flex:2">
-      <button id="refUpload">업로드</button>
+    <div style="margin-top:10px">
+      <label>파일 (고르면 이름이 자동으로 채워진다)</label>
+      <input type="file" id="refFile" accept="image/png,image/jpeg,image/webp">
+      <label>이름 (소문자 슬러그 — 자동 제안을 고쳐도 됨)</label>
+      <div class="row">
+        <input type="text" id="refName" placeholder="byeoli_v2" style="flex:1;min-width:140px">
+        <button id="refUpload">업로드</button>
+      </div>
     </div>
   </div>
 
@@ -273,6 +277,15 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       renderRefs();
     });
   }
+  // 파일명 → 슬러그 자동 제안 (byeoli v2.png → byeoli_v2). 이름 칸이 안 보여 빈 채로
+  // 눌리던 실사용 사고(2026-07-20 밤)의 재발 방지 — 타이핑 없이도 이름이 선다.
+  $('refFile').onchange = function () {
+    var f = $('refFile').files[0];
+    if (!f || $('refName').value.trim()) return;
+    var slug = f.name.replace(/\.[^.]+$/, '').toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '_').replace(/^[^a-z]+/, '').slice(0, 32);
+    $('refName').value = slug;
+  };
   $('refUpload').onclick = function () {
     var f = $('refFile').files[0];
     var name = $('refName').value.trim();
