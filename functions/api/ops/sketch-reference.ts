@@ -65,3 +65,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     next: '이 key를 sketch-trial 요청의 referenceKeys 에 넣으면 role=candidate 로 기록된다.',
   });
 };
+
+/** DELETE ?key= — 기준 그림 제거. reference/ prefix 밖은 지울 수 없다 (운영 captures/ 보호). */
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+  const key = new URL(request.url).searchParams.get('key');
+  if (!key || !key.startsWith(REFERENCE_PREFIX) || key.includes('..')) {
+    return json(400, { error: `bad_key: ${REFERENCE_PREFIX} 안의 키만 지울 수 있다` });
+  }
+  await env.CAPTURES.delete(key);
+  return json(200, { ok: true, deleted: key });
+};
