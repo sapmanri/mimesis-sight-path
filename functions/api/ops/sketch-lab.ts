@@ -276,14 +276,29 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   $('refUpload').onclick = function () {
     var f = $('refFile').files[0];
     var name = $('refName').value.trim();
+    var btn = $('refUpload');
     if (!f || !name) { banner('이름과 파일 둘 다 필요', 'err'); return; }
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name)) {
+      banner('이름은 소문자로 시작하는 슬러그만 (예: byeoli_v2)', 'err'); return;
+    }
+    if (!f.type || ['image/png', 'image/jpeg', 'image/webp'].indexOf(f.type) < 0) {
+      banner('png/jpeg/webp만 가능 (이 파일: ' + (f.type || '타입 없음') + ')', 'err'); return;
+    }
+    if (f.size > 8 * 1024 * 1024) { banner('8MB 이하만 (' + Math.round(f.size / 1048576) + 'MB)', 'err'); return; }
+    btn.disabled = true; btn.textContent = '업로드 중…';
     fetch('/api/ops/sketch-reference?name=' + encodeURIComponent(name), {
       method: 'POST', headers: { 'content-type': f.type }, body: f,
-    }).then(function (res) { return res.json(); }).then(function (res) {
+    }).then(function (res) {
+      return res.json().catch(function () { return { error: 'HTTP ' + res.status + ' (JSON 아님 — Access 만료면 새로고침)' }; });
+    }).then(function (res) {
+      btn.disabled = false; btn.textContent = '업로드';
       if (res.error) { banner('업로드 실패: ' + res.error, 'err'); return; }
-      banner('업로드됨: ' + res.key);
+      banner('업로드됨: ' + res.key + ' (' + Math.round(res.size / 1024) + 'KB)');
       $('refName').value = ''; $('refFile').value = '';
       loadRefs();
+    }).catch(function (e) {
+      btn.disabled = false; btn.textContent = '업로드';
+      banner('업로드 요청 자체가 실패: ' + e + ' — 네트워크 또는 Access 세션 확인', 'err');
     });
   };
 
@@ -400,6 +415,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       return '<option value="' + esc(c.model) + '"' + (c.supportsReference ? '' : ' data-noref') + '>' +
         esc(c.model.split('/').pop()) + (c.supportsReference ? ' (참조 가능)' : ' (텍스트만)') + '</option>';
     }).join('');
+    // 기본 = 확정 그림체의 모델(flux-2-dev). schnell이 첫 항목이라 기본이 되던 혼선 실발생 (2026-07-20 밤).
+    var confirmed = models.filter(function (c) { return c.model.indexOf('flux-2-dev') >= 0; })[0];
+    if (confirmed) sel.value = confirmed.model;
     if (!r.aiBinding) banner('⚠ AI 바인딩 없음 — 생성이 실패한다', 'err');
   });
   renderSubjects();
