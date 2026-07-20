@@ -86,6 +86,22 @@ export const CHARACTER_SHEET_EN = [
   'the cat is entirely white — all-white fur from head to tail',
 ] as const;
 
+/**
+ * 고유명사 사전 — 번역기가 모르면 멋대로 옮긴다.
+ * 6차 사고: "빼콩이가 흙을 먼저 밟았다" → "the puppy stepped on the soil first".
+ * 빼콩이가 강아지가 됐고, Subjects의 one cat과 모순된 지시가 모델에 나갔다.
+ */
+export const CHARACTER_GLOSSARY: Record<string, string> = {
+  '별이': 'the girl',
+  '빼콩이': 'the white cat',
+  '빼콩': 'the white cat',
+};
+
+/** 번역 시스템 프롬프트에 붙일 사전 줄 */
+export function glossaryLine(): string {
+  return Object.entries(CHARACTER_GLOSSARY).map(([k, v]) => `"${k}" = ${v}`).join('; ');
+}
+
 /* ═══ 스타일 시트 — 캐릭터와 독립 ════════════════════════════════
    캐릭터 참조가 그림체까지 끌고 가므로, 그림체는 별도 축으로 계속 밀어 넣는다. */
 

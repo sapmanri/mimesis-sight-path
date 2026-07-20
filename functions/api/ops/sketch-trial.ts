@@ -16,7 +16,7 @@ import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, WORKERS_AI_CANDIDATES, MAX_REFERENCE_IMAGES,
   type ImageProviderId, type ImageProviderEnv, type DailySketchPlan, type ReferenceImage,
 } from '../_image-provider.ts';
-import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, type MemoryEvent } from '../_daily-sketch.ts';
+import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, glossaryLine, type MemoryEvent } from '../_daily-sketch.ts';
 
 interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
@@ -83,7 +83,8 @@ export async function translateScene(env: { ANTHROPIC_API_KEY?: string }, lines:
     },
     body: JSON.stringify({
       model: 'claude-sonnet-5', max_tokens: 120,
-      system: 'Translate the Korean observation notes into ONE short English clause describing only what is physically present. No interpretation, no added objects, no emotion words. Output the clause only.',
+      system: `Translate the Korean observation notes into ONE short English clause describing only what is physically present. No interpretation, no added objects, no emotion words. Output the clause only.
+Proper nouns (use these exact renderings): ${glossaryLine()}.`,
       messages: [{ role: 'user', content: lines.join('\n') }],
     }),
   });
