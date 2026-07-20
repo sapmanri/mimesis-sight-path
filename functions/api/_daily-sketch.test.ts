@@ -17,7 +17,7 @@ import { isTrialKey } from './ops/sketch-image.ts';
 import { groupByPrompt } from './ops/sketch-board.ts';
 import { referenceKeyFor } from './ops/sketch-reference.ts';
 import {
-  capturesToEntries, buildDayMemory, attachBranch, validateDayMemory, kstDate,
+  capturesToEntries, buildDayMemory, attachBranch, validateDayMemory, kstDate, memoryEventId,
 } from './_memory-event.ts';
 
 const DATE = '9100-04-10';
@@ -368,4 +368,33 @@ test('깨진 하루는 저장하지 않는다', () => {
 test('KST 경계 — UTC 오후는 다음날 KST다', () => {
   assert.equal(kstDate(Date.parse('2026-07-19T15:30:00Z')), '2026-07-20');
   assert.equal(kstDate(Date.parse('2026-07-19T14:00:00Z')), '2026-07-19');
+});
+
+test('사건 id — 같은 날의 다른 사건이 뒤섞이지 않는다', () => {
+  const at = Date.parse('2026-07-20T14:23:10Z');
+  assert.equal(memoryEventId(at, '화분'), '2026-07-20T14:23:10Z:화분');
+  assert.equal(memoryEventId(at, null), '2026-07-20T14:23:10Z:moment');
+  assert.equal(memoryEventId(at, 'Flower Pot!!'), '2026-07-20T14:23:10Z:flower-pot');
+  // 같은 날 다른 순간 → 다른 id
+  assert.notEqual(memoryEventId(at, '화분'), memoryEventId(at + 60_000, '화분'));
+});
+
+test('사건이 어느 관찰에서 파생됐는지 추적된다', () => {
+  const at = Date.parse('2026-07-20T01:00:00Z');
+  const day = buildDayMemory([
+    { captureId: 'cap-1', capturedAt: at, targetLabel: '라벤더', diaryLines: ['기울어 있었다.'] },
+    { captureId: 'cap-2', capturedAt: at + 60_000, diaryLines: ['바람은 없었다.'] },
+    { captureId: 'cap-far', capturedAt: at + 40 * 60_000, diaryLines: ['한참 뒤 다른 일.'] },
+  ], '2026-07-20')!;
+  assert.match(day.memoryEventId, /^2026-07-20T/);
+  assert.ok(day.sourceCaptureIds.includes('cap-1'));
+  assert.ok(!day.sourceCaptureIds.includes('cap-far'), '사건 창 밖은 출처가 아니다');
+});
+
+test('사건 id 없는 기억은 저장하지 않는다', () => {
+  const at = Date.parse('2026-07-20T01:00:00Z');
+  const ok = buildDayMemory([{ captureId: 'c', capturedAt: at, diaryLines: ['x가 있었다.'] }], '2026-07-20')!;
+  assert.deepEqual(validateDayMemory(ok), []);
+  assert.ok(validateDayMemory({ ...ok, memoryEventId: 'flowerpot' }).length, '형식 위반');
+  assert.ok(validateDayMemory({ ...ok, sourceCaptureIds: 'x' as never }).length);
 });

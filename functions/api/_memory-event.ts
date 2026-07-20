@@ -36,9 +36,27 @@ export interface CaptureLike {
   diaryLines?: string[];
 }
 
+/**
+ * 사건 식별자. `memory:<date>` 하나만으로는 같은 날의 꽃·비·빼콩 사건이 뒤섞인다.
+ * 저장 키는 날짜 정본을 유지하되 **내부에 사건 id**를 둬서 잘못 합쳐지지 않게 한다.
+ * 형식: `<ISO 초까지>:<대상 슬러그>` — 예) 2026-07-20T14:23:10Z:flowerpot
+ */
+export function memoryEventId(momentAt: number, targetLabel: string | null): string {
+  const iso = new Date(Math.floor(momentAt / 1000) * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const slug = (targetLabel ?? 'moment')
+    .trim().toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, '-').replace(/^-|-$/g, '')
+    .slice(0, 24) || 'moment';
+  return `${iso}:${slug}`;
+}
+
 /** 하루 한 건. 세 갈래가 여기서 갈라진다. */
 export interface DayMemory {
   version: string;
+  /** 이 하루에서 고른 **사건**의 id — 날짜만으로 구분되지 않는 것을 구분한다 */
+  memoryEventId: string;
+  /** 이 사건이 어느 관찰에서 파생됐는지 — 추적 가능해야 한다 */
+  sourceCaptureIds: string[];
   date: string;                 // KST YYYY-MM-DD
   builtAt: number;
   /** 그날 서버에 남은 관찰 조각 수 */
@@ -52,6 +70,9 @@ export interface DayMemory {
 
 export const memoryKey = (date: string) => `memory:${date}`;
 
+/** 같은 사건으로 묶는 시간 창 — buildMemoryEvent의 창과 같아야 한다 */
+const CLUSTER_WINDOW_MS = 10 * 60 * 1000;
+
 /** KST 날짜 문자열 */
 export function kstDate(ms: number): string {
   return new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
@@ -61,9 +82,10 @@ export function kstDate(ms: number): string {
  * capture_meta → ArchiveEntry. walk의 logObservation 산출물과 같은 모양으로 맞춰
  * selectMoment/buildMemoryEvent를 그대로 재사용한다.
  *
- * ⚠ duration이 없다. 엽서 메타는 머문 시간을 안 남긴다. 그래서 그 순간의
- * 관찰 줄 수(diaryLines.length)를 **머무름의 대리 지표**로 쓴다 — 더 오래 머문
- * 순간일수록 관찰이 더 쌓였다는 가정이고, 정확한 값이 아니라 대리값임을 명시한다.
+ * ⚠ duration이 없다. 엽서 메타는 머문 시간을 안 남긴다. 그래서 **그 순간 주변(±10분)에
+ * 쌓인 관찰 줄 수**를 머무름의 대리 지표로 쓴다. 한 엽서의 줄 수만 세면 40분 뒤의
+ * 고립된 관찰 1건이 앞의 뭉친 2건과 동점이 되고, 동점에선 늦은 쪽이 이겨 엉뚱한 순간이
+ * 뽑힌다(테스트가 잡음). 정확한 값이 아니라 대리값임을 명시한다.
  */
 export function capturesToEntries(captures: CaptureLike[], date: string): ArchiveEntry[] {
   const out: ArchiveEntry[] = [];
@@ -72,7 +94,12 @@ export function capturesToEntries(captures: CaptureLike[], date: string): Archiv
     if (kstDate(c.capturedAt) !== date) continue;
     const lines = (c.diaryLines ?? []).filter((l) => typeof l === 'string' && l.trim());
     if (!lines.length) continue;
-    const proxyDuration = lines.length;          // 대리 지표 (초가 아니다)
+    // 대리 지표(초가 아니다): 이 순간 주변에 관찰이 얼마나 몰렸는가
+    const proxyDuration = captures.reduce((n, o) => {
+      if (!o || typeof o.capturedAt !== 'number') return n;
+      if (Math.abs(o.capturedAt - c.capturedAt) > CLUSTER_WINDOW_MS) return n;
+      return n + (o.diaryLines ?? []).filter((l) => typeof l === 'string' && l.trim()).length;
+    }, 0);
     lines.forEach((line, i) => {
       out.push({
         observer: 'byeoli',
@@ -111,8 +138,16 @@ export function buildDayMemory(
   const entries = capturesToEntries(captures, date);
   const event = buildMemoryEvent(entries, date, focus);
   if (!event) return null;
+  // 이 사건에 실제로 기여한 관찰만 — 같은 사건 창(±10분) 안의 capture id
+  const sourceCaptureIds = [...new Set(
+    entries
+      .filter((e) => Math.abs(e.createdAt - event.momentAt) <= 10 * 60 * 1000 && e.eventId)
+      .map((e) => e.eventId as string),
+  )];
   return {
     version: MEMORY_VERSION,
+    memoryEventId: memoryEventId(event.momentAt, event.targetLabel),
+    sourceCaptureIds,
     date,
     builtAt: Date.now(),
     momentCount: entries.length,
@@ -141,5 +176,10 @@ export function validateDayMemory(x: unknown): string[] {
     if (d.event.date !== d.date) errs.push('event.date must match date');
   }
   if (typeof d.momentCount !== 'number' || d.momentCount < 1) errs.push('momentCount must be >= 1');
+  // 사건 id가 없으면 같은 날의 다른 사건과 뒤섞인다
+  if (!d.memoryEventId || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z:.+$/.test(d.memoryEventId)) {
+    errs.push('memoryEventId must be <ISO>:<slug>');
+  }
+  if (!Array.isArray(d.sourceCaptureIds)) errs.push('sourceCaptureIds must be an array');
   return errs;
 }
