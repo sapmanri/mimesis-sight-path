@@ -4,6 +4,7 @@ import { jejuScenes } from './data/jeju';
 import { World } from './scene/World';
 import { PlanetWorld, flagIsKnownCountry } from './scene/PlanetWorld';
 import { TheatreWorld } from './scene/TheatreWorld';
+import { ManriWorld, BYEOL_WALKER_IDX } from './scene/ManriWorld';
 import { DEFAULT_THEATRE_SPEC, loadTheatreDraft, saveTheatreDraft, type TheatreSpec } from './scene/theatreSpec';
 import { walkerCount, WALKER_ROSTER } from './engine/worldCore';
 import { DEFAULT_PLANET_SPEC, loadPlanetDraft, savePlanetDraft, type PlanetSpec, type PlanetMemory, type PlanetContact, type PlanetApi } from './scene/planetSpec';
@@ -103,6 +104,8 @@ export default function App() {
   }, []);
   // BUILD 285: ?theatre=1 — 그림자 극장(페러럴). &edit=1 — 극장 에디터.
   const [theatreMode] = useState(() => new URLSearchParams(window.location.search).has('theatre'));
+  // 만리서재: ?manri=1 — 걸어 들어가는 방 (격리 월드, perspective-engine 캐논)
+  const [manriMode] = useState(() => new URLSearchParams(window.location.search).has('manri'));
   const [tSpec, setTSpec] = useState<TheatreSpec>(() => {
     const q = new URLSearchParams(window.location.search);
     if (q.has('edit') || q.has('draft')) return loadTheatreDraft();
@@ -699,6 +702,18 @@ export default function App() {
       </div>
     </>
   );
+
+  if (manriMode) {
+    return (
+      <main className="app-shell world-core-shell">
+        <div className="world-core-viewport" style={{ position: 'fixed', inset: 0 }}>
+          <ManriWorld walkerIdx={BYEOL_WALKER_IDX} />
+        </div>
+        <div className="atmosphere-grain" aria-hidden="true" />
+        <div className="build-badge">{BUILD_LABEL} · 만리서재</div>
+      </main>
+    );
+  }
 
   if (theatreMode) {
     const theatreEdit = new URLSearchParams(window.location.search).has('edit');
