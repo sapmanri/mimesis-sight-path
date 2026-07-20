@@ -52,9 +52,10 @@ npm run build
 ```
 World → Request → Execution Contract → Selection → Observation(Identity+Daily) → Generation → Validation → Resolution
 ```
-**429 = Observation Compiler Complete (Vase 최종 판정 2026-07-19)**:
-Generation·Repair·Observation Memory PASS / Critic FAIL(재현성) — 문제는 이제 Generator가 아니라 Judge.
-**다음: Critic 계약화(판정을 Rule 코드로 — 정본 §5) → sunset 재검·night 키 1 → B/C/D → 429-D/E/F.**
+**429 = Observation Compiler Complete (Vase 최종 판정 2026-07-19)**.
+**429-D/E/F 배선 완료·배포됨 (2026-07-20)** — 별이가 Genome으로 쓴다. 첫 라이브 결과
+`generationSource: genome-live` 확인. 이후 **431 Daily Sketch**(그림일기, 시험 단계) ·
+**431-M MemoryEvent**(하나의 기억 → 글·사진·그림 세 갈래) 진행 중.
 429 생성·분석은 로컬 파일 + Anthropic API만 (offline guard, 정본 §10-6).
-최신 상태·함정·교훈은 vault `HANDOFF_20260719.md`가 정본.
+최신 상태·함정·교훈은 vault **`HANDOFF_20260720.md`가 정본** (그 전 맥락은 `HANDOFF_20260719.md`).
 게이트 15단(`validate:writer`·`validate:postcard`·`validate:parallel` 포함) · 콘솔 쓰기 표면 4곳 고정.
