@@ -37,10 +37,14 @@ npm run build
 - 행성 맵은 의도적으로 비어 있음 — 하드코딩 금지.
 - 별이 상호작용은 editor-placed props(`SP.props`) 기반 drive/disposition으로만 — 스크립트 조합 금지.
 - **자율 시스템 건드리지 말 것**: Threads 봇(크론 실발행 중) · Authority DO(관찰자 무지 유지가 설계 원칙).
-- 🔒 **Authority 시간 모델 동결** (Vase 2026-07-20, DO 실측 전까지): `TICK_MS` ·
+- 🔒 **Authority 시간 모델 동결** (Vase 2026-07-20, DO 실측 후 확정): `TICK_MS` ·
   `MAX_DT_SECONDS` · `sequence`의 RNG 시드 역할 · persist 주기 — 이 넷은 서로 묶여 있어
-  하나만 바꿔도 별이가 **무엇을 만나는지**가 달라진다. 근거·분기·홈즈 질문은
-  `docs/BUILD_431_AUTHORITY_TICK_DEPENDENCY.md`.
+  하나만 바꿔도 별이가 **무엇을 만나는지**가 달라진다.
+  ⚠ **비용 때문에 동결된 게 아니다.** 실측(356 GB-s/day = 포함량의 2.7%, 총 ≈ 월 $0.24)으로
+  1초 alarm·매초 persist의 비용은 무시 가능함이 확인됐다. 동결 사유는 **세계 시간과 사건
+  재현성에의 결합** 하나뿐이다 — 즉 "비용 최적화"는 이 넷을 건드릴 명분이 될 수 없다.
+  해제는 **BUILD 432 Deterministic World Time**을 통해서만. 근거·실측·완료 계약은
+  `docs/BUILD_431_AUTHORITY_TICK_DEPENDENCY.md`와 vault `HANDOFF_20260720.md` §6·§7.
 - 범위 확장 금지 — 오픈 차단 기준은 홈즈 작업표 원문 기준.
 
 ## 현재 단계 (2026-07-19 기준)
