@@ -856,8 +856,10 @@ async function pollPresence(){
     lastPresence = d;
     $('prNow').textContent = `함께 열린 세션 ${d.active.sessions}개 · live ${d.active.live}개`;
     $('prToday').textContent = `감지된 브라우저 세션 ${d.today.sessions}개`;
-    $('prDur').textContent = d.today.sessions
-      ? `평균 ${dur(d.today.avgMs)} · 가장 오래 ${dur(d.today.maxMs)}`
+    // 431-P: 체류시간이 today → active로 이동(의미도 다르다 — 접속 중인 세션이 여태 머문 시간).
+    // today.avgMs를 계속 읽어 NaN이 표시되던 실사고(2026-07-20 밤) 수정.
+    $('prDur').textContent = d.active.sessions
+      ? `접속 중 평균 ${dur(d.active.avgMs)} · 가장 오래 ${dur(d.active.maxMs)}`
       : '—';
     renderWatch(); // 메타 일기에 세션 수 반영
   } catch (e) { /* 유지 */ }
