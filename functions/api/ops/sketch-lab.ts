@@ -112,12 +112,12 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <div class="panel">
     <h2>③ 주제 못박기 <span class="muted">(subjects — 수를 아라비아 숫자로)</span></h2>
     <div class="row">
-      <input type="text" id="subjInput" placeholder="예: 1 utility pole" style="flex:1">
+      <input type="text" id="subjInput" placeholder="예: utility pole (이름만 — 숫자는 자동)" style="flex:1">
       <button id="subjAdd">추가</button>
       <button id="subjFromDay" title="하루의 targetLabel로 채움">하루에서</button>
     </div>
     <div id="subjChips" class="chips"></div>
-    <div class="muted" style="margin-top:4px">칩을 누르면 빠진다. 별이·빼콩이는 프롬프트가 이미 넣으므로 소품·대상만.</div>
+    <div class="muted" style="margin-top:4px">칩을 누르면 빠진다. <b>별이·빼콩이 수는 서버가 항상 못박는다</b>(9차) — 여긴 소품·대상만. 숫자를 붙여도 이중이 안 되게 서버가 걸러준다.</div>
   </div>
 
   <div class="panel">
@@ -127,6 +127,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       <div style="flex:1"><label>seed</label><input type="number" id="seed" value="431001"></div>
       <div><label>&nbsp;</label><button id="seedRand" title="새 seed">🎲</button></div>
       <div style="flex:1"><label>장수 (1–6)</label><input type="number" id="count" value="1" min="1" max="6"></div>
+      <div style="flex:1"><label>steps (1–20)</label><input type="number" id="steps" value="4" min="1" max="20" title="불량률 다이얼 — 기본 4, 올리면 생성이 느려지는 대신 기형이 줄 수 있다"></div>
     </div>
     <details><summary>장면 영문 직접 지정 (선택)</summary>
       <label>sceneEn — 비우면 서버가 관찰을 번역한다</label>
@@ -338,7 +339,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   $('subjFromDay').onclick = function () {
     var src = state.day && (state.day.stored || state.day.preview);
     if (!src || !src.event || !src.event.targetLabel) { banner('하루를 먼저 불러와야 한다', 'err'); return; }
-    state.subjects.push('1 ' + src.event.targetLabel);
+    state.subjects.push(src.event.targetLabel);   // 숫자는 서버가 붙인다
     saveSubjects(); renderSubjects();
   };
 
@@ -357,6 +358,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       models: [$('model').value],
       count: Math.max(1, Math.min(6, Number($('count').value) || 1)),
       seed: Number($('seed').value),
+      steps: Math.max(1, Math.min(20, Number($('steps').value) || 4)),
       referenceKeys: chosenRefs('char'),
       styleKeys: chosenRefs('style'),
       subjects: state.subjects.slice(),

@@ -7,7 +7,7 @@ import {
   selectMoment, densityOf, buildMemoryEvent, buildSketchPrompt,
   SKETCH_RULES, SKETCH_RULES_EN, SKETCH_POSITIVE, CHARACTER_IDENTITY_CHECKS,
   CHARACTER_SHEET, CHARACTER_SHEET_EN, STYLE_SHEET_EN, doodleFor, glossaryLine,
-  buildImagePrompt, subjectClause, type ArchiveEntry,
+  buildImagePrompt, subjectClause, pinnedSubjectClause, type ArchiveEntry,
 } from './_daily-sketch.ts';
 import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, manualProvider, workersAiProvider,
@@ -217,6 +217,37 @@ test('숫자가 density보다 명확하다 — 대상을 세어서 못박는다'
   // 단수 처리 — "These one are everything" 같은 문장이 모델에 나가면 안 된다
   assert.equal(subjectClause(['flower pot'], 1),
     'The whole drawing contains exactly 1 flower pot. Just this single subject fills the page.');
+});
+
+/* ── 9차 회귀: 숫자 없는 캐릭터가 복제·혼성됐다 ── */
+
+test('9차 — 캐릭터 수는 항상 못박고, density 예산은 소품에만 적용된다', () => {
+  // 소품 없음 → 캐릭터만
+  assert.equal(pinnedSubjectClause([], 2),
+    'The whole drawing contains exactly 1 girl, 1 small white cat. Nothing else on the page.');
+  // 칩이 "1 girl"꼴 이중 숫자·캐릭터 중복이어도 흡수된다 (실사용: 1 girl 칩이 "1 1 girl"로 나가던 것)
+  assert.equal(pinnedSubjectClause(['1 girl', 'white cat', '1 utility pole'], 2),
+    'The whole drawing contains exactly 1 girl, 1 small white cat, 1 utility pole. Nothing else on the page.');
+  // 예산은 소품만 자른다 — 캐릭터는 예산 밖 (칩 2개에 별이 몸통이 사라진 실사고 회귀)
+  const p = pinnedSubjectClause(['pole', 'broom', 'web'], 2);
+  assert.ok(p.includes('1 girl') && p.includes('1 pole') && p.includes('1 broom'));
+  assert.ok(!p.includes('web'), '소품 예산 초과분은 잘려야 한다');
+});
+
+test('buildImagePrompt에도 캐릭터 수가 박힌다', () => {
+  const m = buildMemoryEvent([e()], DATE)!;
+  const p = buildImagePrompt(m, null, 'a pot');
+  assert.match(p, /exactly 1 girl, 1 small white cat/);
+});
+
+test('steps는 1~20 정수만 — 시험 한 번을 날리기 전에 잡는다', () => {
+  const base = { confirm: 'trial', models: ['m'], useMemory: '9100-04-10' };
+  assert.equal(validateTrialInput({ ...base, steps: 0 }).ok, false);
+  assert.equal(validateTrialInput({ ...base, steps: 4.5 }).ok, false);
+  const twelve = validateTrialInput({ ...base, steps: 12 });
+  assert.ok(twelve.ok && twelve.value.steps === 12);
+  const dflt = validateTrialInput(base);
+  assert.ok(dflt.ok && dflt.value.steps === 4, '생략하면 기본 4');
 });
 
 test('장면 번역이 없어도 프롬프트는 만들어진다 (번역 실패가 시험을 막지 않게)', () => {

@@ -73,6 +73,21 @@ export function subjectClause(subjects: string[], max: number): string {
   return `${named} These ${NUM_WORD[Math.min(list.length, 5)]} are everything on the page.`;
 }
 
+/**
+ * 9차(2026-07-20): 숫자 없는 캐릭터가 복제·혼성됐다(별이 2명, 별이-고양이 잡종) —
+ * 별이·빼콩이 수를 **항상** 못박는다. density 예산(maxSubjects)은 소품에만 적용된다.
+ * 캐릭터는 예산 밖 — 항상 있는 존재라 "대상 수 2개 이내"와 자리 다툼을 벌이면
+ * 안 된다(칩 2개에 별이 몸통이 사라진 실사고).
+ */
+export function pinnedSubjectClause(props: string[], maxProps: number): string {
+  const cleaned = props
+    .map((s) => s.trim().replace(/^1\s+/, ''))       // 칩이 "1 girl"꼴이어도 이중 숫자 방지
+    .filter((s) => s && !/^(girl|(small\s+)?(white\s+)?cat)$/i.test(s))  // 캐릭터 중복 칩 흡수
+    .slice(0, maxProps);
+  const all = ['1 girl', '1 small white cat', ...cleaned.map((s) => `1 ${s}`)];
+  return `The whole drawing contains exactly ${all.join(', ')}. Nothing else on the page.`;
+}
+
 /* ═══ 캐릭터 시트 — 그림체와 분리된 '누구인가' ═══════════════════
    참조 그림이 스타일까지 먹어버리는 문제가 있어(5차 관찰), 캐릭터는 그림에만 맡기지 않고
    문장으로도 고정한다. 참조가 흔들려도 이 문장은 흔들리지 않는다. */
@@ -308,7 +323,8 @@ export function buildImagePrompt(
     // 성실히 그려 넣는다(3차: 제본과 책상이 찍혔다). 물건이 아니라 표면만 말한다.
     'A simple hand-drawn sketch. Flat illustration drawn from memory.',
     `Scene: ${scene}`,
-    subjectClause(subjects, d.maxSubjects),
+    // 9차: subjectClause → pinnedSubjectClause. 캐릭터 수는 항상 못박고, 예산은 소품에만.
+    pinnedSubjectClause(subjects, d.maxSubjects),
     focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
     `Style: ${SKETCH_RULES_EN.join(', ')}.`,
     // 참조는 인덱스로 지칭한다(flux-2는 image 0..3). **캐릭터와 스타일을 분리**한다 —

@@ -53,6 +53,8 @@ export interface TrialRecord {
   role: 'candidate' | 'control';
   /** 다중 장면 시험에서 어떤 하루였는지 */
   sceneLabel?: string | null;
+  /** 이 실행에 실제로 들어간 참조 키 (캐릭터 → 스타일 순). 기록이 출처를 말해야 한다 */
+  refKeys?: string[];
 }
 
 /** "다른 장면에서도 같은 아이인가" — 같은 참조로 서로 다른 하루를 그린다. */
@@ -110,7 +112,7 @@ export function hashPrompt(s: string): string {
 export function validateTrialInput(body: unknown): { ok: true; value: {
   memory: MemoryEvent; models: string[]; count: number; providerId: ImageProviderId;
   referenceKeys: string[]; seed?: number; subjects: string[];
-  styleKeys: string[]; scenes: TrialScene[]; useMemory: string | null;
+  styleKeys: string[]; scenes: TrialScene[]; useMemory: string | null; steps: number;
 } } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
   if (b.confirm !== 'trial') return { ok: false, error: 'confirm_required: {"confirm":"trial"}' };
@@ -145,7 +147,12 @@ export function validateTrialInput(body: unknown): { ok: true; value: {
     : [];
   const referenceKeys = Array.isArray(b.referenceKeys) ? b.referenceKeys.filter((k): k is string => typeof k === 'string') : [];
   const seed = b.seed === undefined ? undefined : Number(b.seed);
-  return { ok: true, value: { memory: memory as MemoryEvent, models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes, useMemory } };
+  // 불량률 다이얼 — dev 계열엔 4가 낮을 수 있다(편차 실측 30~40%). 기본은 4 유지, 상한 20.
+  const steps = b.steps === undefined ? 4 : Number(b.steps);
+  if (!Number.isInteger(steps) || steps < 1 || steps > 20) {
+    return { ok: false, error: 'bad_steps: 1~20 정수 (기본 4)' };
+  }
+  return { ok: true, value: { memory: memory as MemoryEvent, models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes, useMemory, steps } };
 }
 
 /** GET — 지금까지의 시험 기록 + 스타일 보드용 목록. 생성하지 않는다. */
@@ -176,7 +183,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_json' }); }
   const checked = validateTrialInput(body);
   if (!checked.ok) return json(400, { error: checked.error });
-  const { models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes, useMemory } = checked.value;
+  const { models, count, providerId, referenceKeys, seed, subjects, styleKeys, scenes, useMemory, steps } = checked.value;
   // 저장된 하루가 있으면 그걸 쓴다. 이 한 줄이 "사람이 지어낸 하루"와 "별이의 하루"를 가른다.
   let memory = checked.value.memory;
   let memorySource = 'hand-fed';
@@ -232,7 +239,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const prompt = shotPlans[0].prompt;
   const plan: DailySketchPlan = { memory, prompt, referenceKeys };
   const provider = selectProvider(providerId, env);
-  const trialId = `${new Date().toISOString().slice(0, 10)}-${hashPrompt(prompt)}`;
+  // trialId에는 참조 지문을 섞는다 — 프롬프트가 같아도 참조가 다르면 다른 실행이다.
+  // (실사고 2026-07-20: 참조만 바꾼 실행이 같은 trialId → 같은 R2 키로 이전 산출물을 덮어씀.)
+  // promptHash는 프롬프트만으로 유지 — 보드의 "같은 프롬프트끼리 비교" 그룹이 그걸 쓴다.
+  const refFingerprint = [...referenceKeys, '|', ...styleKeys].join(',');
+  const trialId = `${new Date().toISOString().slice(0, 10)}-${hashPrompt(`${prompt}\n#refs:${refFingerprint}\n#steps:${steps}`)}`;
   const promptHash = hashPrompt(prompt);
 
   const made: TrialRecord[] = [];
@@ -244,7 +255,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       // 참조를 못 받는 모델에 참조를 넘기지 않는다. 넘긴 척도 하지 않는다.
       // 실제로 읽힌 참조가 있을 때만 후보다. 모델이 못 받거나 파일이 없으면 대조군.
       const refOk = references.length > 0 && supportsReference(model);
-      const params = { steps: 4, width: 1024, height: 1024 };
+      const params = { steps, width: 1024, height: 1024 };
       const art = await provider.generate(env, {
         plan: { ...plan, prompt: shot.prompt }, model, params,
         references: refOk ? references : [],
@@ -262,6 +273,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         promptHash: hashPrompt(shot.prompt), sketchVersion: SKETCH_VERSION, note: art.note,
         referenceApplied: refOk, role: refOk ? 'candidate' : 'control',
         sceneLabel: shot.label,
+        refKeys: refOk ? [...referenceKeys, ...styleKeys] : [],
       });
     }
   }
