@@ -67,9 +67,10 @@ const NUM_WORD = ['zero', 'one', 'two', 'three', 'four', 'five'];
 export function subjectClause(subjects: string[], max: number): string {
   const list = subjects.slice(0, max).filter(Boolean);
   if (!list.length) return `Exactly ${NUM_WORD[Math.min(max, 5)]} subject${max > 1 ? 's' : ''}, nothing else.`;
-  const named = `Subjects: ${list.map((s) => `one ${s}`).join(', ')}.`;
-  if (list.length === 1) return `${named} Only this one subject, nothing else.`;
-  return `${named} Only these ${NUM_WORD[Math.min(list.length, 5)]} subjects, nothing else.`;
+  // 숫자를 아라비아 숫자로 못박는다 — "one girl"이 두 명으로 그려진 적이 있다(7차).
+  const named = `The whole drawing contains exactly ${list.map((s) => `1 ${s}`).join(', ')}.`;
+  if (list.length === 1) return `${named} Just this single subject fills the page.`;
+  return `${named} These ${NUM_WORD[Math.min(list.length, 5)]} are everything on the page.`;
 }
 
 /* ═══ 캐릭터 시트 — 그림체와 분리된 '누구인가' ═══════════════════

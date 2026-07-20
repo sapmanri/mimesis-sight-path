@@ -208,11 +208,12 @@ test('사진이 아니라 그림을 말한다 (2차 실패: 공책을 찍은 사
 
 test('숫자가 density보다 명확하다 — 대상을 세어서 못박는다', () => {
   assert.equal(subjectClause(['girl', 'cat', 'flower pot'], 3),
-    'Subjects: one girl, one cat, one flower pot. Only these three subjects, nothing else.');
-  assert.match(subjectClause(['girl', 'cat', 'flower pot'], 2), /Only these two subjects/);
+    'The whole drawing contains exactly 1 girl, 1 cat, 1 flower pot. These three are everything on the page.');
+  assert.match(subjectClause(['girl', 'cat', 'flower pot'], 2), /These two are everything/);
   assert.match(subjectClause([], 1), /Exactly one subject, nothing else\./);
-  // 단수 문법 — "Only these one subjects" 같은 문장이 모델에 나가면 안 된다
-  assert.equal(subjectClause(['flower pot'], 1), 'Subjects: one flower pot. Only this one subject, nothing else.');
+  // 단수 처리 — "These one are everything" 같은 문장이 모델에 나가면 안 된다
+  assert.equal(subjectClause(['flower pot'], 1),
+    'The whole drawing contains exactly 1 flower pot. Just this single subject fills the page.');
 });
 
 test('장면 번역이 없어도 프롬프트는 만들어진다 (번역 실패가 시험을 막지 않게)', () => {

@@ -83,7 +83,11 @@ export async function translateScene(env: { ANTHROPIC_API_KEY?: string }, lines:
     },
     body: JSON.stringify({
       model: 'claude-sonnet-5', max_tokens: 120,
-      system: `Translate the Korean observation notes into ONE short English clause describing only what is physically present. No interpretation, no added objects, no emotion words. Output the clause only.
+      system: `These are the girl's own diary notes, written in Korean, which drops subjects.
+When a clause has no explicit subject, the subject is the girl herself — never the cat.
+Translate them into ONE short English clause describing only what is physically present.
+Keep every actor that appears; if the girl and the cat both act, keep both.
+No interpretation, no added objects, no emotion words. Output the clause only.
 Proper nouns (use these exact renderings): ${glossaryLine()}.`,
       messages: [{ role: 'user', content: lines.join('\n') }],
     }),
