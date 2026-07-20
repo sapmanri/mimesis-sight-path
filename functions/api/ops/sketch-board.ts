@@ -43,7 +43,7 @@ function card(r: TrialRecord): string {
     <figcaption>
       <b>${esc(r.model.split('/').pop())}</b>
       <span class="role">${r.role === 'candidate' ? '후보 · 참조 O' : '대조군 · 텍스트만'}</span>
-      <small>seed ${esc(r.seed ?? '—')} · ${esc(new Date(r.createdAt).toLocaleString('ko-KR'))}</small>
+      <small>seed ${esc(r.seed ?? '—')} · ${esc(new Date(r.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }))} KST</small>
       <small class="params">${esc(JSON.stringify(r.params))}</small>
     </figcaption>
   </figure>`;
