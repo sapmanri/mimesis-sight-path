@@ -96,7 +96,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   </div>
 
   <div class="panel">
-    <h2>② 참조 그림 <span class="muted">(역할을 줘야만 들어간다 · 순서: 캐릭터 → 스타일 · 총 4장)</span></h2>
+    <h2>② 참조 그림 <span class="muted">(역할을 줘야만 들어간다 · 캐릭터 2장이면 별이→빼콩이 순서로 서버가 이름 정렬 · 총 4장)</span></h2>
     <div id="refs" class="refgrid"><span class="muted">불러오는 중…</span></div>
     <div style="margin-top:10px">
       <label>파일 (고르면 이름이 자동으로 채워진다)</label>

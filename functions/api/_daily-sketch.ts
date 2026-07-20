@@ -329,9 +329,13 @@ export function buildImagePrompt(
     `Style: ${SKETCH_RULES_EN.join(', ')}.`,
     // 참조는 인덱스로 지칭한다(flux-2는 image 0..3). **캐릭터와 스타일을 분리**한다 —
     // 5차 관찰: 캐릭터 참조 한 장이 그림체까지 먹어버려 상업 일러스트 쪽으로 갔다.
-    nChar > 0
-      ? `Keep the same girl and the same cat as in image 0 — same hair shape, same face, same body proportions, same clothes.`
-      : '',
+    // 포즈 시트 시대(2026-07-20 밤): 참조가 자세까지 베끼던 문제를 시트+지시로 푼다.
+    // 캐릭터 2장이면 별이=image 0, 빼콩이=image 1 (sketch-trial이 이름으로 정렬해 보장).
+    nChar >= 2
+      ? `Images 0 and 1 are character reference sheets — image 0 is the girl, image 1 is the white cat. Keep their exact appearance: same hair shape, same face, same body proportions, same clothes for the girl; all-white fur for the cat. The sheets show many poses — choose whichever pose fits the scene, do not copy any single panel or the sheet layout.`
+      : nChar === 1
+        ? `Image 0 is a character reference for the same girl and the same cat — same hair shape, same face, same body proportions, same clothes. If it shows multiple poses, choose the pose that fits the scene — do not copy the sheet layout.`
+        : '',
     // 스타일 참조가 여러 장이면 **범위로 지칭하고 섞으라고** 말한다.
     // 한 장만 가리키면 그 그림 하나를 베끼게 되고, 결국 남의 그림체와 비슷해진다.
     nStyle > 1

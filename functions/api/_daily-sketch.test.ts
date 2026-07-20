@@ -12,7 +12,7 @@ import {
 import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, manualProvider, workersAiProvider,
 } from './_image-provider.ts';
-import { validateTrialInput, hashPrompt, supportsReference, translateSubjects } from './ops/sketch-trial.ts';
+import { validateTrialInput, hashPrompt, supportsReference, translateSubjects, orderCharacterRefs } from './ops/sketch-trial.ts';
 import { isTrialKey } from './ops/sketch-image.ts';
 import { groupByPrompt } from './ops/sketch-board.ts';
 import { referenceKeyFor } from './ops/sketch-reference.ts';
@@ -262,6 +262,28 @@ test('Workers AI 경계는 전면 영어 — 한글 소품은 번역 불가 시 
   assert.match(ko.notes[0], /빗자루/);
 });
 
+/* ── 포즈 시트 시대 — 캐릭터 2장 지칭·정렬 ── */
+
+test('캐릭터 참조 2장이면 별이=image 0, 빼콩이=image 1로 지칭·정렬된다', () => {
+  // 정렬: 업로드·목록 순서와 무관하게 이름으로
+  assert.deepEqual(
+    orderCharacterRefs([
+      'sketch-trials/reference/ppaekong_poses.png',
+      'sketch-trials/reference/byeoli_poses.png',
+    ]),
+    ['sketch-trials/reference/byeoli_poses.png', 'sketch-trials/reference/ppaekong_poses.png'],
+  );
+  // 프롬프트: 각자 지칭 + 포즈 선택 지시 (참조가 자세까지 베끼던 문제의 해독제)
+  const m = buildMemoryEvent([e()], DATE)!;
+  const p2 = buildImagePrompt(m, null, 'a pot', [], { characters: 2, styles: 0 });
+  assert.match(p2, /image 0 is the girl/);
+  assert.match(p2, /image 1 is the white cat/);
+  assert.match(p2, /do not copy any single panel/);
+  // 1장이어도 시트일 수 있다 — 포즈 선택 지시가 들어간다
+  const p1 = buildImagePrompt(m, null, 'a pot', [], { characters: 1, styles: 0 });
+  assert.match(p1, /choose the pose that fits the scene/);
+});
+
 test('장면 번역이 없어도 프롬프트는 만들어진다 (번역 실패가 시험을 막지 않게)', () => {
   const m = buildMemoryEvent([e()], DATE)!;
   const p = buildImagePrompt(m, null, null);
@@ -298,7 +320,8 @@ test('참조가 있을 때만 image 0을 지칭한다 (Character Identity의 핵
   const m = buildMemoryEvent([e()], DATE)!;
   assert.ok(!buildImagePrompt(m, null, 'a pot', ['flower pot'], 0).includes('image 0'));
   const withRef = buildImagePrompt(m, null, 'a pot', ['flower pot'], 1);
-  assert.match(withRef, /same girl and the same cat as in image 0/);
+  // 포즈 시트 시대 문구 — 외형은 고정하되 자세는 장면에 맞게 고른다
+  assert.match(withRef, /Image 0 is a character reference for the same girl and the same cat/);
   assert.match(withRef, /same hair shape, same face, same body proportions, same clothes/);
 });
 
@@ -307,7 +330,7 @@ test('참조가 있을 때만 image 0을 지칭한다 (Character Identity의 핵
 test('캐릭터 참조와 스타일 참조를 다른 인덱스로 지칭한다', () => {
   const m = buildMemoryEvent([e()], DATE)!;
   const p = buildImagePrompt(m, null, 'a pot', ['flower pot'], { characters: 1, styles: 1 });
-  assert.match(p, /same girl and the same cat as in image 0/);
+  assert.match(p, /Image 0 is a character reference/);
   assert.match(p, /drawing style of image 1/);
 });
 

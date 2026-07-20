@@ -152,6 +152,15 @@ Proper nouns (use these exact renderings): ${glossaryLine()}.`,
   };
 }
 
+/**
+ * 캐릭터 참조 정렬 — 프롬프트가 "image 0 = 별이, image 1 = 빼콩이"로 지칭하므로
+ * 키 이름으로 순서를 보장한다. 업로드 순서·R2 목록 순서에 기대면 언젠가 어긋난다.
+ */
+export function orderCharacterRefs(keys: string[]): string[] {
+  const rank = (k: string) => (/byeol|girl/i.test(k) ? 0 : /ppaekong|cat/i.test(k) ? 1 : 2);
+  return [...keys].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+}
+
 /** 같은 프롬프트인지 한눈에 — 스타일 비교는 프롬프트가 같아야 성립한다. */
 export function hashPrompt(s: string): string {
   let h = 0x811c9dc5;
@@ -234,7 +243,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { body = await request.json(); } catch { return json(400, { error: 'invalid_json' }); }
   const checked = validateTrialInput(body);
   if (!checked.ok) return json(400, { error: checked.error });
-  const { models, count, providerId, referenceKeys, seed, styleKeys, useMemory, steps } = checked.value;
+  const { models, count, providerId, seed, styleKeys, useMemory, steps } = checked.value;
+  // 별이 시트가 image 0, 빼콩이 시트가 image 1 — 프롬프트 지칭과 순서를 맞춘다.
+  const referenceKeys = orderCharacterRefs(checked.value.referenceKeys);
   // 경계 봉쇄: EN 프롬프트로 들어가는 subjects는 top-level·scene 양쪽 다 영어로.
   const subjTr = await translateSubjects(env, checked.value.subjects);
   const subjects = subjTr.subjects;
