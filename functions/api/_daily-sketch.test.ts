@@ -481,3 +481,19 @@ test('attach 검증 — 시험 산출물만 기억이 될 수 있다', async () 
   const ok = validateAttachInput({ date: '2026-07-21', sketch: 'sketch-trials/t/img.png' });
   assert.ok(ok.ok && ok.sketch === 'sketch-trials/t/img.png');
 });
+
+test('발행물 역추적 — 이 순간을 쓴 발행의 글만, 없으면 null', async () => {
+  const { matchPublishedText } = await import('./ops/memory.ts');
+  const runs = [
+    { imageKey: 'captures/walk/111.jpg', invokedAt: 1000_000, threads: { ok: true } },
+    { imageKey: 'captures/walk/222.jpg', invokedAt: 2000_000, threads: { ok: false } }, // 발행 실패는 글이 아니다
+  ];
+  const feed = [
+    { text: '까마귀들이 줄지어 앉았다.', t: 1000_500 },
+    { text: '다른 날의 글', t: 9000_000 },
+  ];
+  assert.equal(matchPublishedText(runs, feed, 'captures/walk/111.jpg'), '까마귀들이 줄지어 앉았다.');
+  assert.equal(matchPublishedText(runs, feed, 'captures/walk/222.jpg'), null, 'threads 실패 발행은 제외');
+  assert.equal(matchPublishedText(runs, feed, 'captures/walk/999.jpg'), null, '안 쓰인 순간은 null');
+  assert.equal(matchPublishedText(runs, feed, null), null);
+});

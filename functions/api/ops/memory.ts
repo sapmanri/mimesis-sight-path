@@ -19,6 +19,23 @@ interface Env {
   CAPTURES: R2Bucket;
 }
 
+/**
+ * 발행물 역추적 — 이 순간의 사진(photoKey)을 실제로 사용한 발행의 글을 찾는다.
+ * 영수증 체인의 역방향: 엽서 → publish_log.imageKey → feed의 그 발행 문장.
+ * 순수 함수 — 못 찾으면 null (그 순간이 발행에 쓰인 적이 없다는 정직한 답).
+ */
+export function matchPublishedText(
+  runs: { imageKey?: string | null; invokedAt?: number; threads?: { ok?: boolean } }[],
+  feed: { text?: string; t?: number }[],
+  photoKey: string | null,
+): string | null {
+  if (!photoKey) return null;
+  const run = runs.find((r) => r.imageKey === photoKey && r.threads?.ok);
+  if (!run) return null;
+  const post = feed.find((p) => Math.abs((p.t ?? 0) - (run.invokedAt ?? 0)) < 120000);
+  return post?.text?.trim() || null;
+}
+
 /** attach 사전 검증 — 시험 산출물(sketch-trials/)만 기억이 될 수 있다. */
 export function validateAttachInput(body: Record<string, unknown>):
   { ok: true; date: string; sketch: string } | { ok: false; error: string } {
@@ -86,22 +103,49 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const head = await env.CAPTURES.head(checked.sketch);
     if (!head) return json(404, { error: `sketch_missing: ${checked.sketch} — R2에 없는 그림은 붙일 수 없다` });
     const replaced = day.event.sketchDiary ?? null;
-    const next = attachBranch(day, 'sketchDiary', checked.sketch);
+    let next = attachBranch(day, 'sketchDiary', checked.sketch);
+
+    // 431-M 완성(A, 2026-07-21): 그림 채택이 방아쇠 — 같은 사건의 사진·글 갈래도 함께 채운다.
+    // 사진 = 하루를 세울 때 이미 골라둔 그 순간의 photoKey를 갈래로 승격.
+    if (!next.event.selectedPhoto && next.photoKey) {
+      next = attachBranch(next, 'selectedPhoto', next.photoKey);
+    }
+    // 글 = 발행물 역추적. 못 찾으면 비워 둔다 — 그 순간이 발행에 쓰인 적 없다는 정직한 답.
+    if (!next.event.diaryText) {
+      try {
+        const [publishRaw, feedRaw] = await Promise.all([
+          env.PLANET.get('publish_log'), env.PLANET.get('feed'),
+        ]);
+        const text = matchPublishedText(
+          publishRaw ? JSON.parse(publishRaw) : [],
+          feedRaw ? JSON.parse(feedRaw) : [],
+          next.photoKey,
+        );
+        if (text) next = attachBranch(next, 'diaryText', text);
+      } catch { /* 역추적 실패가 그림 채택을 막지 않는다 */ }
+    }
+
     const errs = validateDayMemory(next);
     if (errs.length) return json(422, { error: 'invalid_memory', detail: errs });
     await env.PLANET.put(memoryKey(checked.date), JSON.stringify(next));
+    const filled = [
+      next.event.diaryText ? '글' : null,
+      next.event.selectedPhoto ? '사진' : null,
+      '그림',
+    ].filter(Boolean);
     return json(200, {
       ok: true, date: checked.date, memoryEventId: next.memoryEventId,
       attached: { branch: 'sketchDiary', value: checked.sketch },
       replaced,
       branches: {
-        diaryText: Boolean(next.event.diaryText),
-        selectedPhoto: Boolean(next.event.selectedPhoto),
-        sketchDiary: true,
+        diaryText: next.event.diaryText ?? null,
+        selectedPhoto: next.event.selectedPhoto ?? null,
+        sketchDiary: checked.sketch,
       },
-      note: replaced
-        ? '이전 채택을 교체했다 — 하루의 그림은 한 장이다.'
-        : '그림이 기억에 붙었다. 글·사진·그림이 같은 사건을 가리키기 시작했다.',
+      note: (replaced ? '이전 그림을 교체했다. ' : '') +
+        (filled.length === 3
+          ? '세 갈래가 모두 같은 사건을 가리킨다 — 하나의 기억, 세 표현.'
+          : `채워진 갈래: ${filled.join('·')}. ${next.event.diaryText ? '' : '글은 이 순간을 쓴 발행이 없어 비워 둔다.'}`),
     });
   }
 

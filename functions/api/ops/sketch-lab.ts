@@ -202,10 +202,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     }).join('<br>');
     var allAuto = (src.sourceCaptureIds || []).length &&
       (src.sourceCaptureIds || []).every(function (id) { return state.srcOf[id] === 'autopost'; });
-    var branches = '갈래: 글 ' + (ev.diaryText ? '✓' : '—') +
-      ' · 사진 ' + (ev.selectedPhoto ? '✓' : '—') +
+    var branches = '갈래: 글 ' + (ev.diaryText ? '<b class="ok" title="' + esc(ev.diaryText) + '">✓</b>' : '—') +
+      ' · 사진 ' + (ev.selectedPhoto ? '<b class="ok" title="' + esc(ev.selectedPhoto) + '">✓</b>' : '—') +
       ' · 그림 ' + (ev.sketchDiary
-        ? '<a class="ok" href="/api/ops/sketch-image?key=' + encodeURIComponent(ev.sketchDiary) + '" target="_blank">✓</a>'
+        ? '<a class="ok" style="font-weight:700" href="/api/ops/sketch-image?key=' + encodeURIComponent(ev.sketchDiary) + '" target="_blank">✓ 보기</a>'
         : '—');
     $('dayInfo').innerHTML =
       '<b>' + (d.stored ? '저장됨' : '미리보기 (POST 전)') + '</b> · 관찰 ' + d.captureCount + '건 · density ' + esc(src.density) +
