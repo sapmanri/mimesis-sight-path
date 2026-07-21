@@ -153,13 +153,37 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json(400, { error: 'bad_date: YYYY-MM-DD (KST)' });
 
   const captures = await loadCaptures(env);
-  const day = buildDayMemory(captures, date);
+  let day = buildDayMemory(captures, date);
   if (!day) {
     return json(404, {
       error: 'no_observations',
       detail: `${date}에 서버에 남은 관찰이 없다. 빈 기억을 지어내지 않는다.`,
     });
   }
+
+  // 재빌드 가드(2026-07-22 자정): 새 DayMemory의 갈래는 전부 null이라, 채택 후
+  // 무심코 다시 세우면 붙여둔 그림·글이 소리 없이 사라진다. 같은 사건이면 갈래를
+  // 승계하고, 사건이 바뀌는데 갈래가 차 있으면 확인(force) 없이는 덮지 않는다.
+  const prevRaw = await env.PLANET.get(memoryKey(date));
+  if (prevRaw) {
+    const prev = JSON.parse(prevRaw) as DayMemory;
+    const prevBranches = {
+      diaryText: prev.event.diaryText ?? null,
+      selectedPhoto: prev.event.selectedPhoto ?? null,
+      sketchDiary: prev.event.sketchDiary ?? null,
+    };
+    const hasBranches = Boolean(prevBranches.diaryText || prevBranches.selectedPhoto || prevBranches.sketchDiary);
+    if (hasBranches && prev.memoryEventId === day.memoryEventId) {
+      day = { ...day, event: { ...day.event, ...prevBranches } };   // 같은 사건 — 갈래 승계
+    } else if (hasBranches && body.force !== true) {
+      return json(409, {
+        error: 'branches_would_be_lost',
+        detail: `저장된 하루(${prev.memoryEventId})에 채택된 갈래가 있는데, 다시 세우면 사건이 ${day.memoryEventId}(으)로 바뀌며 갈래가 사라진다. 정말 새로 세우려면 {"force":true}.`,
+        prev: { memoryEventId: prev.memoryEventId, branches: prevBranches },
+      });
+    }
+  }
+
   const errs = validateDayMemory(day);
   if (errs.length) return json(422, { error: 'invalid_memory', detail: errs });
 

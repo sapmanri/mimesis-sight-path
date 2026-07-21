@@ -258,10 +258,25 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   }
   $('loadDay').onclick = loadDay;
   $('buildDay').onclick = function () {
-    api('/api/ops/memory', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ date: $('date').value }),
-    }).then(function (r) {
+    var post = function (force) {
+      return api('/api/ops/memory', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(force ? { date: $('date').value, force: true } : { date: $('date').value }),
+      });
+    };
+    post(false).then(function (r) {
+      // 재빌드 가드 — 채택된 갈래가 사라질 상황이면 서버가 409로 멈춘다. 사람이 확인해야만 진행.
+      if (r.error === 'branches_would_be_lost') {
+        if (!confirm('⚠ ' + r.detail + '\\n\\n계속하면 채택된 그림·글이 이 하루에서 떨어진다.')) {
+          banner('하루 세우기 취소 — 갈래 보존됨');
+          return;
+        }
+        return post(true).then(function (r2) {
+          if (r2.error) { banner('하루 세우기 실패: ' + (r2.detail || r2.error), 'err'); return; }
+          banner('하루를 새로 세웠다 (이전 갈래는 떨어짐): ' + r2.date);
+          loadDay();
+        });
+      }
       if (r.error) { banner('하루 세우기 실패: ' + (r.detail || r.error), 'err'); return; }
       banner('하루 저장됨: ' + r.date);
       loadDay();
