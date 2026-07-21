@@ -454,9 +454,26 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     });
   });
 
+  // ── 최근 생성 목록 — 새로고침해도 붙일 수 있게 (결과 영역은 세션 휘발이라
+  //    "이미 만든 그림을 채택"하는 길이 없었다. 실사용 실발생 2026-07-21) ──
+  function renderRecent(records) {
+    var cards = '';
+    records.forEach(function (r) {
+      if (!r.r2Key) return;
+      cards += '<div class="refcard">' +
+        '<img src="/api/ops/sketch-image?key=' + encodeURIComponent(r.r2Key) + '" loading="lazy">' +
+        '<div class="nm">seed ' + esc(r.seed ?? '—') + '</div>' +
+        '<button class="del" data-attach="' + esc(r.r2Key) + '">📌 붙이기</button></div>';
+    });
+    if (!cards) return;
+    $('out').innerHTML += '<div class="panel"><h2>최근 생성 <span class="muted">(새로고침해도 남음 — 여기서도 붙일 수 있다)</span></h2>' +
+      '<div class="refgrid">' + cards + '</div></div>';
+  }
+
   // ── 초기화 ──
   $('date').value = kstToday();
   api('/api/ops/sketch-trial').then(function (r) {
+    renderRecent((r.records || []).slice(0, 12));
     var sel = $('model');
     var models = Object.keys(r.candidates || {}).map(function (k) { return r.candidates[k]; });
     sel.innerHTML = models.map(function (c) {
