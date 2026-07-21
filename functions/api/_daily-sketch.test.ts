@@ -464,3 +464,20 @@ test('사건 id 없는 기억은 저장하지 않는다', () => {
   assert.ok(validateDayMemory({ ...ok, memoryEventId: 'flowerpot' }).length, '형식 위반');
   assert.ok(validateDayMemory({ ...ok, sourceCaptureIds: 'x' as never }).length);
 });
+
+/* ── 431-A: 채택 → 기억 부착 ── */
+
+test('attach 검증 — 시험 산출물만 기억이 될 수 있다', async () => {
+  const { validateAttachInput } = await import('./ops/memory.ts');
+  // 형식 오류·운영 경로·경로 조작은 서버 저장까지 가지 않는다
+  for (const bad of [
+    { date: '21-07-2026', sketch: 'sketch-trials/a/b.png' },   // 날짜 자릿수 (존재하지 않는 달은 어차피 no_memory 404)
+    { date: '2026-07-21', sketch: 'captures/walk/x.jpg' },     // 운영 captures — 기억은 시험 산출물만
+    { date: '2026-07-21', sketch: 'sketch-trials/../captures/x.png' }, // 경로 조작
+    { date: '2026-07-21' },                                     // sketch 없음
+  ]) {
+    assert.equal(validateAttachInput(bad as Record<string, unknown>).ok, false);
+  }
+  const ok = validateAttachInput({ date: '2026-07-21', sketch: 'sketch-trials/t/img.png' });
+  assert.ok(ok.ok && ok.sketch === 'sketch-trials/t/img.png');
+});

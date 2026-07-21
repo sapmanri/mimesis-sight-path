@@ -202,8 +202,14 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     }).join('<br>');
     var allAuto = (src.sourceCaptureIds || []).length &&
       (src.sourceCaptureIds || []).every(function (id) { return state.srcOf[id] === 'autopost'; });
+    var branches = '갈래: 글 ' + (ev.diaryText ? '✓' : '—') +
+      ' · 사진 ' + (ev.selectedPhoto ? '✓' : '—') +
+      ' · 그림 ' + (ev.sketchDiary
+        ? '<a class="ok" href="/api/ops/sketch-image?key=' + encodeURIComponent(ev.sketchDiary) + '" target="_blank">✓</a>'
+        : '—');
     $('dayInfo').innerHTML =
       '<b>' + (d.stored ? '저장됨' : '미리보기 (POST 전)') + '</b> · 관찰 ' + d.captureCount + '건 · density ' + esc(src.density) +
+      '<br>' + branches +
       '<br>사건: ' + esc(src.memoryEventId || '—') +
       '<br>가장 크게: <b>' + esc(ev.targetLabel || '—') + '</b>' +
       '<br>' + (ev.lines || []).map(function (l) { return '· ' + esc(l); }).join('<br>') +
@@ -414,12 +420,39 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         '<figcaption><b>' + esc(rec.model.split('/').pop()) + '</b>' +
         '<span>seed ' + esc(rec.seed) + ' · ' + esc(rec.role) +
         ' · 참조 적용 ' + (rec.referenceApplied ? 'O' : 'X') + '</span>' +
-        '<span>' + esc(rec.r2Key || '') + '</span></figcaption></figure>';
+        '<span>' + esc(rec.r2Key || '') + '</span>' +
+        (rec.r2Key
+          ? '<button class="primary" data-attach="' + esc(rec.r2Key) + '" style="margin-top:6px">📌 이 장을 오늘 기억에 붙이기</button>'
+          : '') +
+        '</figcaption></figure>';
     });
     html += '<details><summary>프롬프트 (한국어 검토용)</summary><pre>' + esc(r.promptKo) + '</pre></details>' +
       '<details><summary>프롬프트 (모델에 나간 영어)</summary><pre>' + esc(r.prompt) + '</pre></details></div>';
     out.innerHTML = html + out.innerHTML;   // 최신이 위 — 비교는 스타일 보드에서
   }
+
+  // ── 채택 → 기억 부착 (431-A) — 결과 영역 위임 리스너 ──
+  $('out').addEventListener('click', function (ev) {
+    var t = ev.target;
+    var key = t && t.getAttribute ? t.getAttribute('data-attach') : null;
+    if (!key) return;
+    var date = $('date').value;
+    if (!confirm('이 그림을 ' + date + ' 기억의 그림 갈래(sketchDiary)로 붙인다.\\n하루의 그림은 한 장 — 이미 있으면 교체된다.')) return;
+    t.disabled = true;
+    api('/api/ops/memory', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'attach', date: date, sketch: key }),
+    }).then(function (r) {
+      t.disabled = false;
+      if (r.error) { banner('붙이기 실패: ' + r.error, 'err'); return; }
+      banner((r.replaced ? '교체 채택 — ' : '채택 — ') + r.memoryEventId + ' ← 그림 갈래' +
+        (r.replaced ? ' (이전 그림 교체됨)' : ''));
+      loadDay();   // ①의 갈래 상태에 그림 ✓가 떠야 한다
+    }).catch(function (e) {
+      t.disabled = false;
+      banner('붙이기 요청 실패: ' + e, 'err');
+    });
+  });
 
   // ── 초기화 ──
   $('date').value = kstToday();
