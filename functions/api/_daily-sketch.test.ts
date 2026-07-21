@@ -497,3 +497,15 @@ test('발행물 역추적 — 이 순간을 쓴 발행의 글만, 없으면 null
   assert.equal(matchPublishedText(runs, feed, 'captures/walk/999.jpg'), null, '안 쓰인 순간은 null');
   assert.equal(matchPublishedText(runs, feed, null), null);
 });
+
+test('그림 발행 — 하루 1장, 실패는 재시도 가능', async () => {
+  const { alreadyPublished } = await import('./_sketch-pub.ts');
+  const log = [
+    { date: '2026-07-21', ok: true },
+    { date: '2026-07-20', ok: false },  // 실패 기록은 상한을 소모하지 않는다
+  ];
+  assert.equal(alreadyPublished(log, '2026-07-21'), true, '성공한 날은 재발행 불가');
+  assert.equal(alreadyPublished(log, '2026-07-20'), false, '실패한 날은 재시도 가능');
+  assert.equal(alreadyPublished(log, '2026-07-22'), false);
+  assert.equal(alreadyPublished([], '2026-07-21'), false);
+});

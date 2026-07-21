@@ -206,7 +206,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       ' · 사진 ' + (ev.selectedPhoto ? '<b class="ok" title="' + esc(ev.selectedPhoto) + '">✓</b>' : '—') +
       ' · 그림 ' + (ev.sketchDiary
         ? '<a class="ok" style="font-weight:700" href="/api/ops/sketch-image?key=' + encodeURIComponent(ev.sketchDiary) + '" target="_blank">✓ 보기</a>'
-        : '—');
+        : '—') +
+      (ev.sketchDiary
+        ? ' &nbsp;<button class="primary" id="pubBtn">🕊 Threads에 발행</button>'
+        : '');
     $('dayInfo').innerHTML =
       '<b>' + (d.stored ? '저장됨' : '미리보기 (POST 전)') + '</b> · 관찰 ' + d.captureCount + '건 · density ' + esc(src.density) +
       '<br>' + branches +
@@ -217,6 +220,29 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       '<br>' + (allAuto
         ? '<span class="ok">✅ 전부 autopost — 사람이 지어내지 않은 하루</span>'
         : '<span class="warn">⚠ autopost 아닌 출처 포함 — 정식 1호 조건 미충족</span>');
+    // 431-PUB: 발행 버튼 — 채택된 그림이 있을 때만 나타난다 (조건 ①·②)
+    var pb = $('pubBtn');
+    if (pb) pb.onclick = function () {
+      var date = $('date').value;
+      var hasText = !!(src.event && src.event.diaryText);
+      if (!confirm('🕊 ' + date + '의 채택된 그림을 Threads에 공개 발행한다.\\n' +
+        (hasText ? '그 기억의 글과 함께 나간다.' : '이 기억을 쓴 발행이 없어 그림만 나간다 (캡션을 지어내지 않는다).') +
+        '\\n하루 1장 — 발행 후에는 오늘 다시 발행할 수 없다.')) return;
+      pb.disabled = true; pb.textContent = '발행 중…';
+      api('/api/ops/sketch-publish', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirm: 'publish-sketch', date: date }),
+      }).then(function (r) {
+        pb.disabled = false; pb.textContent = '🕊 Threads에 발행';
+        if (r.error) { banner('발행 실패: ' + r.error, 'err'); return; }
+        if (!r.ok) { banner('Threads 실패: ' + (r.threads && r.threads.errorCode) + ' — ' + (r.note || ''), 'err'); return; }
+        banner('🕊 발행됨 — ' + r.memoryEventId + (r.withText ? ' (글과 함께)' : ' (그림만)'));
+        loadDay();
+      }).catch(function (e) {
+        pb.disabled = false; pb.textContent = '🕊 Threads에 발행';
+        banner('발행 요청 실패: ' + e, 'err');
+      });
+    };
   }
   function loadDay() {
     var date = $('date').value;
