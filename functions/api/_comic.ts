@@ -130,10 +130,15 @@ export function buildPagePrompt(s: ComicScenario, opts: { panelLayoutRef?: boole
     ? 'following the panel layout, panel sizes and arrangement shown in the panel-layout reference image (the last reference image) — that image defines the frame design only, not the content'
     : `arranged in ${PAGE_GRID[s.panelCount] ?? `a balanced, rhythmically varied grid of ${s.panelCount} panels`}`;
   const lines: string[] = [
+    // 한국어 정확도 지시를 선두에, 한국어로 — 실측 검증된 기법 (2026-07-22 조사)
+    `한국어 텍스트 정확하게 렌더링, 글자 왜곡 없음. Render every Korean text below with perfect accuracy — no invented or distorted glyphs.`,
     `A single Korean webtoon page with exactly ${s.panelCount} panels, ${grid}.`,
+    // 실사고: 레이아웃 참조가 6칸이면 4컷 지시를 이겼다 — 칸 수 절대 우선 명시
+    `The page must contain exactly ${s.panelCount} panels — count them. If any layout reference shows a different number of frames, borrow only its border style, gutters and rhythm; never copy its frame count.`,
+    // 실사고: 마지막 컷에 별이가 둘 — 수 못박기 (9차의 교훈, 페이지판)
+    `In every panel there is exactly one girl — never two girls — and at most one white cat.`,
     `Match the character design, hair, palette and line style of the reference sheets exactly — same girl, same white cat.`,
     `Page design: warm paper background, thin navy panel borders, small header reading "BYEOLI WEBTOON" and the chapter title "${s.title}".`,
-    `Render all Korean text exactly as written below, letter-perfect, in a clean friendly hand-lettered style.`,
     '',
   ];
   for (const p of s.panels) {

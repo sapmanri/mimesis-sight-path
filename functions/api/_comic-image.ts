@@ -99,7 +99,8 @@ function bytesToB64(buf: ArrayBuffer): string {
 }
 
 // 모델 은퇴 내성 — 404면 다음 후보 (env COMIC_IMAGE_MODEL이 있으면 그것만)
-const GEMINI_IMAGE_CANDIDATES = ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview', 'gemini-2.0-flash-preview-image-generation'];
+// 한글 텍스트 품질 우선 — 나노바나나 프로(3-pro-image)가 한글 렌더링을 사실상 해결 (실측 80~90%)
+const GEMINI_IMAGE_CANDIDATES = ['gemini-3-pro-image-preview', 'gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation'];
 
 async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes[], ratio: string):
   Promise<{ bytes: ArrayBuffer; model: string } | { error: string }> {
