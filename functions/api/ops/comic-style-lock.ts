@@ -4,22 +4,46 @@
 // (실사고 2026-07-22: 초판이 sketch-reference에 얹혀 두 실험실이 엮였다 — Vase 판정으로 분리.
 //  "응용만 하라고 했지 둘을 엮지 말라고." 포크는 패턴 재사용이지 저장소 공유가 아니다.)
 //
-// 슬롯은 바이블 5장 고정 — 임의 이름 업로드 불가. 잠김(Lock)의 의미가 그것이다.
+// 슬롯은 정해진 이름 고정 — 임의 이름 업로드 불가. 잠김(Lock)의 의미가 그것이다.
+//
+// S-04 판정 4 (홈즈 QC, 2026-07-22) — Lock 3분리, 가산 확장:
+//   기존 ch00~ch04 = 별이 바이블(정체성+스타일 겸용, 별이 단독 경로 전용 — 무회귀 보장)
+//   style_s1~s5    = Comic Style Lock (작품 공통 그림체 — 관축해)
+//   id_<c>_i1~i5   = Creator Identity Lock (출연자별 정체성, 1장이면 활성)
+//   ch05_panel     = Panel Bible (작품 공통, 기존 슬롯 그대로 공용)
+// 키는 기존과 같은 평평한 prefix — 슬롯 이름이 이름공간을 품는다. 마이그레이션 0.
 
 import { STYLE_LOCK_NAMES } from '../_comic.ts';
 
 interface Env { CAPTURES: R2Bucket }
 
 export const COMIC_LOCK_PREFIX = 'comic/style-lock/';
+export const IDENTITY_CREATORS = ['byeoli', 'vase', 'holmes'] as const;
+export const COMIC_STYLE_SLOTS = ['style_s1', 'style_s2', 'style_s3', 'style_s4', 'style_s5'] as const;
+export const IDENTITY_SLOTS: readonly string[] = IDENTITY_CREATORS.flatMap((c) =>
+  [1, 2, 3, 4, 5].map((i) => `id_${c}_i${i}`));
+export const LOCK_SLOTS_V2: readonly string[] = [
+  ...STYLE_LOCK_NAMES, ...COMIC_STYLE_SLOTS, ...IDENTITY_SLOTS,
+];
+
+/** 슬롯 → 그룹. UI와 생성 경로가 같은 분류를 쓴다 (판정 4의 A/B/C). */
+export function lockGroupOf(slot: string): string {
+  if (slot === 'ch05_panel') return 'panel';
+  if ((STYLE_LOCK_NAMES as readonly string[]).includes(slot)) return 'byeoli-bible';
+  if ((COMIC_STYLE_SLOTS as readonly string[]).includes(slot)) return 'style';
+  const m = slot.match(/^id_([a-z]+)_i[1-5]$/);
+  return m ? `identity:${m[1]}` : 'unknown';
+}
+
 const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
-/** 슬롯 검증 — 바이블 5장 외에는 이 저장소에 들어올 수 없다. */
-export function isLockSlot(slot: string | null): slot is (typeof STYLE_LOCK_NAMES)[number] {
-  return !!slot && (STYLE_LOCK_NAMES as readonly string[]).includes(slot);
+/** 슬롯 검증 — 정의된 슬롯 외에는 이 저장소에 들어올 수 없다. */
+export function isLockSlot(slot: string | null): slot is string {
+  return !!slot && LOCK_SLOTS_V2.includes(slot);
 }
 
 const extOf = (ct: string) => (ct === 'image/png' ? 'png' : ct === 'image/jpeg' ? 'jpg' : 'webp');
@@ -56,15 +80,23 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       },
     });
   }
-  const slots = [] as { slot: string; loaded: boolean; key: string | null; size: number | null; uploaded: number | null; hasThumb: boolean }[];
-  for (const slot of STYLE_LOCK_NAMES) {
-    const found = await findSlotObject(env, slot);
-    const thumb = found ? await findSlotObject(env, slot, true) : null;
-    slots.push({
-      slot, loaded: !!found, key: found?.key ?? null, size: found?.size ?? null,
-      uploaded: found?.uploaded ?? null, hasThumb: !!thumb,
-    });
+  // 슬롯이 26개가 됐다(v2) — 슬롯당 list 대신 한 번의 list로 전부 매칭한다
+  const listed = await env.CAPTURES.list({ prefix: COMIC_LOCK_PREFIX, limit: 200 });
+  const bySlot = new Map<string, { key: string; size: number; uploaded: number }>();
+  const thumbSlots = new Set<string>();
+  for (const o of listed.objects) {
+    const name = o.key.slice(COMIC_LOCK_PREFIX.length);
+    const slot = name.replace(/(\.thumb)?\.[a-z]+$/, '');
+    if (name.includes('.thumb.')) { thumbSlots.add(slot); continue; }
+    if (!bySlot.has(slot)) bySlot.set(slot, { key: o.key, size: o.size, uploaded: Number(new Date(o.uploaded)) });
   }
+  const slots = LOCK_SLOTS_V2.map((slot) => {
+    const found = bySlot.get(slot) ?? null;
+    return {
+      slot, group: lockGroupOf(slot), loaded: !!found, key: found?.key ?? null,
+      size: found?.size ?? null, uploaded: found?.uploaded ?? null, hasThumb: thumbSlots.has(slot),
+    };
+  });
   return json(200, { ok: true, prefix: COMIC_LOCK_PREFIX, slots, loaded: slots.filter((s) => s.loaded).length });
 };
 

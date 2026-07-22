@@ -72,12 +72,22 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <div>
 
   <div class="panel">
+    <h2>출연자 <span class="muted">최대 3</span></h2>
+    <div class="row" id="cast">
+      <label><input type="checkbox" data-c="byeoli" checked> Byeoli</label>
+      <label><input type="checkbox" data-c="vase"> Vase</label>
+      <label><input type="checkbox" data-c="holmes"> Holmes <span class="muted">(experimental)</span></label>
+    </div>
+    <div class="muted" id="castNote" style="margin-top:6px">Byeoli 단독 = 기존 그림일기 경로 그대로.</div>
+  </div>
+
+  <div class="panel">
     <h2>🔒 Style Lock <span class="muted" id="lockVer"></span></h2>
     <div id="lockStatus" class="muted">확인 중…</div>
-    <details open><summary>바이블 5장 + 패널 레이아웃(선택) — 칸을 눌러 업로드·교체</summary>
-      <div id="lockGrid" class="lockgrid"></div>
+    <details open><summary>그룹별 칸을 눌러 업로드·교체 — S-04 Lock 3분리</summary>
+      <div id="lockGroups"></div>
       <div class="muted" style="margin-top:6px">Comic Lab 전용 저장소 — 다른 실험실과 섞이지 않는다.
-      한 번 올리면 계속 장착된다.</div>
+      한 번 올리면 계속 장착된다. 스타일은 작품이, 정체성은 출연자가 소유한다.</div>
     </details>
     <input type="file" id="lockFile" accept="image/png,image/jpeg,image/webp" style="display:none">
   </div>
@@ -94,9 +104,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         style="width:64px;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;padding:6px 8px;font:inherit;font-size:12px">
     </div>
     <div style="margin-top:12px">
-      <button id="go" class="primary" style="width:100%;padding:10px">별이 게놈으로 이야기 만들기</button>
+      <button id="go" class="primary" style="width:100%;padding:10px">선택한 게놈으로 이야기 만들기</button>
     </div>
-    <div class="muted" style="margin-top:6px">그림은 아직 안 만든다 — 시나리오가 별이답지 않으면 여기서 다시.</div>
+    <div class="muted" style="margin-top:6px">그림은 아직 안 만든다 — 시나리오가 게놈답지 않으면 여기서 다시.</div>
   </div>
 
 </div>
@@ -176,32 +186,72 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       .then(function (b) { return uploadThumb(slot, b); })
       .catch(function () { /* 백필 실패는 조용히 — 다음 방문에 재시도 */ });
   }
+  // S-04 Lock 3분리 — 그룹별 렌더. 별이 바이블(레거시) 표시는 기존과 동일한 정보를 유지한다.
+  var LOCK_GROUP_META = [
+    { g: 'style',            label: '🎨 Comic Style (작품 공통)', max: 5 },
+    { g: 'byeoli-bible',     label: '👤 Byeoli — 바이블',         max: 5 },
+    { g: 'identity:vase',    label: '👤 Vase Identity',           max: 5 },
+    { g: 'identity:holmes',  label: '〰 Holmes Identity',         max: 5 },
+    { g: 'panel',            label: '▦ Panel Bible (공용)',       max: 1 },
+  ];
   function checkLock() {
     api('/api/ops/comic-style-lock').then(function (r) {
-      var grid = $('lockGrid');
-      grid.innerHTML = '';
-      (r.slots || []).forEach(function (s) {
-        var cell = document.createElement('div');
-        cell.style.cursor = 'pointer';
-        cell.title = s.loaded ? s.slot + ' — 눌러서 교체' : s.slot + ' — 눌러서 업로드';
-        if (s.loaded && !s.hasThumb) healThumb(s.slot);
-        cell.innerHTML = (s.loaded
-          ? '<img src="/api/ops/comic-style-lock?file=' + esc(s.slot) + '&thumb=1&v=' + esc(s.uploaded || 0) + '" loading="lazy">'
-          : '<div class="miss">비어 있음<br>+</div>') +
-          '<div class="lockname">' + esc(s.slot) + '</div>';
-        cell.onclick = function () { pendingSlot = s.slot; $('lockFile').click(); };
-        grid.appendChild(cell);
+      var wrap = $('lockGroups');
+      wrap.innerHTML = '';
+      var slots = r.slots || [];
+      LOCK_GROUP_META.forEach(function (gm) {
+        var mine = slots.filter(function (s) {
+          return gm.g === 'byeoli-bible'
+            ? (s.group === 'byeoli-bible' && s.slot !== 'ch05_panel')
+            : s.group === gm.g;
+        });
+        if (!mine.length) return;
+        var n = mine.filter(function (s) { return s.loaded; }).length;
+        var head = document.createElement('div');
+        head.className = 'muted';
+        head.style.margin = '8px 0 4px';
+        head.textContent = gm.label + '  ' + n + '/' + gm.max;
+        wrap.appendChild(head);
+        var grid = document.createElement('div');
+        grid.className = 'lockgrid';
+        mine.forEach(function (s) {
+          var cell = document.createElement('div');
+          cell.style.cursor = 'pointer';
+          cell.title = s.loaded ? s.slot + ' — 눌러서 교체' : s.slot + ' — 눌러서 업로드';
+          if (s.loaded && !s.hasThumb) healThumb(s.slot);
+          cell.innerHTML = (s.loaded
+            ? '<img src="/api/ops/comic-style-lock?file=' + esc(s.slot) + '&thumb=1&v=' + esc(s.uploaded || 0) + '" loading="lazy">'
+            : '<div class="miss">비어 있음<br>+</div>') +
+            '<div class="lockname">' + esc(s.slot) + '</div>';
+          cell.onclick = function () { pendingSlot = s.slot; $('lockFile').click(); };
+          grid.appendChild(cell);
+        });
+        wrap.appendChild(grid);
       });
-      var required = (r.slots || []).filter(function (x) { return x.slot !== 'ch05_panel'; });
+      var required = slots.filter(function (x) { return x.group === 'byeoli-bible' && x.slot !== 'ch05_panel'; });
       var reqLoaded = required.filter(function (x) { return x.loaded; }).length;
-      var panelOn = (r.slots || []).some(function (x) { return x.slot === 'ch05_panel' && x.loaded; });
+      var panelOn = slots.some(function (x) { return x.slot === 'ch05_panel' && x.loaded; });
       $('lockVer').textContent = '${STYLE_LOCK_VERSION}';
       $('lockStatus').innerHTML = (reqLoaded === required.length
-        ? '<span class="ok">🔒 ' + reqLoaded + '/5 필수 장착</span>'
-        : '<span class="warn">⚠ ' + reqLoaded + '/5 필수 — 빈 칸을 눌러 올릴 것</span>') +
+        ? '<span class="ok">🔒 Byeoli ' + reqLoaded + '/5 장착</span>'
+        : '<span class="warn">⚠ Byeoli ' + reqLoaded + '/5 — 빈 칸을 눌러 올릴 것</span>') +
         ' · 패널 레이아웃 ' + (panelOn ? '<span class="ok">✓ (원샷이 이 레이아웃을 따른다)</span>' : '<span class="muted">— (없으면 기본 격자)</span>');
     });
   }
+  // ── 출연자 선택 (S-04 2단) — Byeoli 단독이 기본, 그때는 기존 경로 그대로 ──
+  function castNow() {
+    return Array.prototype.filter.call(document.querySelectorAll('#cast input:checked'), function () { return true; })
+      .map(function (x) { return x.getAttribute('data-c'); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#cast input'), function (cb) {
+    cb.onchange = function () {
+      var c = castNow();
+      if (!c.length) { cb.checked = true; c = castNow(); banner('출연자는 최소 1명', 'err'); }
+      $('castNote').textContent = (c.length === 1 && c[0] === 'byeoli')
+        ? 'Byeoli 단독 = 기존 그림일기 경로 그대로.'
+        : '멀티 Creator 경로 — Genome Adapter 배선(S-04 5~7단) 후 생성 가능. 지금은 Lock 준비 단계.';
+    };
+  });
   $('lockFile').onchange = function () {
     var f = $('lockFile').files[0];
     if (!f || !pendingSlot) return;
@@ -367,7 +417,13 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // ── 생성 ──
   function makeStory() {
     var theme = $('theme').value.trim();
-    if (!theme) { banner('주제가 비어 있다 — 오늘 별이가 겪을 일 한 줄', 'err'); return; }
+    if (!theme) { banner('주제가 비어 있다 — 오늘 겪을 일 한 줄', 'err'); return; }
+    var c = castNow();
+    if (!(c.length === 1 && c[0] === 'byeoli')) {
+      // S-04 5~7단(Genome Adapter·Relation) 배선 전 — 조용히 별이 게놈으로 대신 만들지 않는다
+      banner('멀티 Creator 생성은 아직 배선 전 (S-04 5~7단). 지금은 Identity Lock 업로드까지 준비 단계.', 'err');
+      return;
+    }
     var go = $('go');
     go.disabled = true;
     go.innerHTML = '<span class="spin">◐</span> 별이가 이야기를 고르는 중…';
@@ -375,7 +431,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ theme: theme, panelCount: state.cut }),
     }).then(function (r) {
-      go.disabled = false; go.textContent = '별이 게놈으로 이야기 만들기';
+      go.disabled = false; go.textContent = '선택한 게놈으로 이야기 만들기';
       if (r.error === 'scenario_invalid') {
         banner('시나리오가 계약 미달 — ' + (r.detail || []).join(' / ') + ' · 다시 눌러 재생성', 'err');
         if (r.scenario && r.scenario.panels) renderScenario(r.scenario, { provider: '미달본', model: '' });
@@ -386,7 +442,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       banner('시나리오 완성 — 별이다운지 읽어보고, 아니면 다시');
       renderScenario(r.scenario, r);
     }).catch(function (e) {
-      go.disabled = false; go.textContent = '별이 게놈으로 이야기 만들기';
+      go.disabled = false; go.textContent = '선택한 게놈으로 이야기 만들기';
       banner('요청 실패: ' + e, 'err');
     });
   }

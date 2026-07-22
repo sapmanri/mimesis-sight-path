@@ -228,3 +228,54 @@ test('페이지 프롬프트 — 채색은 긍정 서술로 못박는다 (부정
   assert.match(p, /Hair is one solid dark shape, fully filled/, '머리 단색 면 — 듬성듬성 실사고 대응');
   assert.ok(!/no sparse|no patchy|not faint/.test(p), '부정문으로 도망치지 않는다 (음성)');
 });
+
+// ── S-04: ComicScenario Contract v2 + v1→v2 번역 (홈즈 QC 판정 5) ──
+
+test('v2 계약 — v1 시나리오를 번역하면 v2 검증을 통과한다 (별이 경로 보존)', async () => {
+  const { toV2, validateScenarioV2 } = await import('./_comic-v2.ts');
+  const v2 = toV2(scenario(6));
+  assert.deepEqual(validateScenarioV2(v2), []);
+  assert.equal(v2.cast[0].creatorId, 'byeoli');
+  assert.equal(v2.cast[0].role, 'lead');
+  assert.equal(v2.cast[1].creatorId, 'ppaekong', 'ppaekong은 특수 필드가 아니라 일반 캐릭터');
+  assert.equal(v2.cast[1].speechPolicy.allowed, false, '빼콩이는 말하지 않는다');
+  assert.equal(v2.relation, null, '단독(별이+반려)이면 relation null');
+  assert.equal(v2.panels[0].actions.length, 2, '별이+빼콩이 행동이 분리 기록');
+});
+
+test('v2 계약 — 미출연 Creator·침묵 위반·관계 규칙을 잡는다 (음성)', async () => {
+  const { toV2, validateScenarioV2, MAX_CAST } = await import('./_comic-v2.ts');
+  const base = toV2(scenario(4));
+  // 미출연 Creator 출연 금지
+  const ghost = JSON.parse(JSON.stringify(base));
+  ghost.panels[0].actions.push({ creatorId: 'holmes', action: 'floats in' });
+  assert.ok(validateScenarioV2(ghost).some((e) => e.includes('미출연 Creator')));
+  // speechPolicy.allowed=false인 캐릭터의 대사 금지
+  const talkingCat = JSON.parse(JSON.stringify(base));
+  talkingCat.panels[0].dialogue.push({ speakerId: 'ppaekong', intent: 'speech', text: '야옹' });
+  assert.ok(validateScenarioV2(talkingCat).some((e) => e.includes('말할 수 없다')));
+  // 단독인데 relation이 있으면 위반
+  const fakeRel = JSON.parse(JSON.stringify(base));
+  fakeRel.cast = [base.cast[0]];
+  fakeRel.panels.forEach((p) => { p.actions = p.actions.filter((a) => a.creatorId === 'byeoli'); });
+  fakeRel.relation = { relationId: 'vase-holmes', version: 'v0' };
+  assert.ok(validateScenarioV2(fakeRel).some((e) => e.includes('relation must be null')));
+  // cast 상한
+  const crowd = JSON.parse(JSON.stringify(base));
+  crowd.cast = ['a', 'b', 'c', 'd'].map((id) => ({ creatorId: id, role: 'cameo', genomeContextVersion: 'x' }));
+  assert.ok(validateScenarioV2(crowd).some((e) => e.includes(`cast max ${MAX_CAST}`)));
+});
+
+test('Lock v2 슬롯 — 그룹 분류와 레거시 보존 (S-04 판정 4)', async () => {
+  const { LOCK_SLOTS_V2, lockGroupOf, isLockSlot } = await import('./ops/comic-style-lock.ts');
+  const { STYLE_LOCK_NAMES } = await import('./_comic.ts');
+  for (const s of STYLE_LOCK_NAMES) assert.ok(isLockSlot(s), `레거시 슬롯 보존: ${s}`);
+  assert.equal(lockGroupOf('ch00_master'), 'byeoli-bible');
+  assert.equal(lockGroupOf('ch05_panel'), 'panel', 'Panel Bible은 공용');
+  assert.equal(lockGroupOf('style_s3'), 'style');
+  assert.equal(lockGroupOf('id_vase_i1'), 'identity:vase');
+  assert.equal(lockGroupOf('id_holmes_i5'), 'identity:holmes');
+  assert.ok(!isLockSlot('id_hacker_i1'), '미등록 Creator 슬롯 거부 (음성)');
+  assert.ok(!isLockSlot('style_s6'), '슬롯 범위 밖 거부 (음성)');
+  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 15, '6 레거시 + 5 스타일 + 15 정체성');
+});
