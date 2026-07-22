@@ -74,9 +74,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <div class="panel">
     <h2>출연자 <span class="muted">최대 3</span></h2>
     <div class="row" id="cast">
-      <label><input type="checkbox" data-c="byeoli" checked> Byeoli</label>
+      <label><input type="checkbox" data-c="sap"> Sap</label>
       <label><input type="checkbox" data-c="vase"> Vase</label>
       <label><input type="checkbox" data-c="holmes"> Holmes <span class="muted">(experimental)</span></label>
+      <label><input type="checkbox" data-c="byeoli" checked> Byeoli</label>
     </div>
     <div class="muted" id="castNote" style="margin-top:6px">Byeoli 단독 = 기존 그림일기 경로 그대로.</div>
   </div>
@@ -197,6 +198,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   var LOCK_GROUP_META = [
     { g: 'style',            label: '🎨 Comic Style (작품 공통)', max: 5 },
     { g: 'byeoli-bible',     label: '👤 Byeoli — 바이블',         max: 5 },
+    { g: 'identity:sap',     label: '👤 Sap Identity',            max: 5 },
     { g: 'identity:vase',    label: '👤 Vase Identity',           max: 5 },
     { g: 'identity:holmes',  label: '〰 Holmes Identity',         max: 5 },
     { g: 'panel',            label: '▦ Panel Bible (공용)',       max: 1 },
@@ -386,7 +388,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         encodeURIComponent(r.key) + '&v=' + Date.now() + '">' +
         (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
         '<div class="row" style="margin-top:10px"><button id="redraw2" class="primary">🎲 전체 다시 그리기</button></div>' +
-        '<div class="muted" style="margin-top:8px">검사 축: Vase 실루엣(눈코입 없음) · Holmes 순수 파형(얼굴·팔다리 없으면 합격) · ' +
+        '<div class="muted" style="margin-top:8px">검사 축: 인간 실루엣(눈코입 없음) · Holmes 순수 파형(얼굴·팔다리 없으면 합격) · ' +
         '한 그림체 안에서 둘이 구분 · 컷 수 ' + s.panelCount + ' · 한글 오탈자 · <b>둘이 진짜 우리처럼 보이는가</b></div></div>';
       $('out').innerHTML = pg;
       var rb = $('redraw2');

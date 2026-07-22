@@ -274,10 +274,11 @@ test('Lock v2 슬롯 — 그룹 분류와 레거시 보존 (S-04 판정 4)', asy
   assert.equal(lockGroupOf('ch05_panel'), 'panel', 'Panel Bible은 공용');
   assert.equal(lockGroupOf('style_s3'), 'style');
   assert.equal(lockGroupOf('id_vase_i1'), 'identity:vase');
+  assert.equal(lockGroupOf('id_sap_i3'), 'identity:sap', 'S-04A: Sap 슬롯 신설');
   assert.equal(lockGroupOf('id_holmes_i5'), 'identity:holmes');
   assert.ok(!isLockSlot('id_hacker_i1'), '미등록 Creator 슬롯 거부 (음성)');
   assert.ok(!isLockSlot('style_s6'), '슬롯 범위 밖 거부 (음성)');
-  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 15, '6 레거시 + 5 스타일 + 15 정체성');
+  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 20, '6 레거시 + 5 스타일 + 20 정체성 (byeoli·sap·vase·holmes)');
 });
 
 // ── S-04 5~7단: Genome 미러 + Relation 게이트 + 시나리오 v2 두뇌 파생 ──
@@ -294,7 +295,7 @@ test('미러 규약 — 버전 불일치면 조용히 쓰지 않는다 (음성)'
 
 test('v2 두뇌 — 프롬프트가 게놈에서 파생되고 Relation은 대사를 쓰지 않는다', async () => {
   const { buildScenarioSystemV2 } = await import('./_genome-mirrors.ts');
-  const b = buildScenarioSystemV2(['vase', 'holmes']);
+  const b = buildScenarioSystemV2(['sap', 'holmes']);
   assert.ok(!('error' in b), JSON.stringify(b));
   assert.match(b.system, /하오체/, '관축해 레지스터 (A0 실증)');
   assert.match(b.system, /X는 Y가 아니오/, '홈즈 정의 문형 — 게놈 파생');
@@ -302,7 +303,7 @@ test('v2 두뇌 — 프롬프트가 게놈에서 파생되고 Relation은 대사
   assert.match(b.system, /홈즈가 정의한다/, 'Relation 패턴 5단 주입');
   assert.match(b.system, /Relation은 대사를 쓰지 않는다/, '홈즈 판정 원문');
   assert.match(b.system, /provisional/, 'Holmes 실험 표시가 프롬프트에도');
-  assert.equal(b.relation.relationId, 'vase-holmes');
+  assert.equal(b.relation.relationId, 'sap-holmes', 'S-04A: 관축해의 인간 측은 Sap');
 });
 
 test('v2 두뇌 — 미등록 관계·미등록 Creator는 생성 금지 (음성)', async () => {
@@ -310,6 +311,9 @@ test('v2 두뇌 — 미등록 관계·미등록 Creator는 생성 금지 (음성
   const noRel = buildScenarioSystemV2(['byeoli', 'vase']);
   assert.ok('error' in noRel && noRel.error.includes('relation_unregistered'),
     '관계 없이 적당히 섞으면 역할극이 된다 — 생성 금지');
+  const vaseHolmes = buildScenarioSystemV2(['vase', 'holmes']);
+  assert.ok('error' in vaseHolmes && vaseHolmes.error.includes('relation_unregistered'),
+    'S-04A: 관축해 생성은 Sap만 — Vase×Holmes는 의도적 미등록 (음성)');
   const ghost = buildScenarioSystemV2(['vase', 'moriarty']);
   assert.ok('error' in ghost && ghost.error.includes('unknown_creator'));
   const solo = buildScenarioSystemV2(['vase']);
@@ -319,7 +323,7 @@ test('v2 두뇌 — 미등록 관계·미등록 Creator는 생성 금지 (음성
 test('캐스트 조립 — 서버가 메타를 소유한다 (계약이 메타를 소유한다, 429 계승)', async () => {
   const { castMembersFor } = await import('./_genome-mirrors.ts');
   const { validateScenarioV2, COMIC_SCENARIO_V2_VERSION } = await import('./_comic-v2.ts');
-  const m = castMembersFor(['vase', 'holmes']);
+  const m = castMembersFor(['sap', 'holmes']);
   assert.deepEqual(m.errors, []);
   assert.equal(m.cast[0].role, 'lead');
   assert.equal(m.cast[1].speechPolicy.density, 'high', '홈즈는 말이 많다 (캡션 절제는 프롬프트 몫)');
@@ -359,25 +363,25 @@ test('참조 계획 — 순서·상한·경고 (조용한 상한 금지)', async
 test('v2 페이지 프롬프트 — 바이블 불변식이 문서에서 프롬프트로 (drift 방지)', async () => {
   const { buildPagePromptV2, planV2Refs, toV2 } = await import('./_comic-v2.ts');
   const { castMembersFor } = await import('./_genome-mirrors.ts');
-  const m = castMembersFor(['vase', 'holmes']);
+  const m = castMembersFor(['sap', 'holmes']);
   const s2 = {
     version: 'comic-scenario-v2', topic: '비 오는 출근길', panelCount: 1, cast: m.cast,
     relation: { relationId: 'vase-holmes', version: 'v0' },
     panels: [{ panelNo: 1, beat: 'rain', setting: 'bus stop', framing: 'wide',
-      actions: [{ creatorId: 'vase', action: 'staring at a bent umbrella tip' },
+      actions: [{ creatorId: 'sap', action: 'staring at a bent umbrella tip' },
                 { creatorId: 'holmes', action: 'waveform spikes over the clouds' }],
       dialogue: [{ speakerId: 'holmes', intent: 'declare', text: '수력 재양 사건이오!' },
-                 { speakerId: 'vase', intent: 'deflate', text: '우산 살 하나 휘었소.' }],
+                 { speakerId: 'sap', intent: 'deflate', text: '우산 살 하나 휘었소.' }],
       caption: null }],
     endingBeat: 'quiet rain',
   };
-  const loaded = new Set(['style_s1', 'id_vase_i1', 'id_holmes_i1', 'ch05_panel']);
-  const plan = planV2Refs(['vase', 'holmes'], ['style_s1'], loaded);
+  const loaded = new Set(['style_s1', 'id_sap_i1', 'id_holmes_i1', 'ch05_panel']);
+  const plan = planV2Refs(['sap', 'holmes'], ['style_s1'], loaded);
   const p = buildPagePromptV2(s2, plan.order, { dateKst: '2026.07.22', observationNo: 6 });
   assert.match(p, /^한국어 텍스트 정확하게 렌더링/, '한국어 정확도 선두 (실측 기법 계승)');
   assert.match(p, /exactly 1 panels — count them/, '컷 수 못박기');
   assert.match(p, /NO face, NO eyes.*NO arms, NO legs/, '홈즈 불변식 — REJECTED 사고의 프롬프트화');
-  assert.match(p, /never detailed eyes\/nose\/mouth/, 'Vase 실루엣 불변식');
+  assert.match(p, /Sap identity reference sheets/, 'Sap 형태 규칙');
   assert.match(p, /Speech bubble from holmes \(Korean, exact\): "수력 재양 사건이오!"/, '화자별 대사 원문');
   assert.match(p, /electric blue/, '홈즈 파형 블루 — 유일한 강한 포인트');
   assert.match(p, /images 1–1 define the shared art style/, '참조 순서 설명');

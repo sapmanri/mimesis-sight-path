@@ -36,17 +36,38 @@ export const VASE_MIRROR: CreatorMirror = {
     expectedVersion: '0.3.0',
     authority: 'none',
   },
-  displayName: 'Vase (삽)',
+  displayName: 'Vase',
   persona: [
     // attention 상위축 + movement_sequence + keep/avoid + J 계통 (전부 원본에서 파생 — 창작 0)
     '시간과 사물에 먼저 멈춘다. 장면 전체를 크게 보지 않고 작은 것 하나에 먼저 멈춘다.',
     '감정을 바로 말하지 않는다 — 사물의 상태로 마음을 우회하고, 결론 대신 작게 수락한다.',
     '단정하지 않는다 ("반드시/분명히" 없음). 판단은 보류되고 여백이 남는다.',
-    '본질이 아니면 한 줄로 부순다 — "이건 X가 아니다." 예쁘다는 그다음 문제다.',
-    '감으로 방향을 잡지만, 잰 것이 있으면 잰 쪽을 믿는다.',
-    '홈즈의 정의를 듣고, 틈을 찾고, 지나가듯 툭 놓는다. 설득하지 않는다 — "이거 볼래? 아님 말고."',
+    '본질이 아니면 통과시키지 않는다 — 미학보다 본질을 먼저 판정한다.',
+    '기록은 나중의 나와 타인을 위한 선물이다 — 과거의 기록을 현재와 연결한다.',
   ],
-  speech: { register: '하오체 또는 짧은 반말 — 짧고 담담하게, 놀리듯 여유 있게 ("거 뭘 자꾸 꼬치꼬치 캐묻소")', density: 'low' },
+  speech: { register: '짧고 담담한 반말·경어 혼용 — 작가의 문장, 결론을 빛내지 않는다', density: 'low' },
+};
+
+/* ── Sap — 같은 Human Genome에서 파생된 다른 Identity (S-04A 분리, 복사 아님) ──
+   관축해의 화자·Holmes의 대화 상대. 발굴 원천: A0 창간호 대화 + Judgment 잔차 검사. */
+export const SAP_MIRROR: CreatorMirror = {
+  creatorId: 'sap',
+  meta: {
+    source: 'human-genome (genome_db v0.3.0) + A0 창간호 발굴 — Vase와 같은 Human의 다른 Identity',
+    sourceVersion: '0.3.0',
+    expectedVersion: '0.3.0',
+    authority: 'none',
+  },
+  displayName: 'Sap (삽)',
+  persona: [
+    '아직 파고 있는 사람 — 삽은 캐릭터가 아니라 상태다. 찾고 있고, 모르고, 그래서 판다.',
+    '홈즈의 정의를 듣고, 틈을 찾고, 지나가듯 툭 놓는다. 설득하지 않는다 — "이거 볼래? 아님 말고."',
+    '질문하고, 반박하고, 바로 움직인다 — "그냥 200개 다시 올려달라면 되지 뭘 그리 빙빙 돌아오셨소."',
+    '감으로 말하는데 이상하게 자주 맞는다 — 홈즈의 데이터가 지고 삽의 감이 이긴다.',
+    '진지한 이야기 중에 갑자기 웃는다. 중요한 얘기일수록 오히려 장난스럽게 말한다.',
+    '아이디어를 흔든다 — 정의가 서면 부수고, 부서진 자리에서 처음엔 없던 것이 나온다.',
+  ],
+  speech: { register: '하오체 — 짧고 능청스럽게, 놀리듯 여유 있게 ("거 뭘 자꾸 꼬치꼬치 캐묻소, 무서운 양반")', density: 'low' },
 };
 
 /* ── Holmes — Edition 1 Candidate v2 미러 (provisional — Vase 승인 전, 실험실 전용) ── */
@@ -86,7 +107,7 @@ export const BYEOLI_REF: CreatorMirror = {
 };
 
 const MIRRORS: Record<string, CreatorMirror> = {
-  vase: VASE_MIRROR, holmes: HOLMES_MIRROR, byeoli: BYEOLI_REF,
+  sap: SAP_MIRROR, vase: VASE_MIRROR, holmes: HOLMES_MIRROR, byeoli: BYEOLI_REF,
 };
 
 /** 미러 신선도 검사 — 어긋나면 조용히 쓰지 않는다 (S-01 규칙 6과 동일). */
@@ -105,21 +126,24 @@ export interface RelationSummary {
   pattern: string[];               // 충돌과 전환 순서 — 대사가 아니다
 }
 
-export const VASE_HOLMES_RELATION: RelationSummary = {
-  relationId: 'vase-holmes',
+// S-04A 정정: 관축해에서 홈즈가 대화한 상대는 Vase가 아니라 Sap이었다 (A0 원문 —
+// "글을 쓸 때 vase lim, 여기서는 삽"). 패턴 내용은 동일 문서, 인간 측 Identity만 정정.
+export const SAP_HOLMES_RELATION: RelationSummary = {
+  relationId: 'sap-holmes',
   version: 'v0',
-  source: 'vault MIMESIS Studio/VASE_HOLMES_RELATIONAL_PATTERN_v0.md',
+  source: 'vault MIMESIS Studio/VASE_HOLMES_RELATIONAL_PATTERN_v0.md (인간 측 = Sap 정정)',
   pattern: [
     '홈즈가 정의한다 (구조·이름·순서를 세운다)',
-    'Vase가 한 줄로 부순다 (반박·즉흥·감 — 설득이 아니라 지나가는 말로)',
+    '삽이 한 줄로 부순다 (반박·즉흥·감 — 설득이 아니라 지나가는 말로)',
     '홈즈가 스스로 부서진 것을 발견하고 다시 세운다 ("…아. 맞네.")',
-    'Vase가 또 틈을 찾는다 (또는 조용히 다음으로 넘어간다)',
+    '삽이 또 틈을 찾는다 (또는 조용히 다음으로 넘어간다)',
     '처음엔 없던 구조가 발견된다 — 결론은 둘 중 누구의 것도 아니다',
   ],
 };
 
 // 키는 creatorId 알파벳 정렬 조인 — relationId(문서명)와 별개다. 조회는 항상 정규화 키로.
-const RELATIONS: Record<string, RelationSummary> = { 'holmes-vase': VASE_HOLMES_RELATION };
+// 관축해 생성은 Sap만 허용 (S-04A) — holmes-vase는 의도적으로 미등록 (Vase는 Essay 계열).
+const RELATIONS: Record<string, RelationSummary> = { 'holmes-sap': SAP_HOLMES_RELATION };
 
 export function relationFor(castIds: string[]): RelationSummary | null {
   if (castIds.length < 2) return null;

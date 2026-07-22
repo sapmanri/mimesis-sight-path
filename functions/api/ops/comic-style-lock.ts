@@ -18,7 +18,10 @@ import { STYLE_LOCK_NAMES } from '../_comic.ts';
 interface Env { CAPTURES: R2Bucket }
 
 export const COMIC_LOCK_PREFIX = 'comic/style-lock/';
-export const IDENTITY_CREATORS = ['byeoli', 'vase', 'holmes'] as const;
+// S-04A (2026-07-22): Human Creator를 두 Identity로 분리 — Sap(관축해 화자·대화형 창작)
+// / Vase(작가·기록자·Essay 계열). 기존 vase 슬롯 5장은 Vase Identity로 유지(삭제·이동 없음),
+// sap 슬롯은 빈 칸으로 신설 — Sap Identity Bible 제작 후 채운다.
+export const IDENTITY_CREATORS = ['byeoli', 'sap', 'vase', 'holmes'] as const;
 export const COMIC_STYLE_SLOTS = ['style_s1', 'style_s2', 'style_s3', 'style_s4', 'style_s5'] as const;
 export const IDENTITY_SLOTS: readonly string[] = IDENTITY_CREATORS.flatMap((c) =>
   [1, 2, 3, 4, 5].map((i) => `id_${c}_i${i}`));
