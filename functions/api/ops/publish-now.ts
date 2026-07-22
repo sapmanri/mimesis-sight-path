@@ -52,22 +52,38 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const feed: { text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
 
   // BUILD 425-D: 엽서의 장면·일기로 Claude가 글을 쓴다. 실패 시 문장 풀 폴백.
+  // 실사고(07-22): 429에서 Writer 반환형이 봉투({text, provenance})로 바뀌었는데
+  // 이 수동 경로만 언랩을 안 해 객체가 text로 저장·전송돼 dispatch가 즉사했다.
   let text = chosen.text;
   let textIndex: number | null = pick;
+  let genome: unknown = null;
   const written = await writeByeoliPost(env, {
     targetLabel: meta.targetLabel ?? null,
     byeoliAction: meta.byeoliAction ?? null,
     skyPhase: meta.skyPhase ?? null,
     weather: meta.weather ?? null,
     diaryLines: meta.diaryLines ?? [],
-    recentTexts: feed.slice(0, 5).map((p) => p.text ?? '').filter(Boolean),
+    recentTexts: feed.slice(0, 5).map((p) => (typeof p.text === 'string' ? p.text : '')).filter(Boolean),
   });
-  if (written) { text = written; textIndex = null; }
+  if (written && typeof written.text === 'string') {
+    text = written.text;
+    genome = written.provenance ?? null;
+    textIndex = null;
+  }
 
+  // 자기치유: 과거 사고로 text가 객체로 저장된 항목을 문자열로 복원 (봉투 → .text)
+  const healedFeed = feed.map((p) => {
+    const t = p.text as unknown;
+    if (t && typeof t === 'object' && typeof (t as { text?: string }).text === 'string') {
+      const envl = t as { text: string; provenance?: unknown };
+      return { ...p, text: envl.text, genome: (p as { genome?: unknown }).genome ?? envl.provenance ?? null };
+    }
+    return p;
+  });
   await env.PLANET.put(FEED_KEY, JSON.stringify([{
     id: `bot-${now}`, t: now, title: '', text, img, icon: '🌏',
-    likes: Math.floor(Math.random() * 12) + 1, comments: [],
-  }, ...feed].slice(0, MAX_POSTS)));
+    likes: Math.floor(Math.random() * 12) + 1, comments: [], genome,
+  }, ...healedFeed].slice(0, MAX_POSTS)));
   if (textIndex !== null) {
     await env.PLANET.put(RECENT_KEY, JSON.stringify([pick, ...recent].slice(0, RECENT_KEEP)));
   }
