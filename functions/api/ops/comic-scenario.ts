@@ -40,6 +40,7 @@ async function scenarioV2(env: Env, theme: string, panelCount: number, castIds: 
     panelCount,
     cast: members.cast,
     relation: built.relation ? { relationId: built.relation.relationId, version: built.relation.version } : null,
+    relations: built.relations.length > 1 ? built.relations.map((r) => ({ relationId: r.relationId, version: r.version })) : undefined,
     panels: parsed.panels ?? [],
     endingBeat: parsed.endingBeat ?? '',
   };

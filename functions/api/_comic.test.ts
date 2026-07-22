@@ -314,6 +314,17 @@ test('v2 두뇌 — 미등록 관계·미등록 Creator는 생성 금지 (음성
   const vaseHolmes = buildScenarioSystemV2(['vase', 'holmes']);
   assert.ok('error' in vaseHolmes && vaseHolmes.error.includes('relation_unregistered'),
     'S-04A: 관축해 생성은 Sap만 — Vase×Holmes는 의도적 미등록 (음성)');
+  // Relation Resolver (Vase 설계): 페어 전수 필수 — 미등록 페어를 전부 나열한다
+  const { resolveRelations } = await import('./_genome-mirrors.ts');
+  const trio = resolveRelations(['sap', 'holmes', 'byeoli']);
+  assert.equal(trio.pairs.length, 1, 'sap-holmes만 등록됨');
+  assert.deepEqual(trio.missingPairs, ['byeoli-holmes', 'byeoli-sap'], '미등록 페어 전부 나열');
+  const trioErr = buildScenarioSystemV2(['sap', 'holmes', 'byeoli']);
+  assert.ok('error' in trioErr && trioErr.error.includes('byeoli-holmes') && trioErr.error.includes('byeoli-sap'),
+    '무엇이 없는지 정확히 말한다 (음성)');
+  const pairOk = resolveRelations(['sap', 'holmes']);
+  assert.equal(pairOk.missingPairs.length, 0);
+  assert.equal(pairOk.group, null, '2인은 group 없음');
   const ghost = buildScenarioSystemV2(['vase', 'moriarty']);
   assert.ok('error' in ghost && ghost.error.includes('unknown_creator'));
   const solo = buildScenarioSystemV2(['vase']);

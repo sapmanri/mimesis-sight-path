@@ -9,8 +9,10 @@
 // ⛔ 자동 게시·크론 연결 없음.
 
 import { STYLE_LOCK_NAMES, STYLE_LOCK_VERSION } from '../_comic.ts';
+import { RELATION_KEYS } from '../_genome-mirrors.ts';
 
 const NAMES_JS = JSON.stringify(STYLE_LOCK_NAMES);
+const RELATIONS_JS = JSON.stringify(RELATION_KEYS);
 
 const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -80,6 +82,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       <label><input type="checkbox" data-c="byeoli" checked> Byeoli</label>
     </div>
     <div class="muted" id="castNote" style="margin-top:6px">Byeoli 단독 = 기존 그림일기 경로 그대로.</div>
+    <div id="relStatus" style="margin-top:8px;font-size:11px"></div>
   </div>
 
   <div class="panel">
@@ -123,6 +126,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var LOCK_NAMES = ${NAMES_JS};
+  var RELATION_KEYS = ${RELATIONS_JS};   // Relation Registry — Creator Registry와 분리된 창작 자산
   var state = { cut: 4, scenario: null };
 
   function banner(msg, kind) {
@@ -303,13 +307,41 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     return Array.prototype.filter.call(document.querySelectorAll('#cast input:checked'), function () { return true; })
       .map(function (x) { return x.getAttribute('data-c'); });
   }
+  // 관계 현황판 (Vase 제안): "아, 아직 이 둘은 서로를 모르는구나"가 한눈에 보이게.
+  // 페어 전수 필수 — 하나라도 ✗면 생성 불가 (Relation Registry는 Creator Registry와 분리된 자산).
+  function renderRelations() {
+    var c = castNow().sort();
+    var box = $('relStatus');
+    if (c.length < 2) { box.innerHTML = ''; $('go').disabled = false; return; }
+    var missing = 0;
+    var rows = '<div class="muted" style="margin-bottom:2px">Relation</div>';
+    for (var i = 0; i < c.length; i++) {
+      for (var j = i + 1; j < c.length; j++) {
+        var key = c[i] + '-' + c[j];
+        var ok = RELATION_KEYS.indexOf(key) >= 0;
+        if (!ok) missing++;
+        rows += '<div class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓' : '✗') + ' ' +
+          esc(c[i]) + ' ↔ ' + esc(c[j]) + (ok ? '' : ' <span class="muted">(서로를 아직 모른다)</span>') + '</div>';
+      }
+    }
+    if (c.length >= 3) {
+      var gkey = c.join('-');
+      var gok = RELATION_KEYS.indexOf(gkey) >= 0;
+      rows += '<div class="muted">' + (gok ? '✓' : '—') + ' ' + esc(c.join(' ↔ ')) +
+        ' <span class="muted">(' + (gok ? 'n자 관계 우선 적용' : 'optional — 페어 조합으로 생성') + ')</span></div>';
+    }
+    if (missing) rows += '<div class="warn" style="margin-top:2px">⚠ 생성 불가 — 관계는 창작 자산이다. 미등록 페어의 Relation Pattern부터.</div>';
+    box.innerHTML = rows;
+    $('go').disabled = missing > 0;
+  }
   Array.prototype.forEach.call(document.querySelectorAll('#cast input'), function (cb) {
     cb.onchange = function () {
       var c = castNow();
       if (!c.length) { cb.checked = true; c = castNow(); banner('출연자는 최소 1명', 'err'); }
       $('castNote').textContent = (c.length === 1 && c[0] === 'byeoli')
         ? 'Byeoli 단독 = 기존 그림일기 경로 그대로.'
-        : '멀티 Creator 경로 — Genome Adapter 배선(S-04 5~7단) 후 생성 가능. 지금은 Lock 준비 단계.';
+        : '멀티 Creator 경로 — 아래 관계 현황이 전부 ✓여야 생성한다.';
+      renderRelations();
     };
   });
   $('lockFile').onchange = function () {

@@ -41,6 +41,7 @@ export interface ComicScenarioV2 {
   panelCount: number;
   cast: ComicCastMember[];
   relation?: { relationId: string; version: string } | null;
+  relations?: { relationId: string; version: string }[];   // 3인 이상 — 적용된 페어 목록 (가산 필드)
   panels: ComicPanelV2[];
   endingBeat: string;
 }
@@ -78,6 +79,10 @@ export function validateScenarioV2(x: unknown): string[] {
   if (s.relation && (!s.relation.relationId || !s.relation.version)) {
     errs.push('relation requires relationId and version');
   }
+  (s.relations ?? []).forEach((r, i) => {
+    if (!r.relationId || !r.version) errs.push(`relations[${i}] requires relationId and version`);
+  });
+  if (s.cast.length < 2 && s.relations?.length) errs.push('relations must be empty for a single creator');
 
   if (!Number.isInteger(s.panelCount) || (s.panelCount as number) < 1 || (s.panelCount as number) > 12) {
     errs.push('panelCount must be integer 1~12');

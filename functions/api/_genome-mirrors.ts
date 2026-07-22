@@ -153,10 +153,34 @@ export const SAP_HOLMES_RELATION: RelationSummary = {
 // 관축해 생성은 Sap만 허용 (S-04A) — holmes-vase는 의도적으로 미등록 (Vase는 Essay 계열).
 const RELATIONS: Record<string, RelationSummary> = { 'holmes-sap': SAP_HOLMES_RELATION };
 
-export function relationFor(castIds: string[]): RelationSummary | null {
-  if (castIds.length < 2) return null;
-  const key = [...castIds].filter((c) => c !== 'ppaekong').sort().join('-');
-  return RELATIONS[key] ?? null;
+/**
+ * Relation Resolver (Vase 설계 변경, 2026-07-22 밤):
+ * 선택 Creator들의 **모든 페어**가 등록돼 있어야 생성한다 — 하나라도 없으면 금지.
+ * n자 Relation(Triple…)은 Optional Layer — 있으면 우선, 없으면 페어들을 조합한다.
+ * Creator Registry와 Relation Registry는 완전히 분리된다 — 관계도 창작 자산이다.
+ * Comic Lab은 Creator를 합치는 것이 아니라, 등록된 관계를 통해 함께 등장시키는 것이다.
+ */
+export const RELATION_KEYS: readonly string[] = Object.keys(RELATIONS);
+
+export function resolveRelations(castIds: string[]): {
+  group: RelationSummary | null;          // n자 관계 (optional layer)
+  pairs: RelationSummary[];               // 등록된 페어들
+  missingPairs: string[];                 // 미등록 페어 키 (하나라도 있으면 생성 금지)
+} {
+  const ids = [...new Set(castIds.filter((c) => c !== 'ppaekong'))].sort();
+  if (ids.length < 2) return { group: null, pairs: [], missingPairs: [] };
+  const group = ids.length >= 3 ? (RELATIONS[ids.join('-')] ?? null) : null;
+  const pairs: RelationSummary[] = [];
+  const missingPairs: string[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const key = `${ids[i]}-${ids[j]}`;
+      const r = RELATIONS[key];
+      if (r) pairs.push(r);
+      else missingPairs.push(key);
+    }
+  }
+  return { group, pairs, missingPairs };
 }
 
 /* ── 캐스트 조립 — 계약이 메타를 소유한다. LLM은 panels만 쓴다 ── */
@@ -203,18 +227,20 @@ export function validateEmbodimentV2(s2: { cast: { creatorId: string }[]; panels
 
 /* ── 시나리오 v2 두뇌 프롬프트 — 게놈에서 파생된다 (하드코딩 아님, 429-E 계승) ── */
 export function buildScenarioSystemV2(castIds: string[]):
-  { system: string; relation: RelationSummary | null } | { error: string } {
+  { system: string; relation: RelationSummary | null; relations: RelationSummary[] } | { error: string } {
   const unknown = castIds.filter((id) => !MIRRORS[id]);
   if (unknown.length) return { error: `unknown_creator: ${unknown.join(', ')}` };
   for (const id of castIds) {
     const stale = checkMirror(MIRRORS[id]);
     if (stale) return { error: stale };
   }
-  const relation = relationFor(castIds);
-  if (castIds.length >= 2 && !relation) {
+  const resolved = resolveRelations(castIds);
+  if (resolved.missingPairs.length) {
     // 관계 패턴 없이 모델에게 적당히 섞게 하면 Studio가 아니라 일반 역할극이 된다 (홈즈)
-    return { error: `relation_unregistered: ${[...castIds].sort().join('-')} — 등록된 Relation Pattern이 없다. 생성하지 않는다.` };
+    // 페어 전수 필수 (Vase 설계): 아직 서로를 모르는 둘은 같은 무대에 서지 않는다.
+    return { error: `relation_unregistered: 미등록 페어 ${resolved.missingPairs.join(', ')} — 등록된 Relation Pattern이 없다. 생성하지 않는다.` };
   }
+  const applied = resolved.group ? [resolved.group] : resolved.pairs;
 
   const lines: string[] = [
     '너는 MIMESIS Studio의 시나리오 작가다. 출연자들의 게놈으로만 쓴다 — 게놈에 없는 성격을 지어내지 않는다.',
@@ -228,10 +254,14 @@ export function buildScenarioSystemV2(castIds: string[]):
     lines.push(`- 몸: ${m.embodiment}`);
     lines.push('');
   }
-  if (relation) {
-    lines.push('## 관계 패턴 (Relation은 대사를 쓰지 않는다 — 충돌과 전환의 순서만 제공한다)');
-    relation.pattern.forEach((p, i) => lines.push(`${i + 1}. ${p}`));
+  for (const rel of applied) {
+    lines.push(`## 관계 패턴 — ${rel.relationId} (Relation은 대사를 쓰지 않는다 — 충돌과 전환의 순서만 제공한다)`);
+    rel.pattern.forEach((p, i) => lines.push(`${i + 1}. ${p}`));
     lines.push('- 이 순서를 이야기의 뼈대로 쓰되, 각자의 대사는 각자의 게놈에서 나온다.');
+    lines.push('');
+  }
+  if (applied.length > 1) {
+    lines.push('- 여러 관계가 한 무대에 있다 — 컷마다 한 관계의 리듬이 주도하게 하고, 전부를 한 컷에 욱여넣지 않는다.');
     lines.push('');
   }
   lines.push(
@@ -250,5 +280,5 @@ export function buildScenarioSystemV2(castIds: string[]):
     '  "dialogue": [{"speakerId": id, "intent": en, "text": ko}], "caption": ko|null}],',
     ' "endingBeat": en}',
   );
-  return { system: lines.join('\n'), relation };
+  return { system: lines.join('\n'), relation: resolved.group ?? (resolved.pairs.length === 1 ? resolved.pairs[0] : null), relations: resolved.pairs };
 }
