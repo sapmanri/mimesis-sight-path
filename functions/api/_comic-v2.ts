@@ -298,13 +298,23 @@ export function buildPagePromptV2(
       ? `At the very bottom of the page, tiny: "Observation #${String(opts.observationNo).padStart(3, '0')} · MIMESIS Studio".`
       : '',
     `Every piece of Korean text is hand-lettered, calm and legible — never digital typeset fonts.`,
-    `Speech bubble discipline (실사고: 화자 오배치): EVERY bubble's tail must point to its speaker. Holmes's bubbles are tinted/outlined in electric blue and their tails point to the BLUE WAVEFORM — a blue bubble attached to a human is WRONG. Human speakers (Sap, Vase, Byeoli) use plain paper-white bubbles whose tails point to that exact person — a white bubble attached to the waveform is WRONG. Place each bubble nearer to its speaker than to anyone else.`,
+    `Speech bubble discipline (실사고: 화자 오배치): EVERY bubble's tail must point to its speaker. Holmes's bubbles are tinted/outlined in electric blue and their tails point to the BLUE WAVEFORM — a blue bubble attached to a human is WRONG. Human speakers (Sap, Vase, Byeoli) use plain paper-white bubbles whose tails point to that exact person — a white bubble attached to the waveform is WRONG.`,
+    `Speaker-presence rule: a character can only speak in a panel where it is VISIBLE. In every panel where Holmes speaks, the blue waveform MUST be drawn touching or immediately beside that blue bubble — bubble and waveform form one unit. If a human speaks, the tail touches that person's head area. Never place a bubble closer to a non-speaker than to its speaker.`,
     '',
   ];
   for (const p of s.panels) {
     lines.push(`Panel ${p.panelNo}: ${p.setting}, ${p.framing} shot. Beat: ${p.beat}.`);
     for (const a of p.actions) {
       lines.push(`  ${a.creatorId}: ${a.action}${a.expressionOrState ? ` (${a.expressionOrState})` : ''}.`);
+    }
+    // 화자 동석 보장 — 시나리오가 홈즈 행동을 안 줬는데 홈즈가 말하면, 파형이 화면에
+    // 없어서 풍선이 옆 사람에게 붙는다 (실사고 Obs #008). 화자는 반드시 그 컷에 있다.
+    const speakers = [...new Set(p.dialogue.filter((d) => d.text).map((d) => d.speakerId))];
+    if (speakers.length) {
+      lines.push(`  Speakers in this panel: ${speakers.join(', ')} — each must be visibly present.`);
+      if (speakers.includes('holmes') && !p.actions.some((a) => a.creatorId === 'holmes')) {
+        lines.push('  holmes: the blue waveform hovers in this panel, directly beside its speech bubble.');
+      }
     }
     for (const d of p.dialogue) {
       if (d.text) {
