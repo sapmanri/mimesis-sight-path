@@ -217,13 +217,26 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         mine.forEach(function (s) {
           var cell = document.createElement('div');
           cell.style.cursor = 'pointer';
+          cell.style.position = 'relative';
           cell.title = s.loaded ? s.slot + ' — 눌러서 교체' : s.slot + ' — 눌러서 업로드';
           if (s.loaded && !s.hasThumb) healThumb(s.slot);
           cell.innerHTML = (s.loaded
-            ? '<img src="/api/ops/comic-style-lock?file=' + esc(s.slot) + '&thumb=1&v=' + esc(s.uploaded || 0) + '" loading="lazy">'
+            ? '<img src="/api/ops/comic-style-lock?file=' + esc(s.slot) + '&thumb=1&v=' + esc(s.uploaded || 0) + '" loading="lazy">' +
+              '<button data-x="' + esc(s.slot) + '" title="비우기" style="position:absolute;top:2px;right:2px;font-size:10px;line-height:1;padding:2px 5px;background:#2a1a1a;color:#c8a0a0;border:1px solid #5d3a3a;border-radius:3px;cursor:pointer">✕</button>'
             : '<div class="miss">비어 있음<br>+</div>') +
             '<div class="lockname">' + esc(s.slot) + '</div>';
           cell.onclick = function () { pendingSlot = s.slot; $('lockFile').click(); };
+          var x = cell.querySelector('[data-x]');
+          if (x) x.onclick = function (ev) {
+            ev.stopPropagation();
+            if (!confirm(s.slot + ' 칸을 비울까?')) return;
+            api('/api/ops/comic-style-lock?slot=' + encodeURIComponent(s.slot), { method: 'DELETE' })
+              .then(function (r) {
+                if (r.error) { banner('삭제 실패: ' + r.error, 'err'); return; }
+                banner(s.slot + ' 비움');
+                checkLock();
+              });
+          };
           grid.appendChild(cell);
         });
         wrap.appendChild(grid);
