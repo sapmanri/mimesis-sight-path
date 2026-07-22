@@ -9,6 +9,7 @@
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
 import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
+import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
 import { COMIC_LOCK_PREFIX } from './comic-style-lock.ts';
 
@@ -19,7 +20,8 @@ interface Env extends ComicImageEnv {
 
 export const COMIC_STRIP_PREFIX = 'comic/strips/';
 const META_KEY = 'comic_meta';
-const META_KEEP = 12;
+const META_KEEP = 60;
+const COUNTER_KEY = 'comic_counter';
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -39,6 +41,32 @@ export const panelKey = (comicId: string, index: number) => `${COMIC_STRIP_PREFI
  * 응답을 즉시 열고 8초마다 하트비트 줄을 흘리면 스트리밍 중 응답은 끊기지 않는다.
  * 형식: NDJSON — 중간 줄 {"hb":1}, 마지막 줄이 결과. 클라이언트는 마지막 줄만 파싱.
  */
+/** GET — 작품 목록 (최근순, 페이지 키 포함). */
+export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+  const raw = await env.PLANET.get(META_KEY);
+  const log: { comicId: string; no?: number; at: number; title: string; epigraph?: string; theme: string; panelCount: number }[] = raw ? JSON.parse(raw) : [];
+  return json(200, {
+    ok: true,
+    comics: log.map((x) => ({
+      comicId: x.comicId, no: x.no ?? null, at: x.at, title: x.title,
+      epigraph: x.epigraph ?? null, theme: x.theme, panelCount: x.panelCount,
+      pageKey: `${COMIC_STRIP_PREFIX}${x.comicId}/page.png`,
+    })),
+  });
+};
+
+/** DELETE ?comicId= — 작품 삭제 (R2 산출물 + 메타). 관찰 번호는 재사용하지 않는다. */
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+  const comicId = new URL(request.url).searchParams.get('comicId');
+  if (!comicId || !/^[a-f0-9]{8}$/.test(comicId)) return json(400, { ok: false, error: 'bad_comic_id' });
+  const listed = await env.CAPTURES.list({ prefix: `${COMIC_STRIP_PREFIX}${comicId}/`, limit: 50 });
+  for (const o of listed.objects) await env.CAPTURES.delete(o.key);
+  const raw = await env.PLANET.get(META_KEY);
+  const log: { comicId: string }[] = raw ? JSON.parse(raw) : [];
+  await env.PLANET.put(META_KEY, JSON.stringify(log.filter((x) => x.comicId !== comicId)));
+  return json(200, { ok: true, deleted: comicId, files: listed.objects.length });
+};
+
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
   let body: { scenario?: ComicScenario; panels?: number[] };
@@ -114,7 +142,19 @@ async function runGeneration(
       else if ((STYLE_LOCK_REQUIRED as readonly string[]).includes(slot)) missing.push(slot);
     }
     if (!refs.length) return { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' };
-    const prompt = buildPagePrompt(s, { panelLayoutRef: hasPanelRef });
+    // 관찰 번호 — 500편이 쌓이면 하나의 아카이브가 된다 (홈즈). 재그리기는 같은 번호 유지.
+    const metaRaw0 = await env.PLANET.get(META_KEY);
+    const metaLog0: { comicId: string; no?: number }[] = metaRaw0 ? JSON.parse(metaRaw0) : [];
+    let obsNo = metaLog0.find((x) => x.comicId === comicId)?.no;
+    if (!obsNo) {
+      obsNo = Number(await env.PLANET.get(COUNTER_KEY) ?? 0) + 1;
+      await env.PLANET.put(COUNTER_KEY, String(obsNo));
+    }
+    const prompt = buildPagePrompt(s, {
+      panelLayoutRef: hasPanelRef,
+      observationNo: obsNo,
+      dateKst: kstDate(Date.now()).replace(/-/g, '.'),
+    });
     const art = await generatePageImage(env, prompt, refs, s.panelCount);
     if ('error' in art) return { ok: false, error: art.error, provider: art.provider };
     const key = `${COMIC_STRIP_PREFIX}${comicId}/page.png`;
@@ -123,12 +163,12 @@ async function runGeneration(
       const raw = await env.PLANET.get(META_KEY);
       const log: { comicId: string }[] = raw ? JSON.parse(raw) : [];
       await env.PLANET.put(META_KEY, JSON.stringify([
-        { comicId, at: Date.now(), title: s.title, theme: s.theme, panelCount: s.panelCount, mode: 'page', scenario: s },
+        { comicId, no: obsNo, at: Date.now(), title: s.title, epigraph: s.epigraph, theme: s.theme, panelCount: s.panelCount, mode: 'page', scenario: s },
         ...log.filter((x) => x.comicId !== comicId),
       ].slice(0, META_KEEP)));
     } catch { /* 메타 실패가 생성을 막지 않는다 */ }
     return {
-      ok: true, mode: 'page', comicId, key, model: art.model, provider,
+      ok: true, mode: 'page', comicId, no: obsNo, key, model: art.model, provider,
       warnings: missing.length ? [`lock_missing: ${missing.join(', ')}`] : [],
     };
   }

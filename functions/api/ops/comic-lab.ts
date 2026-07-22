@@ -100,9 +100,11 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   </div>
 
 </div>
+<div>
 <div id="out">
-  <div class="panel muted">주제를 넣고 이야기를 만들면 컷 시나리오가 여기 선다.<br>
-  별이다우면 [이 시나리오로 그리기] — 그건 다음 배선(Phase 2)에서 열린다.</div>
+  <div class="panel muted">주제를 넣고 이야기를 만들면 컷 시나리오가 여기 선다.</div>
+</div>
+<div id="archive"></div>
 </div>
 </div>
 <script>
@@ -244,7 +246,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // ── 시나리오 렌더 ──
   function renderScenario(s, meta) {
     var html = '<div class="panel"><h2>「' + esc(s.title) + '」 <span class="muted">' +
-      esc(s.panelCount) + '컷 · ' + esc(meta.provider) + ' · ' + esc(meta.model) + '</span></h2>';
+      esc(s.panelCount) + '컷 · ' + esc(meta.provider) + ' · ' + esc(meta.model) + '</span></h2>' +
+      (s.epigraph ? '<div class="muted" style="margin:-6px 0 10px">' + esc(s.epigraph) + '</div>' : '');
     s.panels.forEach(function (p) {
       html += '<div class="cut"><h3>' + p.index + '컷</h3>' +
         '<div class="vis">' + esc(p.location) + ' · ' + esc(p.shot) + ' · 초점: ' + esc(p.subject) +
@@ -304,7 +307,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     generateCall({ scenario: s }).then(function (r) {
       if (r.mode === 'page') {
         var pg = '<div class="panel" style="max-width:760px"><h2>「' + esc(s.title) + '」 <span class="muted">' +
-          esc(r.provider) + ' · ' + esc(r.model) + ' · 원샷 페이지</span></h2>' +
+          (r.no ? 'Observation #' + String(r.no).padStart(3, '0') + ' · ' : '') +
+          esc(r.provider) + ' · ' + esc(r.model) + '</span></h2>' +
           '<img style="width:100%;display:block;border-radius:4px" src="/api/ops/comic-file?key=' +
           encodeURIComponent(r.key) + '&v=' + Date.now() + '">' +
           (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
@@ -315,6 +319,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         var rb = $('redraw');
         if (rb) rb.onclick = drawComic;
         banner('페이지 완성 — 오탈자·별이 동일성 확인');
+        renderArchive();
         return;
       }
       if (r.error) {
@@ -389,6 +394,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   $('theme').onkeydown = function (e) { if (e.key === 'Enter') makeStory(); };
 
   checkLock();
+  renderArchive();
 })();
 </script>
 </body></html>`;
