@@ -187,6 +187,13 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       .catch(function () { /* 백필 실패는 조용히 — 다음 방문에 재시도 */ });
   }
   // S-04 Lock 3분리 — 그룹별 렌더. 별이 바이블(레거시) 표시는 기존과 동일한 정보를 유지한다.
+  // Comic Style 슬롯은 작품마다 다르다(별이 그림일기체 ≠ 관축해체) — 칸을 채워두고
+  // 생성별로 [적용]을 고른다. 기본 제외 (sketch-lab 저녁 판정 계승: 참조는 기본 제외).
+  var STYLE_APPLY_KEY = 'comic_style_apply';
+  function styleApplied() {
+    try { return JSON.parse(localStorage.getItem(STYLE_APPLY_KEY) || '[]'); } catch (e) { return []; }
+  }
+  function setStyleApplied(list) { localStorage.setItem(STYLE_APPLY_KEY, JSON.stringify(list)); }
   var LOCK_GROUP_META = [
     { g: 'style',            label: '🎨 Comic Style (작품 공통)', max: 5 },
     { g: 'byeoli-bible',     label: '👤 Byeoli — 바이블',         max: 5 },
@@ -210,7 +217,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         var head = document.createElement('div');
         head.className = 'muted';
         head.style.margin = '8px 0 4px';
-        head.textContent = gm.label + '  ' + n + '/' + gm.max;
+        head.textContent = gm.label + '  ' + n + '/' + gm.max +
+          (gm.g === 'style' ? ' · 적용 ' + styleApplied().filter(function (sl) {
+            return mine.some(function (s) { return s.slot === sl && s.loaded; });
+          }).length + '장 (기본 제외 — 켠 것만 그리기에 들어간다)' : '');
         wrap.appendChild(head);
         var grid = document.createElement('div');
         grid.className = 'lockgrid';
@@ -225,6 +235,25 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
               '<button data-x="' + esc(s.slot) + '" title="비우기" style="position:absolute;top:2px;right:2px;font-size:10px;line-height:1;padding:2px 5px;background:#2a1a1a;color:#c8a0a0;border:1px solid #5d3a3a;border-radius:3px;cursor:pointer">✕</button>'
             : '<div class="miss">비어 있음<br>+</div>') +
             '<div class="lockname">' + esc(s.slot) + '</div>';
+          // 스타일 슬롯: 생성별 [적용] 토글 — 별이체와 관축해체가 같은 칸을 쓰므로 골라 쓴다
+          if (gm.g === 'style' && s.loaded) {
+            var ap = document.createElement('label');
+            ap.style.cssText = 'display:block;font-size:10px;cursor:pointer;margin-top:2px';
+            var cb2 = document.createElement('input');
+            cb2.type = 'checkbox';
+            cb2.checked = styleApplied().indexOf(s.slot) >= 0;
+            cb2.onclick = function (ev) { ev.stopPropagation(); };
+            cb2.onchange = function () {
+              var cur = styleApplied().filter(function (sl) { return sl !== s.slot; });
+              if (cb2.checked) cur.push(s.slot);
+              setStyleApplied(cur);
+              checkLock();
+            };
+            ap.onclick = function (ev) { ev.stopPropagation(); };
+            ap.appendChild(cb2);
+            ap.appendChild(document.createTextNode(' 적용'));
+            cell.appendChild(ap);
+          }
           cell.onclick = function () { pendingSlot = s.slot; $('lockFile').click(); };
           var x = cell.querySelector('[data-x]');
           if (x) x.onclick = function (ev) {
