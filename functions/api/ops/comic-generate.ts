@@ -9,7 +9,7 @@
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
 import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
-import { validateScenarioV2, planV2Refs, buildPagePromptV2, type ComicScenarioV2 } from '../_comic-v2.ts';
+import { validateScenarioV2, planV2Refs, buildPagePromptV2, detectPlaces, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
 import { withTransientRetry } from '../_retry.ts';
@@ -133,7 +133,8 @@ async function runGenerationV2(
   }
 
   const castIds = s2.cast.map((c) => c.creatorId);
-  const plan = planV2Refs(castIds, styleSlots, loaded, includePanel);
+  const places = detectPlaces(s2);   // setting에 등장하는 고정 장소 — 있으면 참조로 실린다
+  const plan = planV2Refs(castIds, styleSlots, loaded, includePanel, places);
   const identityMissing = plan.warnings.filter((w) => w.startsWith('identity_missing'));
   if (identityMissing.length) {
     return { ok: false, error: identityMissing.join(' / '), provider };   // 바이블 없이 그리면 남이 된다

@@ -22,11 +22,16 @@ export const COMIC_LOCK_PREFIX = 'comic/style-lock/';
 // / Vase(작가·기록자·Essay 계열). 기존 vase 슬롯 5장은 Vase Identity로 유지(삭제·이동 없음),
 // sap 슬롯은 빈 칸으로 신설 — Sap Identity Bible 제작 후 채운다.
 export const IDENTITY_CREATORS = ['byeoli', 'sap', 'vase', 'holmes'] as const;
+// Place Bible (Vase 지시 07-22 심야): 자주 등장하는 장소 고정. 첫 장소 = 작업실
+// (실제 작업실 — 홈즈 제작). 슬롯 0~5장, 1장이면 활성 — 부분 장착 철학 동일.
+export const PLACE_IDS = ['workshop'] as const;
+export const PLACE_SLOTS: readonly string[] = PLACE_IDS.flatMap((pl) =>
+  [1, 2, 3, 4, 5].map((i) => `pl_${pl}_p${i}`));
 export const COMIC_STYLE_SLOTS = ['style_s1', 'style_s2', 'style_s3', 'style_s4', 'style_s5'] as const;
 export const IDENTITY_SLOTS: readonly string[] = IDENTITY_CREATORS.flatMap((c) =>
   [1, 2, 3, 4, 5].map((i) => `id_${c}_i${i}`));
 export const LOCK_SLOTS_V2: readonly string[] = [
-  ...STYLE_LOCK_NAMES, ...COMIC_STYLE_SLOTS, ...IDENTITY_SLOTS,
+  ...STYLE_LOCK_NAMES, ...COMIC_STYLE_SLOTS, ...IDENTITY_SLOTS, ...PLACE_SLOTS,
 ];
 
 /** 슬롯 → 그룹. UI와 생성 경로가 같은 분류를 쓴다 (판정 4의 A/B/C). */
@@ -35,7 +40,9 @@ export function lockGroupOf(slot: string): string {
   if ((STYLE_LOCK_NAMES as readonly string[]).includes(slot)) return 'byeoli-bible';
   if ((COMIC_STYLE_SLOTS as readonly string[]).includes(slot)) return 'style';
   const m = slot.match(/^id_([a-z]+)_i[1-5]$/);
-  return m ? `identity:${m[1]}` : 'unknown';
+  if (m) return `identity:${m[1]}`;
+  const pl = slot.match(/^pl_([a-z]+)_p[1-5]$/);
+  return pl ? `place:${pl[1]}` : 'unknown';
 }
 
 const MAX_BYTES = 8 * 1024 * 1024;

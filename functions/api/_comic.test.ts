@@ -278,7 +278,9 @@ test('Lock v2 슬롯 — 그룹 분류와 레거시 보존 (S-04 판정 4)', asy
   assert.equal(lockGroupOf('id_holmes_i5'), 'identity:holmes');
   assert.ok(!isLockSlot('id_hacker_i1'), '미등록 Creator 슬롯 거부 (음성)');
   assert.ok(!isLockSlot('style_s6'), '슬롯 범위 밖 거부 (음성)');
-  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 20, '6 레거시 + 5 스타일 + 20 정체성 (byeoli·sap·vase·holmes)');
+  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 20 + 5, '레거시6 + 스타일5 + 정체성20 + 장소5');
+  assert.equal(lockGroupOf('pl_workshop_p2'), 'place:workshop', 'Place Bible 그룹');
+  assert.ok(!isLockSlot('pl_bedroom_p1'), '미등록 장소 거부 (음성)');
 });
 
 // ── S-04 5~7단: Genome 미러 + Relation 게이트 + 시나리오 v2 두뇌 파생 ──
@@ -388,6 +390,25 @@ test('참조 계획 — 순서·상한·경고 (조용한 상한 금지)', async
   // 전용 락이 생기면 그쪽 우선
   const byeoliDedicated = planV2Refs(['byeoli'], [], new Set(['id_byeoli_i1', 'ch00_master']));
   assert.equal(byeoliDedicated.order[0].slot, 'id_byeoli_i1', '전용 락 우선 — Lock 분리 원칙');
+  // Place Bible: 감지된 장소만 싣는다 + 공간만 빌린다
+  const { detectPlaces, buildPagePromptV2: bpp2, toV2: toV2b } = await import('./_comic-v2.ts');
+  const wsLoaded = new Set(['id_sap_i1', 'id_holmes_i1', 'pl_workshop_p1', 'pl_workshop_p2', 'pl_workshop_p3']);
+  const wsPlan = planV2Refs(['sap', 'holmes'], [], wsLoaded, false, ['workshop']);
+  const plRefs = wsPlan.order.filter((r) => r.kind === 'place:workshop');
+  assert.equal(plRefs.length, V2_REF_CAPS.place, '장소 상한 2장');
+  assert.ok(wsPlan.warnings.some((w) => w.includes('place_refs_truncated')), '잘렸으면 말한다');
+  const noPl = planV2Refs(['sap', 'holmes'], [], wsLoaded, false, []);
+  assert.equal(noPl.order.filter((r) => r.kind.startsWith('place:')).length, 0, '감지 안 되면 안 싣는다');
+  // detect: setting 기반
+  const wsScenario = toV2b(scenario(4));
+  wsScenario.panels[2].setting = 'A sunlit cluttered workshop with tools';
+  assert.deepEqual(detectPlaces(wsScenario), ['workshop']);
+  wsScenario.panels[2].setting = 'bus stop in rain';
+  assert.deepEqual(detectPlaces(wsScenario), [], '없으면 빈 배열 (음성)');
+  // 프롬프트: 공간만 빌린다
+  const wsPrompt = bpp2({ ...wsScenario, panels: wsScenario.panels }, wsPlan.order, {});
+  assert.match(wsPrompt, /recurring PLACE "작업실"/, '장소 참조 설명');
+  assert.match(wsPrompt, /characters or people NEVER come from place references/, '공간만 빌린다');
 });
 
 test('v2 페이지 프롬프트 — 바이블 불변식이 문서에서 프롬프트로 (drift 방지)', async () => {

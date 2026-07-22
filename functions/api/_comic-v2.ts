@@ -177,13 +177,29 @@ export const CAST_FORM_EN: Record<string, string> = {
   ppaekong: 'Ppaekong: the small white cat exactly as in the reference sheets',
 };
 
-export const V2_REF_CAPS = { style: 3, identityPerCreator: 4 };   // 총합이 제미나이 참조 한도 안에 들게
+export const V2_REF_CAPS = { style: 3, identityPerCreator: 4, place: 2, total: 13 };   // 제미나이 참조 한도(±14) 안
+
+/* ── Place Registry — 자주 등장하는 장소의 고정 (첫 장소: 작업실) ──
+   장소 참조에서는 공간만 빌린다 — 사람·캐릭터는 절대 장소 이미지에서 오지 않는다. */
+export const PLACES: Record<string, { ko: string; match: RegExp }> = {
+  workshop: { ko: '작업실', match: /workshop|atelier|work\s?room|작업실/i },
+};
+
+/** 시나리오 setting에서 등장 장소를 감지한다 (패널 과반이 아니라 등장 여부 — 한 컷이라도 그 장소면 고정 필요). */
+export function detectPlaces(s: ComicScenarioV2): string[] {
+  const found: string[] = [];
+  for (const [id, pl] of Object.entries(PLACES)) {
+    if (s.panels.some((p) => pl.match.test(p.setting))) found.push(id);
+  }
+  return found;
+}
 
 /** 참조 계획 — 순수 함수(테스트 가능). 순서: 스타일 → 캐스트별 정체성 → 패널(마지막). */
 export function planV2Refs(
   castIds: string[], appliedStyleSlots: string[], loadedSlots: Set<string>,
   includePanel = false,   // 실사고(관축해 1호): 별이용 패널 바이블의 '내용'이 관축해에 번졌다.
                           // 레이아웃만 참고시킬 수 없다면 기본은 빼는 것 — 명시 opt-in만.
+  placeIds: string[] = [],   // detectPlaces 결과 — setting에 감지된 장소만 싣는다
 ): { order: { slot: string; kind: string }[]; warnings: string[] } {
   const order: { slot: string; kind: string }[] = [];
   const warnings: string[] = [];
@@ -208,7 +224,31 @@ export function planV2Refs(
     }
     ids.slice(0, V2_REF_CAPS.identityPerCreator).forEach((s) => order.push({ slot: s, kind: `identity:${c}` }));
   }
+  for (const pl of placeIds) {
+    const slots = [1, 2, 3, 4, 5].map((i) => `pl_${pl}_p${i}`).filter((s) => loadedSlots.has(s));
+    if (!slots.length) continue;   // 장소 참조는 없으면 조용히 생략 — 정체성과 달리 필수가 아니다
+    if (slots.length > V2_REF_CAPS.place) warnings.push(`place_refs_truncated: ${pl} ${slots.length} → ${V2_REF_CAPS.place}`);
+    slots.slice(0, V2_REF_CAPS.place).forEach((s) => order.push({ slot: s, kind: `place:${pl}` }));
+  }
   if (includePanel && loadedSlots.has('ch05_panel')) order.push({ slot: 'ch05_panel', kind: 'panel' });
+  // 총량 예산 — 넘치면 정체성부터 라운드로빈으로 줄인다 (조용한 상한 금지: 경고로 말한다)
+  while (order.length > V2_REF_CAPS.total) {
+    const idKinds = [...new Set(order.filter((r) => r.kind.startsWith('identity:')).map((r) => r.kind))];
+    let removed = false;
+    for (const k of idKinds) {
+      const mine = order.filter((r) => r.kind === k);
+      if (mine.length > 2) {   // 정체성은 최소 2장은 지킨다
+        order.splice(order.lastIndexOf(mine[mine.length - 1]), 1);
+        removed = true;
+        if (order.length <= V2_REF_CAPS.total) break;
+      }
+    }
+    if (!removed) break;
+  }
+  if (order.length > V2_REF_CAPS.total) warnings.push(`refs_over_budget: ${order.length}/${V2_REF_CAPS.total}`);
+  else if (order.some((r) => r.kind.startsWith('place:')) && order.filter((r) => r.kind.startsWith('identity:')).length < castIds.filter((c) => c !== 'ppaekong').length * V2_REF_CAPS.identityPerCreator) {
+    warnings.push('refs_budget_trimmed: 장소 참조를 싣기 위해 정체성 참조 일부 축소');
+  }
   return { order, warnings };
 }
 
@@ -221,6 +261,7 @@ export function buildPagePromptV2(
   const styleN = refPlan.filter((r) => r.kind === 'style').length;
   const idGroups = s.cast.map((c) => c.creatorId)
     .filter((c) => refPlan.some((r) => r.kind === `identity:${c}`));
+  const placeGroups = [...new Set(refPlan.filter((r) => r.kind.startsWith('place:')).map((r) => r.kind.slice(6)))];
   const hasPanelRef = refPlan.some((r) => r.kind === 'panel');
 
   const refDesc: string[] = [];
@@ -229,6 +270,11 @@ export function buildPagePromptV2(
   for (const c of idGroups) {
     const n = refPlan.filter((r) => r.kind === `identity:${c}`).length;
     refDesc.push(`images ${cursor + 1}–${cursor + n} define the identity of ${c}`);
+    cursor += n;
+  }
+  for (const pl of placeGroups) {
+    const n = refPlan.filter((r) => r.kind === `place:${pl}`).length;
+    refDesc.push(`images ${cursor + 1}–${cursor + n} define the recurring PLACE "${PLACES[pl]?.ko ?? pl}" — match its layout, furniture, lighting and props every time this place appears. Borrow the SPACE only: characters or people NEVER come from place references`);
     cursor += n;
   }
   if (hasPanelRef) refDesc.push('the last image is a panel-LAYOUT reference from a DIFFERENT work: borrow ONLY frame borders, gutters and rhythm — NEVER its characters, drawing style, colors, or content');
