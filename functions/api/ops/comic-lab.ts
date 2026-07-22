@@ -196,6 +196,28 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // 생성별로 [적용]을 고른다. 기본 제외 (sketch-lab 저녁 판정 계승: 참조는 기본 제외).
   var STYLE_APPLY_KEY = 'comic_style_apply';
   var PANEL_APPLY_KEY = 'comic_panel_apply';   // v2 전용 — 별이(v1) 경로는 기존대로 자동
+  // 실사고(07-22 심야): 시나리오가 메모리에만 있어 리프레시하면 사라졌다 (sketch-lab
+  // 세션 휘발 사고의 재발). 마지막 시나리오를 로컬에 보존하고 부팅 시 복원한다.
+  var DRAFT_KEY = 'comic_last_scenario';
+  function saveDraft(kind, sc, meta) {
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ kind: kind, s: sc, meta: meta || {}, at: Date.now() })); } catch (e) {}
+  }
+  function restoreDraft() {
+    var raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    try {
+      var d = JSON.parse(raw);
+      if (d.kind === 'v2' && d.s) {
+        state.scenario2 = d.s;
+        renderScenarioV2(d.s, d.meta || {});
+        banner('🗂 마지막 v2 시나리오 복원됨 — 리프레시해도 사라지지 않는다');
+      } else if (d.kind === 'v1' && d.s) {
+        state.scenario = d.s;
+        renderScenario(d.s, d.meta || {});
+        banner('🗂 마지막 시나리오 복원됨');
+      }
+    } catch (e) { /* 깨진 드래프트는 무시 */ }
+  }
   function panelApplied() { return localStorage.getItem(PANEL_APPLY_KEY) === '1'; }
   function styleApplied() {
     try { return JSON.parse(localStorage.getItem(STYLE_APPLY_KEY) || '[]'); } catch (e) { return []; }
@@ -435,7 +457,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
     generateCall({ scenario2: s, styleSlots: styleApplied(), panelRef: panelApplied() }).then(function (r) {
       if (r.error) {
-        $('out').firstChild.remove();
+        $('out').firstChild.innerHTML = '<div class="bad">실패: ' + esc(r.error) + '</div>' +
+          '<div class="muted" style="margin-top:6px">시나리오는 아래 그대로 남아 있다 — 원인 해소 후 다시 누르면 된다.</div>';
         banner('실패: ' + r.error, 'err');
         return;
       }
@@ -609,6 +632,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           return;
         }
         state.scenario2 = r.scenario2;
+        saveDraft('v2', r.scenario2, { provider: r.provider, model: r.model });
         renderScenarioV2(r.scenario2, r);
         banner('v2 시나리오 완성 — 게놈답게 나왔는지 확인');
         return;
@@ -666,6 +690,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 
   checkLock();
   renderArchive();
+  restoreDraft();
 })();
 </script>
 </body></html>`;
