@@ -141,7 +141,39 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   }
 
   // ── Style Lock — Comic Lab 전용 저장소 (comic/style-lock/). 칸 클릭 = 업로드/교체 ──
+  // 썸네일: 원본(1~2MB)을 새로고침마다 다시 받던 실사고 — 200px webp를 만들어 같이 저장.
   var pendingSlot = null;
+  var healed = {};   // 세션당 슬롯별 백필 1회
+  function makeThumb(blob) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      var url = URL.createObjectURL(blob);
+      img.onload = function () {
+        var w = 200, h = Math.max(1, Math.round(img.height * (200 / img.width)));
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? resolve(b) : reject('thumb_failed'); }, 'image/webp', 0.82);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject('thumb_load_failed'); };
+      img.src = url;
+    });
+  }
+  function uploadThumb(slot, blob) {
+    return fetch('/api/ops/comic-style-lock?slot=' + encodeURIComponent(slot) + '&thumb=1', {
+      method: 'POST', headers: { 'content-type': 'image/webp' }, body: blob,
+    }).then(function (r) { return r.json().catch(function () { return {}; }); });
+  }
+  function healThumb(slot) {   // 기존 원본에 썸네일이 없으면 스스로 만든다 (1회)
+    if (healed[slot]) return;
+    healed[slot] = true;
+    fetch('/api/ops/comic-style-lock?file=' + encodeURIComponent(slot))
+      .then(function (r) { return r.blob(); })
+      .then(makeThumb)
+      .then(function (b) { return uploadThumb(slot, b); })
+      .catch(function () { /* 백필 실패는 조용히 — 다음 방문에 재시도 */ });
+  }
   function checkLock() {
     api('/api/ops/comic-style-lock').then(function (r) {
       var grid = $('lockGrid');
@@ -150,8 +182,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         var cell = document.createElement('div');
         cell.style.cursor = 'pointer';
         cell.title = s.loaded ? s.slot + ' — 눌러서 교체' : s.slot + ' — 눌러서 업로드';
+        if (s.loaded && !s.hasThumb) healThumb(s.slot);
         cell.innerHTML = (s.loaded
-          ? '<img src="/api/ops/comic-style-lock?file=' + esc(s.slot) + '&v=' + Date.now() + '" loading="lazy">'
+          ? '<img src="/api/ops/comic-style-lock?file=' + esc(s.slot) + '&thumb=1&v=' + esc(s.uploaded || 0) + '" loading="lazy">'
           : '<div class="miss">비어 있음<br>+</div>') +
           '<div class="lockname">' + esc(s.slot) + '</div>';
         cell.onclick = function () { pendingSlot = s.slot; $('lockFile').click(); };
@@ -184,7 +217,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     }).then(function (r) {
       if (r.error) { banner(slot + ' 업로드 실패: ' + r.error, 'err'); return; }
       banner('🔒 ' + slot + ' 장착됨 (' + Math.round(r.size / 1024) + 'KB)');
-      checkLock();
+      makeThumb(f).then(function (b) { return uploadThumb(slot, b); })
+        .catch(function () { /* 썸네일 실패해도 원본 장착은 유효 */ })
+        .then(checkLock);
     }).catch(function (e) { banner('업로드 요청 실패: ' + e, 'err'); });
   };
 
