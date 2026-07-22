@@ -79,7 +79,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
-  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[] };
+  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[]; panelRef?: boolean };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
   const scenario = body.scenario;
   const scenario2 = body.scenario2;
@@ -94,7 +94,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     const hb = setInterval(() => { writer.write(enc.encode('{"hb":1}\n')).catch(() => {}); }, 8000);
     try {
       const result = scenario2
-        ? await runGenerationV2(env, scenario2, Array.isArray(body.styleSlots) ? body.styleSlots : [])
+        ? await runGenerationV2(env, scenario2, Array.isArray(body.styleSlots) ? body.styleSlots : [], body.panelRef === true)
         : await runGeneration(env, scenario as ComicScenario, body.panels);
       await writer.write(enc.encode(JSON.stringify(result) + '\n'));
     } catch (e) {
@@ -114,7 +114,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
    프롬프트의 형태 규칙은 바이블 문서에서 파생(_comic-v2.ts) — Holmes drift 재발 방지가
    이미지 참조가 아니라 문서 원본의 몫이라는 것이 REJECTED 사고의 교훈이다. */
 async function runGenerationV2(
-  env: Env, s2: ComicScenarioV2, styleSlots: string[],
+  env: Env, s2: ComicScenarioV2, styleSlots: string[], includePanel: boolean,
 ): Promise<Record<string, unknown>> {
   const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
   if (provider !== 'gemini') return { ok: false, error: 'v2_page_mode_gemini_only', provider };
@@ -133,7 +133,7 @@ async function runGenerationV2(
   }
 
   const castIds = s2.cast.map((c) => c.creatorId);
-  const plan = planV2Refs(castIds, styleSlots, loaded);
+  const plan = planV2Refs(castIds, styleSlots, loaded, includePanel);
   const identityMissing = plan.warnings.filter((w) => w.startsWith('identity_missing'));
   if (identityMissing.length) {
     return { ok: false, error: identityMissing.join(' / '), provider };   // 바이블 없이 그리면 남이 된다

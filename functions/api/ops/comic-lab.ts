@@ -191,6 +191,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // Comic Style 슬롯은 작품마다 다르다(별이 그림일기체 ≠ 관축해체) — 칸을 채워두고
   // 생성별로 [적용]을 고른다. 기본 제외 (sketch-lab 저녁 판정 계승: 참조는 기본 제외).
   var STYLE_APPLY_KEY = 'comic_style_apply';
+  var PANEL_APPLY_KEY = 'comic_panel_apply';   // v2 전용 — 별이(v1) 경로는 기존대로 자동
+  function panelApplied() { return localStorage.getItem(PANEL_APPLY_KEY) === '1'; }
   function styleApplied() {
     try { return JSON.parse(localStorage.getItem(STYLE_APPLY_KEY) || '[]'); } catch (e) { return []; }
   }
@@ -237,6 +239,20 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
               '<button data-x="' + esc(s.slot) + '" title="비우기" style="position:absolute;top:2px;right:2px;font-size:10px;line-height:1;padding:2px 5px;background:#2a1a1a;color:#c8a0a0;border:1px solid #5d3a3a;border-radius:3px;cursor:pointer">✕</button>'
             : '<div class="miss">비어 있음<br>+</div>') +
             '<div class="lockname">' + esc(s.slot) + '</div>';
+          // 패널 슬롯(v2): 별이용 패널 바이블 내용이 관축해에 번진 실사고 — 기본 제외, 명시 적용만
+          if (gm.g === 'panel' && s.loaded) {
+            var ap2 = document.createElement('label');
+            ap2.style.cssText = 'display:block;font-size:10px;cursor:pointer;margin-top:2px';
+            var cbp = document.createElement('input');
+            cbp.type = 'checkbox';
+            cbp.checked = panelApplied();
+            cbp.onclick = function (ev) { ev.stopPropagation(); };
+            cbp.onchange = function () { localStorage.setItem(PANEL_APPLY_KEY, cbp.checked ? '1' : '0'); checkLock(); };
+            ap2.onclick = function (ev) { ev.stopPropagation(); };
+            ap2.appendChild(cbp);
+            ap2.appendChild(document.createTextNode(' v2 적용(레이아웃만)'));
+            cell.appendChild(ap2);
+          }
           // 스타일 슬롯: 생성별 [적용] 토글 — 별이체와 관축해체가 같은 칸을 쓰므로 골라 쓴다
           if (gm.g === 'style' && s.loaded) {
             var ap = document.createElement('label');
@@ -375,7 +391,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     if (!s) { banner('v2 시나리오가 없다', 'err'); return; }
     var probe = $('out');
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
-    generateCall({ scenario2: s, styleSlots: styleApplied() }).then(function (r) {
+    generateCall({ scenario2: s, styleSlots: styleApplied(), panelRef: panelApplied() }).then(function (r) {
       if (r.error) {
         $('out').firstChild.remove();
         banner('실패: ' + r.error, 'err');

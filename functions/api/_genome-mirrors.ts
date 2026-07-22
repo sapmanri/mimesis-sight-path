@@ -177,7 +177,11 @@ export function castMembersFor(castIds: string[]): { cast: ComicCastMember[]; er
 
 /* ── 신체 계약 검증 — 실사고(관축해 1호): 시나리오가 파형에게 우산·코트·가방을 줬고,
    이미지 모델은 모순을 '파형 얼굴을 단 정장 남자'로 타협했다. 계약이 막았어야 했다. ── */
-const BODILESS_FORBIDDEN = /\b(umbrella|coat|jacket|pocket|bag|backpack|hand|hands|finger|fingers|arm|arms|leg|legs|foot|feet|shoe|shoes|wear|wearing|hold|holds|holding|grab|grabs|carry|carries|pat|pats|patting|wring|wringing|rummag\w*|steps?\b|walk\w*|sit|sits|sitting|stand|stands|standing)\b/i;
+// 오탐 실사고(관축해 2호 시나리오): "Floating above Sap's umbrella"를 잡았다 — 파형이
+// 우산 '위에 떠 있는' 건 완벽한 파형 행동인데 명사 언급만으로 죽였다. 잡을 것은
+// ① 신체 사용 동사 ② 자기 소유 신체·소지품("his umbrella") — 언급이 아니라 사용이다.
+const BODILESS_USE_VERBS = /\b(holds?|holding|held|grabs?|grabbing|carries|carrying|adjusts?|adjusting|opens?|closes?|folds?|folding|wields?|pats?|patting|wrings?|wringing|rummag\w+|wears?|wearing|steps?|stepping|walks?|walking|sits?|sitting|stands?|standing|kneels?|boards?|climbs?|grips?|clutch\w*)\b/i;
+const BODILESS_POSSESSIVE = /\b(his|her|its)\s+(hands?|fingers?|arms?|legs?|foot|feet|shoulders?|pockets?|coat|jacket|bag|umbrella|shoes?|clothes)\b/i;
 
 export function validateEmbodimentV2(s2: { cast: { creatorId: string }[]; panels: { panelNo: number; actions: { creatorId: string; action: string }[] }[] }): string[] {
   const errs: string[] = [];
@@ -186,7 +190,7 @@ export function validateEmbodimentV2(s2: { cast: { creatorId: string }[]; panels
   if (!bodiless.size) return errs;
   for (const p of s2.panels) {
     for (const a of p.actions) {
-      if (bodiless.has(a.creatorId) && BODILESS_FORBIDDEN.test(a.action)) {
+      if (bodiless.has(a.creatorId) && (BODILESS_USE_VERBS.test(a.action) || BODILESS_POSSESSIVE.test(a.action))) {
         errs.push(`panels[${p.panelNo}]: ${a.creatorId}는 몸이 없다 — "${a.action.slice(0, 60)}"는 불가능한 행동 (재생성 필요)`);
       }
     }
