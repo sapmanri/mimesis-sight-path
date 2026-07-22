@@ -47,6 +47,15 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   .cut .cap{margin-top:8px;font-size:13px;color:#e7dcc4;border-left:2px solid var(--sage,#A7B49A);padding-left:10px}
   .cut .dlg{margin-top:6px;font-size:13px;color:#c9beA6}
   .cut .dlg::before{content:'💬 '}
+  .strip{max-width:520px}
+  .pframe{border:1px solid #2b352a;border-radius:6px;overflow:hidden;background:#1a1f16;margin-bottom:4px;position:relative}
+  .pframe img{width:100%;display:block;background:#fff}
+  .pframe .making{height:220px;display:grid;place-content:center;color:#7d8a76;font-size:12px}
+  .pdlg{position:absolute;top:10px;left:10px;max-width:70%;background:#FAF7F2;color:#111111;
+    border:1.5px solid #111111;border-radius:14px;padding:6px 12px;font-size:13px;line-height:1.5}
+  .pcap{font-size:13px;color:#c9beA6;padding:6px 2px 16px;line-height:1.6}
+  .ptools{position:absolute;top:8px;right:8px}
+  .ptools button{font-size:10px;padding:3px 8px;opacity:.85}
   .banner{padding:8px 12px;border-radius:4px;font-size:12px;margin-bottom:10px;display:none}
   .banner.show{display:block}
   .banner.err{background:#2a1a1a;border:1px solid #5d3a3a;color:#c8a0a0}
@@ -186,14 +195,80 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     });
     html += '<div class="row">' +
       '<button id="redo">다른 이야기로 다시</button>' +
-      '<button class="primary" disabled title="Phase 2 배선에서 열린다">이 시나리오로 그리기 (다음 배선)</button>' +
+      '<button class="primary" id="draw">🎨 이 시나리오로 그리기 (' + s.panelCount + '장 생성)</button>' +
       '</div>' +
       '<details><summary>시나리오 JSON (계약 원문)</summary><pre style="white-space:pre-wrap;font-size:11px;color:#c9beA6">' +
       esc(JSON.stringify(s, null, 2)) + '</pre></details></div>';
     $('out').innerHTML = html;
     var rd = $('redo');
     if (rd) rd.onclick = makeStory;
+    var dw = $('draw');
+    if (dw) dw.onclick = drawComic;
   }
+
+  // ── Phase 2: 컷별 생성 → 세로 조립 (캡션·대사는 진짜 폰트 — 그림엔 글자가 없다) ──
+  function panelFrame(p) {
+    return '<div class="pframe" id="pf' + p.index + '">' +
+      '<div class="making"><span class="spin">◐</span>&nbsp; ' + p.index + '컷 그리는 중…</div></div>' +
+      (p.caption ? '<div class="pcap">' + esc(p.caption) + '</div>' : '<div style="height:12px"></div>');
+  }
+  function fillPanel(p, key) {
+    var f = $('pf' + p.index);
+    if (!f) return;
+    f.innerHTML = '<img src="/api/ops/comic-file?key=' + encodeURIComponent(key) + '&v=' + Date.now() + '">' +
+      (p.dialogue ? '<div class="pdlg">' + esc(p.dialogue) + '</div>' : '') +
+      '<div class="ptools"><button data-repanel="' + p.index + '">이 컷 다시</button></div>';
+  }
+  function failPanel(p, why) {
+    var f = $('pf' + p.index);
+    if (!f) return;
+    f.innerHTML = '<div class="making bad">' + p.index + '컷 실패 — ' + esc(why) +
+      '<br><button data-repanel="' + p.index + '" style="margin-top:8px">다시 시도</button></div>';
+  }
+  function genPanel(idx) {
+    var s = state.scenario;
+    var p = s.panels.filter(function (x) { return x.index === idx; })[0];
+    return api('/api/ops/comic-generate', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scenario: s, panels: [idx] }),
+    }).then(function (r) {
+      if (r.made && r.made.length) fillPanel(p, r.made[0].key);
+      else failPanel(p, (r.errors && r.errors[0]) || r.error || '?');
+      return r;
+    }).catch(function (e) { failPanel(p, String(e)); return { errors: [String(e)] }; });
+  }
+  function drawComic() {
+    var s = state.scenario;
+    if (!s) { banner('시나리오가 없다', 'err'); return; }
+    var strip = '<div class="panel strip" id="strip"><h2>「' + esc(s.title) + '」</h2>';
+    s.panels.forEach(function (p) { strip += panelFrame(p); });
+    strip += '<div class="muted" id="stripStatus">0/' + s.panelCount + '</div>' +
+      '<div class="muted" style="margin-top:8px">검사 축: 같은 별이인가 · 머리가 단색 면인가 · ' +
+      '앞머리 유지 · 빼콩이 유지 · 컷 수 일치 · (글자는 그림에 없어야 정상 — 캡션·대사는 아래 폰트가 담당)</div></div>';
+    $('out').innerHTML = strip + $('out').innerHTML;
+    var done = 0;
+    // 순차 생성 — 진행이 보이고, 실패해도 다음 컷은 계속
+    var chain = Promise.resolve();
+    s.panels.forEach(function (p) {
+      chain = chain.then(function () {
+        return genPanel(p.index).then(function () {
+          done++;
+          var st = $('stripStatus');
+          if (st) st.textContent = done + '/' + s.panelCount + (done === s.panelCount ? ' — 완성. 이상한 컷은 [이 컷 다시]' : '');
+        });
+      });
+    });
+  }
+  // 컷별 재생성 — 위임 리스너
+  $('out').addEventListener('click', function (ev) {
+    var t = ev.target;
+    var idx = t && t.getAttribute ? t.getAttribute('data-repanel') : null;
+    if (!idx || !state.scenario) return;
+    var p = state.scenario.panels.filter(function (x) { return x.index === Number(idx); })[0];
+    var f = $('pf' + idx);
+    if (f) f.innerHTML = '<div class="making"><span class="spin">◐</span>&nbsp; ' + idx + '컷 다시 그리는 중…</div>';
+    genPanel(Number(idx));
+  });
 
   // ── 생성 ──
   function makeStory() {
