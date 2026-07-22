@@ -15,6 +15,7 @@ export interface ComicImageEnv {
   COMIC_IMAGE_MODEL?: string;
   COMIC_IMAGE_QUALITY?: string;    // gpt 전용: low | medium(기본) | high
   COMIC_PAGE_RATIO?: string;       // gemini 페이지 비율 핀 (기본: 컷 수에서 파생)
+  COMIC_IMAGE_SIZE?: string;       // gemini 해상도 핀: 1K | 2K | 4K (기본: 프로 모델만 2K)
   AI?: { run: (model: string, input: unknown) => Promise<unknown> };
 }
 
@@ -102,6 +103,18 @@ function bytesToB64(buf: ArrayBuffer): string {
 // 한글 텍스트 품질 우선 — 나노바나나 프로(3-pro-image)가 한글 렌더링을 사실상 해결 (실측 80~90%)
 const GEMINI_IMAGE_CANDIDATES = ['gemini-3-pro-image-preview', 'gemini-2.5-flash-image', 'gemini-2.0-flash-preview-image-generation'];
 
+/**
+ * 해상도 다이얼 — 실사고(07-22 밤): 희미한 채색으로 별이 머리가 듬성듬성 나오는 장이 있었다.
+ * 제미나이엔 flux의 steps가 없다. 대신 프로 모델(나노바나나 프로)은 imageSize 1K|2K|4K를 받고,
+ * 2K는 1K와 같은 가격대 — 픽셀 밀도를 공짜로 올린다. 플래시 계열은 미지원이라 보내지 않는다.
+ * env COMIC_IMAGE_SIZE로 핀 가능(4K는 장당 비용 상승 — 명시 선택만).
+ */
+export function geminiImageSizeFor(env: ComicImageEnv, model: string): string | undefined {
+  const pin = (env.COMIC_IMAGE_SIZE || '').toUpperCase();
+  if (pin === '1K' || pin === '2K' || pin === '4K') return pin;
+  return model.startsWith('gemini-3-pro-image') ? '2K' : undefined;
+}
+
 async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes[], ratio: string):
   Promise<{ bytes: ArrayBuffer; model: string } | { error: string }> {
   const key = env.GEMINI_API_KEY || env.GEMINIAPIKEY;
@@ -111,7 +124,7 @@ async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes
   for (const model of candidates) {
     // 503(혼잡)은 같은 모델 재시도 — 폴백하면 한글 품질이 조용히 떨어진다(품질 선택을 몰래 바꾸지 않는다)
     for (let attempt = 0; attempt < 3; attempt++) {
-      const out = await geminiImageOnce(key, model, prompt, refs, ratio);
+      const out = await geminiImageOnce(key, model, prompt, refs, ratio, geminiImageSizeFor(env, model));
       if (!('error' in out)) return out;
       lastErr = out.error;
       if (out.error.includes('_503')) {
@@ -127,11 +140,13 @@ async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes
     : lastErr };
 }
 
-async function geminiImageOnce(key: string, model: string, prompt: string, refs: RefBytes[], ratio: string):
+async function geminiImageOnce(key: string, model: string, prompt: string, refs: RefBytes[], ratio: string, imageSize?: string):
   Promise<{ bytes: ArrayBuffer; model: string } | { error: string }> {
   try {
     const parts: unknown[] = [{ text: prompt }];
     for (const r of refs) parts.push({ inlineData: { mimeType: r.contentType, data: bytesToB64(r.bytes) } });
+    const imageConfig: Record<string, string> = { aspectRatio: ratio };
+    if (imageSize) imageConfig.imageSize = imageSize;
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
@@ -139,7 +154,7 @@ async function geminiImageOnce(key: string, model: string, prompt: string, refs:
         headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({
           contents: [{ parts }],
-          generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: ratio } },
+          generationConfig: { responseModalities: ['IMAGE'], imageConfig },
         }),
       },
     );

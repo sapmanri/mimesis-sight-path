@@ -143,6 +143,8 @@ export function buildPagePrompt(
     // 실사고: 마지막 컷에 별이가 둘 — 수 못박기 (9차의 교훈, 페이지판)
     `In every panel there is exactly one girl — never two girls — and at most one white cat.`,
     `Match the character design, hair, palette and line style of the reference sheets exactly — same girl, same white cat.`,
+    // 실사고(07-22 밤): 희미한 채색 → 별이 머리 듬성듬성. 부정문 대신 긍정 서술로 못박는다 (교훈 2)
+    `Coloring: confident, fully saturated flat fills — every colored shape is filled completely edge to edge. Hair is one solid dark shape, fully filled with even color.`,
     // 홈즈 제목 체계(07-22): 콘텐츠의 제목이 아니라 "오늘의 기록"처럼 — AI 만화 티를 지운다
     `Page design: warm paper like a page from a child's picture diary. Top-left, very small: "별이의 그림일기" and "${opts.dateKst ?? ''}". Below it the title "${s.title}" written large. Under the title one small line: "${s.epigraph}".`,
     opts.observationNo

@@ -390,6 +390,40 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       banner('요청 실패: ' + e, 'err');
     });
   }
+  // 관찰 아카이브 — 95790b8에서 호출만 남고 정의가 빠졌던 함수 (실사고: 페이지 완성 직후
+  // ReferenceError가 catch로 흘러 "요청 실패" 배너가 떴다). 500편이 쌓이면 하나의 아카이브가 된다.
+  function renderArchive() {
+    api('/api/ops/comic-generate').then(function (r) {
+      var list = (r && r.comics) || [];
+      if (!list.length) { $('archive').innerHTML = ''; return; }
+      var html = '<div class="panel"><h2>📚 관찰 아카이브 <span class="muted">' + list.length + '편</span></h2>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">';
+      list.forEach(function (c) {
+        var d = new Date(c.at);
+        var pad = function (n) { return String(n).padStart(2, '0'); };
+        html += '<div style="border:1px solid rgba(255,255,255,0.1);border-radius:6px;overflow:hidden">' +
+          '<a href="/api/ops/comic-file?key=' + encodeURIComponent(c.pageKey) + '" target="_blank">' +
+          '<img loading="lazy" style="width:100%;display:block;aspect-ratio:3/4;object-fit:cover" src="/api/ops/comic-file?key=' +
+          encodeURIComponent(c.pageKey) + '"></a>' +
+          '<div style="padding:6px 8px;font-size:11px">' +
+          (c.no ? '<span class="muted">#' + String(c.no).padStart(3, '0') + '</span> ' : '') +
+          '<b>' + esc(c.title) + '</b>' +
+          '<div class="muted">' + d.getFullYear() + '.' + pad(d.getMonth() + 1) + '.' + pad(d.getDate()) +
+          ' · ' + c.panelCount + '컷 <button data-del="' + esc(c.comicId) + '" style="float:right;font-size:10px">🗑</button></div>' +
+          '</div></div>';
+      });
+      html += '</div></div>';
+      $('archive').innerHTML = html;
+      $('archive').querySelectorAll('[data-del]').forEach(function (b) {
+        b.onclick = function () {
+          if (!confirm('이 작품을 삭제할까? 관찰 번호는 재사용되지 않는다.')) return;
+          api('/api/ops/comic-generate?comicId=' + b.getAttribute('data-del'), { method: 'DELETE' })
+            .then(function () { renderArchive(); });
+        };
+      });
+    }).catch(function () { /* 아카이브 표시는 부가 기능 — 실패가 실험실을 막지 않는다 */ });
+  }
+
   $('go').onclick = makeStory;
   $('theme').onkeydown = function (e) { if (e.key === 'Enter') makeStory(); };
 
