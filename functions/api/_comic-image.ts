@@ -98,11 +98,26 @@ function bytesToB64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
+// 모델 은퇴 내성 — 404면 다음 후보 (env COMIC_IMAGE_MODEL이 있으면 그것만)
+const GEMINI_IMAGE_CANDIDATES = ['gemini-2.5-flash-image', 'gemini-3-pro-image-preview', 'gemini-2.0-flash-preview-image-generation'];
+
 async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes[], ratio: string):
   Promise<{ bytes: ArrayBuffer; model: string } | { error: string }> {
   const key = env.GEMINI_API_KEY || env.GEMINIAPIKEY;
   if (!key) return { error: 'gemini_key_missing: GEMINI_API_KEY(또는 GEMINIAPIKEY) 시크릿 필요' };
-  const model = env.COMIC_IMAGE_MODEL || 'gemini-2.5-flash-image';
+  const candidates = env.COMIC_IMAGE_MODEL ? [env.COMIC_IMAGE_MODEL] : GEMINI_IMAGE_CANDIDATES;
+  let lastErr = 'gemini_no_candidates';
+  for (const model of candidates) {
+    const out = await geminiImageOnce(key, model, prompt, refs, ratio);
+    if (!('error' in out)) return out;
+    lastErr = out.error;
+    if (!out.error.includes('_404')) break;
+  }
+  return { error: lastErr };
+}
+
+async function geminiImageOnce(key: string, model: string, prompt: string, refs: RefBytes[], ratio: string):
+  Promise<{ bytes: ArrayBuffer; model: string } | { error: string }> {
   try {
     const parts: unknown[] = [{ text: prompt }];
     for (const r of refs) parts.push({ inlineData: { mimeType: r.contentType, data: bytesToB64(r.bytes) } });

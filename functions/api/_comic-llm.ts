@@ -21,7 +21,9 @@ export interface ComicLlmEnv {
 
 const GPT_MODEL_DEFAULT = 'gpt-5';
 const CLAUDE_MODEL_DEFAULT = 'claude-sonnet-5';
-const GEMINI_MODEL_DEFAULT = 'gemini-2.5-pro';
+// 모델 은퇴 내성(실사고 07-22: gemini-2.5-pro가 신규 사용자에게 404):
+// 별칭 우선 + 404면 다음 후보. env COMIC_TEXT_MODEL이 있으면 그것만 쓴다.
+const GEMINI_TEXT_CANDIDATES = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3-flash-preview'];
 
 /** 시크릿 이름 관용 — GEMINI_API_KEY 또는 GEMINIAPIKEY 어느 쪽이든 읽는다. */
 export function geminiKeyOf(env: { GEMINI_API_KEY?: string; GEMINIAPIKEY?: string }): string | null {
@@ -90,7 +92,19 @@ async function viaGemini(env: ComicLlmEnv, theme: string, panelCount: number):
   Promise<{ text: string; model: string } | { error: string }> {
   const key = geminiKeyOf(env);
   if (!key) return { error: 'gemini_key_missing: GEMINI_API_KEY(또는 GEMINIAPIKEY) 시크릿 필요' };
-  const model = env.COMIC_TEXT_MODEL || GEMINI_MODEL_DEFAULT;
+  const candidates = env.COMIC_TEXT_MODEL ? [env.COMIC_TEXT_MODEL] : GEMINI_TEXT_CANDIDATES;
+  let lastErr = 'gemini_no_candidates';
+  for (const model of candidates) {
+    const out = await geminiTextOnce(key, model, theme, panelCount);
+    if (!('error' in out)) return out;
+    lastErr = out.error;
+    if (!out.error.includes('_404')) break;   // 404(모델 은퇴)만 다음 후보로, 다른 오류는 즉시 보고
+  }
+  return { error: lastErr };
+}
+
+async function geminiTextOnce(key: string, model: string, theme: string, panelCount: number):
+  Promise<{ text: string; model: string } | { error: string }> {
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
