@@ -137,13 +137,16 @@ async function callClaude(env: Env, messages: { role: string; content: string }[
         'x-api-key': env.ANTHROPIC_API_KEY as string,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 300, system: STYLE_SYSTEM, messages }),
+      // 실사고(07-22 밤): 300이면 한국어 답글+reason이 잘려 닫는 중괄호가 사라진다
+      // (한국어 ≈ 글자당 1~1.5토큰) → claude_bad_output. 여유 있게.
+      body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: 800, system: STYLE_SYSTEM, messages }),
     });
     if (!res.ok) return { error: `claude_http_${res.status}` };
-    const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const data = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string };
     const text = data.content?.find((c) => c.type === 'text')?.text ?? '';
     const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return { error: 'claude_bad_output' };
+    // 실패 사유를 실어 보낸다 — "bad_output" 한 단어로는 다음 사람이 또 헤맨다 (Layer1 정신)
+    if (!m) return { error: `claude_bad_output(${data.stop_reason ?? '?'}): ${text.slice(0, 60) || '빈 응답'}` };
     const out = JSON.parse(m[0]) as { reply?: unknown; bookmark?: unknown; reason?: unknown };
     const reply = typeof out.reply === 'string' && out.reply.trim() ? out.reply.trim().slice(0, 300) : null;
     return { reply, bookmark: out.bookmark === true, reason: String(out.reason ?? '').slice(0, 200) };
