@@ -34,13 +34,43 @@ export function comicIdOf(s: ComicScenario): string {
 
 export const panelKey = (comicId: string, index: number) => `${COMIC_STRIP_PREFIX}${comicId}/p${index}.png`;
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+/**
+ * 524 대책(실사고 07-22 오후): 나노바나나 프로 생성 + 재시도가 엣지 100초 벽을 넘겼다.
+ * 응답을 즉시 열고 8초마다 하트비트 줄을 흘리면 스트리밍 중 응답은 끊기지 않는다.
+ * 형식: NDJSON — 중간 줄 {"hb":1}, 마지막 줄이 결과. 클라이언트는 마지막 줄만 파싱.
+ */
+export const onRequestPost: PagesFunction<Env> = async (ctx) => {
+  const { request, env } = ctx;
   let body: { scenario?: ComicScenario; panels?: number[] };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
   const scenario = body.scenario;
   const errs = scenario ? validateScenario(scenario) : ['scenario required'];
   if (errs.length) return json(400, { ok: false, error: 'scenario_invalid', detail: errs });
-  const s = scenario as ComicScenario;
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const enc = new TextEncoder();
+  const work = (async () => {
+    const hb = setInterval(() => { writer.write(enc.encode('{"hb":1}\n')).catch(() => {}); }, 8000);
+    try {
+      const result = await runGeneration(env, scenario as ComicScenario, body.panels);
+      await writer.write(enc.encode(JSON.stringify(result) + '\n'));
+    } catch (e) {
+      await writer.write(enc.encode(JSON.stringify({ ok: false, error: `generate_crashed: ${String(e).slice(0, 200)}` }) + '\n'));
+    } finally {
+      clearInterval(hb);
+      await writer.close().catch(() => {});
+    }
+  })();
+  ctx.waitUntil(work);
+  return new Response(readable, {
+    headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
+  });
+};
+
+async function runGeneration(
+  env: Env, s: ComicScenario, panelsWanted?: number[],
+): Promise<Record<string, unknown>> {
   const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
   const cap = refCapFor(provider);
   const comicId = comicIdOf(s);
@@ -48,12 +78,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // gpt/flux = 컷별 모드 (한글은 폰트로 얹는 기존 구조).
   const mode = provider === 'gemini' ? 'page' : 'panels';
 
-  const want = Array.isArray(body.panels) && body.panels.length
-    ? body.panels.filter((n) => Number.isInteger(n) && n >= 1 && n <= s.panelCount)
+  const want = Array.isArray(panelsWanted) && panelsWanted.length
+    ? panelsWanted.filter((n) => Number.isInteger(n) && n >= 1 && n <= s.panelCount)
     : s.panels.map((p) => p.index);
   if (mode === 'panels') {
-    if (!want.length) return json(400, { ok: false, error: 'no_valid_panels' });
-    if (want.length > 2) return json(400, { ok: false, error: 'max_2_per_call: 컷 단위로 나눠 부른다 (진행 표시·부분 재시도)' });
+    if (!want.length) return { ok: false, error: 'no_valid_panels' };
+    if (want.length > 2) return { ok: false, error: 'max_2_per_call: 컷 단위로 나눠 부른다' };
   }
 
   // Style Lock 로드 — 실제로 읽는다. 키만 믿지 않는다.
@@ -83,10 +113,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       if (r) { refs.push(r); if (slot === 'ch05_panel') hasPanelRef = true; }
       else if ((STYLE_LOCK_REQUIRED as readonly string[]).includes(slot)) missing.push(slot);
     }
-    if (!refs.length) return json(409, { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' });
+    if (!refs.length) return { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' };
     const prompt = buildPagePrompt(s, { panelLayoutRef: hasPanelRef });
     const art = await generatePageImage(env, prompt, refs, s.panelCount);
-    if ('error' in art) return json(502, { ok: false, error: art.error, provider: art.provider });
+    if ('error' in art) return { ok: false, error: art.error, provider: art.provider };
     const key = `${COMIC_STRIP_PREFIX}${comicId}/page.png`;
     await env.CAPTURES.put(key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
     try {
@@ -97,10 +127,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         ...log.filter((x) => x.comicId !== comicId),
       ].slice(0, META_KEEP)));
     } catch { /* 메타 실패가 생성을 막지 않는다 */ }
-    return json(200, {
+    return {
       ok: true, mode: 'page', comicId, key, model: art.model, provider,
       warnings: missing.length ? [`lock_missing: ${missing.join(', ')}`] : [],
-    });
+    };
   }
 
   const made: { index: number; key: string; model: string; provider: string }[] = [];
@@ -134,5 +164,5 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ].slice(0, META_KEEP)));
   } catch { /* 메타 실패가 생성을 막지 않는다 */ }
 
-  return json(200, { ok: errors.length === 0, comicId, made, errors, provider });
-};
+  return { ok: errors.length === 0, mode: 'panels', comicId, made, errors, provider };
+}

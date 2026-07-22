@@ -122,6 +122,19 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       return r.json().catch(function () { return { error: 'HTTP ' + r.status }; });
     });
   }
+  // comic-generate 전용 — NDJSON 스트림(하트비트 + 마지막 줄 결과). 524 대책.
+  function generateCall(bodyObj) {
+    return fetch('/api/ops/comic-generate', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(bodyObj),
+    }).then(function (res) {
+      return res.text().then(function (t) {
+        var lines = t.trim().split('\\n').filter(Boolean);
+        try { return JSON.parse(lines[lines.length - 1]); }
+        catch (e) { return { error: 'bad_stream: ' + t.slice(0, 120) }; }
+      });
+    });
+  }
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -241,10 +254,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   function genPanel(idx) {
     var s = state.scenario;
     var p = s.panels.filter(function (x) { return x.index === idx; })[0];
-    return api('/api/ops/comic-generate', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scenario: s, panels: [idx] }),
-    }).then(function (r) {
+    return generateCall({ scenario: s, panels: [idx] }).then(function (r) {
       if (r.made && r.made.length) fillPanel(p, r.made[0].key);
       else failPanel(p, (r.errors && r.errors[0]) || r.error || '?');
       return r;
@@ -256,10 +266,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     // 먼저 서버에 물어본다 — 페이지 모드(제미나이)면 한 방, 아니면 컷별
     var probe = $('out');
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
-    api('/api/ops/comic-generate', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scenario: s }),
-    }).then(function (r) {
+    generateCall({ scenario: s }).then(function (r) {
       if (r.mode === 'page') {
         var pg = '<div class="panel" style="max-width:760px"><h2>「' + esc(s.title) + '」 <span class="muted">' +
           esc(r.provider) + ' · ' + esc(r.model) + ' · 원샷 페이지</span></h2>' +
