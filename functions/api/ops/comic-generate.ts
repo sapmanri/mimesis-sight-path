@@ -8,8 +8,8 @@
 //
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
-import { validateScenario, buildPanelPrompt, pickStyleRefs, type ComicScenario } from '../_comic.ts';
-import { generatePanelImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
+import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, type ComicScenario } from '../_comic.ts';
+import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
 import { COMIC_LOCK_PREFIX } from './comic-style-lock.ts';
 
 interface Env extends ComicImageEnv {
@@ -41,15 +41,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const errs = scenario ? validateScenario(scenario) : ['scenario required'];
   if (errs.length) return json(400, { ok: false, error: 'scenario_invalid', detail: errs });
   const s = scenario as ComicScenario;
+  const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
+  const cap = refCapFor(provider);
+  const comicId = comicIdOf(s);
+  // 제미나이 = 원샷 페이지 (실증: 한 캔버스가 일관성을 이긴다 + 한글 텍스트 가능).
+  // gpt/flux = 컷별 모드 (한글은 폰트로 얹는 기존 구조).
+  const mode = provider === 'gemini' ? 'page' : 'panels';
+
   const want = Array.isArray(body.panels) && body.panels.length
     ? body.panels.filter((n) => Number.isInteger(n) && n >= 1 && n <= s.panelCount)
     : s.panels.map((p) => p.index);
-  if (!want.length) return json(400, { ok: false, error: 'no_valid_panels' });
-  if (want.length > 2) return json(400, { ok: false, error: 'max_2_per_call: 컷 단위로 나눠 부른다 (진행 표시·부분 재시도)' });
-
-  const provider = (env.COMIC_IMAGE_PROVIDER || 'gpt').toLowerCase();
-  const cap = refCapFor(provider);
-  const comicId = comicIdOf(s);
+  if (mode === 'panels') {
+    if (!want.length) return json(400, { ok: false, error: 'no_valid_panels' });
+    if (want.length > 2) return json(400, { ok: false, error: 'max_2_per_call: 컷 단위로 나눠 부른다 (진행 표시·부분 재시도)' });
+  }
 
   // Style Lock 로드 — 실제로 읽는다. 키만 믿지 않는다.
   const lockCache = new Map<string, RefBytes>();
@@ -66,6 +71,34 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     };
     lockCache.set(slot, r);
     return r;
+  }
+
+  // ── 페이지 모드 — 한 번의 호출로 페이지 전체 ──
+  if (mode === 'page') {
+    const refs: RefBytes[] = [];
+    const missing: string[] = [];
+    for (const slot of STYLE_LOCK_NAMES) {
+      const r = await loadRef(slot);
+      if (r) refs.push(r); else missing.push(slot);
+    }
+    if (!refs.length) return json(409, { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' });
+    const prompt = buildPagePrompt(s);
+    const art = await generatePageImage(env, prompt, refs, s.panelCount);
+    if ('error' in art) return json(502, { ok: false, error: art.error, provider: art.provider });
+    const key = `${COMIC_STRIP_PREFIX}${comicId}/page.png`;
+    await env.CAPTURES.put(key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
+    try {
+      const raw = await env.PLANET.get(META_KEY);
+      const log: { comicId: string }[] = raw ? JSON.parse(raw) : [];
+      await env.PLANET.put(META_KEY, JSON.stringify([
+        { comicId, at: Date.now(), title: s.title, theme: s.theme, panelCount: s.panelCount, mode: 'page', scenario: s },
+        ...log.filter((x) => x.comicId !== comicId),
+      ].slice(0, META_KEEP)));
+    } catch { /* 메타 실패가 생성을 막지 않는다 */ }
+    return json(200, {
+      ok: true, mode: 'page', comicId, key, model: art.model, provider,
+      warnings: missing.length ? [`lock_missing: ${missing.join(', ')}`] : [],
+    });
   }
 
   const made: { index: number; key: string; model: string; provider: string }[] = [];

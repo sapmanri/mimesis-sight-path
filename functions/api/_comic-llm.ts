@@ -13,12 +13,20 @@ import { SCENARIO_SYSTEM } from './_comic.ts';
 export interface ComicLlmEnv {
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
-  COMIC_TEXT_PROVIDER?: string;   // 'gpt'(기본) | 'claude'
+  GEMINI_API_KEY?: string;
+  GEMINIAPIKEY?: string;          // 시크릿 이름을 언더바 없이 만든 경우 폴백 (2026-07-22)
+  COMIC_TEXT_PROVIDER?: string;   // 'gemini'(기본, Vase 판정 07-22) | 'gpt' | 'claude'
   COMIC_TEXT_MODEL?: string;      // 모델 핀 교체용 (기본: 아래 상수)
 }
 
 const GPT_MODEL_DEFAULT = 'gpt-5';
 const CLAUDE_MODEL_DEFAULT = 'claude-sonnet-5';
+const GEMINI_MODEL_DEFAULT = 'gemini-2.5-pro';
+
+/** 시크릿 이름 관용 — GEMINI_API_KEY 또는 GEMINIAPIKEY 어느 쪽이든 읽는다. */
+export function geminiKeyOf(env: { GEMINI_API_KEY?: string; GEMINIAPIKEY?: string }): string | null {
+  return env.GEMINI_API_KEY || env.GEMINIAPIKEY || null;
+}
 
 export function userPrompt(theme: string, panelCount: number): string {
   return `주제: ${theme}\npanelCount: ${panelCount}\n이 주제로 별이의 ${panelCount}컷 그림일기 시나리오를 JSON으로.`;
@@ -78,14 +86,40 @@ async function viaClaude(env: ComicLlmEnv, theme: string, panelCount: number):
   } catch (e) { return { error: `claude_network: ${String(e).slice(0, 120)}` }; }
 }
 
-/** 두뇌 호출 — provider는 env로 정해진다. 기본 gpt (Vase 판정). */
+async function viaGemini(env: ComicLlmEnv, theme: string, panelCount: number):
+  Promise<{ text: string; model: string } | { error: string }> {
+  const key = geminiKeyOf(env);
+  if (!key) return { error: 'gemini_key_missing: GEMINI_API_KEY(또는 GEMINIAPIKEY) 시크릿 필요' };
+  const model = env.COMIC_TEXT_MODEL || GEMINI_MODEL_DEFAULT;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SCENARIO_SYSTEM }] },
+          contents: [{ parts: [{ text: userPrompt(theme, panelCount) }] }],
+          generationConfig: { responseMimeType: 'application/json' },
+        }),
+      },
+    );
+    if (!res.ok) return { error: `gemini_http_${res.status}: ${(await res.text()).slice(0, 200)}` };
+    const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    const text = (data.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');
+    if (!text) return { error: 'gemini_empty_output' };
+    return { text, model };
+  } catch (e) { return { error: `gemini_network: ${String(e).slice(0, 120)}` }; }
+}
+
+/** 두뇌 호출 — provider는 env로 정해진다. 기본 gemini (Vase 판정 07-22: "전부 제미나이로"). */
 export async function generateScenarioText(
   env: ComicLlmEnv, theme: string, panelCount: number,
 ): Promise<{ text: string; model: string; provider: string } | { error: string; provider: string }> {
-  const provider = (env.COMIC_TEXT_PROVIDER || 'gpt').toLowerCase();
-  const out = provider === 'claude'
-    ? await viaClaude(env, theme, panelCount)
-    : await viaGpt(env, theme, panelCount);
+  const provider = (env.COMIC_TEXT_PROVIDER || 'gemini').toLowerCase();
+  const out = provider === 'claude' ? await viaClaude(env, theme, panelCount)
+    : provider === 'gpt' ? await viaGpt(env, theme, panelCount)
+    : await viaGemini(env, theme, panelCount);
   return 'error' in out ? { ...out, provider } : { ...out, provider };
 }
 

@@ -9,9 +9,12 @@
 
 export interface ComicImageEnv {
   OPENAI_API_KEY?: string;
-  COMIC_IMAGE_PROVIDER?: string;   // 'gpt'(기본) | 'workers-ai'
-  COMIC_IMAGE_MODEL?: string;      // 기본 gpt-image-1
-  COMIC_IMAGE_QUALITY?: string;    // low | medium(기본) | high
+  GEMINI_API_KEY?: string;
+  GEMINIAPIKEY?: string;
+  COMIC_IMAGE_PROVIDER?: string;   // 'gemini'(기본, Vase 판정 07-22) | 'gpt' | 'workers-ai'
+  COMIC_IMAGE_MODEL?: string;
+  COMIC_IMAGE_QUALITY?: string;    // gpt 전용: low | medium(기본) | high
+  COMIC_PAGE_RATIO?: string;       // gemini 페이지 비율 핀 (기본: 컷 수에서 파생)
   AI?: { run: (model: string, input: unknown) => Promise<unknown> };
 }
 
@@ -87,13 +90,66 @@ async function viaWorkersAi(env: ComicImageEnv, prompt: string, refs: RefBytes[]
   } catch (e) { return { error: `flux_failed: ${String(e).slice(0, 120)}` }; }
 }
 
-/** 컷 한 장 생성 — provider는 env가 정한다. 기본 gpt (Vase 판정). */
+function bytesToB64(buf: ArrayBuffer): string {
+  const u = new Uint8Array(buf);
+  let s = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < u.length; i += CHUNK) s += String.fromCharCode(...u.subarray(i, i + CHUNK));
+  return btoa(s);
+}
+
+async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes[], ratio: string):
+  Promise<{ bytes: ArrayBuffer; model: string } | { error: string }> {
+  const key = env.GEMINI_API_KEY || env.GEMINIAPIKEY;
+  if (!key) return { error: 'gemini_key_missing: GEMINI_API_KEY(또는 GEMINIAPIKEY) 시크릿 필요' };
+  const model = env.COMIC_IMAGE_MODEL || 'gemini-2.5-flash-image';
+  try {
+    const parts: unknown[] = [{ text: prompt }];
+    for (const r of refs) parts.push({ inlineData: { mimeType: r.contentType, data: bytesToB64(r.bytes) } });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: ratio } },
+        }),
+      },
+    );
+    if (!res.ok) return { error: `geminiimg_http_${res.status}: ${(await res.text()).slice(0, 200)}` };
+    const data = (await res.json()) as {
+      candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[];
+    };
+    const b64 = (data.candidates?.[0]?.content?.parts ?? []).find((p) => p.inlineData?.data)?.inlineData?.data;
+    if (!b64) return { error: 'geminiimg_empty' };
+    return { bytes: b64ToBytes(b64), model };
+  } catch (e) { return { error: `geminiimg_network: ${String(e).slice(0, 120)}` }; }
+}
+
+/** 컷 한 장 생성 — provider는 env가 정한다. 기본 gemini (Vase 판정 07-22). */
 export async function generatePanelImage(
   env: ComicImageEnv, prompt: string, refs: RefBytes[],
 ): Promise<{ bytes: ArrayBuffer; model: string; provider: string } | { error: string; provider: string }> {
-  const provider = (env.COMIC_IMAGE_PROVIDER || 'gpt').toLowerCase();
-  const out = provider === 'workers-ai'
-    ? await viaWorkersAi(env, prompt, refs)
-    : await viaGptImage(env, prompt, refs);
+  const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
+  const out = provider === 'workers-ai' ? await viaWorkersAi(env, prompt, refs)
+    : provider === 'gpt' ? await viaGptImage(env, prompt, refs)
+    : await viaGeminiImage(env, prompt, refs, '1:1');
+  return 'error' in out ? { ...out, provider } : { ...out, provider };
+}
+
+/** 페이지 비율 — 컷 수에서 파생 (COMIC_PAGE_RATIO로 핀 가능). */
+export function pageRatioFor(env: ComicImageEnv, panelCount: number): string {
+  if (env.COMIC_PAGE_RATIO) return env.COMIC_PAGE_RATIO;
+  return panelCount === 8 ? '16:9' : '3:4';
+}
+
+/** 원샷 페이지 생성 — 제미나이 전용 (다른 provider는 컷별 모드로 폴백해야 한다). */
+export async function generatePageImage(
+  env: ComicImageEnv, prompt: string, refs: RefBytes[], panelCount: number,
+): Promise<{ bytes: ArrayBuffer; model: string; provider: string } | { error: string; provider: string }> {
+  const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
+  if (provider !== 'gemini') return { error: 'page_mode_gemini_only', provider };
+  const out = await viaGeminiImage(env, prompt, refs, pageRatioFor(env, panelCount));
   return 'error' in out ? { ...out, provider } : { ...out, provider };
 }

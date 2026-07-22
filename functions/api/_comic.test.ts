@@ -106,3 +106,21 @@ test('참조 상한 — flux 4장, gpt 5장', async () => {
   assert.equal(refCapFor('workers-ai'), 4);
   assert.equal(refCapFor('gpt'), 5);
 });
+
+test('원샷 페이지 프롬프트 — 한글 대사·캡션이 정확히 실리고 컷 수가 박힌다 (제미나이 모드)', async () => {
+  const { buildPagePrompt } = await import('./_comic.ts');
+  const s = scenario();
+  s.panels[0].dialogue = '또 가...?';
+  const p = buildPagePrompt(s);
+  assert.match(p, /exactly 4 panels/);
+  assert.ok(p.includes('"또 가...?"'), '대사가 원문 그대로 실려야 한다');
+  assert.ok(p.includes('"빗소리가 먼저 일어났다."'), '캡션 원문');
+  assert.ok(p.includes('빗소리 하나'), '헤더 제목');
+});
+
+test('제미나이 키 이름 관용 — 언더바 없이 만들어도 읽힌다', async () => {
+  const { geminiKeyOf } = await import('./_comic-llm.ts');
+  assert.equal(geminiKeyOf({ GEMINI_API_KEY: 'a' }), 'a');
+  assert.equal(geminiKeyOf({ GEMINIAPIKEY: 'b' }), 'b');
+  assert.equal(geminiKeyOf({}), null);
+});

@@ -240,6 +240,40 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   function drawComic() {
     var s = state.scenario;
     if (!s) { banner('시나리오가 없다', 'err'); return; }
+    // 먼저 서버에 물어본다 — 페이지 모드(제미나이)면 한 방, 아니면 컷별
+    var probe = $('out');
+    probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
+    api('/api/ops/comic-generate', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scenario: s }),
+    }).then(function (r) {
+      if (r.mode === 'page') {
+        var pg = '<div class="panel" style="max-width:760px"><h2>「' + esc(s.title) + '」 <span class="muted">' +
+          esc(r.provider) + ' · ' + esc(r.model) + ' · 원샷 페이지</span></h2>' +
+          '<img style="width:100%;display:block;border-radius:4px" src="/api/ops/comic-file?key=' +
+          encodeURIComponent(r.key) + '&v=' + Date.now() + '">' +
+          (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
+          '<div class="row" style="margin-top:10px"><button id="redraw" class="primary">🎲 전체 다시 그리기</button></div>' +
+          '<div class="muted" style="margin-top:8px">검사 축: 같은 별이 · 머리 단색 면 · 빼콩이 유지 · 컷 수 ' +
+          s.panelCount + ' · <b>한글 오탈자</b> (원샷 모드의 검사 항목 — 시나리오 문장과 대조)</div></div>';
+        $('out').innerHTML = pg;
+        var rb = $('redraw');
+        if (rb) rb.onclick = drawComic;
+        banner('페이지 완성 — 오탈자·별이 동일성 확인');
+        return;
+      }
+      if (r.error) {
+        $('out').firstChild.remove();
+        banner('실패: ' + r.error, 'err');
+        return;
+      }
+      // 컷별 모드 (gpt/flux 어댑터) — 기존 흐름
+      $('out').firstChild.remove();
+      drawPanels();
+    }).catch(function (e) { banner('요청 실패: ' + e, 'err'); });
+  }
+  function drawPanels() {
+    var s = state.scenario;
     var strip = '<div class="panel strip" id="strip"><h2>「' + esc(s.title) + '」</h2>';
     s.panels.forEach(function (p) { strip += panelFrame(p); });
     strip += '<div class="muted" id="stripStatus">0/' + s.panelCount + '</div>' +

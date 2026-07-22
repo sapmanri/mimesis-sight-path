@@ -108,6 +108,36 @@ export function buildPanelPrompt(p: ComicPanel): string {
   ].join('\n');
 }
 
+/* ── 원샷 페이지 프롬프트 (제미나이 페이지 모드) ──────────────────
+   실증(2026-07-22): 제미나이는 한 장에 N컷 + 한글 텍스트를 일관성 있게 그린다.
+   "한글은 그림으로 취급된다"는 flux의 규칙이었다 — 여기선 오탈자 검사로 대체된다.
+   레이아웃은 CH05 PANEL BIBLE이 오기 전까지 기본 격자. */
+
+const PAGE_GRID: Record<number, string> = {
+  4: '2 rows of 2 panels',
+  6: '3 rows of 2 panels',
+  8: '2 rows of 4 panels',
+};
+
+export function buildPagePrompt(s: ComicScenario): string {
+  const lines: string[] = [
+    `A single Korean webtoon page with exactly ${s.panelCount} panels, arranged in ${PAGE_GRID[s.panelCount]}.`,
+    `Match the character design, hair, palette and line style of the reference sheets exactly — same girl, same white cat.`,
+    `Page design: warm paper background, thin navy panel borders, small header reading "BYEOLI WEBTOON" and the chapter title "${s.title}".`,
+    `Render all Korean text exactly as written below, letter-perfect, in a clean friendly hand-lettered style.`,
+    '',
+  ];
+  for (const p of s.panels) {
+    lines.push(`Panel ${p.index}: ${p.location}, ${p.shot} shot. The girl: ${p.action}, expression ${p.expression}.`
+      + (p.ppaekong ? ` The white cat: ${p.ppaekong}.` : ' The white cat is not in this panel.')
+      + ` Focus: ${p.subject}.`);
+    if (p.dialogue) lines.push(`  Speech bubble (Korean, exact): "${p.dialogue}"`);
+    if (p.caption) lines.push(`  Caption box (Korean, exact): "${p.caption}"`);
+  }
+  lines.push('', 'No text other than the specified Korean lines and the header.');
+  return lines.join('\n');
+}
+
 /* ── 게놈 시나리오 시스템 프롬프트 — 별이답음의 계약 ── */
 
 export const SCENARIO_SYSTEM = `너는 '별이'의 하루를 4~8컷 그림일기로 구성하는 작가다. 별이의 게놈:
