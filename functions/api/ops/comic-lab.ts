@@ -644,6 +644,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       }
       if (r.error) { banner('실패: ' + r.error, 'err'); return; }
       state.scenario = r.scenario;
+      saveDraft('v1', r.scenario, { provider: r.provider, model: r.model });
       banner('시나리오 완성 — 별이다운지 읽어보고, 아니면 다시');
       renderScenario(r.scenario, r);
     }).catch(function (e) {
