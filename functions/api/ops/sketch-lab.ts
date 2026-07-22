@@ -508,7 +508,17 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     });
     if (!cards) return;
     $('out').innerHTML += '<div class="panel"><h2>최근 생성 <span class="muted">(새로고침해도 남음 — 여기서도 붙일 수 있다)</span></h2>' +
+      '<div id="dailyReco" class="muted" style="margin-bottom:8px"></div>' +
       '<div class="refgrid">' + cards + '</div></div>';
+    // 병행 운전(B): 판정기 추천은 표시만 — 채택은 사람 (조건 ⑥)
+    api('/api/ops/sketch-daily-reco?date=' + $('date').value).then(function (r) {
+      var el = $('dailyReco');
+      if (!el || !r || r.empty || !r.reco) return;
+      el.innerHTML = '🤖 판정기 추천(기록용): ' +
+        (r.reco.pick ? '<b class="ok">' + r.reco.pick + '번째 장</b>' : '<span class="warn">전부 불합격 — 오늘은 없음 추천</span>') +
+        (r.reco.reasons ? ' — ' + esc(r.reco.reasons) : '') +
+        '<br><span style="font-size:10px">' + (r.reco.verdicts || []).map(esc).join(' · ') + '</span>';
+    });
   }
 
   // ── 초기화 ──

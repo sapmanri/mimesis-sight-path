@@ -509,3 +509,11 @@ test('그림 발행 — 하루 1장, 실패는 재시도 가능', async () => {
   assert.equal(alreadyPublished(log, '2026-07-22'), false);
   assert.equal(alreadyPublished([], '2026-07-21'), false);
 });
+
+test('일일 자동 seed — 날짜 결정론 (같은 날 같은 3장, 조건 ④)', async () => {
+  const { dailySeed } = await import('./sketch-daily.ts');
+  assert.equal(dailySeed('2026-07-22'), dailySeed('2026-07-22'));
+  assert.notEqual(dailySeed('2026-07-22'), dailySeed('2026-07-23'));
+  const s = dailySeed('2026-07-22');
+  assert.ok(s >= 400000 && s < 490000);
+});
