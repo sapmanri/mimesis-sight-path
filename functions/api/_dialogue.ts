@@ -36,14 +36,19 @@ export interface DialogueProvenance {
   reconstructedLines: { output: string; basis: string[] }[];
 }
 
-export interface Utterance { line: number; speaker: string | null; text: string; inferred?: boolean; pinned?: boolean }
+export interface Utterance { line: number; speaker: string | null; text: string; inferred?: boolean; pinned?: boolean; pins?: string[] }
 
-/** 핀 문법 (Vase 제안 07-23): 발화를 *별표*(또는 ★)로 감싸면 "반드시 원문 그대로 보존".
+/** 핀 문법 (Vase 제안 07-23): *별표*(또는 ★)로 감싼 구간은 "반드시 원문 그대로 보존".
+    발화 전체를 감싸도, 긴 블록의 일부 문장만 감싸도 걸린다.
+    (실사고 07-23: 블록 중간 핀이 소리 없이 무시됨 — 침묵이 버그였다.)
     마커는 각색용 주석 — 대조·표시 때는 벗겨서 쓴다. */
-export function stripPin(text: string): { text: string; pinned: boolean } {
-  const t = text.trim();
-  const m = t.match(/^[*★]\s*([\s\S]+?)\s*[*★]$/);
-  return m ? { text: m[1], pinned: true } : { text: t, pinned: false };
+export function extractPins(text: string): { text: string; pins: string[] } {
+  const pins: string[] = [];
+  const stripped = text.replace(/[*★]\s*([^*★][\s\S]*?)\s*[*★]/g, (_all, inner: string) => {
+    pins.push(inner);
+    return inner;
+  });
+  return { text: stripped.trim(), pins };
 }
 
 /* ── 화자 파싱 — 확신하지 못하면 임의 매핑하지 않는다 ── */
@@ -86,9 +91,10 @@ export function parseDialogue(raw: string): {
   }
   if (current) utterances.push(current);
   for (const u of utterances) {
-    const p = stripPin(u.text);
+    const p = extractPins(u.text);
     u.text = p.text;
-    if (p.pinned) u.pinned = true;
+    if (p.pins.length) { u.pinned = true; u.pins = p.pins; }
+    if (/[*★]/.test(p.text)) warnings.push(`핀 별표 짝이 안 맞음 ${u.line}행 — 핀은 *문장* 형태로 감싼다`);
   }
   const speakers = [...new Set(utterances.map((u) => u.speaker).filter((s): s is string => !!s))];
   return { utterances, speakers, warnings };
@@ -162,10 +168,12 @@ export function validateAdaptation(
   for (const u of utterances) {
     if (!u.pinned || !u.speaker) continue;
     const target = input.speakerMap[u.speaker];
-    const un = norm(u.text);
-    const alive = s2.panels.some((p) => p.dialogue.some((d) =>
-      d.speakerId === target && d.text && norm(d.text).includes(un)));
-    if (!alive) errors.push(`pinned_line_missing: ${u.line}행 "${u.text.slice(0, 30)}" — 핀 꽂힌 대사가 시나리오에 없다 (생략·수정 금지)`);
+    for (const span of u.pins ?? [u.text]) {
+      const un = norm(span);
+      const alive = s2.panels.some((p) => p.dialogue.some((d) =>
+        d.speakerId === target && d.text && norm(d.text).includes(un)));
+      if (!alive) errors.push(`pinned_line_missing: ${u.line}행 "${span.slice(0, 30)}" — 핀 꽂힌 대사가 시나리오에 없다 (생략·수정 금지)`);
+    }
   }
 
   // provenance 커버리지 — sourceRanges 없는 패널이 과반이면 실패
@@ -215,10 +223,11 @@ export function buildDialogueAdapterPrompt(
     '- 원문에 없는 발화자·사건·결말·감정을 만들지 않는다.',
     MODE_RULES[input.preservationMode],
     (() => {
-      const pins = utterances.filter((u) => u.pinned);
+      const pins = utterances.flatMap((u) =>
+        (u.pins ?? (u.pinned ? [u.text] : [])).map((s) => ({ line: u.line, speaker: u.speaker, text: s })));
       return pins.length
-        ? '- 📌 핀 고정 발화 — 보존 모드와 무관하게 반드시 원문 그대로 대사로 남긴다 (생략·수정·화자 변경 금지):\n'
-          + pins.map((u) => `  ${u.line}행| ${u.speaker}: "${u.text}"`).join('\n')
+        ? '- 📌 핀 고정 발화 — 보존 모드와 무관하게 반드시 원문 그대로 대사로 남긴다 (생략·수정·화자 변경 금지). 한 글자도 다듬지 않는다:\n'
+          + pins.map((p) => `  ${p.line}행| ${p.speaker}: "${p.text}"`).join('\n')
         : '';
     })(),
     input.placeId ? `- 장소: ${input.placeId} — setting에 이 영단어를 그대로 포함한다. 장소 때문에 원문의 사건을 바꾸지 않는다.` : '',
@@ -230,7 +239,7 @@ export function buildDialogueAdapterPrompt(
     '  "reconstructedLines": [{"output": "새 연결문", "basis": ["근거 원문 줄"]}] }}',
   ].filter(Boolean).join('\n');
 
-  const numbered = utterances.map((u) => `${u.line}| ${u.speaker ?? '?'}: ${u.text.replace(/\n/g, ' / ')}`).join('\n');
+  const numbered = utterances.map((u) => `${u.line}| ${u.pinned ? '📌 ' : ''}${u.speaker ?? '?'}: ${u.text.replace(/\n/g, ' / ')}`).join('\n');
   const user = [
     `대화 원문 (행번호| 화자: 발화):`, numbered, '',
     `화자 연결: ${Object.entries(input.speakerMap).map(([k, v]) => `${k}→${v}`).join(', ')}`,
@@ -287,11 +296,13 @@ export function buildBeatPrompt(utterances: Utterance[]): { system: string; user
       '- landing: 결론 없이 내려앉는 마지막',
       '규칙: 발견은 하나씩 온다 — 발견 여러 개를 한 비트로 합치지 마라.',
       '가설과 그 판정("무엇을 상상하든…"↔"맞았소")은 한 세트 — inseparableWith로 묶어라.',
-      '각 비트에 잃으면 안 되는 원문 문장이 있으면 keyQuote로, 그 화자의 creatorId를 keySpeaker로.',
+      'keyQuote는 아껴 쓴다 — 정말로 잃으면 안 되는 문장에만, 전체 비트의 절반 이하. 화자의 creatorId를 keySpeaker로.',
+      '(실사고 07-23: 비트 전부에 keyQuote를 달면 5컷에 다 넣을 수 없어 각색이 전멸한다.)',
+      '📌 표시 발화는 사람이 핀으로 고정한 문장 — 반드시 어느 비트의 keyQuote로 삼는다.',
       '출력 JSON 하나: {"beats": [{"id": n, "type": "...", "startLine": n, "endLine": n,',
       ' "gist": "...", "keyQuote": "원문 그대로"|null, "keySpeaker": creatorId|null, "inseparableWith": n|null}]}',
     ].join('\n'),
-    user: utterances.map((u) => `${u.line}| ${u.speaker ?? '?'}: ${u.text.replace(/\n/g, ' / ')}`).join('\n')
+    user: utterances.map((u) => `${u.line}| ${u.pinned ? '📌 ' : ''}${u.speaker ?? '?'}: ${u.text.replace(/\n/g, ' / ')}`).join('\n')
       + '\n\n이 대화의 비트를 발굴하라.',
   };
 }
@@ -304,6 +315,7 @@ export function beatsToPromptBlock(beats: Beat[]): string {
       + (b.keyQuote ? ` · 필수 보존: "${b.keyQuote}"${b.keySpeaker ? ` (${b.keySpeaker})` : ''}` : '')
       + (b.inseparableWith ? ` · ${b.inseparableWith}번 비트와 한 세트 — 같은 컷에` : '')),
     '- 각 패널에 beatIds를 명시한다. discovery 비트는 한 컷에 하나만 — 발견은 하나씩 발굴된다.',
+    '- 필수 보존 문장은 한 글자도 바꾸지 않는다 — 요약·다듬기·어미 변경 금지. 그대로 그 화자의 대사로 넣는다.',
     '- interjection 비트의 추임새는 반드시 대사로 남긴다 — 리듬이니까.',
     '- discovery는 그 컷 안에서 "일어나는" 것으로 그린다 — 준비된 결론처럼 선언하지 않는다.',
   ].join('\n');

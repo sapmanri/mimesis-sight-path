@@ -143,7 +143,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       <div style="margin-top:12px">
         <button id="goDlg" class="primary" style="width:100%;padding:10px">대화를 웹툰 시나리오로 만들기</button>
       </div>
-      <div class="muted" style="margin-top:6px">원문은 불변 자산으로 보관된다 — 각색은 원문을 덮어쓰지 않는다.<br>📌 꼭 살릴 대사는 <b>*별표*</b>로 감싼다 (예: Sap: *무엇을 상상하든 그건 아닐걸?*) — 생략·수정되면 각색이 실패 처리된다.</div>
+      <div class="muted" style="margin-top:6px">원문은 불변 자산으로 보관된다 — 각색은 원문을 덮어쓰지 않는다.<br>📌 꼭 살릴 대사는 <b>*별표*</b>로 감싼다 — 긴 발화 블록 중간의 문장만 감싸도 된다. 생략·수정되면 각색이 반려되고, 위반 목록을 들려주며 1회 자동 재시도한다.</div>
     </div>
   </div>
 
@@ -843,7 +843,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         return;
       }
       if (r.error === 'dialogue_invalid' || r.error === 'scenario_invalid') {
-        banner((r.error === 'dialogue_invalid' ? '입력 문제 — ' : '각색이 계약 미달 — ') + (r.detail || []).join(' / '), 'err');
+        banner((r.error === 'dialogue_invalid' ? '입력 문제 — ' : '각색 반려 — ') + (r.detail || []).join(' / ')
+          + (r.error === 'scenario_invalid' ? ' ⟵ 반려된 각색은 화면에 반영되지 않는다. 아래 시나리오는 이전 초안 그대로다.' : ''), 'err');
         return;
       }
       if (r.error) { banner('실패: ' + r.error, 'err'); return; }

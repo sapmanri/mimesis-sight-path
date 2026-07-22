@@ -71,51 +71,72 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const beats: Beat[] = (beatParsed?.beats ?? []).filter((b) => b && Number.isInteger(b.id));
   if (!beats.length) return json(502, { ok: false, error: 'beats_not_found', raw: beatOut.text.slice(0, 300) });
 
-  // ── 2차: 비트 뼈대 위에서 시나리오 ──
+  // ── 2차: 비트 뼈대 위에서 시나리오 — 계약 미달이면 위반 목록을 들려주고 1회 재시도 ──
   const prompts = buildDialogueAdapterPrompt(built.system, input, utterances);
   prompts.system += '\n\n' + beatsToPromptBlock(beats);
-  const out = await generateScenarioText(env, input.titleHint ?? 'dialogue', 0, prompts);
-  if ('error' in out) return json(502, { ok: false, error: out.error, provider: out.provider });
-  const parsed = extractJson(out.text) as {
-    topic?: string; panels?: ComicPanelV2[]; endingBeat?: string;
-    provenance?: Partial<DialogueProvenance>;
-  } | null;
-  if (!parsed?.panels?.length) return json(502, { ok: false, error: 'scenario_not_json', raw: out.text.slice(0, 400) });
-
   const sourceHash = dialogueHash(input.rawDialogue);
-  const provenance: DialogueProvenance = {
-    sourceType: 'dialogue',
-    sourceHash,
-    preservationMode: input.preservationMode,
-    sourceRanges: (parsed.provenance?.sourceRanges ?? []).filter((r) => r && Number.isInteger(r.panelNo)),
-    preservedLines: (parsed.provenance?.preservedLines ?? []).map(String),
-    omittedLines: (parsed.provenance?.omittedLines ?? []).map(String),
-    reconstructedLines: (parsed.provenance?.reconstructedLines ?? [])
-      .filter((r) => r && r.output).map((r) => ({ output: String(r.output), basis: (r.basis ?? []).map(String) })),
-  };
 
+  let out!: { provider: string; model: string; text: string };
+  let scenario2!: ComicScenarioV2;
+  let provenance!: DialogueProvenance;
   const warnings: string[] = [];
-  const scenario2: ComicScenarioV2 = {
-    version: COMIC_SCENARIO_V2_VERSION,
-    topic: (parsed.topic ?? input.titleHint ?? '대화 각색').slice(0, 60),
-    panelCount: parsed.panels.length,
-    cast: members.cast,
-    relation: built.relation ? { relationId: built.relation.relationId, version: built.relation.version } : null,
-    relations: built.relations.length > 1 ? built.relations.map((r) => ({ relationId: r.relationId, version: r.version })) : undefined,
-    relationDiscovery: built.discovery.length ? built.discovery : undefined,
-    provenance,
-    panels: parsed.panels,
-    endingBeat: parsed.endingBeat ?? '',
-  };
+  let errs: string[] = [];
+  let attempts = 0;
+  let retryNote = '';
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    attempts = attempt + 1;
+    const sys = retryNote ? prompts.system + '\n\n' + retryNote : prompts.system;
+    const o = await generateScenarioText(env, input.titleHint ?? 'dialogue', 0, { system: sys, user: prompts.user });
+    if ('error' in o) return json(502, { ok: false, error: o.error, provider: o.provider });
+    out = o;
+    const parsed = extractJson(out.text) as {
+      topic?: string; panels?: ComicPanelV2[]; endingBeat?: string;
+      provenance?: Partial<DialogueProvenance>;
+    } | null;
+    if (!parsed?.panels?.length) return json(502, { ok: false, error: 'scenario_not_json', raw: out.text.slice(0, 400) });
+
+    provenance = {
+      sourceType: 'dialogue',
+      sourceHash,
+      preservationMode: input.preservationMode,
+      sourceRanges: (parsed.provenance?.sourceRanges ?? []).filter((r) => r && Number.isInteger(r.panelNo)),
+      preservedLines: (parsed.provenance?.preservedLines ?? []).map(String),
+      omittedLines: (parsed.provenance?.omittedLines ?? []).map(String),
+      reconstructedLines: (parsed.provenance?.reconstructedLines ?? [])
+        .filter((r) => r && r.output).map((r) => ({ output: String(r.output), basis: (r.basis ?? []).map(String) })),
+    };
+    scenario2 = {
+      version: COMIC_SCENARIO_V2_VERSION,
+      topic: (parsed.topic ?? input.titleHint ?? '대화 각색').slice(0, 60),
+      panelCount: parsed.panels.length,
+      cast: members.cast,
+      relation: built.relation ? { relationId: built.relation.relationId, version: built.relation.version } : null,
+      relations: built.relations.length > 1 ? built.relations.map((r) => ({ relationId: r.relationId, version: r.version })) : undefined,
+      relationDiscovery: built.discovery.length ? built.discovery : undefined,
+      provenance,
+      panels: parsed.panels,
+      endingBeat: parsed.endingBeat ?? '',
+    };
+
+    const adaptation = validateAdaptation(scenario2, provenance, utterances, input);
+    const beatCheck = validateBeats(scenario2, beats);
+    errs = [...validateScenarioV2(scenario2), ...validateEmbodimentV2(scenario2), ...adaptation.errors, ...beatCheck.errors];
+    if (!errs.length) {
+      warnings.push(...adaptation.warnings, ...beatCheck.warnings, ...parsedAll.warnings);
+      break;
+    }
+    retryNote = [
+      '## 직전 시도가 계약 미달로 반려됨 — 아래 위반을 전부 고쳐서 다시 각색하라',
+      '보존 대상 문장은 한 글자도 바꾸지 말고 지정된 화자의 대사로 그대로 넣는다.',
+      ...errs.map((e) => `- ${e}`),
+    ].join('\n');
+  }
+  if (errs.length) return json(422, { ok: false, error: 'scenario_invalid', detail: errs, scenario2, beats, attempts });
   if (typeof input.requestedPanelCount === 'number' && input.requestedPanelCount !== scenario2.panelCount) {
     warnings.push(`panel_count_adjusted: 요청 ${input.requestedPanelCount} → ${scenario2.panelCount}`);
   }
-
-  const adaptation = validateAdaptation(scenario2, provenance, utterances, input);
-  const beatCheck = validateBeats(scenario2, beats);
-  const errs = [...validateScenarioV2(scenario2), ...validateEmbodimentV2(scenario2), ...adaptation.errors, ...beatCheck.errors];
-  if (errs.length) return json(422, { ok: false, error: 'scenario_invalid', detail: errs, scenario2, beats });
-  warnings.push(...adaptation.warnings, ...beatCheck.warnings, ...parsedAll.warnings);
+  if (attempts > 1) warnings.push('adaptation_retried: 1차 각색이 반려되어 위반 목록으로 재시도 후 통과');
 
   // 원문 불변 보관 — 같은 해시는 다시 쓰지 않는다 (원본은 수정되지 않으므로 멱등)
   const srcKey = `${DIALOGUE_SOURCE_PREFIX}${sourceHash}.txt`;

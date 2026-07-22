@@ -616,6 +616,47 @@ test('핀 문법 — *별표* 발화는 반드시 살아야 한다 (Vase 제안)
   assert.match(pr.system, /무엇을 상상하든 그건 아닐걸\?/);
 });
 
+test('구간 핀 — 긴 블록 중간 문장 핀 (실사고 07-23: 통핀만 인식돼 소리 없이 무시됨)', async () => {
+  const { parseDialogue, validateAdaptation, buildDialogueAdapterPrompt, buildBeatPrompt } = await import('./_dialogue.ts');
+  const { castMembersFor } = await import('./_genome-mirrors.ts');
+  const parsed = parseDialogue(
+    'Holmes: 하하. 탐험가 양반. *무엇을 상상하든 그건 아닐걸? 맞았소.* 고양이인 줄 알았소.\nSap: 가만히 봐줘.\nHolmes: 작은 것들의 전시 도록이오.\nSap: 오.');
+  assert.equal(parsed.utterances[0].pinned, true, '블록 중간 핀도 감지된다');
+  assert.deepEqual(parsed.utterances[0].pins, ['무엇을 상상하든 그건 아닐걸? 맞았소.'], '핀은 구간만');
+  assert.ok(!parsed.utterances[0].text.includes('*'), '마커는 벗긴다');
+  assert.ok(parsed.utterances[0].text.includes('고양이인 줄'), '핀 밖 문장은 그대로');
+
+  const input = { mode: 'dialogue', rawDialogue: '', speakerMap: { Sap: 'sap', Holmes: 'holmes' },
+    creators: ['sap', 'holmes'], requestedPanelCount: 4, preservationMode: 'balanced' };
+  const cast = castMembersFor(['sap', 'holmes']).cast;
+  const mk = (dlg) => ({ version: 'comic-scenario-v2', topic: 't', panelCount: 1, cast,
+    relation: { relationId: 'sap-holmes', version: 'v0' },
+    panels: [{ panelNo: 1, beat: 'b', setting: 'workshop', framing: 'medium',
+      actions: [{ creatorId: 'sap', action: 'shrugs' }], dialogue: dlg, caption: null }], endingBeat: 'e' });
+  const prov = { sourceType: 'dialogue', sourceHash: 'x', preservationMode: 'balanced',
+    sourceRanges: [{ panelNo: 1, startLine: 1, endLine: 4 }], preservedLines: [], omittedLines: [], reconstructedLines: [] };
+  // 구간을 다듬어 바꾸면 실패 (Obs 실사례: "그건 아니었소"로 순화됨)
+  const softened = validateAdaptation(
+    mk([{ speakerId: 'holmes', intent: 's', text: '하하, 무엇을 상상하든 그건 아니었소.' }]), prov, parsed.utterances, input);
+  assert.ok(softened.errors.some((e) => e.includes('pinned_line_missing')), '순화도 소실이다');
+  // 구간이 더 긴 대사 안에 원문 그대로 살아 있으면 통과
+  const kept = validateAdaptation(
+    mk([{ speakerId: 'holmes', intent: 's', text: '탐험가 양반, 무엇을 상상하든 그건 아닐걸? 맞았소. 하하.' }]), prov, parsed.utterances, input);
+  assert.ok(!kept.errors.some((e) => e.includes('pinned_line_missing')));
+  // 어댑터 핀 블록에는 구간만 실린다
+  const pr = buildDialogueAdapterPrompt('SYS', input, parsed.utterances);
+  assert.match(pr.system, /"무엇을 상상하든 그건 아닐걸\? 맞았소\."/);
+  assert.match(pr.user, /📌/, '원문 덤프에 핀 표기');
+  // 짝 안 맞는 별표는 침묵하지 않는다
+  const odd = parseDialogue('Sap: 별표 *하나만 쳤다\nHolmes: 응. 그래서 침묵이 버그였소.\nSap: 맞아.\nHolmes: 고치오.');
+  assert.ok(odd.warnings.some((w) => w.includes('짝이 안 맞음')), '핀 실패는 경고로 보인다');
+  // 비트 추출기 — keyQuote 절제 + 핀은 keyQuote 의무
+  const bp = buildBeatPrompt(parsed.utterances);
+  assert.match(bp.system, /keyQuote는 아껴 쓴다/, '남발 금지 (실사고: 8/8 keyQuote 전멸)');
+  assert.match(bp.system, /반드시 어느 비트의 keyQuote/, '핀은 비트에 승계');
+  assert.match(bp.user, /📌/);
+});
+
 test('각색 프롬프트 — 원칙과 모드 규칙이 실린다', async () => {
   const { parseDialogue, buildDialogueAdapterPrompt, dialogueHash, EPISODE_THRESHOLD } = await import('./_dialogue.ts');
   const { buildScenarioSystemV2 } = await import('./_genome-mirrors.ts');
