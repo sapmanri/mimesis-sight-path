@@ -194,7 +194,14 @@ export function planV2Refs(
   style.slice(0, V2_REF_CAPS.style).forEach((s) => order.push({ slot: s, kind: 'style' }));
   for (const c of castIds) {
     if (c === 'ppaekong') continue;   // 빼콩이는 별이 바이블에 동봉 — 별도 슬롯 없음
-    const ids = [1, 2, 3, 4, 5].map((i) => `id_${c}_i${i}`).filter((s) => loadedSlots.has(s));
+    let ids = [1, 2, 3, 4, 5].map((i) => `id_${c}_i${i}`).filter((s) => loadedSlots.has(s));
+    // 실사고(07-22 심야): 별이의 정체성은 레거시 바이블 칸(ch00~04)에 있다 — 전용 락이
+    // 비어 있으면 폴백한다 (id_byeoli_*가 생기면 그쪽 우선 — Lock 분리 원칙 유지).
+    if (!ids.length && c === 'byeoli') {
+      ids = ['ch00_master', 'ch01_turnaround', 'ch03_pose', 'ch04_hair', 'ch02_expression']
+        .filter((s) => loadedSlots.has(s));
+      if (ids.length) warnings.push('identity_fallback: byeoli — 전용 락(id_byeoli_*) 없음, 별이 바이블(레거시)로 대체');
+    }
     if (!ids.length) { warnings.push(`identity_missing: ${c} — 정체성 참조 0장 (바이블 없이 그리면 남이 된다)`); continue; }
     if (ids.length > V2_REF_CAPS.identityPerCreator) {
       warnings.push(`identity_refs_truncated: ${c} ${ids.length} → ${V2_REF_CAPS.identityPerCreator}`);

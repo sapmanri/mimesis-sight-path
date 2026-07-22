@@ -378,6 +378,16 @@ test('참조 계획 — 순서·상한·경고 (조용한 상한 금지)', async
   // 정체성 0장 경고 (음성)
   const noId = planV2Refs(['vase', 'byeoli'], [], new Set(['style_s1']));
   assert.ok(noId.warnings.some((w) => w.includes('identity_missing: vase')));
+  // 별이 폴백 (실사고): 전용 락 없으면 레거시 바이블 사용 + 정직한 경고
+  const byeoliLegacy = planV2Refs(['sap', 'byeoli'], [],
+    new Set(['id_sap_i1', 'ch00_master', 'ch01_turnaround', 'ch03_pose', 'ch04_hair', 'ch02_expression']));
+  const bIds = byeoliLegacy.order.filter((r) => r.kind === 'identity:byeoli');
+  assert.equal(bIds.length, V2_REF_CAPS.identityPerCreator, '레거시 바이블에서 상한만큼');
+  assert.equal(bIds[0].slot, 'ch00_master');
+  assert.ok(byeoliLegacy.warnings.some((w) => w.includes('identity_fallback: byeoli')), '폴백은 조용히 하지 않는다');
+  // 전용 락이 생기면 그쪽 우선
+  const byeoliDedicated = planV2Refs(['byeoli'], [], new Set(['id_byeoli_i1', 'ch00_master']));
+  assert.equal(byeoliDedicated.order[0].slot, 'id_byeoli_i1', '전용 락 우선 — Lock 분리 원칙');
 });
 
 test('v2 페이지 프롬프트 — 바이블 불변식이 문서에서 프롬프트로 (drift 방지)', async () => {
