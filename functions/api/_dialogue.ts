@@ -36,7 +36,15 @@ export interface DialogueProvenance {
   reconstructedLines: { output: string; basis: string[] }[];
 }
 
-export interface Utterance { line: number; speaker: string | null; text: string; inferred?: boolean }
+export interface Utterance { line: number; speaker: string | null; text: string; inferred?: boolean; pinned?: boolean }
+
+/** 핀 문법 (Vase 제안 07-23): 발화를 *별표*(또는 ★)로 감싸면 "반드시 원문 그대로 보존".
+    마커는 각색용 주석 — 대조·표시 때는 벗겨서 쓴다. */
+export function stripPin(text: string): { text: string; pinned: boolean } {
+  const t = text.trim();
+  const m = t.match(/^[*★]\s*([\s\S]+?)\s*[*★]$/);
+  return m ? { text: m[1], pinned: true } : { text: t, pinned: false };
+}
 
 /* ── 화자 파싱 — 확신하지 못하면 임의 매핑하지 않는다 ── */
 
@@ -77,6 +85,11 @@ export function parseDialogue(raw: string): {
     warnings.push(`화자 불명 ${i + 1}행 — UI에서 연결 필요`);
   }
   if (current) utterances.push(current);
+  for (const u of utterances) {
+    const p = stripPin(u.text);
+    u.text = p.text;
+    if (p.pinned) u.pinned = true;
+  }
   const speakers = [...new Set(utterances.map((u) => u.speaker).filter((s): s is string => !!s))];
   return { utterances, speakers, warnings };
 }
@@ -145,6 +158,16 @@ export function validateAdaptation(
       }
     }
   }
+  // 핀 검증 — *별표*로 못박은 발화는 반드시 원문 그대로, 그 화자의 대사로 남아야 한다
+  for (const u of utterances) {
+    if (!u.pinned || !u.speaker) continue;
+    const target = input.speakerMap[u.speaker];
+    const un = norm(u.text);
+    const alive = s2.panels.some((p) => p.dialogue.some((d) =>
+      d.speakerId === target && d.text && norm(d.text).includes(un)));
+    if (!alive) errors.push(`pinned_line_missing: ${u.line}행 "${u.text.slice(0, 30)}" — 핀 꽂힌 대사가 시나리오에 없다 (생략·수정 금지)`);
+  }
+
   // provenance 커버리지 — sourceRanges 없는 패널이 과반이면 실패
   const covered = new Set(prov.sourceRanges.map((r) => r.panelNo));
   const uncovered = s2.panels.filter((p) => !covered.has(p.panelNo)).length;
@@ -191,6 +214,13 @@ export function buildDialogueAdapterPrompt(
     '- 원문 사실 > Genome 표현 선호. 누가 무엇을 말했는가는 절대 바꾸지 않는다.',
     '- 원문에 없는 발화자·사건·결말·감정을 만들지 않는다.',
     MODE_RULES[input.preservationMode],
+    (() => {
+      const pins = utterances.filter((u) => u.pinned);
+      return pins.length
+        ? '- 📌 핀 고정 발화 — 보존 모드와 무관하게 반드시 원문 그대로 대사로 남긴다 (생략·수정·화자 변경 금지):\n'
+          + pins.map((u) => `  ${u.line}행| ${u.speaker}: "${u.text}"`).join('\n')
+        : '';
+    })(),
     input.placeId ? `- 장소: ${input.placeId} — setting에 이 영단어를 그대로 포함한다. 장소 때문에 원문의 사건을 바꾸지 않는다.` : '',
     '',
     '스키마 (기존 panels·endingBeat에 더해):',

@@ -143,7 +143,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       <div style="margin-top:12px">
         <button id="goDlg" class="primary" style="width:100%;padding:10px">대화를 웹툰 시나리오로 만들기</button>
       </div>
-      <div class="muted" style="margin-top:6px">원문은 불변 자산으로 보관된다 — 각색은 원문을 덮어쓰지 않는다.</div>
+      <div class="muted" style="margin-top:6px">원문은 불변 자산으로 보관된다 — 각색은 원문을 덮어쓰지 않는다.<br>📌 꼭 살릴 대사는 <b>*별표*</b>로 감싼다 (예: Sap: *무엇을 상상하든 그건 아닐걸?*) — 생략·수정되면 각색이 실패 처리된다.</div>
     </div>
   </div>
 
