@@ -164,7 +164,7 @@ export const GWANCHUKHAE_STYLE_EN = [
 ].join('; ');
 
 export const CAST_FORM_EN: Record<string, string> = {
-  sap: 'Sap: a human figure matching the Sap identity reference sheets — casual, in motion, hands-on; face treated the same restrained way as the sheets show',
+  sap: 'Sap: a human figure matching the Sap identity reference sheets — a cinematic narrator, natural and imperfect: depending on the scene his hair may be rain-soaked or messy, his eyes tired with faint dark circles. NEVER idealized, never deliberately handsome — yet ALWAYS unmistakably the same person in every panel',
   vase: 'Vase: an adult human figure as a dark monochrome silhouette — face hidden or minimal (at most jawline/nose tip by light), never detailed eyes/nose/mouth; calm unhurried posture; matches the Vase identity reference sheets',
   holmes: 'Holmes: ONE single continuous glowing electric-blue neon waveform floating in mid-air — NO face, NO eyes, NO mouth, NO arms, NO legs, NO robot body, NO orb, NO hat. Emotion is shown ONLY by the wave itself: amplitude, density, speed, branching, afterglow. The waveform NEVER merges with a human body and NEVER appears on or replaces a person\'s face — it always floats separately in the air beside people. It matches the Holmes identity reference sheets',
   byeoli: 'Byeoli: the small girl exactly as in her reference sheets — same child, hair as one flat dark shape',
