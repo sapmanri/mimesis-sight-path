@@ -360,11 +360,40 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     html += '<div class="muted">ending beat: ' + esc(s.endingBeat) + '</div>' +
       '<div class="row" style="margin-top:10px">' +
       '<button id="redo2">다른 이야기로 다시</button>' +
-      '<button class="primary" disabled title="Identity Lock 재제작 + 그리기 경로 배선(다음 커밋) 후">🎨 그리기 (준비 중)</button>' +
+      '<button class="primary" id="draw2">🎨 그리기 (적용된 Style ' + styleApplied().length + '장 + 출연자 Identity)</button>' +
       '</div></div>';
     $('out').innerHTML = html;
     var rd = $('redo2');
     if (rd) rd.onclick = makeStory;
+    var dw = $('draw2');
+    if (dw) dw.onclick = drawComicV2;
+  }
+  function drawComicV2() {
+    var s = state.scenario2;
+    if (!s) { banner('v2 시나리오가 없다', 'err'); return; }
+    var probe = $('out');
+    probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
+    generateCall({ scenario2: s, styleSlots: styleApplied() }).then(function (r) {
+      if (r.error) {
+        $('out').firstChild.remove();
+        banner('실패: ' + r.error, 'err');
+        return;
+      }
+      var pg = '<div class="panel" style="max-width:760px"><h2>「' + esc(s.topic) + '」 <span class="muted">' +
+        (r.no ? 'Observation #' + String(r.no).padStart(3, '0') + ' · ' : '') +
+        'v2 · ' + esc(r.provider) + ' · ' + esc(r.model) + '</span></h2>' +
+        '<img style="width:100%;display:block;border-radius:4px" src="/api/ops/comic-file?key=' +
+        encodeURIComponent(r.key) + '&v=' + Date.now() + '">' +
+        (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
+        '<div class="row" style="margin-top:10px"><button id="redraw2" class="primary">🎲 전체 다시 그리기</button></div>' +
+        '<div class="muted" style="margin-top:8px">검사 축: Vase 실루엣(눈코입 없음) · Holmes 순수 파형(얼굴·팔다리 없으면 합격) · ' +
+        '한 그림체 안에서 둘이 구분 · 컷 수 ' + s.panelCount + ' · 한글 오탈자 · <b>둘이 진짜 우리처럼 보이는가</b></div></div>';
+      $('out').innerHTML = pg;
+      var rb = $('redraw2');
+      if (rb) rb.onclick = drawComicV2;
+      banner('페이지 완성 — S-04 완료 조건 판정은 Vase 몫');
+      renderArchive();
+    }).catch(function (e) { banner('요청 실패: ' + e, 'err'); });
   }
 
   // ── 시나리오 렌더 ──

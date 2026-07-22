@@ -9,6 +9,7 @@
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
 import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
+import { validateScenarioV2, planV2Refs, buildPagePromptV2, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
 import { withTransientRetry } from '../_retry.ts';
@@ -36,6 +37,14 @@ export function comicIdOf(s: ComicScenario): string {
 }
 
 export const panelKey = (comicId: string, index: number) => `${COMIC_STRIP_PREFIX}${comicId}/p${index}.png`;
+
+/** v2 결정론 id — topic|panelCount|cast. 같은 캐스트의 같은 상황은 같은 자리(재그리기=덮어쓰기). */
+export function comicIdOfV2(s: ComicScenarioV2): string {
+  const src = `v2|${s.topic}|${s.panelCount}|${s.cast.map((c) => c.creatorId).join(',')}`;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(16).padStart(8, '0');
+}
 
 /**
  * 524 대책(실사고 07-22 오후): 나노바나나 프로 생성 + 재시도가 엣지 100초 벽을 넘겼다.
@@ -70,10 +79,12 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
-  let body: { scenario?: ComicScenario; panels?: number[] };
+  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[] };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
   const scenario = body.scenario;
-  const errs = scenario ? validateScenario(scenario) : ['scenario required'];
+  const scenario2 = body.scenario2;
+  const errs = scenario2 ? validateScenarioV2(scenario2)
+    : scenario ? validateScenario(scenario) : ['scenario required'];
   if (errs.length) return json(400, { ok: false, error: 'scenario_invalid', detail: errs });
 
   const { readable, writable } = new TransformStream();
@@ -82,7 +93,9 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const work = (async () => {
     const hb = setInterval(() => { writer.write(enc.encode('{"hb":1}\n')).catch(() => {}); }, 8000);
     try {
-      const result = await runGeneration(env, scenario as ComicScenario, body.panels);
+      const result = scenario2
+        ? await runGenerationV2(env, scenario2, Array.isArray(body.styleSlots) ? body.styleSlots : [])
+        : await runGeneration(env, scenario as ComicScenario, body.panels);
       await writer.write(enc.encode(JSON.stringify(result) + '\n'));
     } catch (e) {
       await writer.write(enc.encode(JSON.stringify({ ok: false, error: `generate_crashed: ${String(e).slice(0, 200)}` }) + '\n'));
@@ -96,6 +109,77 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' },
   });
 };
+
+/* ── S-04 v2 그리기 — 공통 Style(적용 선택분) + 캐스트별 Identity + 공용 Panel Bible ──
+   프롬프트의 형태 규칙은 바이블 문서에서 파생(_comic-v2.ts) — Holmes drift 재발 방지가
+   이미지 참조가 아니라 문서 원본의 몫이라는 것이 REJECTED 사고의 교훈이다. */
+async function runGenerationV2(
+  env: Env, s2: ComicScenarioV2, styleSlots: string[],
+): Promise<Record<string, unknown>> {
+  const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
+  if (provider !== 'gemini') return { ok: false, error: 'v2_page_mode_gemini_only', provider };
+  const comicId = comicIdOfV2(s2);
+
+  // 장착 상태를 실제로 읽는다 — 키만 믿지 않는다 (한 번의 list로)
+  const listed = await withTransientRetry('v2_lock_list', () =>
+    env.CAPTURES.list({ prefix: COMIC_LOCK_PREFIX, limit: 200 }));
+  const loaded = new Set<string>();
+  const keyOf = new Map<string, string>();
+  for (const o of listed.objects) {
+    const name = o.key.slice(COMIC_LOCK_PREFIX.length);
+    if (name.includes('.thumb.')) continue;
+    const slot = name.replace(/\.[a-z]+$/, '');
+    if (!loaded.has(slot)) { loaded.add(slot); keyOf.set(slot, o.key); }
+  }
+
+  const castIds = s2.cast.map((c) => c.creatorId);
+  const plan = planV2Refs(castIds, styleSlots, loaded);
+  const identityMissing = plan.warnings.filter((w) => w.startsWith('identity_missing'));
+  if (identityMissing.length) {
+    return { ok: false, error: identityMissing.join(' / '), provider };   // 바이블 없이 그리면 남이 된다
+  }
+
+  const refs: RefBytes[] = [];
+  for (const r of plan.order) {
+    const key = keyOf.get(r.slot);
+    if (!key) continue;
+    const obj = await withTransientRetry(`v2_lock_get:${r.slot}`, () => env.CAPTURES.get(key));
+    if (!obj) continue;
+    refs.push({
+      name: `${r.slot}.png`, bytes: await obj.arrayBuffer(),
+      contentType: obj.httpMetadata?.contentType ?? 'image/png',
+    });
+  }
+
+  // 관찰 번호 — v1과 같은 계열 (하나의 아카이브)
+  const metaRaw0 = await withTransientRetry('v2_meta_get', () => env.PLANET.get(META_KEY));
+  const metaLog0: { comicId: string; no?: number }[] = metaRaw0 ? JSON.parse(metaRaw0) : [];
+  let obsNo = metaLog0.find((x) => x.comicId === comicId)?.no;
+  if (!obsNo) {
+    obsNo = Number(await withTransientRetry('v2_counter_get', () => env.PLANET.get(COUNTER_KEY)) ?? 0) + 1;
+    await withTransientRetry('v2_counter_put', () => env.PLANET.put(COUNTER_KEY, String(obsNo)));
+  }
+
+  const prompt = buildPagePromptV2(s2, plan.order, {
+    observationNo: obsNo,
+    dateKst: kstDate(Date.now()).replace(/-/g, '.'),
+  });
+  const art = await generatePageImage(env, prompt, refs, s2.panelCount);
+  if ('error' in art) return { ok: false, error: art.error, provider: art.provider };
+  const key = `${COMIC_STRIP_PREFIX}${comicId}/page.png`;
+  await withTransientRetry('v2_page_put', () =>
+    env.CAPTURES.put(key, art.bytes, { httpMetadata: { contentType: 'image/png' } }));
+  try {
+    const raw = await env.PLANET.get(META_KEY);
+    const log: { comicId: string }[] = raw ? JSON.parse(raw) : [];
+    await env.PLANET.put(META_KEY, JSON.stringify([
+      { comicId, no: obsNo, at: Date.now(), title: s2.topic, epigraph: null, theme: s2.topic,
+        panelCount: s2.panelCount, mode: 'page', kind: 'v2', cast: castIds, scenario2: s2 },
+      ...log.filter((x) => x.comicId !== comicId),
+    ].slice(0, META_KEEP)));
+  } catch { /* 메타 실패가 생성을 막지 않는다 */ }
+  return { ok: true, mode: 'page', kind: 'v2', comicId, no: obsNo, key, model: art.model, provider, warnings: plan.warnings };
+}
 
 async function runGeneration(
   env: Env, s: ComicScenario, panelsWanted?: number[],

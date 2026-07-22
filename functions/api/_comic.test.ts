@@ -334,3 +334,57 @@ test('캐스트 조립 — 서버가 메타를 소유한다 (계약이 메타를
   };
   assert.deepEqual(validateScenarioV2(s2), []);
 });
+
+// ── S-04 그리기 경로: 참조 계획 + v2 페이지 프롬프트 (Holmes drift 재발 방지) ──
+
+test('참조 계획 — 순서·상한·경고 (조용한 상한 금지)', async () => {
+  const { planV2Refs, V2_REF_CAPS } = await import('./_comic-v2.ts');
+  const loaded = new Set(['style_s1', 'style_s2', 'style_s3', 'style_s4',
+    'id_vase_i1', 'id_vase_i2', 'id_vase_i3', 'id_vase_i4', 'id_vase_i5',
+    'id_holmes_i1', 'id_holmes_i2', 'ch05_panel']);
+  const p = planV2Refs(['vase', 'holmes'], ['style_s1', 'style_s2', 'style_s3', 'style_s4'], loaded);
+  assert.equal(p.order.filter((r) => r.kind === 'style').length, V2_REF_CAPS.style, '스타일 상한');
+  assert.ok(p.warnings.some((w) => w.includes('style_refs_truncated')), '잘렸으면 말한다');
+  assert.equal(p.order.filter((r) => r.kind === 'identity:vase').length, V2_REF_CAPS.identityPerCreator);
+  assert.ok(p.warnings.some((w) => w.includes('identity_refs_truncated: vase')));
+  assert.equal(p.order[p.order.length - 1].kind, 'panel', '패널 바이블은 마지막');
+  // 미적용 스타일은 제외 (기본 제외 — Vase 지적의 코드화)
+  const none = planV2Refs(['vase', 'holmes'], [], loaded);
+  assert.equal(none.order.filter((r) => r.kind === 'style').length, 0, '적용 안 켜면 스타일 0장');
+  // 정체성 0장 경고 (음성)
+  const noId = planV2Refs(['vase', 'byeoli'], [], new Set(['style_s1']));
+  assert.ok(noId.warnings.some((w) => w.includes('identity_missing: vase')));
+});
+
+test('v2 페이지 프롬프트 — 바이블 불변식이 문서에서 프롬프트로 (drift 방지)', async () => {
+  const { buildPagePromptV2, planV2Refs, toV2 } = await import('./_comic-v2.ts');
+  const { castMembersFor } = await import('./_genome-mirrors.ts');
+  const m = castMembersFor(['vase', 'holmes']);
+  const s2 = {
+    version: 'comic-scenario-v2', topic: '비 오는 출근길', panelCount: 1, cast: m.cast,
+    relation: { relationId: 'vase-holmes', version: 'v0' },
+    panels: [{ panelNo: 1, beat: 'rain', setting: 'bus stop', framing: 'wide',
+      actions: [{ creatorId: 'vase', action: 'staring at a bent umbrella tip' },
+                { creatorId: 'holmes', action: 'waveform spikes over the clouds' }],
+      dialogue: [{ speakerId: 'holmes', intent: 'declare', text: '수력 재양 사건이오!' },
+                 { speakerId: 'vase', intent: 'deflate', text: '우산 살 하나 휘었소.' }],
+      caption: null }],
+    endingBeat: 'quiet rain',
+  };
+  const loaded = new Set(['style_s1', 'id_vase_i1', 'id_holmes_i1', 'ch05_panel']);
+  const plan = planV2Refs(['vase', 'holmes'], ['style_s1'], loaded);
+  const p = buildPagePromptV2(s2, plan.order, { dateKst: '2026.07.22', observationNo: 6 });
+  assert.match(p, /^한국어 텍스트 정확하게 렌더링/, '한국어 정확도 선두 (실측 기법 계승)');
+  assert.match(p, /exactly 1 panels — count them/, '컷 수 못박기');
+  assert.match(p, /NO face, NO eyes.*NO arms, NO legs/, '홈즈 불변식 — REJECTED 사고의 프롬프트화');
+  assert.match(p, /never detailed eyes\/nose\/mouth/, 'Vase 실루엣 불변식');
+  assert.match(p, /Speech bubble from holmes \(Korean, exact\): "수력 재양 사건이오!"/, '화자별 대사 원문');
+  assert.match(p, /electric blue/, '홈즈 파형 블루 — 유일한 강한 포인트');
+  assert.match(p, /images 1–1 define the shared art style/, '참조 순서 설명');
+  assert.ok(!p.includes('ppaekong') && !p.includes('white cat'), '미출연 캐릭터 언급 없음 (음성)');
+  // 별이 단독 v1 번역본도 같은 프롬프트 함수를 통과한다
+  const b = toV2(scenario(4));
+  const bPlan = planV2Refs(['byeoli'], [], new Set(['id_byeoli_i1']));
+  const bp = buildPagePromptV2(b, bPlan.order, {});
+  assert.match(bp, /Byeoli: the small girl/, '별이 형태 규칙');
+});

@@ -147,3 +147,102 @@ export function toV2(v1: ComicScenario): ComicScenarioV2 {
       ?? v1.panels[v1.panels.length - 1]?.subject ?? v1.epigraph,
   };
 }
+
+/* ═══ S-04 그리기 경로 — v2 페이지 프롬프트 + 참조 계획 ═══════════════
+   스타일 텍스트는 vault 정본에서 파생:
+   - GWANCHUKHAE_COMIC_STYLE_BIBLE_v1.md (작품 공통 그림체)
+   - HOLMES_IDENTITY_BIBLE_v1.md 절대 불변식 (anthropomorphic drift 재발 방지 —
+     REJECTED 사고 후 프롬프트에 직접 박는다. 이미지는 참조, 문서가 원본.)
+   - VASE_IDENTITY_BIBLE_v1.md (얼굴 최소 기호화 실루엣) */
+
+export const GWANCHUKHAE_STYLE_EN = [
+  'restrained lines and generous negative space, paper texture, muted low-saturation palette',
+  'ink black, warm gray, stone gray, deep blue — the ONLY strong accent is electric blue neon (Holmes)',
+  'emotion shown through posture and distance, never exaggerated facial expression',
+  'a real everyday space where one unreal glowing waveform floats naturally, as if it belongs',
+  'quiet, observational, intellectual warmth — not childlike, not fairy-tale',
+].join('; ');
+
+export const CAST_FORM_EN: Record<string, string> = {
+  vase: 'Vase: an adult human figure as a dark monochrome silhouette — face hidden or minimal (at most jawline/nose tip by light), never detailed eyes/nose/mouth; calm unhurried posture; matches the Vase identity reference sheets',
+  holmes: 'Holmes: ONE single continuous glowing electric-blue neon waveform floating in mid-air — NO face, NO eyes, NO mouth, NO arms, NO legs, NO robot body, NO orb, NO hat. Emotion is shown ONLY by the wave itself: amplitude, density, speed, branching, afterglow. It matches the Holmes identity reference sheets',
+  byeoli: 'Byeoli: the small girl exactly as in her reference sheets — same child, hair as one flat dark shape',
+  ppaekong: 'Ppaekong: the small white cat exactly as in the reference sheets',
+};
+
+export const V2_REF_CAPS = { style: 3, identityPerCreator: 4 };   // 총합이 제미나이 참조 한도 안에 들게
+
+/** 참조 계획 — 순수 함수(테스트 가능). 순서: 스타일 → 캐스트별 정체성 → 패널(마지막). */
+export function planV2Refs(
+  castIds: string[], appliedStyleSlots: string[], loadedSlots: Set<string>,
+): { order: { slot: string; kind: string }[]; warnings: string[] } {
+  const order: { slot: string; kind: string }[] = [];
+  const warnings: string[] = [];
+  const style = appliedStyleSlots.filter((s) => /^style_s[1-5]$/.test(s) && loadedSlots.has(s));
+  if (style.length > V2_REF_CAPS.style) {
+    warnings.push(`style_refs_truncated: ${style.length} → ${V2_REF_CAPS.style}`);   // 조용한 상한 금지
+  }
+  style.slice(0, V2_REF_CAPS.style).forEach((s) => order.push({ slot: s, kind: 'style' }));
+  for (const c of castIds) {
+    if (c === 'ppaekong') continue;   // 빼콩이는 별이 바이블에 동봉 — 별도 슬롯 없음
+    const ids = [1, 2, 3, 4, 5].map((i) => `id_${c}_i${i}`).filter((s) => loadedSlots.has(s));
+    if (!ids.length) { warnings.push(`identity_missing: ${c} — 정체성 참조 0장 (바이블 없이 그리면 남이 된다)`); continue; }
+    if (ids.length > V2_REF_CAPS.identityPerCreator) {
+      warnings.push(`identity_refs_truncated: ${c} ${ids.length} → ${V2_REF_CAPS.identityPerCreator}`);
+    }
+    ids.slice(0, V2_REF_CAPS.identityPerCreator).forEach((s) => order.push({ slot: s, kind: `identity:${c}` }));
+  }
+  if (loadedSlots.has('ch05_panel')) order.push({ slot: 'ch05_panel', kind: 'panel' });
+  return { order, warnings };
+}
+
+/** v2 원샷 페이지 프롬프트 — 한국어 정확도·컷 수 못박기·화자별 말풍선은 v1 실사고 교훈 계승. */
+export function buildPagePromptV2(
+  s: ComicScenarioV2,
+  refPlan: { slot: string; kind: string }[],
+  opts: { dateKst?: string; observationNo?: number } = {},
+): string {
+  const styleN = refPlan.filter((r) => r.kind === 'style').length;
+  const idGroups = s.cast.map((c) => c.creatorId)
+    .filter((c) => refPlan.some((r) => r.kind === `identity:${c}`));
+  const hasPanelRef = refPlan.some((r) => r.kind === 'panel');
+
+  const refDesc: string[] = [];
+  let cursor = 0;
+  if (styleN) { refDesc.push(`images ${cursor + 1}–${cursor + styleN} define the shared art style of the whole page`); cursor += styleN; }
+  for (const c of idGroups) {
+    const n = refPlan.filter((r) => r.kind === `identity:${c}`).length;
+    refDesc.push(`images ${cursor + 1}–${cursor + n} define the identity of ${c}`);
+    cursor += n;
+  }
+  if (hasPanelRef) refDesc.push('the last image defines the panel layout (frame design only, never its content or frame count)');
+
+  const lines: string[] = [
+    `한국어 텍스트 정확하게 렌더링, 글자 왜곡 없음. Render every Korean text below with perfect accuracy — no invented or distorted glyphs.`,
+    `A single Korean webtoon page with exactly ${s.panelCount} panels.`,
+    `The page must contain exactly ${s.panelCount} panels — count them. If any layout reference shows a different number of frames, borrow only its border style, gutters and rhythm; never copy its frame count.`,
+    `Reference images, in order: ${refDesc.join('. ')}.`,
+    `Style: ${GWANCHUKHAE_STYLE_EN}.`,
+    ...s.cast.map((c) => CAST_FORM_EN[c.creatorId]).filter(Boolean),
+    `Only the listed cast appears. No other people or creatures.`,
+    `Page header, top-left, small and quiet: "관축해" and "${opts.dateKst ?? ''}". Below it the topic "${s.topic}" written as a modest title.`,
+    opts.observationNo
+      ? `At the very bottom of the page, tiny: "Observation #${String(opts.observationNo).padStart(3, '0')} · MIMESIS Studio".`
+      : '',
+    `Every piece of Korean text is hand-lettered, calm and legible — never digital typeset fonts.`,
+    `Speech bubbles: Vase and Byeoli use plain quiet bubbles. Holmes speaks in a bubble tinted/outlined with the same electric blue as the waveform.`,
+    '',
+  ];
+  for (const p of s.panels) {
+    lines.push(`Panel ${p.panelNo}: ${p.setting}, ${p.framing} shot. Beat: ${p.beat}.`);
+    for (const a of p.actions) {
+      lines.push(`  ${a.creatorId}: ${a.action}${a.expressionOrState ? ` (${a.expressionOrState})` : ''}.`);
+    }
+    for (const d of p.dialogue) {
+      if (d.text) lines.push(`  Speech bubble from ${d.speakerId} (Korean, exact): "${d.text}"`);
+    }
+    if (p.caption) lines.push(`  Caption box (Korean, exact): "${p.caption}"`);
+  }
+  lines.push('', `Ending mood: ${s.endingBeat}.`, 'No text other than the specified Korean lines and the header.');
+  return lines.filter(Boolean).join('\n');
+}
