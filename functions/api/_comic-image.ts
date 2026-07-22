@@ -122,12 +122,13 @@ async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes
   const candidates = env.COMIC_IMAGE_MODEL ? [env.COMIC_IMAGE_MODEL] : GEMINI_IMAGE_CANDIDATES;
   let lastErr = 'gemini_no_candidates';
   for (const model of candidates) {
-    // 503(혼잡)은 같은 모델 재시도 — 폴백하면 한글 품질이 조용히 떨어진다(품질 선택을 몰래 바꾸지 않는다)
+    // 503(혼잡)·524/522/504(엣지 시간 벽)는 같은 모델 재시도 — 폴백하면 한글 품질이
+    // 조용히 떨어진다(품질 선택을 몰래 바꾸지 않는다)
     for (let attempt = 0; attempt < 3; attempt++) {
       const out = await geminiImageOnce(key, model, prompt, refs, ratio, geminiImageSizeFor(env, model));
       if (!('error' in out)) return out;
       lastErr = out.error;
-      if (out.error.includes('_503')) {
+      if (/_50[34]|_522|_524/.test(out.error)) {
         await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
         continue;
       }
@@ -135,9 +136,31 @@ async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes
     }
     if (!lastErr.includes('_404')) break;   // 404(은퇴)만 다음 후보로
   }
-  return { error: lastErr.includes('_503')
-    ? lastErr + ' — 프로 모델 혼잡(일시적). 잠시 후 [전체 다시]를 누르면 된다. 폴백하지 않는 이유: 플래시로 내려가면 한글이 다시 깨진다.'
+  return { error: /_50[34]|_522|_524/.test(lastErr)
+    ? lastErr + ' — 혼잡 또는 시간 벽(일시적). 잠시 후 [전체 다시]. 계속 524면 COMIC_IMAGE_SIZE=1K 핀 또는 컷 수·참조를 줄일 것. 폴백하지 않는 이유: 플래시로 내려가면 한글이 다시 깨진다.'
     : lastErr };
+}
+
+/**
+ * SSE 응답에서 이미지 base64 조각들을 이어 붙인다 (도착 순서대로).
+ * 실사고(07-22 밤) 대응의 핵심: streamGenerateContent는 응답 헤더가 즉시 오므로
+ * 2K 대형 생성이 첫 바이트 전 100초 벽(524)에 걸리지 않는다.
+ */
+export function parseGeminiSseImage(sse: string): string | null {
+  let b64 = '';
+  for (const line of sse.split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('data:')) continue;
+    const payload = t.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+    try {
+      const j = JSON.parse(payload) as { candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[] };
+      for (const p of j.candidates?.[0]?.content?.parts ?? []) {
+        if (p.inlineData?.data) b64 += p.inlineData.data;
+      }
+    } catch { /* 조각난 줄은 건너뜀 — 완결 이벤트만 */ }
+  }
+  return b64 || null;
 }
 
 async function geminiImageOnce(key: string, model: string, prompt: string, refs: RefBytes[], ratio: string, imageSize?: string):
@@ -148,7 +171,7 @@ async function geminiImageOnce(key: string, model: string, prompt: string, refs:
     const imageConfig: Record<string, string> = { aspectRatio: ratio };
     if (imageSize) imageConfig.imageSize = imageSize;
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
@@ -159,10 +182,7 @@ async function geminiImageOnce(key: string, model: string, prompt: string, refs:
       },
     );
     if (!res.ok) return { error: `geminiimg_http_${res.status}: ${(await res.text()).slice(0, 200)}` };
-    const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[];
-    };
-    const b64 = (data.candidates?.[0]?.content?.parts ?? []).find((p) => p.inlineData?.data)?.inlineData?.data;
+    const b64 = parseGeminiSseImage(await res.text());
     if (!b64) return { error: 'geminiimg_empty' };
     return { bytes: b64ToBytes(b64), model };
   } catch (e) { return { error: `geminiimg_network: ${String(e).slice(0, 120)}` }; }
