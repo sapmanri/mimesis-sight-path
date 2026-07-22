@@ -25,6 +25,7 @@ export interface CreatorMirror {
   displayName: string;
   persona: string[];               // 게놈 파생 — 시나리오 두뇌에 들어가는 문장들
   speech: { register: string; density: 'silent' | 'low' | 'medium' | 'high' };
+  embodiment: string;              // 몸 계약 — 실사고(관축해 1호 빵점): 파형에게 우산을 줬다
 }
 
 /* ── Vase — genome_db.json v0.3.0 미러 (원본: carousel-generator) ── */
@@ -46,6 +47,7 @@ export const VASE_MIRROR: CreatorMirror = {
     '기록은 나중의 나와 타인을 위한 선물이다 — 과거의 기록을 현재와 연결한다.',
   ],
   speech: { register: '짧고 담담한 반말·경어 혼용 — 작가의 문장, 결론을 빛내지 않는다', density: 'low' },
+  embodiment: '성인 인간. 손·우산·카메라·노트 등 도구 사용 가능. 움직임은 느긋하고 불필요한 제스처가 없다.',
 };
 
 /* ── Sap — 같은 Human Genome에서 파생된 다른 Identity (S-04A 분리, 복사 아님) ──
@@ -68,6 +70,7 @@ export const SAP_MIRROR: CreatorMirror = {
     '아이디어를 흔든다 — 정의가 서면 부수고, 부서진 자리에서 처음엔 없던 것이 나온다.',
   ],
   speech: { register: '하오체 — 짧고 능청스럽게, 놀리듯 여유 있게 ("거 뭘 자꾸 꼬치꼬치 캐묻소, 무서운 양반")', density: 'low' },
+  embodiment: '성인 인간. 손·삽·우산·휴대폰 등 도구 사용 가능. 가볍게 바로 움직인다.',
 };
 
 /* ── Holmes — Edition 1 Candidate v2 미러 (provisional — Vase 승인 전, 실험실 전용) ── */
@@ -91,6 +94,7 @@ export const HOLMES_MIRROR: CreatorMirror = {
     '진지할수록 웃기다 — 웃기려 하지 않는다. 사건을 지나치게 진지하게 처리할 뿐이다.',
   ],
   speech: { register: '하오체 ("~소/~하오/~겠소", 호칭 "탐험가 양반") — 말은 많되 캡션·정리는 절제', density: 'high' },
+  embodiment: '몸이 없다 — 허공에 떠 있는 파란 네온 파형 하나가 전부다. 우산·옷·가방·주머니·손·다리가 필요한 행동은 절대 불가. 가능한 행동: 떠다니기, 기울기, 솟기, 갈라지기(분기), 커지기/작아지기, 잔광 남기기, 누군가의 어깨 높이에 머무르기, 사물 위를 맴돌기. 비를 맞아도 젖지 않는다.',
 };
 
 /* ── Byeoli — 이 레포가 원본. v2 캐스트용 요약만 (미러 아님) ── */
@@ -104,6 +108,7 @@ export const BYEOLI_REF: CreatorMirror = {
     '말이 적다. 대사는 드물고 짧다. 어른들의 일을 설명하지 않고 곁에서 지나간다.',
   ],
   speech: { register: '반말, 아주 짧게', density: 'low' },
+  embodiment: '5살 아이. 작은 손. 아이가 물리적으로 할 수 있는 행동만.',
 };
 
 const MIRRORS: Record<string, CreatorMirror> = {
@@ -170,6 +175,25 @@ export function castMembersFor(castIds: string[]): { cast: ComicCastMember[]; er
   return { cast, errors };
 }
 
+/* ── 신체 계약 검증 — 실사고(관축해 1호): 시나리오가 파형에게 우산·코트·가방을 줬고,
+   이미지 모델은 모순을 '파형 얼굴을 단 정장 남자'로 타협했다. 계약이 막았어야 했다. ── */
+const BODILESS_FORBIDDEN = /\b(umbrella|coat|jacket|pocket|bag|backpack|hand|hands|finger|fingers|arm|arms|leg|legs|foot|feet|shoe|shoes|wear|wearing|hold|holds|holding|grab|grabs|carry|carries|pat|pats|patting|wring|wringing|rummag\w*|steps?\b|walk\w*|sit|sits|sitting|stand|stands|standing)\b/i;
+
+export function validateEmbodimentV2(s2: { cast: { creatorId: string }[]; panels: { panelNo: number; actions: { creatorId: string; action: string }[] }[] }): string[] {
+  const errs: string[] = [];
+  const bodiless = new Set(
+    s2.cast.map((c) => c.creatorId).filter((id) => MIRRORS[id] && MIRRORS[id].embodiment.startsWith('몸이 없다')));
+  if (!bodiless.size) return errs;
+  for (const p of s2.panels) {
+    for (const a of p.actions) {
+      if (bodiless.has(a.creatorId) && BODILESS_FORBIDDEN.test(a.action)) {
+        errs.push(`panels[${p.panelNo}]: ${a.creatorId}는 몸이 없다 — "${a.action.slice(0, 60)}"는 불가능한 행동 (재생성 필요)`);
+      }
+    }
+  }
+  return errs;
+}
+
 /* ── 시나리오 v2 두뇌 프롬프트 — 게놈에서 파생된다 (하드코딩 아님, 429-E 계승) ── */
 export function buildScenarioSystemV2(castIds: string[]):
   { system: string; relation: RelationSummary | null } | { error: string } {
@@ -194,6 +218,7 @@ export function buildScenarioSystemV2(castIds: string[]):
     lines.push(`## ${m.displayName} — 게놈${m.experimental ? ' (provisional — 실험실 내부 검증용)' : ''}`);
     for (const p of m.persona) lines.push(`- ${p}`);
     lines.push(`- 말투: ${m.speech.register} · 대사 밀도: ${m.speech.density}`);
+    lines.push(`- 몸: ${m.embodiment}`);
     lines.push('');
   }
   if (relation) {
@@ -206,7 +231,9 @@ export function buildScenarioSystemV2(castIds: string[]):
     '## 출력 규칙 (어기면 실패)',
     '- JSON 하나만 출력한다. 마크다운·설명 금지.',
     '- 시각 필드(setting/framing/actions[].action/beat)는 영어. dialogue[].text·caption은 한국어.',
-    '- 출연자 목록에 없는 인물을 등장시키지 않는다. 매 컷에 모두가 등장할 필요는 없다.',
+    '- 출연자 목록에 없는 인물을 등장시키지 않는다. 배경 군중·행인도 금지 — 무대는 출연자의 것이다 (필요하면 빈 거리·빈 정류장으로).',
+    '- 행동은 그 존재의 몸으로 물리적으로 가능한 것만 쓴다. 몸이 없는 존재에게 도구·옷·손 동작을 시키지 않는다.',
+    '- 매 컷에 모두가 등장할 필요는 없다.',
     '- 대사 밀도를 지킨다 — low인 출연자는 드물고 짧게, high는 많되 캡션은 절제.',
     '- 마지막 컷은 결론이 아니라 여운 — 정리하지 않는다.',
     '',

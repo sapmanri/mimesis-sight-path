@@ -166,7 +166,7 @@ export const GWANCHUKHAE_STYLE_EN = [
 export const CAST_FORM_EN: Record<string, string> = {
   sap: 'Sap: a human figure matching the Sap identity reference sheets — casual, in motion, hands-on; face treated the same restrained way as the sheets show',
   vase: 'Vase: an adult human figure as a dark monochrome silhouette — face hidden or minimal (at most jawline/nose tip by light), never detailed eyes/nose/mouth; calm unhurried posture; matches the Vase identity reference sheets',
-  holmes: 'Holmes: ONE single continuous glowing electric-blue neon waveform floating in mid-air — NO face, NO eyes, NO mouth, NO arms, NO legs, NO robot body, NO orb, NO hat. Emotion is shown ONLY by the wave itself: amplitude, density, speed, branching, afterglow. It matches the Holmes identity reference sheets',
+  holmes: 'Holmes: ONE single continuous glowing electric-blue neon waveform floating in mid-air — NO face, NO eyes, NO mouth, NO arms, NO legs, NO robot body, NO orb, NO hat. Emotion is shown ONLY by the wave itself: amplitude, density, speed, branching, afterglow. The waveform NEVER merges with a human body and NEVER appears on or replaces a person\'s face — it always floats separately in the air beside people. It matches the Holmes identity reference sheets',
   byeoli: 'Byeoli: the small girl exactly as in her reference sheets — same child, hair as one flat dark shape',
   ppaekong: 'Ppaekong: the small white cat exactly as in the reference sheets',
 };
@@ -225,7 +225,7 @@ export function buildPagePromptV2(
     `Reference images, in order: ${refDesc.join('. ')}.`,
     `Style: ${GWANCHUKHAE_STYLE_EN}.`,
     ...s.cast.map((c) => CAST_FORM_EN[c.creatorId]).filter(Boolean),
-    `Only the listed cast appears. No other people or creatures.`,
+    `Only the listed cast appears. No other people anywhere on the page — no crowds, no passers-by, no background figures. Empty streets and empty spaces are correct.`,
     `Page header, top-left, small and quiet: "관축해" and "${opts.dateKst ?? ''}". Below it the topic "${s.topic}" written as a modest title.`,
     opts.observationNo
       ? `At the very bottom of the page, tiny: "Observation #${String(opts.observationNo).padStart(3, '0')} · MIMESIS Studio".`

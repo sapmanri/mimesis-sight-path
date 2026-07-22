@@ -8,7 +8,7 @@
 import { validateScenario, type ComicScenario } from '../_comic.ts';
 import { generateScenarioText, extractJson, type ComicLlmEnv } from '../_comic-llm.ts';
 import { validateScenarioV2, COMIC_SCENARIO_V2_VERSION, MAX_CAST, type ComicScenarioV2, type ComicPanelV2 } from '../_comic-v2.ts';
-import { buildScenarioSystemV2, castMembersFor } from '../_genome-mirrors.ts';
+import { buildScenarioSystemV2, castMembersFor, validateEmbodimentV2 } from '../_genome-mirrors.ts';
 
 interface Env extends ComicLlmEnv {
   PLANET: KVNamespace;
@@ -43,7 +43,7 @@ async function scenarioV2(env: Env, theme: string, panelCount: number, castIds: 
     panels: parsed.panels ?? [],
     endingBeat: parsed.endingBeat ?? '',
   };
-  const errs = validateScenarioV2(scenario2);
+  const errs = [...validateScenarioV2(scenario2), ...validateEmbodimentV2(scenario2)];
   if (errs.length) return json(422, { ok: false, error: 'scenario_invalid', detail: errs, scenario2 });
 
   try {
