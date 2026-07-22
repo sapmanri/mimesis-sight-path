@@ -997,7 +997,20 @@ async function pollPublishLog(){
       } else {
         lines.push('사진 없이 나섰다.');
       }
-      lines.push(r.result === 'success' ? '사람들에게 이 이야기를 남겼다. ✓' : 'Threads에 올리지 못했다. ✕');
+      // 실패 사유 노출 (실사고 07-22 저녁: 18:00 실패가 "올리지 못했다"로만 보여 원인 조회가 막혔다
+      // — 422-OPS-A가 이 질문에 답하려고 Layer1을 저장하는데 화면이 답을 감추고 있었다)
+      if (r.result === 'success') {
+        lines.push('사람들에게 이 이야기를 남겼다. ✓');
+      } else {
+        const t = r.threads ?? {};
+        const why = [
+          t.errorCode ? `code ${t.errorCode}` : null,
+          typeof r.httpStatus === 'number' ? `HTTP ${r.httpStatus}` : null,
+          t.requestId ? `trace ${t.requestId}` : null,
+          t.attempted === false ? '호출 자체가 없었다' : null,
+        ].filter(Boolean).join(' · ');
+        lines.push(`Threads에 올리지 못했다. ✕${why ? ` (${why})` : ''}`);
+      }
     }
     for (const t of lines) {
       const p = document.createElement('div'); p.className = 'what';
