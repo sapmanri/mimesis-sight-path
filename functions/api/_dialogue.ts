@@ -154,8 +154,12 @@ export function validateAdaptation(
   if (prov.omittedLines.length > utterances.length * 0.6) {
     warnings.push(`heavy_omission: 원문 ${utterances.length}발화 중 ${prov.omittedLines.length}건 생략`);
   }
-  if (input.preservationMode !== 'reconstruct' && prov.reconstructedLines.length) {
-    errors.push('reconstruction_forbidden: strict/balanced에서 새 대사 생성 금지');
+  if (input.preservationMode === 'strict' && prov.reconstructedLines.length) {
+    errors.push('reconstruction_forbidden: strict에서 새 대사 생성 금지');
+  } else if (input.preservationMode === 'balanced' && prov.reconstructedLines.length) {
+    // 실사고(07-23): 두뇌가 미세 정리를 성실히 신고했는데 신고 자체를 위반 처리했다.
+    // balanced는 말투 미세 정리 허용 — 신고는 벌하지 않고 검토 대상으로 보인다.
+    warnings.push(`balanced_reconstruction: ${prov.reconstructedLines.length}건 신고 — 미세 정리인지 [원문과 비교]에서 검토`);
   }
   return { errors, warnings };
 }
