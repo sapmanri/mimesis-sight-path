@@ -279,3 +279,58 @@ test('Lock v2 슬롯 — 그룹 분류와 레거시 보존 (S-04 판정 4)', asy
   assert.ok(!isLockSlot('style_s6'), '슬롯 범위 밖 거부 (음성)');
   assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 15, '6 레거시 + 5 스타일 + 15 정체성');
 });
+
+// ── S-04 5~7단: Genome 미러 + Relation 게이트 + 시나리오 v2 두뇌 파생 ──
+
+test('미러 규약 — 버전 불일치면 조용히 쓰지 않는다 (음성)', async () => {
+  const { checkMirror, VASE_MIRROR, HOLMES_MIRROR } = await import('./_genome-mirrors.ts');
+  assert.equal(checkMirror(VASE_MIRROR), null);
+  assert.equal(checkMirror(HOLMES_MIRROR), null);
+  const stale = JSON.parse(JSON.stringify(VASE_MIRROR));
+  stale.meta.sourceVersion = '0.2.0';
+  assert.match(checkMirror(stale), /mirror_version_mismatch\(vase\)/);
+  assert.ok(HOLMES_MIRROR.experimental, 'Holmes는 provisional — 실험실 전용 표시');
+});
+
+test('v2 두뇌 — 프롬프트가 게놈에서 파생되고 Relation은 대사를 쓰지 않는다', async () => {
+  const { buildScenarioSystemV2 } = await import('./_genome-mirrors.ts');
+  const b = buildScenarioSystemV2(['vase', 'holmes']);
+  assert.ok(!('error' in b), JSON.stringify(b));
+  assert.match(b.system, /하오체/, '관축해 레지스터 (A0 실증)');
+  assert.match(b.system, /X는 Y가 아니오/, '홈즈 정의 문형 — 게놈 파생');
+  assert.match(b.system, /이거 볼래\? 아님 말고/, 'Vase 게놈 파생');
+  assert.match(b.system, /홈즈가 정의한다/, 'Relation 패턴 5단 주입');
+  assert.match(b.system, /Relation은 대사를 쓰지 않는다/, '홈즈 판정 원문');
+  assert.match(b.system, /provisional/, 'Holmes 실험 표시가 프롬프트에도');
+  assert.equal(b.relation.relationId, 'vase-holmes');
+});
+
+test('v2 두뇌 — 미등록 관계·미등록 Creator는 생성 금지 (음성)', async () => {
+  const { buildScenarioSystemV2 } = await import('./_genome-mirrors.ts');
+  const noRel = buildScenarioSystemV2(['byeoli', 'vase']);
+  assert.ok('error' in noRel && noRel.error.includes('relation_unregistered'),
+    '관계 없이 적당히 섞으면 역할극이 된다 — 생성 금지');
+  const ghost = buildScenarioSystemV2(['vase', 'moriarty']);
+  assert.ok('error' in ghost && ghost.error.includes('unknown_creator'));
+  const solo = buildScenarioSystemV2(['vase']);
+  assert.ok(!('error' in solo) && solo.relation === null, '단독은 relation 없이 성립');
+});
+
+test('캐스트 조립 — 서버가 메타를 소유한다 (계약이 메타를 소유한다, 429 계승)', async () => {
+  const { castMembersFor } = await import('./_genome-mirrors.ts');
+  const { validateScenarioV2, COMIC_SCENARIO_V2_VERSION } = await import('./_comic-v2.ts');
+  const m = castMembersFor(['vase', 'holmes']);
+  assert.deepEqual(m.errors, []);
+  assert.equal(m.cast[0].role, 'lead');
+  assert.equal(m.cast[1].speechPolicy.density, 'high', '홈즈는 말이 많다 (캡션 절제는 프롬프트 몫)');
+  // 조립된 캐스트로 스켈레톤 시나리오가 계약을 통과하는지
+  const s2 = {
+    version: COMIC_SCENARIO_V2_VERSION, topic: '오늘도 홈즈가 사고쳤다', panelCount: 1,
+    cast: m.cast, relation: { relationId: 'vase-holmes', version: 'v0' },
+    panels: [{ panelNo: 1, beat: 'discovery', setting: 'studio desk at night', framing: 'medium',
+      actions: [{ creatorId: 'holmes', action: 'waveform spikes sharply over the desk' }],
+      dialogue: [{ speakerId: 'holmes', intent: 'declare', text: '사건이오.' }], caption: null }],
+    endingBeat: 'quiet afterglow',
+  };
+  assert.deepEqual(validateScenarioV2(s2), []);
+});

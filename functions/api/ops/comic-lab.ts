@@ -306,6 +306,38 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     }
   };
 
+  // ── v2 시나리오 렌더 (S-04 7단) — 그리기는 다음 커밋 (Identity Lock 재제작 후) ──
+  function renderScenarioV2(s, meta) {
+    var html = '<div class="panel"><h2>「' + esc(s.topic) + '」 <span class="muted">' +
+      s.panelCount + '컷 · v2 · ' + esc(meta.provider || '') + ' · ' + esc(meta.model || '') + '</span></h2>' +
+      '<div class="muted">출연: ' + s.cast.map(function (cm) {
+        return esc(cm.creatorId) + '(' + esc(cm.role) + ')';
+      }).join(' · ') +
+      (s.relation ? ' · 관계: ' + esc(s.relation.relationId) + ' ' + esc(s.relation.version) : '') + '</div>';
+    s.panels.forEach(function (p) {
+      html += '<div class="pframe"><b>' + p.panelNo + '컷</b> <span class="muted">' +
+        esc(p.setting) + ' · ' + esc(p.framing) + ' · beat: ' + esc(p.beat) + '</span>';
+      (p.actions || []).forEach(function (a) {
+        html += '<div style="margin-left:8px">' + esc(a.creatorId) + ': ' + esc(a.action) +
+          (a.expressionOrState ? ' <span class="muted">(' + esc(a.expressionOrState) + ')</span>' : '') + '</div>';
+      });
+      (p.dialogue || []).forEach(function (d) {
+        html += '<div style="margin-left:8px">💬 <b>' + esc(d.speakerId) + '</b>: ' + esc(d.text || '') +
+          ' <span class="muted">[' + esc(d.intent) + ']</span></div>';
+      });
+      if (p.caption) html += '<div style="margin-left:8px;border-left:2px solid #3d4a3b;padding-left:6px">' + esc(p.caption) + '</div>';
+      html += '</div>';
+    });
+    html += '<div class="muted">ending beat: ' + esc(s.endingBeat) + '</div>' +
+      '<div class="row" style="margin-top:10px">' +
+      '<button id="redo2">다른 이야기로 다시</button>' +
+      '<button class="primary" disabled title="Identity Lock 재제작 + 그리기 경로 배선(다음 커밋) 후">🎨 그리기 (준비 중)</button>' +
+      '</div></div>';
+    $('out').innerHTML = html;
+    var rd = $('redo2');
+    if (rd) rd.onclick = makeStory;
+  }
+
   // ── 시나리오 렌더 ──
   function renderScenario(s, meta) {
     var html = '<div class="panel"><h2>「' + esc(s.title) + '」 <span class="muted">' +
@@ -432,19 +464,24 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     var theme = $('theme').value.trim();
     if (!theme) { banner('주제가 비어 있다 — 오늘 겪을 일 한 줄', 'err'); return; }
     var c = castNow();
-    if (!(c.length === 1 && c[0] === 'byeoli')) {
-      // S-04 5~7단(Genome Adapter·Relation) 배선 전 — 조용히 별이 게놈으로 대신 만들지 않는다
-      banner('멀티 Creator 생성은 아직 배선 전 (S-04 5~7단). 지금은 Identity Lock 업로드까지 준비 단계.', 'err');
-      return;
-    }
     var go = $('go');
     go.disabled = true;
-    go.innerHTML = '<span class="spin">◐</span> 별이가 이야기를 고르는 중…';
+    go.innerHTML = '<span class="spin">◐</span> 게놈이 이야기를 고르는 중…';
     api('/api/ops/comic-scenario', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ theme: theme, panelCount: state.cut }),
+      body: JSON.stringify({ theme: theme, panelCount: state.cut, cast: c }),
     }).then(function (r) {
       go.disabled = false; go.textContent = '선택한 게놈으로 이야기 만들기';
+      if (r.scenario2) {
+        if (r.error === 'scenario_invalid') {
+          banner('시나리오가 v2 계약 미달 — ' + (r.detail || []).join(' / ') + ' · 다시 눌러 재생성', 'err');
+          return;
+        }
+        state.scenario2 = r.scenario2;
+        renderScenarioV2(r.scenario2, r);
+        banner('v2 시나리오 완성 — 게놈답게 나왔는지 확인');
+        return;
+      }
       if (r.error === 'scenario_invalid') {
         banner('시나리오가 계약 미달 — ' + (r.detail || []).join(' / ') + ' · 다시 눌러 재생성', 'err');
         if (r.scenario && r.scenario.panels) renderScenario(r.scenario, { provider: '미달본', model: '' });

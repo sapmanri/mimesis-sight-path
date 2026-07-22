@@ -30,11 +30,14 @@ export function geminiKeyOf(env: { GEMINI_API_KEY?: string; GEMINIAPIKEY?: strin
   return env.GEMINI_API_KEY || env.GEMINIAPIKEY || null;
 }
 
+/** v2 경로(S-04)가 게놈 파생 프롬프트를 주입한다. 없으면 v1(별이 단독) 기본 — 무회귀. */
+export interface ScenarioPrompts { system: string; user: string }
+
 export function userPrompt(theme: string, panelCount: number): string {
   return `주제: ${theme}\npanelCount: ${panelCount}\n이 주제로 별이의 ${panelCount}컷 그림일기 시나리오를 JSON으로.`;
 }
 
-async function viaGpt(env: ComicLlmEnv, theme: string, panelCount: number):
+async function viaGpt(env: ComicLlmEnv, theme: string, panelCount: number, prompts?: ScenarioPrompts):
   Promise<{ text: string; model: string } | { error: string }> {
   if (!env.OPENAI_API_KEY) return { error: 'openai_key_missing: OPENAI_API_KEY를 wrangler secret으로 심어야 한다' };
   const model = env.COMIC_TEXT_MODEL || GPT_MODEL_DEFAULT;
@@ -48,8 +51,8 @@ async function viaGpt(env: ComicLlmEnv, theme: string, panelCount: number):
       body: JSON.stringify({
         model,
         messages: [
-          { role: 'system', content: SCENARIO_SYSTEM },
-          { role: 'user', content: userPrompt(theme, panelCount) },
+          { role: 'system', content: prompts?.system ?? SCENARIO_SYSTEM },
+          { role: 'user', content: prompts?.user ?? userPrompt(theme, panelCount) },
         ],
         response_format: { type: 'json_object' },
       }),
@@ -62,7 +65,7 @@ async function viaGpt(env: ComicLlmEnv, theme: string, panelCount: number):
   } catch (e) { return { error: `gpt_network: ${String(e).slice(0, 120)}` }; }
 }
 
-async function viaClaude(env: ComicLlmEnv, theme: string, panelCount: number):
+async function viaClaude(env: ComicLlmEnv, theme: string, panelCount: number, prompts?: ScenarioPrompts):
   Promise<{ text: string; model: string } | { error: string }> {
   if (!env.ANTHROPIC_API_KEY) return { error: 'anthropic_key_missing' };
   const model = env.COMIC_TEXT_MODEL || CLAUDE_MODEL_DEFAULT;
@@ -76,8 +79,8 @@ async function viaClaude(env: ComicLlmEnv, theme: string, panelCount: number):
       },
       body: JSON.stringify({
         model, max_tokens: 3000,
-        system: SCENARIO_SYSTEM,
-        messages: [{ role: 'user', content: userPrompt(theme, panelCount) }],
+        system: prompts?.system ?? SCENARIO_SYSTEM,
+        messages: [{ role: 'user', content: prompts?.user ?? userPrompt(theme, panelCount) }],
       }),
     });
     if (!res.ok) return { error: `claude_http_${res.status}` };
@@ -88,14 +91,14 @@ async function viaClaude(env: ComicLlmEnv, theme: string, panelCount: number):
   } catch (e) { return { error: `claude_network: ${String(e).slice(0, 120)}` }; }
 }
 
-async function viaGemini(env: ComicLlmEnv, theme: string, panelCount: number):
+async function viaGemini(env: ComicLlmEnv, theme: string, panelCount: number, prompts?: ScenarioPrompts):
   Promise<{ text: string; model: string } | { error: string }> {
   const key = geminiKeyOf(env);
   if (!key) return { error: 'gemini_key_missing: GEMINI_API_KEY(또는 GEMINIAPIKEY) 시크릿 필요' };
   const candidates = env.COMIC_TEXT_MODEL ? [env.COMIC_TEXT_MODEL] : GEMINI_TEXT_CANDIDATES;
   let lastErr = 'gemini_no_candidates';
   for (const model of candidates) {
-    const out = await geminiTextOnce(key, model, theme, panelCount);
+    const out = await geminiTextOnce(key, model, theme, panelCount, prompts);
     if (!('error' in out)) return out;
     lastErr = out.error;
     if (!out.error.includes('_404')) break;   // 404(모델 은퇴)만 다음 후보로, 다른 오류는 즉시 보고
@@ -103,7 +106,7 @@ async function viaGemini(env: ComicLlmEnv, theme: string, panelCount: number):
   return { error: lastErr };
 }
 
-async function geminiTextOnce(key: string, model: string, theme: string, panelCount: number):
+async function geminiTextOnce(key: string, model: string, theme: string, panelCount: number, prompts?: ScenarioPrompts):
   Promise<{ text: string; model: string } | { error: string }> {
   try {
     const res = await fetch(
@@ -112,8 +115,8 @@ async function geminiTextOnce(key: string, model: string, theme: string, panelCo
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SCENARIO_SYSTEM }] },
-          contents: [{ parts: [{ text: userPrompt(theme, panelCount) }] }],
+          systemInstruction: { parts: [{ text: prompts?.system ?? SCENARIO_SYSTEM }] },
+          contents: [{ parts: [{ text: prompts?.user ?? userPrompt(theme, panelCount) }] }],
           generationConfig: { responseMimeType: 'application/json' },
         }),
       },
@@ -128,12 +131,12 @@ async function geminiTextOnce(key: string, model: string, theme: string, panelCo
 
 /** 두뇌 호출 — provider는 env로 정해진다. 기본 gemini (Vase 판정 07-22: "전부 제미나이로"). */
 export async function generateScenarioText(
-  env: ComicLlmEnv, theme: string, panelCount: number,
+  env: ComicLlmEnv, theme: string, panelCount: number, prompts?: ScenarioPrompts,
 ): Promise<{ text: string; model: string; provider: string } | { error: string; provider: string }> {
   const provider = (env.COMIC_TEXT_PROVIDER || 'gemini').toLowerCase();
-  const out = provider === 'claude' ? await viaClaude(env, theme, panelCount)
-    : provider === 'gpt' ? await viaGpt(env, theme, panelCount)
-    : await viaGemini(env, theme, panelCount);
+  const out = provider === 'claude' ? await viaClaude(env, theme, panelCount, prompts)
+    : provider === 'gpt' ? await viaGpt(env, theme, panelCount, prompts)
+    : await viaGemini(env, theme, panelCount, prompts);
   return 'error' in out ? { ...out, provider } : { ...out, provider };
 }
 
