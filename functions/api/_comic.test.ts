@@ -72,3 +72,13 @@ test('extractJson — 코드펜스·서론이 섞여도 JSON만 뽑는다', () =
   assert.equal(extractJson('json 없음'), null);
   assert.ok(userPrompt('비', 4).includes('4'));
 });
+
+test('Style Lock 저장소는 바이블 5칸만 받는다 — 임의 이름 불가', async () => {
+  const { isLockSlot, COMIC_LOCK_PREFIX } = await import('./ops/comic-style-lock.ts');
+  assert.equal(isLockSlot('ch00_master'), true);
+  assert.equal(isLockSlot('ch04_hair'), true);
+  assert.equal(isLockSlot('byeoli_poses'), false, '그림실험실 참조는 여기 못 들어온다');
+  assert.equal(isLockSlot('../captures/x'), false);
+  assert.equal(isLockSlot(null), false);
+  assert.ok(COMIC_LOCK_PREFIX.startsWith('comic/'), '그림실험실 prefix와 분리');
+});

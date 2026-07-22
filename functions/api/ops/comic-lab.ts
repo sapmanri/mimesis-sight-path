@@ -57,8 +57,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   details{margin-top:8px} summary{cursor:pointer;color:#A7B49A;font-size:12px}
 </style></head><body>
 <h1>BYEOLI Comic Lab</h1>
-<p class="lead">주제 → 별이 게놈 → 시나리오 → (승인) → 웹툰. 두뇌·그림 모두 어댑터 — 기본 GPT.
-· <a href="/api/ops/sketch-lab">그림실험실 ←</a></p>
+<p class="lead">주제 → 별이 게놈 → 시나리오 → (승인) → 웹툰. 두뇌·그림 모두 어댑터 — 기본 GPT. 독립 실험실 — 다른 실험실과 섞이지 않는다.</p>
 <div id="banner" class="banner"></div>
 <div class="cols">
 <div>
@@ -66,11 +65,12 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <div class="panel">
     <h2>🔒 Style Lock <span class="muted" id="lockVer"></span></h2>
     <div id="lockStatus" class="muted">확인 중…</div>
-    <details><summary>바이블 5장</summary>
+    <details open><summary>바이블 5장 (칸을 눌러 업로드·교체)</summary>
       <div id="lockGrid" class="lockgrid"></div>
-      <div class="muted" style="margin-top:6px">비면: 그림실험실 ②에서 같은 이름으로 업로드
-      (ch00_master · ch01_turnaround · ch02_expression · ch03_pose · ch04_hair)</div>
+      <div class="muted" style="margin-top:6px">Comic Lab 전용 저장소 — 다른 실험실과 섞이지 않는다.
+      한 번 올리면 계속 장착된다.</div>
     </details>
+    <input type="file" id="lockFile" accept="image/png,image/jpeg,image/webp" style="display:none">
   </div>
 
   <div class="panel">
@@ -116,31 +116,50 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  // ── Style Lock 장착 확인 — 이름으로 자동 (매번 업로드하지 않는다) ──
+  // ── Style Lock — Comic Lab 전용 저장소 (comic/style-lock/). 칸 클릭 = 업로드/교체 ──
+  var pendingSlot = null;
   function checkLock() {
-    api('/api/ops/sketch-reference').then(function (r) {
-      var refs = r.references || [];
+    api('/api/ops/comic-style-lock').then(function (r) {
       var grid = $('lockGrid');
       grid.innerHTML = '';
-      var found = 0;
-      LOCK_NAMES.forEach(function (name) {
-        var hit = refs.filter(function (x) { return x.key.indexOf('/' + name + '.') >= 0; })[0];
+      (r.slots || []).forEach(function (s) {
         var cell = document.createElement('div');
-        if (hit) {
-          found++;
-          cell.innerHTML = '<img src="' + esc(hit.preview) + '" loading="lazy">' +
-            '<div class="lockname">' + esc(name) + '</div>';
-        } else {
-          cell.innerHTML = '<div class="miss">없음</div><div class="lockname">' + esc(name) + '</div>';
-        }
+        cell.style.cursor = 'pointer';
+        cell.title = s.loaded ? s.slot + ' — 눌러서 교체' : s.slot + ' — 눌러서 업로드';
+        cell.innerHTML = (s.loaded
+          ? '<img src="/api/ops/comic-style-lock?file=' + esc(s.slot) + '&v=' + Date.now() + '" loading="lazy">'
+          : '<div class="miss">비어 있음<br>+</div>') +
+          '<div class="lockname">' + esc(s.slot) + '</div>';
+        cell.onclick = function () { pendingSlot = s.slot; $('lockFile').click(); };
         grid.appendChild(cell);
       });
+      var found = r.loaded || 0;
       $('lockVer').textContent = '${STYLE_LOCK_VERSION}';
       $('lockStatus').innerHTML = found === LOCK_NAMES.length
         ? '<span class="ok">🔒 ' + found + '/5 장착 — 잠김</span>'
-        : '<span class="warn">⚠ ' + found + '/5 — 바이블이 비어 있다 (그리기 전까지 채울 것)</span>';
+        : '<span class="warn">⚠ ' + found + '/5 — 빈 칸을 눌러 바이블을 올릴 것 (그리기 전까지)</span>';
     });
   }
+  $('lockFile').onchange = function () {
+    var f = $('lockFile').files[0];
+    if (!f || !pendingSlot) return;
+    var slot = pendingSlot;
+    pendingSlot = null;
+    $('lockFile').value = '';
+    if (['image/png', 'image/jpeg', 'image/webp'].indexOf(f.type) < 0) {
+      banner('png/jpeg/webp만 가능 (' + (f.type || '타입 없음') + ')', 'err'); return;
+    }
+    banner(slot + ' 업로드 중…');
+    fetch('/api/ops/comic-style-lock?slot=' + encodeURIComponent(slot), {
+      method: 'POST', headers: { 'content-type': f.type }, body: f,
+    }).then(function (res) {
+      return res.json().catch(function () { return { error: 'HTTP ' + res.status }; });
+    }).then(function (r) {
+      if (r.error) { banner(slot + ' 업로드 실패: ' + r.error, 'err'); return; }
+      banner('🔒 ' + slot + ' 장착됨 (' + Math.round(r.size / 1024) + 'KB)');
+      checkLock();
+    }).catch(function (e) { banner('업로드 요청 실패: ' + e, 'err'); });
+  };
 
   // ── 컷 수 선택 ──
   Array.prototype.forEach.call(document.querySelectorAll('#cuts button'), function (b) {
