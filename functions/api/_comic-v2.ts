@@ -42,6 +42,7 @@ export interface ComicScenarioV2 {
   cast: ComicCastMember[];
   relation?: { relationId: string; version: string } | null;
   relations?: { relationId: string; version: string }[];   // 3인 이상 — 적용된 페어 목록 (가산 필드)
+  relationDiscovery?: string[];   // Discovery Mode — 이 작품이 첫 관찰인 미정의 페어 키들
   panels: ComicPanelV2[];
   endingBeat: string;
 }

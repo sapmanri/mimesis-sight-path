@@ -41,6 +41,7 @@ async function scenarioV2(env: Env, theme: string, panelCount: number, castIds: 
     cast: members.cast,
     relation: built.relation ? { relationId: built.relation.relationId, version: built.relation.version } : null,
     relations: built.relations.length > 1 ? built.relations.map((r) => ({ relationId: r.relationId, version: r.version })) : undefined,
+    relationDiscovery: built.discovery.length ? built.discovery : undefined,
     panels: parsed.panels ?? [],
     endingBeat: parsed.endingBeat ?? '',
   };

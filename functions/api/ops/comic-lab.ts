@@ -313,15 +313,15 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     var c = castNow().sort();
     var box = $('relStatus');
     if (c.length < 2) { box.innerHTML = ''; $('go').disabled = false; return; }
-    var missing = 0;
+    var missing = 0, known = 0;
     var rows = '<div class="muted" style="margin-bottom:2px">Relation</div>';
     for (var i = 0; i < c.length; i++) {
       for (var j = i + 1; j < c.length; j++) {
         var key = c[i] + '-' + c[j];
         var ok = RELATION_KEYS.indexOf(key) >= 0;
-        if (!ok) missing++;
-        rows += '<div class="' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓' : '✗') + ' ' +
-          esc(c[i]) + ' ↔ ' + esc(c[j]) + (ok ? '' : ' <span class="muted">(서로를 아직 모른다)</span>') + '</div>';
+        if (ok) known++; else missing++;
+        rows += '<div class="' + (ok ? 'ok' : 'warn') + '">' + (ok ? '✓' : '✗') + ' ' +
+          esc(c[i]) + ' ↔ ' + esc(c[j]) + (ok ? '' : ' <span class="muted">(아직 서로를 잘 모른다)</span>') + '</div>';
       }
     }
     if (c.length >= 3) {
@@ -330,9 +330,16 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       rows += '<div class="muted">' + (gok ? '✓' : '—') + ' ' + esc(c.join(' ↔ ')) +
         ' <span class="muted">(' + (gok ? 'n자 관계 우선 적용' : 'optional — 페어 조합으로 생성') + ')</span></div>';
     }
-    if (missing) rows += '<div class="warn" style="margin-top:2px">⚠ 생성 불가 — 관계는 창작 자산이다. 미등록 페어의 Relation Pattern부터.</div>';
+    // Relation Discovery (Vase 설계): 관계를 발견하는 것 역시 창작이다.
+    // 기반 관계가 하나라도 있으면 발견 모드로 생성한다. 기반 0이면 창작이 아니라 환각 — 그때만 막는다.
+    if (missing && known) {
+      rows += '<div class="warn" style="margin-top:4px">⚠ 아직 서로를 잘 모르는 관계가 있습니다.<br>' +
+        '이 작품은 <b>Relation Discovery Mode</b>로 생성됩니다 — 결과를 검토한 뒤 관계 후보로 저장할 수 있습니다.</div>';
+    } else if (missing && !known) {
+      rows += '<div class="bad" style="margin-top:4px">⚠ 기반 관계가 하나도 없습니다 — 최소 한 관계가 있어야 발견이 창작이 됩니다.</div>';
+    }
     box.innerHTML = rows;
-    $('go').disabled = missing > 0;
+    $('go').disabled = missing > 0 && known === 0;
   }
   Array.prototype.forEach.call(document.querySelectorAll('#cast input'), function (cb) {
     cb.onchange = function () {
@@ -392,7 +399,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       '<div class="muted">출연: ' + s.cast.map(function (cm) {
         return esc(cm.creatorId) + '(' + esc(cm.role) + ')';
       }).join(' · ') +
-      (s.relation ? ' · 관계: ' + esc(s.relation.relationId) + ' ' + esc(s.relation.version) : '') + '</div>';
+      (s.relation ? ' · 관계: ' + esc(s.relation.relationId) + ' ' + esc(s.relation.version) : '') +
+      (s.relations && s.relations.length ? ' · 페어 ' + s.relations.length + '건' : '') + '</div>' +
+      (s.relationDiscovery && s.relationDiscovery.length
+        ? '<div class="warn" style="margin:4px 0">🔍 Relation Discovery — 이 작품이 첫 관찰이 되는 관계: ' + esc(s.relationDiscovery.join(', ')) + '</div>' : '');
     s.panels.forEach(function (p) {
       html += '<div class="pframe"><b>' + p.panelNo + '컷</b> <span class="muted">' +
         esc(p.setting) + ' · ' + esc(p.framing) + ' · beat: ' + esc(p.beat) + '</span>';
@@ -435,12 +445,25 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         '<img style="width:100%;display:block;border-radius:4px" src="/api/ops/comic-file?key=' +
         encodeURIComponent(r.key) + '&v=' + Date.now() + '">' +
         (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
-        '<div class="row" style="margin-top:10px"><button id="redraw2" class="primary">🎲 전체 다시 그리기</button></div>' +
+        '<div class="row" style="margin-top:10px"><button id="redraw2" class="primary">🎲 전체 다시 그리기</button>' +
+        (s.relationDiscovery && s.relationDiscovery.length
+          ? '<button id="saveRel">🔍 관계 후보로 저장 (' + esc(s.relationDiscovery.join(', ')) + ')</button>' : '') +
+        '</div>' +
         '<div class="muted" style="margin-top:8px">검사 축: 인간 실루엣(눈코입 없음) · Holmes 순수 파형(얼굴·팔다리 없으면 합격) · ' +
         '한 그림체 안에서 둘이 구분 · 컷 수 ' + s.panelCount + ' · 한글 오탈자 · <b>둘이 진짜 우리처럼 보이는가</b></div></div>';
       $('out').innerHTML = pg;
       var rb = $('redraw2');
       if (rb) rb.onclick = drawComicV2;
+      var sv = $('saveRel');
+      if (sv) sv.onclick = function () {
+        api('/api/ops/comic-relation-candidate', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ pairs: s.relationDiscovery, comicId: r.comicId, topic: s.topic }),
+        }).then(function (rr) {
+          if (rr.error) { banner('후보 저장 실패: ' + rr.error, 'err'); return; }
+          banner('🔍 관계 후보 저장됨 — Observer 승인 후 Relation Registry 정식 등록 (Relation Genome의 시작)');
+        });
+      };
       banner('페이지 완성 — S-04 완료 조건 판정은 Vase 몫');
       renderArchive();
     }).catch(function (e) { banner('요청 실패: ' + e, 'err'); });

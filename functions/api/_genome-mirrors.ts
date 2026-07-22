@@ -227,7 +227,7 @@ export function validateEmbodimentV2(s2: { cast: { creatorId: string }[]; panels
 
 /* ── 시나리오 v2 두뇌 프롬프트 — 게놈에서 파생된다 (하드코딩 아님, 429-E 계승) ── */
 export function buildScenarioSystemV2(castIds: string[]):
-  { system: string; relation: RelationSummary | null; relations: RelationSummary[] } | { error: string } {
+  { system: string; relation: RelationSummary | null; relations: RelationSummary[]; discovery: string[] } | { error: string } {
   const unknown = castIds.filter((id) => !MIRRORS[id]);
   if (unknown.length) return { error: `unknown_creator: ${unknown.join(', ')}` };
   for (const id of castIds) {
@@ -235,11 +235,14 @@ export function buildScenarioSystemV2(castIds: string[]):
     if (stale) return { error: stale };
   }
   const resolved = resolveRelations(castIds);
-  if (resolved.missingPairs.length) {
-    // 관계 패턴 없이 모델에게 적당히 섞게 하면 Studio가 아니라 일반 역할극이 된다 (홈즈)
-    // 페어 전수 필수 (Vase 설계): 아직 서로를 모르는 둘은 같은 무대에 서지 않는다.
-    return { error: `relation_unregistered: 미등록 페어 ${resolved.missingPairs.join(', ')} — 등록된 Relation Pattern이 없다. 생성하지 않는다.` };
+  // Relation Discovery (Vase 설계 변경, 07-22 심야): 관계는 창작 자산이지만,
+  // 관계를 발견하는 것 역시 창작이다. 미등록 페어가 있어도 **기반 관계가 하나 이상**
+  // 있으면 Discovery Mode로 생성한다. 기반이 0이면 창작이 아니라 환각 — 그때만 막는다.
+  const humanCast = castIds.filter((c) => c !== 'ppaekong');
+  if (humanCast.length >= 2 && resolved.pairs.length === 0 && !resolved.group) {
+    return { error: `relation_unregistered: ${resolved.missingPairs.join(', ')} — 기반 관계가 하나도 없다. 최소 한 관계가 있어야 발견이 창작이 된다.` };
   }
+  const discovery = resolved.missingPairs;
   const applied = resolved.group ? [resolved.group] : resolved.pairs;
 
   const lines: string[] = [
@@ -264,6 +267,13 @@ export function buildScenarioSystemV2(castIds: string[]):
     lines.push('- 여러 관계가 한 무대에 있다 — 컷마다 한 관계의 리듬이 주도하게 하고, 전부를 한 컷에 욱여넣지 않는다.');
     lines.push('');
   }
+  if (discovery.length) {
+    lines.push(`## Relation Discovery — 아직 정의되지 않은 관계: ${discovery.join(', ')}`);
+    lines.push('- 이 쌍들의 관계는 아직 발견되지 않았다. 단정하거나 기성 관계처럼 굴리지 마라.');
+    lines.push('- 등록된 관계의 리듬 위에서, 미정의 쌍의 상호작용이 조심스럽게 처음 드러나게 하라 — 첫 만남의 거리감을 존중하라.');
+    lines.push('- 이 작품이 그 관계의 첫 관찰 기록이 된다.');
+    lines.push('');
+  }
   lines.push(
     '## 출력 규칙 (어기면 실패)',
     '- JSON 하나만 출력한다. 마크다운·설명 금지.',
@@ -280,5 +290,5 @@ export function buildScenarioSystemV2(castIds: string[]):
     '  "dialogue": [{"speakerId": id, "intent": en, "text": ko}], "caption": ko|null}],',
     ' "endingBeat": en}',
   );
-  return { system: lines.join('\n'), relation: resolved.group ?? (resolved.pairs.length === 1 ? resolved.pairs[0] : null), relations: resolved.pairs };
+  return { system: lines.join('\n'), relation: resolved.group ?? (resolved.pairs.length === 1 ? resolved.pairs[0] : null), relations: resolved.pairs, discovery };
 }

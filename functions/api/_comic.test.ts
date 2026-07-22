@@ -319,9 +319,16 @@ test('v2 두뇌 — 미등록 관계·미등록 Creator는 생성 금지 (음성
   const trio = resolveRelations(['sap', 'holmes', 'byeoli']);
   assert.equal(trio.pairs.length, 1, 'sap-holmes만 등록됨');
   assert.deepEqual(trio.missingPairs, ['byeoli-holmes', 'byeoli-sap'], '미등록 페어 전부 나열');
-  const trioErr = buildScenarioSystemV2(['sap', 'holmes', 'byeoli']);
-  assert.ok('error' in trioErr && trioErr.error.includes('byeoli-holmes') && trioErr.error.includes('byeoli-sap'),
-    '무엇이 없는지 정확히 말한다 (음성)');
+  // Relation Discovery (설계 변경): 기반 관계 1+ 이면 발견 모드로 생성한다
+  const trioDisc = buildScenarioSystemV2(['sap', 'holmes', 'byeoli']);
+  assert.ok(!('error' in trioDisc), '기반(sap-holmes)이 있으므로 Discovery Mode로 생성');
+  assert.deepEqual(trioDisc.discovery, ['byeoli-holmes', 'byeoli-sap'], '발견 대상 페어 기록');
+  assert.match(trioDisc.system, /Relation Discovery — 아직 정의되지 않은 관계/, '두뇌에 발견 규칙 주입');
+  assert.match(trioDisc.system, /첫 만남의 거리감을 존중하라/, '단정 금지 — 관계를 지어내지 않는다');
+  // 기반 0이면 환각 — 여전히 차단 (음성)
+  const zeroBase = buildScenarioSystemV2(['vase', 'holmes']);
+  assert.ok('error' in zeroBase && zeroBase.error.includes('기반 관계가 하나도 없다'),
+    '기반 0 조합은 발견이 아니라 환각 — 차단 유지');
   const pairOk = resolveRelations(['sap', 'holmes']);
   assert.equal(pairOk.missingPairs.length, 0);
   assert.equal(pairOk.group, null, '2인은 group 없음');
