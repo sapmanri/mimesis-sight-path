@@ -33,6 +33,7 @@ export interface ComicPanelV2 {
   actions: ComicPanelActionV2[];
   dialogue: ComicPanelDialogueV2[];
   caption?: string | null;
+  beatIds?: number[];   // S-04B Beat Preservation — 이 컷이 담는 비트 (Dialogue Mode 전용, 가산)
 }
 
 export interface ComicScenarioV2 {

@@ -462,10 +462,17 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         ? '<div class="warn" style="margin:4px 0">🔍 Relation Discovery — 이 작품이 첫 관찰이 되는 관계: ' + esc(s.relationDiscovery.join(', ')) + '</div>' : '');
     var ranges = {};
     if (s.provenance) (s.provenance.sourceRanges || []).forEach(function (r) { ranges[r.panelNo] = r; });
+    var beats = (meta && meta.beats) || [];
+    if (beats.length) {
+      html += '<div class="muted" style="margin:4px 0">🎵 비트 ' + beats.length + '개: ' + beats.map(function (b) {
+        return '[' + b.id + ' ' + esc(b.type) + ' ' + b.startLine + '–' + b.endLine + '행]';
+      }).join(' ') + '</div>';
+    }
     s.panels.forEach(function (p) {
       html += '<div class="pframe"><b>' + p.panelNo + '컷</b> <span class="muted">' +
         esc(p.setting) + ' · ' + esc(p.framing) + ' · beat: ' + esc(p.beat) +
-        (ranges[p.panelNo] ? ' · 원문 ' + ranges[p.panelNo].startLine + '–' + ranges[p.panelNo].endLine + '행' : (s.provenance ? ' · <span class="warn">근거 없음</span>' : '')) + '</span>';
+        (ranges[p.panelNo] ? ' · 원문 ' + ranges[p.panelNo].startLine + '–' + ranges[p.panelNo].endLine + '행' : (s.provenance ? ' · <span class="warn">근거 없음</span>' : '')) +
+        (p.beatIds && p.beatIds.length ? ' · 🎵 ' + p.beatIds.join(',') : '') + '</span>';
       (p.actions || []).forEach(function (a) {
         html += '<div style="margin-left:8px">' + esc(a.creatorId) + ': ' + esc(a.action) +
           (a.expressionOrState ? ' <span class="muted">(' + esc(a.expressionOrState) + ')</span>' : '') + '</div>';
@@ -841,10 +848,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       }
       if (r.error) { banner('실패: ' + r.error, 'err'); return; }
       state.scenario2 = r.scenario2;
-      saveDraft('v2', r.scenario2, { provider: r.provider, model: r.model });
+      saveDraft('v2', r.scenario2, { provider: r.provider, model: r.model, beats: r.beats });
       renderScenarioV2(r.scenario2, r);
       if (r.warnings && r.warnings.length) banner('각색 완료 · 경고: ' + r.warnings.join(' · '));
-      else banner('각색 완료 — 원문 근거를 컷별로 확인');
+      else banner('각색 완료 — 비트와 원문 근거를 컷별로 확인');
     }).catch(function (e) { go.disabled = false; go.textContent = '대화를 웹툰 시나리오로 만들기'; banner('요청 실패: ' + e, 'err'); });
   }
   $('goDlg').onclick = function () { makeDialogueStory(null); };

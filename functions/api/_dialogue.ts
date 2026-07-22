@@ -256,3 +256,97 @@ export function buildEpisodePrompt(utterances: Utterance[]): { system: string; u
       + '\n\n이 대화에서 에피소드 후보를 추출하라.',
   };
 }
+
+/* ═══ Beat Preservation (Vase 설계, 2026-07-23 — Obs #008 검수에서) ═══════
+   "웹툰은 문장보다 비트를 읽는 매체다." 압축의 단위는 문장이 아니라 비트다.
+   비트 = 리듬 단위 (가설→틀림→발견→확신). 정보가 적다고 지우지 않는다 — 리듬이니까 남긴다.
+   실사고 3건: ①발견 3연타가 한 컷에 몰려 논문 발표가 됨 ②삽의 추임새("오." "맞네.")가
+   사라져 리듬 소실 ③발견의 순간이 준비된 결론처럼 읽힘. */
+
+export type BeatType = 'setup' | 'discovery' | 'turn' | 'interjection' | 'landing';
+
+export interface Beat {
+  id: number;
+  type: BeatType;
+  startLine: number;
+  endLine: number;
+  gist: string;                  // 이 비트에서 일어나는 일 한 줄
+  keyQuote?: string;             // 잃으면 안 되는 원문 문장 — 자동 핀과 같은 지위
+  keySpeaker?: string;           // keyQuote의 creatorId
+  inseparableWith?: number;      // 이 비트와 절대 분리 금지인 비트 id (예: 가설↔"맞았소")
+}
+
+export function buildBeatPrompt(utterances: Utterance[]): { system: string; user: string } {
+  return {
+    system: [
+      '너는 실제 대화에서 비트(Beat)를 발굴하는 편집자다. 비트 = 기억에 남는 순간의 리듬 단위.',
+      '문장을 요약하지 마라 — 리듬을 찾아라. 유형:',
+      '- setup: 상황이 놓인다  - discovery: 무언가가 그 자리에서 발견된다 (준비된 결론이 아니다)',
+      '- turn: 가설이 틀리고 방향이 꺾인다 (반박·철회·"맞았소")',
+      '- interjection: 짧은 추임새("오." "…맞네." "아닐걸.") — 정보는 없지만 리듬을 만든다. 지우면 안 된다.',
+      '- landing: 결론 없이 내려앉는 마지막',
+      '규칙: 발견은 하나씩 온다 — 발견 여러 개를 한 비트로 합치지 마라.',
+      '가설과 그 판정("무엇을 상상하든…"↔"맞았소")은 한 세트 — inseparableWith로 묶어라.',
+      '각 비트에 잃으면 안 되는 원문 문장이 있으면 keyQuote로, 그 화자의 creatorId를 keySpeaker로.',
+      '출력 JSON 하나: {"beats": [{"id": n, "type": "...", "startLine": n, "endLine": n,',
+      ' "gist": "...", "keyQuote": "원문 그대로"|null, "keySpeaker": creatorId|null, "inseparableWith": n|null}]}',
+    ].join('\n'),
+    user: utterances.map((u) => `${u.line}| ${u.speaker ?? '?'}: ${u.text.replace(/\n/g, ' / ')}`).join('\n')
+      + '\n\n이 대화의 비트를 발굴하라.',
+  };
+}
+
+/** 비트 뼈대를 2차(시나리오) 프롬프트에 얹는다 — 컷은 비트를 따른다. */
+export function beatsToPromptBlock(beats: Beat[]): string {
+  return [
+    '## Beat 뼈대 — 컷은 문장이 아니라 이 비트를 따른다',
+    ...beats.map((b) => `${b.id}. [${b.type}] ${b.startLine}–${b.endLine}행: ${b.gist}`
+      + (b.keyQuote ? ` · 필수 보존: "${b.keyQuote}"${b.keySpeaker ? ` (${b.keySpeaker})` : ''}` : '')
+      + (b.inseparableWith ? ` · ${b.inseparableWith}번 비트와 한 세트 — 같은 컷에` : '')),
+    '- 각 패널에 beatIds를 명시한다. discovery 비트는 한 컷에 하나만 — 발견은 하나씩 발굴된다.',
+    '- interjection 비트의 추임새는 반드시 대사로 남긴다 — 리듬이니까.',
+    '- discovery는 그 컷 안에서 "일어나는" 것으로 그린다 — 준비된 결론처럼 선언하지 않는다.',
+  ].join('\n');
+}
+
+/** 비트 검증 — 병합·분리·소실을 잡는다. */
+export function validateBeats(
+  s2: { panels: { panelNo: number; beatIds?: number[]; dialogue: { speakerId: string; text?: string }[] }[] },
+  beats: Beat[],
+): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const discovery = new Set(beats.filter((b) => b.type === 'discovery').map((b) => b.id));
+  const panelOf = new Map<number, number[]>();   // beatId → panelNos
+  let unmapped = 0;
+  for (const p of s2.panels) {
+    const ids = p.beatIds ?? [];
+    if (!ids.length) { unmapped++; continue; }
+    const disc = ids.filter((i) => discovery.has(i));
+    if (disc.length > 1) {
+      errors.push(`beat_merged: ${p.panelNo}컷에 발견 비트 ${disc.join(',')}가 함께 — 발견은 하나씩 발굴된다`);
+    }
+    for (const i of ids) panelOf.set(i, [...(panelOf.get(i) ?? []), p.panelNo]);
+  }
+  for (const b of beats) {
+    if (b.inseparableWith) {
+      const a = panelOf.get(b.id) ?? [];
+      const c = panelOf.get(b.inseparableWith) ?? [];
+      if (a.length && c.length && !a.some((p) => c.includes(p))) {
+        errors.push(`beat_separated: 비트 ${b.id}·${b.inseparableWith}는 한 세트인데 다른 컷에 흩어짐`);
+      }
+    }
+    if (b.keyQuote) {
+      const kn = b.keyQuote.replace(/[\s"'「」『』.…!?~,]/g, '');
+      const alive = s2.panels.some((p) => p.dialogue.some((d) =>
+        d.text && d.text.replace(/[\s"'「」『』.…!?~,]/g, '').includes(kn)
+        && (!b.keySpeaker || d.speakerId === b.keySpeaker)));
+      if (!alive) errors.push(`beat_keyline_missing: 비트 ${b.id} "${b.keyQuote.slice(0, 30)}" — 잃으면 안 되는 순간이 사라졌다`);
+    }
+    if (b.type === 'interjection' && !(panelOf.get(b.id) ?? []).length) {
+      warnings.push(`interjection_dropped: 비트 ${b.id} "${b.gist}" — 추임새가 컷에 배정되지 않음 (리듬 소실 위험)`);
+    }
+  }
+  if (unmapped > s2.panels.length / 2) warnings.push(`beats_unmapped: ${unmapped}컷이 비트 미표기`);
+  return { errors, warnings };
+}

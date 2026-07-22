@@ -12,6 +12,7 @@ import { buildScenarioSystemV2, castMembersFor, validateEmbodimentV2 } from '../
 import {
   parseDialogue, validateDialogueInput, validateAdaptation, dialogueHash,
   buildDialogueAdapterPrompt, buildEpisodePrompt, EPISODE_THRESHOLD,
+  buildBeatPrompt, beatsToPromptBlock, validateBeats, type Beat,
   type DialogueComicInput, type DialogueProvenance,
 } from '../_dialogue.ts';
 import { withTransientRetry } from '../_retry.ts';
@@ -62,7 +63,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const members = castMembersFor(input.creators);
   if (members.errors.length) return json(400, { ok: false, error: members.errors.join(' / ') });
 
+  // ── 1차: Beat 발굴 — "웹툰은 문장보다 비트를 읽는 매체" (Vase, Obs #008 검수) ──
+  const bp = buildBeatPrompt(utterances);
+  const beatOut = await generateScenarioText(env, 'beats', 0, { system: bp.system, user: bp.user });
+  if ('error' in beatOut) return json(502, { ok: false, error: beatOut.error, provider: beatOut.provider });
+  const beatParsed = extractJson(beatOut.text) as { beats?: Beat[] } | null;
+  const beats: Beat[] = (beatParsed?.beats ?? []).filter((b) => b && Number.isInteger(b.id));
+  if (!beats.length) return json(502, { ok: false, error: 'beats_not_found', raw: beatOut.text.slice(0, 300) });
+
+  // ── 2차: 비트 뼈대 위에서 시나리오 ──
   const prompts = buildDialogueAdapterPrompt(built.system, input, utterances);
+  prompts.system += '\n\n' + beatsToPromptBlock(beats);
   const out = await generateScenarioText(env, input.titleHint ?? 'dialogue', 0, prompts);
   if ('error' in out) return json(502, { ok: false, error: out.error, provider: out.provider });
   const parsed = extractJson(out.text) as {
@@ -101,9 +112,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const adaptation = validateAdaptation(scenario2, provenance, utterances, input);
-  const errs = [...validateScenarioV2(scenario2), ...validateEmbodimentV2(scenario2), ...adaptation.errors];
-  if (errs.length) return json(422, { ok: false, error: 'scenario_invalid', detail: errs, scenario2 });
-  warnings.push(...adaptation.warnings, ...parsedAll.warnings);
+  const beatCheck = validateBeats(scenario2, beats);
+  const errs = [...validateScenarioV2(scenario2), ...validateEmbodimentV2(scenario2), ...adaptation.errors, ...beatCheck.errors];
+  if (errs.length) return json(422, { ok: false, error: 'scenario_invalid', detail: errs, scenario2, beats });
+  warnings.push(...adaptation.warnings, ...beatCheck.warnings, ...parsedAll.warnings);
 
   // 원문 불변 보관 — 같은 해시는 다시 쓰지 않는다 (원본은 수정되지 않으므로 멱등)
   const srcKey = `${DIALOGUE_SOURCE_PREFIX}${sourceHash}.txt`;
@@ -123,7 +135,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } catch { /* 로그 실패가 시나리오를 막지 않는다 */ }
 
   return json(200, {
-    ok: true, provider: out.provider, model: out.model, scenario2, warnings,
+    ok: true, provider: out.provider, model: out.model, scenario2, warnings, beats,
     sourceHash, sourceKey: srcKey, sourceUtterances: utterances.length,
   });
 };

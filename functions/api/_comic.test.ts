@@ -632,3 +632,36 @@ test('각색 프롬프트 — 원칙과 모드 규칙이 실린다', async () =>
   assert.equal(dialogueHash('같은 원문'), dialogueHash('같은 원문'), '해시 결정론');
   assert.ok(EPISODE_THRESHOLD > 0);
 });
+
+// ── Beat Preservation (Vase 설계 — "웹툰은 문장보다 비트를 읽는 매체") ──
+
+test('비트 검증 — 병합·분리·소실을 잡는다 (Obs #008 실사고 3건의 코드화)', async () => {
+  const { validateBeats, buildBeatPrompt, beatsToPromptBlock, parseDialogue } = await import('./_dialogue.ts');
+  const beats = [
+    { id: 1, type: 'setup', startLine: 1, endLine: 1, gist: '사진을 보여준다' },
+    { id: 2, type: 'turn', startLine: 2, endLine: 2, gist: '가설이 맞았다고 웃는다', keyQuote: '무엇을 상상하든 그건 아닐걸?', keySpeaker: 'sap', inseparableWith: 3 },
+    { id: 3, type: 'interjection', startLine: 3, endLine: 3, gist: '맞았소' },
+    { id: 4, type: 'discovery', startLine: 4, endLine: 6, gist: '흔적의 발견' },
+    { id: 5, type: 'discovery', startLine: 7, endLine: 9, gist: '빛의 발견' },
+  ];
+  const panel = (no, beatIds, dialogue) => ({ panelNo: no, beatIds, dialogue });
+  // 발견 두 개가 한 컷 → 실패 (논문 발표화 방지)
+  const merged = validateBeats({ panels: [panel(1, [4, 5], [])] }, beats);
+  assert.ok(merged.errors.some((e) => e.includes('beat_merged')), '발견은 하나씩 발굴된다');
+  // 한 세트 비트가 다른 컷 → 실패
+  const split = validateBeats({ panels: [panel(1, [2], []), panel(2, [3], [])] }, beats);
+  assert.ok(split.errors.some((e) => e.includes('beat_separated')));
+  // keyQuote 소실 → 실패 / 보존 → 통과
+  const lost = validateBeats({ panels: [panel(1, [2, 3], [{ speakerId: 'sap', text: '다른 말' }])] }, beats);
+  assert.ok(lost.errors.some((e) => e.includes('beat_keyline_missing')));
+  const kept = validateBeats({ panels: [panel(1, [2, 3], [{ speakerId: 'sap', text: '무엇을 상상하든 그건 아닐걸?' }]), panel(2, [4], []), panel(3, [5], [])] }, beats);
+  assert.deepEqual(kept.errors, [], JSON.stringify(kept.errors));
+  // 추임새 미배정 → 경고 (리듬 소실)
+  const noInt = validateBeats({ panels: [panel(1, [2], [{ speakerId: 'sap', text: '무엇을 상상하든 그건 아닐걸?' }])] }, beats);
+  assert.ok(noInt.warnings.some((w) => w.includes('interjection_dropped')));
+  // 프롬프트 원칙
+  const bp = buildBeatPrompt(parseDialogue('Sap: 하나\nHolmes: 둘\nSap: 셋\nHolmes: 넷').utterances);
+  assert.match(bp.system, /리듬을 만든다. 지우면 안 된다/, '추임새 보존 원칙');
+  assert.match(beatsToPromptBlock(beats), /발견은 하나씩 발굴된다/);
+  assert.match(beatsToPromptBlock(beats), /준비된 결론처럼 선언하지 않는다/, 'Obs #008 실사고 ③');
+});
