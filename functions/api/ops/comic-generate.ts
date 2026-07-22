@@ -8,7 +8,7 @@
 //
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
-import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, type ComicScenario } from '../_comic.ts';
+import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
 import { COMIC_LOCK_PREFIX } from './comic-style-lock.ts';
 
@@ -77,12 +77,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (mode === 'page') {
     const refs: RefBytes[] = [];
     const missing: string[] = [];
-    for (const slot of STYLE_LOCK_NAMES) {
+    let hasPanelRef = false;
+    for (const slot of STYLE_LOCK_NAMES) {      // ch05_panel이 배열 끝 — 마지막 참조로 실린다
       const r = await loadRef(slot);
-      if (r) refs.push(r); else missing.push(slot);
+      if (r) { refs.push(r); if (slot === 'ch05_panel') hasPanelRef = true; }
+      else if ((STYLE_LOCK_REQUIRED as readonly string[]).includes(slot)) missing.push(slot);
     }
     if (!refs.length) return json(409, { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' });
-    const prompt = buildPagePrompt(s);
+    const prompt = buildPagePrompt(s, { panelLayoutRef: hasPanelRef });
     const art = await generatePageImage(env, prompt, refs, s.panelCount);
     if ('error' in art) return json(502, { ok: false, error: art.error, provider: art.provider });
     const key = `${COMIC_STRIP_PREFIX}${comicId}/page.png`;

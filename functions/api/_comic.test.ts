@@ -55,7 +55,7 @@ test('참조 선택 — 상시 3장 + 샷별 1장, 상한을 지킨다', () => {
     ['ch00_master', 'ch04_hair', 'ch03_pose', 'ch01_turnaround']);
   assert.equal(pickStyleRefs('wide', 5).length, 5, 'GPT 어댑터는 5장 전부');
   assert.equal(pickStyleRefs('wide', 2).length, 2);
-  assert.equal(STYLE_LOCK_NAMES.length, 5);
+  assert.equal(STYLE_LOCK_NAMES.length, 6, '필수 5 + 선택 ch05_panel');
 });
 
 test('컷 프롬프트 — 한글·대사·캡션이 절대 들어가지 않는다 (글자는 조립 단계 몫)', () => {
@@ -123,4 +123,25 @@ test('제미나이 키 이름 관용 — 언더바 없이 만들어도 읽힌다
   assert.equal(geminiKeyOf({ GEMINI_API_KEY: 'a' }), 'a');
   assert.equal(geminiKeyOf({ GEMINIAPIKEY: 'b' }), 'b');
   assert.equal(geminiKeyOf({}), null);
+});
+
+
+test('임의 컷수 — 1~12 정수는 계약 통과, 밖은 위반', () => {
+  const five = { ...scenario(), panelCount: 5, panels: Array.from({ length: 5 }, (_, i) => panel(i + 1)) };
+  assert.deepEqual(validateScenario(five), []);
+  const zero = { ...scenario(), panelCount: 0, panels: [] };
+  assert.ok(validateScenario(zero).length > 0);
+  const thirteen = { ...scenario(), panelCount: 13, panels: Array.from({ length: 13 }, (_, i) => panel(i + 1)) };
+  assert.ok(validateScenario(thirteen).some((e) => e.includes('1~12')));
+});
+
+test('패널 레이아웃 참조가 있으면 원샷이 그 프레임을 따르라는 지시가 실린다', async () => {
+  const { buildPagePrompt: bpp, STYLE_LOCK_REQUIRED } = await import('./_comic.ts');
+  const withRef = bpp(scenario(), { panelLayoutRef: true });
+  assert.match(withRef, /panel-layout reference image/);
+  assert.match(withRef, /frame design only, not the content/);
+  const five = { ...scenario(), panelCount: 5, panels: Array.from({ length: 5 }, (_, i) => panel(i + 1)) };
+  assert.match(bpp(five), /balanced, rhythmically varied grid of 5 panels/, '프리셋 밖 컷수는 일반 격자 서술');
+  assert.equal(STYLE_LOCK_REQUIRED.length, 5);
+  assert.ok(!STYLE_LOCK_REQUIRED.includes('ch05_panel'));
 });

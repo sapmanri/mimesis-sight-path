@@ -24,14 +24,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const theme = (body.theme ?? '').trim().slice(0, 200);
   if (!theme) return json(400, { ok: false, error: 'theme_required: 오늘 별이가 겪을 일 한 줄' });
   const panelCount = Number(body.panelCount ?? 4);
-  if (![4, 6, 8].includes(panelCount)) return json(400, { ok: false, error: 'panelCount must be 4|6|8' });
+  if (!Number.isInteger(panelCount) || panelCount < 1 || panelCount > 12) {
+    return json(400, { ok: false, error: 'panelCount must be 1~12' });
+  }
 
   const out = await generateScenarioText(env, theme, panelCount);
   if ('error' in out) return json(502, { ok: false, error: out.error, provider: out.provider });
 
   const parsed = extractJson(out.text);
   if (!parsed) return json(502, { ok: false, error: 'scenario_not_json', raw: out.text.slice(0, 400) });
-  const scenario = { ...(parsed as ComicScenario), theme, panelCount: panelCount as 4 };
+  const scenario = { ...(parsed as ComicScenario), theme, panelCount };
   const errs = validateScenario(scenario);
   if (errs.length) {
     // 계약 미달은 사람에게 보여주고 재생성하게 한다 — 미달본으로 그리지 않는다

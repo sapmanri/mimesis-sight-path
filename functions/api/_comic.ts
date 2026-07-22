@@ -26,11 +26,13 @@ export interface ComicPanel {
 export interface ComicScenario {
   title: string;                 // KO — 짧게
   theme: string;                 // 입력 주제 원문
-  panelCount: 4 | 6 | 8;
+  panelCount: number;            // 1~12 (4/6/8은 UI 프리셋일 뿐)
   panels: ComicPanel[];
 }
 
-export const PANEL_COUNTS = [4, 6, 8] as const;
+export const PANEL_COUNTS = [4, 6, 8] as const;   // UI 프리셋
+export const PANEL_COUNT_MIN = 1;
+export const PANEL_COUNT_MAX = 12;
 export const SHOTS = ['wide', 'medium', 'close', 'back'] as const;
 
 /** 시나리오 구조 검증 — LLM 출력은 계약을 통과해야만 다음 단계로 간다. */
@@ -39,7 +41,9 @@ export function validateScenario(x: unknown): string[] {
   if (typeof x !== 'object' || x === null) return ['not an object'];
   const s = x as Partial<ComicScenario>;
   if (!s.title || typeof s.title !== 'string') errs.push('title required');
-  if (!PANEL_COUNTS.includes(s.panelCount as 4)) errs.push(`panelCount must be ${PANEL_COUNTS.join('|')}`);
+  if (!Number.isInteger(s.panelCount) || (s.panelCount as number) < PANEL_COUNT_MIN || (s.panelCount as number) > PANEL_COUNT_MAX) {
+    errs.push(`panelCount must be integer ${PANEL_COUNT_MIN}~${PANEL_COUNT_MAX}`);
+  }
   if (!Array.isArray(s.panels)) return [...errs, 'panels must be an array'];
   if (s.panels.length !== s.panelCount) errs.push(`panels length ${s.panels.length} != panelCount ${s.panelCount}`);
   s.panels.forEach((p, i) => {
@@ -65,7 +69,9 @@ export function validateScenario(x: unknown): string[] {
 
 export const STYLE_LOCK_VERSION = 'style-lock-v1';
 /** sketch-reference에 이 이름들로 업로드하면 Comic Lab이 자동 장착한다. */
-export const STYLE_LOCK_NAMES = ['ch00_master', 'ch01_turnaround', 'ch02_expression', 'ch03_pose', 'ch04_hair'] as const;
+export const STYLE_LOCK_NAMES = ['ch00_master', 'ch01_turnaround', 'ch02_expression', 'ch03_pose', 'ch04_hair', 'ch05_panel'] as const;
+/** 필수 5장 — ch05_panel(패널 레이아웃 참조)은 선택. 있으면 원샷 페이지가 그 레이아웃을 따른다. */
+export const STYLE_LOCK_REQUIRED = STYLE_LOCK_NAMES.slice(0, 5);
 
 /**
  * 컷별 참조 선택 — 어댑터 상한에 맞춰 결정론으로 고른다.
@@ -119,9 +125,12 @@ const PAGE_GRID: Record<number, string> = {
   8: '2 rows of 4 panels',
 };
 
-export function buildPagePrompt(s: ComicScenario): string {
+export function buildPagePrompt(s: ComicScenario, opts: { panelLayoutRef?: boolean } = {}): string {
+  const grid = opts.panelLayoutRef
+    ? 'following the panel layout, panel sizes and arrangement shown in the panel-layout reference image (the last reference image) — that image defines the frame design only, not the content'
+    : `arranged in ${PAGE_GRID[s.panelCount] ?? `a balanced, rhythmically varied grid of ${s.panelCount} panels`}`;
   const lines: string[] = [
-    `A single Korean webtoon page with exactly ${s.panelCount} panels, arranged in ${PAGE_GRID[s.panelCount]}.`,
+    `A single Korean webtoon page with exactly ${s.panelCount} panels, ${grid}.`,
     `Match the character design, hair, palette and line style of the reference sheets exactly — same girl, same white cat.`,
     `Page design: warm paper background, thin navy panel borders, small header reading "BYEOLI WEBTOON" and the chapter title "${s.title}".`,
     `Render all Korean text exactly as written below, letter-perfect, in a clean friendly hand-lettered style.`,
@@ -140,7 +149,7 @@ export function buildPagePrompt(s: ComicScenario): string {
 
 /* ── 게놈 시나리오 시스템 프롬프트 — 별이답음의 계약 ── */
 
-export const SCENARIO_SYSTEM = `너는 '별이'의 하루를 4~8컷 그림일기로 구성하는 작가다. 별이의 게놈:
+export const SCENARIO_SYSTEM = `너는 '별이'의 하루를 1~12컷 그림일기로 구성하는 작가다. 별이의 게놈:
 - 별이는 5살 여자아이. 작은 것들을 오래 바라보는 아이. 조용하고 관찰력이 좋다.
 - 흰 고양이 빼콩이와 함께 산다. 빼콩이는 말보다 마음을 먼저 알아차린다.
 - 별이는 결론을 내리지 않는다. 판단하지 않는다. 감정을 이름 붙이지 않는다 — 본 것을 남길 뿐.
@@ -156,7 +165,7 @@ export const SCENARIO_SYSTEM = `너는 '별이'의 하루를 4~8컷 그림일기
 - 마지막 컷은 결론이 아니라 여운 — 별이는 정리하지 않는다.
 
 스키마:
-{"title": string, "theme": string, "panelCount": 4|6|8,
+{"title": string, "theme": string, "panelCount": 1~12 정수,
  "panels": [{"index": n, "location": en, "shot": "wide|medium|close|back",
    "subject": en, "action": en, "expression": en, "ppaekong": en|null,
    "dialogue": ko|null, "caption": ko|null}]}`;

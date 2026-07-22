@@ -36,7 +36,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .muted{color:#7d8a76;font-size:11px}
   .ok{color:#A7B49A} .warn{color:#c8a878} .bad{color:#c8a0a0}
-  .lockgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+  .lockgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}
   .lockgrid img{width:100%;height:56px;object-fit:cover;border-radius:3px;background:#fff}
   .lockgrid .miss{height:56px;display:grid;place-content:center;border:1px dashed #5d3a3a;
     border-radius:3px;color:#c8a0a0;font-size:10px;text-align:center}
@@ -66,7 +66,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   details{margin-top:8px} summary{cursor:pointer;color:#A7B49A;font-size:12px}
 </style></head><body>
 <h1>BYEOLI Comic Lab</h1>
-<p class="lead">주제 → 별이 게놈 → 시나리오 → (승인) → 웹툰. 두뇌·그림 모두 어댑터 — 기본 GPT. 독립 실험실 — 다른 실험실과 섞이지 않는다.</p>
+<p class="lead">주제 → 별이 게놈 → 시나리오 → (승인) → 웹툰. 두뇌·그림 모두 어댑터 — 기본 제미나이(원샷 페이지). 독립 실험실 — 다른 실험실과 섞이지 않는다.</p>
 <div id="banner" class="banner"></div>
 <div class="cols">
 <div>
@@ -74,7 +74,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <div class="panel">
     <h2>🔒 Style Lock <span class="muted" id="lockVer"></span></h2>
     <div id="lockStatus" class="muted">확인 중…</div>
-    <details open><summary>바이블 5장 (칸을 눌러 업로드·교체)</summary>
+    <details open><summary>바이블 5장 + 패널 레이아웃(선택) — 칸을 눌러 업로드·교체</summary>
       <div id="lockGrid" class="lockgrid"></div>
       <div class="muted" style="margin-top:6px">Comic Lab 전용 저장소 — 다른 실험실과 섞이지 않는다.
       한 번 올리면 계속 장착된다.</div>
@@ -90,6 +90,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       <button data-cut="4" class="sel">4컷</button>
       <button data-cut="6">6컷</button>
       <button data-cut="8">8컷</button>
+      <input type="number" id="cutCustom" min="1" max="12" placeholder="직접"
+        style="width:64px;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;padding:6px 8px;font:inherit;font-size:12px">
     </div>
     <div style="margin-top:12px">
       <button id="go" class="primary" style="width:100%;padding:10px">별이 게놈으로 이야기 만들기</button>
@@ -142,11 +144,14 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         cell.onclick = function () { pendingSlot = s.slot; $('lockFile').click(); };
         grid.appendChild(cell);
       });
-      var found = r.loaded || 0;
+      var required = (r.slots || []).filter(function (x) { return x.slot !== 'ch05_panel'; });
+      var reqLoaded = required.filter(function (x) { return x.loaded; }).length;
+      var panelOn = (r.slots || []).some(function (x) { return x.slot === 'ch05_panel' && x.loaded; });
       $('lockVer').textContent = '${STYLE_LOCK_VERSION}';
-      $('lockStatus').innerHTML = found === LOCK_NAMES.length
-        ? '<span class="ok">🔒 ' + found + '/5 장착 — 잠김</span>'
-        : '<span class="warn">⚠ ' + found + '/5 — 빈 칸을 눌러 바이블을 올릴 것 (그리기 전까지)</span>';
+      $('lockStatus').innerHTML = (reqLoaded === required.length
+        ? '<span class="ok">🔒 ' + reqLoaded + '/5 필수 장착</span>'
+        : '<span class="warn">⚠ ' + reqLoaded + '/5 필수 — 빈 칸을 눌러 올릴 것</span>') +
+        ' · 패널 레이아웃 ' + (panelOn ? '<span class="ok">✓ (원샷이 이 레이아웃을 따른다)</span>' : '<span class="muted">— (없으면 기본 격자)</span>');
     });
   }
   $('lockFile').onchange = function () {
@@ -174,11 +179,19 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   Array.prototype.forEach.call(document.querySelectorAll('#cuts button'), function (b) {
     b.onclick = function () {
       state.cut = Number(b.getAttribute('data-cut'));
+      $('cutCustom').value = '';
       Array.prototype.forEach.call(document.querySelectorAll('#cuts button'), function (x) {
         x.className = x === b ? 'sel' : '';
       });
     };
   });
+  $('cutCustom').oninput = function () {
+    var n = Number($('cutCustom').value);
+    if (Number.isInteger(n) && n >= 1 && n <= 12) {
+      state.cut = n;
+      Array.prototype.forEach.call(document.querySelectorAll('#cuts button'), function (x) { x.className = ''; });
+    }
+  };
 
   // ── 시나리오 렌더 ──
   function renderScenario(s, meta) {
