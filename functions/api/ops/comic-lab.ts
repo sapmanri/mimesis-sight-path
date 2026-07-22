@@ -469,6 +469,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         '<img style="width:100%;display:block;border-radius:4px" src="/api/ops/comic-file?key=' +
         encodeURIComponent(r.key) + '&v=' + Date.now() + '">' +
         (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
+        '<div class="muted" style="font-size:11px;margin-top:4px">🏠 장소 참조: ' +
+        (r.places && r.places.length ? esc(r.places.join(', ')) + ' 적용'
+          : (r.placesDetected && r.placesDetected.length ? esc(r.placesDetected.join(', ')) + ' 감지됐지만 락이 비어 미적용' : '감지 안 됨 — setting에 장소 영단어가 없다')) + '</div>' +
         '<div class="row" style="margin-top:10px"><button id="redraw2" class="primary">🎲 전체 다시 그리기</button>' +
         (s.relationDiscovery && s.relationDiscovery.length
           ? '<button id="saveRel">🔍 관계 후보로 저장 (' + esc(s.relationDiscovery.join(', ')) + ')</button>' : '') +

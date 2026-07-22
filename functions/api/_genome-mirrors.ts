@@ -9,7 +9,7 @@
 // 판정 5 (홈즈 QC): Relation은 대사를 대신 쓰지 않는다. 충돌과 전환 순서만 제공한다.
 // 429 원칙 계승: 계약이 메타를 소유한다 — cast·relation은 서버가 조립하고, LLM은 panels만 쓴다.
 
-import type { ComicCastMember } from './_comic-v2.ts';
+import { PLACES, type ComicCastMember } from './_comic-v2.ts';
 
 export interface MirrorMeta {
   source: string;
@@ -279,6 +279,7 @@ export function buildScenarioSystemV2(castIds: string[]):
     '- JSON 하나만 출력한다. 마크다운·설명 금지.',
     '- 시각 필드(setting/framing/actions[].action/beat)는 영어. dialogue[].text·caption은 한국어.',
     '- 출연자 목록에 없는 인물을 등장시키지 않는다. 배경 군중·행인도 금지 — 무대는 출연자의 것이다 (필요하면 빈 거리·빈 정류장으로).',
+    `- 고정 장소 레지스트리: ${Object.entries(PLACES).map(([id, pl]) => `${id}(${pl.ko})`).join(', ')}. 장면이 이 장소에서 일어나면 setting에 반드시 그 영단어를 그대로 포함한다 (실사고: 어휘가 어긋나면 장소 참조가 실리지 않는다).`,
     '- 행동은 그 존재의 몸으로 물리적으로 가능한 것만 쓴다. 몸이 없는 존재에게 도구·옷·손 동작을 시키지 않는다.',
     '- 매 컷에 모두가 등장할 필요는 없다.',
     '- 대사 밀도를 지킨다 — low인 출연자는 드물고 짧게, high는 많되 캡션은 절제.',

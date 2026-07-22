@@ -179,7 +179,14 @@ async function runGenerationV2(
       ...log.filter((x) => x.comicId !== comicId),
     ].slice(0, META_KEEP)));
   } catch { /* 메타 실패가 생성을 막지 않는다 */ }
-  return { ok: true, mode: 'page', kind: 'v2', comicId, no: obsNo, key, model: art.model, provider, warnings: plan.warnings };
+  return {
+    ok: true, mode: 'page', kind: 'v2', comicId, no: obsNo, key, model: art.model, provider,
+    places: plan.order.some((r) => r.kind.startsWith('place:'))
+      ? [...new Set(plan.order.filter((r) => r.kind.startsWith('place:')).map((r) => r.kind.slice(6)))]
+      : [],
+    placesDetected: places,   // 감지됐지만 락이 비어 못 실린 경우를 구분 (관측 구멍 수리)
+    warnings: plan.warnings,
+  };
 }
 
 async function runGeneration(

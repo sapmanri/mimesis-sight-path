@@ -292,7 +292,7 @@ export function buildPagePromptV2(
       ? `At the very bottom of the page, tiny: "Observation #${String(opts.observationNo).padStart(3, '0')} · MIMESIS Studio".`
       : '',
     `Every piece of Korean text is hand-lettered, calm and legible — never digital typeset fonts.`,
-    `Speech bubbles: Vase and Byeoli use plain quiet bubbles. Holmes speaks in a bubble tinted/outlined with the same electric blue as the waveform.`,
+    `Speech bubble discipline (실사고: 화자 오배치): EVERY bubble's tail must point to its speaker. Holmes's bubbles are tinted/outlined in electric blue and their tails point to the BLUE WAVEFORM — a blue bubble attached to a human is WRONG. Human speakers (Sap, Vase, Byeoli) use plain paper-white bubbles whose tails point to that exact person — a white bubble attached to the waveform is WRONG. Place each bubble nearer to its speaker than to anyone else.`,
     '',
   ];
   for (const p of s.panels) {
@@ -301,7 +301,12 @@ export function buildPagePromptV2(
       lines.push(`  ${a.creatorId}: ${a.action}${a.expressionOrState ? ` (${a.expressionOrState})` : ''}.`);
     }
     for (const d of p.dialogue) {
-      if (d.text) lines.push(`  Speech bubble from ${d.speakerId} (Korean, exact): "${d.text}"`);
+      if (d.text) {
+        const anchor = d.speakerId === 'holmes'
+          ? 'blue-outlined bubble, tail pointing at the waveform'
+          : `white bubble, tail pointing at ${d.speakerId}`;
+        lines.push(`  Speech bubble from ${d.speakerId} (${anchor}; Korean, exact): "${d.text}"`);
+      }
     }
     if (p.caption) lines.push(`  Caption box (Korean, exact): "${p.caption}"`);
   }
