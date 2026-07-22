@@ -109,12 +109,22 @@ async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes
   const candidates = env.COMIC_IMAGE_MODEL ? [env.COMIC_IMAGE_MODEL] : GEMINI_IMAGE_CANDIDATES;
   let lastErr = 'gemini_no_candidates';
   for (const model of candidates) {
-    const out = await geminiImageOnce(key, model, prompt, refs, ratio);
-    if (!('error' in out)) return out;
-    lastErr = out.error;
-    if (!out.error.includes('_404')) break;
+    // 503(혼잡)은 같은 모델 재시도 — 폴백하면 한글 품질이 조용히 떨어진다(품질 선택을 몰래 바꾸지 않는다)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const out = await geminiImageOnce(key, model, prompt, refs, ratio);
+      if (!('error' in out)) return out;
+      lastErr = out.error;
+      if (out.error.includes('_503')) {
+        await new Promise((r) => setTimeout(r, 2500 * (attempt + 1)));
+        continue;
+      }
+      break;
+    }
+    if (!lastErr.includes('_404')) break;   // 404(은퇴)만 다음 후보로
   }
-  return { error: lastErr };
+  return { error: lastErr.includes('_503')
+    ? lastErr + ' — 프로 모델 혼잡(일시적). 잠시 후 [전체 다시]를 누르면 된다. 폴백하지 않는 이유: 플래시로 내려가면 한글이 다시 깨진다.'
+    : lastErr };
 }
 
 async function geminiImageOnce(key: string, model: string, prompt: string, refs: RefBytes[], ratio: string):
