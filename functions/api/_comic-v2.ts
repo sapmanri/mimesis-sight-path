@@ -43,6 +43,12 @@ export interface ComicScenarioV2 {
   relation?: { relationId: string; version: string } | null;
   relations?: { relationId: string; version: string }[];   // 3인 이상 — 적용된 페어 목록 (가산 필드)
   relationDiscovery?: string[];   // Discovery Mode — 이 작품이 첫 관찰인 미정의 페어 키들
+  provenance?: {                  // S-04B Dialogue Mode — 원문 각색 추적 (가산, 주제 경로엔 없음)
+    sourceType: 'dialogue'; sourceHash: string; preservationMode: string;
+    sourceRanges: { panelNo: number; startLine: number; endLine: number }[];
+    preservedLines: string[]; omittedLines: string[];
+    reconstructedLines: { output: string; basis: string[] }[];
+  };
   panels: ComicPanelV2[];
   endingBeat: string;
 }

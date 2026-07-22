@@ -97,6 +97,11 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   </div>
 
   <div class="panel">
+    <div class="row" style="margin-bottom:8px">
+      <button id="tabTheme" class="sel">주제로 만들기</button>
+      <button id="tabDialogue">대화로 만들기</button>
+    </div>
+    <div id="themeForm">
     <h2>오늘 별이가 겪을 일</h2>
     <input type="text" id="theme" placeholder="비 오는 출근길">
     <label>몇 컷?</label>
@@ -111,6 +116,35 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       <button id="go" class="primary" style="width:100%;padding:10px">선택한 게놈으로 이야기 만들기</button>
     </div>
     <div class="muted" style="margin-top:6px">그림은 아직 안 만든다 — 시나리오가 게놈답지 않으면 여기서 다시.</div>
+    </div>
+    <div id="dialogueForm" style="display:none">
+      <h2>대화 원문 <span class="muted">이미 있었던 대화에서 만화가 될 사건을 발견한다</span></h2>
+      <textarea id="dlgRaw" placeholder="Sap: 그거 맞아?&#10;Holmes: 현재 구조상으로는…&#10;Sap: 아닐걸." style="width:100%;box-sizing:border-box;min-height:140px;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;padding:8px 10px;font:inherit;font-size:12px"></textarea>
+      <div id="dlgSpeakers" class="muted" style="margin-top:6px"></div>
+      <label>컷 수</label>
+      <div class="row" id="dlgCuts">
+        <button data-dcut="auto" class="sel">자동</button>
+        <button data-dcut="4">4컷</button>
+        <button data-dcut="6">6컷</button>
+        <button data-dcut="8">8컷</button>
+      </div>
+      <label>원문 보존 강도</label>
+      <div class="row">
+        <label class="muted"><input type="radio" name="dlgMode" value="strict"> 엄격</label>
+        <label class="muted"><input type="radio" name="dlgMode" value="balanced" checked> 균형</label>
+        <label class="muted"><input type="radio" name="dlgMode" value="reconstruct"> 재구성</label>
+      </div>
+      <label>장소</label>
+      <div class="row">
+        <label class="muted"><input type="radio" name="dlgPlace" value="auto" checked> 자동 추출</label>
+        <label class="muted"><input type="radio" name="dlgPlace" value="workshop"> 작업실</label>
+        <label class="muted"><input type="radio" name="dlgPlace" value="none"> 선택 안 함</label>
+      </div>
+      <div style="margin-top:12px">
+        <button id="goDlg" class="primary" style="width:100%;padding:10px">대화를 웹툰 시나리오로 만들기</button>
+      </div>
+      <div class="muted" style="margin-top:6px">원문은 불변 자산으로 보관된다 — 각색은 원문을 덮어쓰지 않는다.</div>
+    </div>
   </div>
 
 </div>
@@ -426,9 +460,12 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       (s.relations && s.relations.length ? ' · 페어 ' + s.relations.length + '건' : '') + '</div>' +
       (s.relationDiscovery && s.relationDiscovery.length
         ? '<div class="warn" style="margin:4px 0">🔍 Relation Discovery — 이 작품이 첫 관찰이 되는 관계: ' + esc(s.relationDiscovery.join(', ')) + '</div>' : '');
+    var ranges = {};
+    if (s.provenance) (s.provenance.sourceRanges || []).forEach(function (r) { ranges[r.panelNo] = r; });
     s.panels.forEach(function (p) {
       html += '<div class="pframe"><b>' + p.panelNo + '컷</b> <span class="muted">' +
-        esc(p.setting) + ' · ' + esc(p.framing) + ' · beat: ' + esc(p.beat) + '</span>';
+        esc(p.setting) + ' · ' + esc(p.framing) + ' · beat: ' + esc(p.beat) +
+        (ranges[p.panelNo] ? ' · 원문 ' + ranges[p.panelNo].startLine + '–' + ranges[p.panelNo].endLine + '행' : (s.provenance ? ' · <span class="warn">근거 없음</span>' : '')) + '</span>';
       (p.actions || []).forEach(function (a) {
         html += '<div style="margin-left:8px">' + esc(a.creatorId) + ': ' + esc(a.action) +
           (a.expressionOrState ? ' <span class="muted">(' + esc(a.expressionOrState) + ')</span>' : '') + '</div>';
@@ -444,12 +481,32 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       '<div class="row" style="margin-top:10px">' +
       '<button id="redo2">다른 이야기로 다시</button>' +
       '<button class="primary" id="draw2">🎨 그리기 (적용된 Style ' + styleApplied().length + '장 + 출연자 Identity)</button>' +
-      '</div></div>';
+      (s.provenance ? '<button id="cmpSrc">원문과 비교</button><button id="reAdapt">다시 압축</button>' : '') +
+      '</div>' +
+      (s.provenance ? '<div id="cmpBox" style="display:none;margin-top:8px;font-size:11px">' +
+        '<div class="ok">보존 ' + (s.provenance.preservedLines || []).length + '건</div>' +
+        (s.provenance.preservedLines || []).map(function (l) { return '<div class="muted">· ' + esc(l) + '</div>'; }).join('') +
+        '<div class="warn" style="margin-top:4px">생략 ' + (s.provenance.omittedLines || []).length + '건</div>' +
+        (s.provenance.omittedLines || []).map(function (l) { return '<div class="muted" style="text-decoration:line-through">· ' + esc(l) + '</div>'; }).join('') +
+        ((s.provenance.reconstructedLines || []).length ? '<div class="bad" style="margin-top:4px">재구성 ' + s.provenance.reconstructedLines.length + '건</div>' +
+          s.provenance.reconstructedLines.map(function (r) { return '<div class="muted">· ' + esc(r.output) + ' <span style="opacity:.6">(근거: ' + esc((r.basis || []).join(' / ')) + ')</span></div>'; }).join('') : '') +
+        '</div>' : '') +
+      '</div>';
     $('out').innerHTML = html;
     var rd = $('redo2');
     if (rd) rd.onclick = makeStory;
     var dw = $('draw2');
     if (dw) dw.onclick = drawComicV2;
+    var cs = $('cmpSrc');
+    if (cs) cs.onclick = function () {
+      var b = $('cmpBox');
+      b.style.display = b.style.display === 'none' ? '' : 'none';
+    };
+    var ra = $('reAdapt');
+    if (ra) ra.onclick = function () {
+      if (dlgState.lastInput) makeDialogueStory(dlgState.lastInput.lineRange || null);
+      else banner('이 세션의 대화 입력이 없다 — 대화 탭에서 다시', 'err');
+    };
   }
   function drawComicV2() {
     var s = state.scenario2;
@@ -692,6 +749,105 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 
   $('go').onclick = makeStory;
   $('theme').onkeydown = function (e) { if (e.key === 'Enter') makeStory(); };
+
+  // ── S-04B Dialogue Mode ──────────────────────────────────────
+  var dlgState = { cut: 'auto', lastInput: null };
+  $('tabTheme').onclick = function () {
+    $('tabTheme').className = 'sel'; $('tabDialogue').className = '';
+    $('themeForm').style.display = ''; $('dialogueForm').style.display = 'none';
+  };
+  $('tabDialogue').onclick = function () {
+    $('tabDialogue').className = 'sel'; $('tabTheme').className = '';
+    $('themeForm').style.display = 'none'; $('dialogueForm').style.display = '';
+    renderSpeakerMap();
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('#dlgCuts button'), function (b) {
+    b.onclick = function () {
+      dlgState.cut = b.getAttribute('data-dcut');
+      Array.prototype.forEach.call(document.querySelectorAll('#dlgCuts button'), function (x) {
+        x.className = x === b ? 'sel' : '';
+      });
+    };
+  });
+  // 화자 감지(클라이언트 표시용 — 권위 파싱은 서버) : "이름:" 콜론 형식 + 이름 단독 줄
+  function detectSpeakers(raw) {
+    var names = {};
+    raw.split('\\n').forEach(function (line) {
+      var m = line.trim().match(/^([^\\s:：]{1,24})\\s*[:：]\\s*.+$/);
+      if (m) names[m[1]] = true;
+    });
+    return Object.keys(names);
+  }
+  function renderSpeakerMap() {
+    var names = detectSpeakers($('dlgRaw').value);
+    var creators = castNow();
+    var box = $('dlgSpeakers');
+    if (!names.length) { box.innerHTML = '화자 형식: "이름: 발화" — 화자가 감지되면 여기서 Creator에 연결한다.'; return; }
+    box.innerHTML = '<div style="margin-bottom:2px">화자 이름 연결</div>' + names.map(function (n) {
+      var guess = creators.filter(function (c) {
+        return c.toLowerCase() === n.toLowerCase() || (n === '삽' && c === 'sap') || (n === '홈즈' && c === 'holmes') || (n === '별이' && c === 'byeoli');
+      })[0] || '';
+      return '<div class="row" style="margin:2px 0">원문 <b>' + esc(n) + '</b> → <select data-sp="' + esc(n) + '" style="background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;font:inherit;font-size:11px">' +
+        '<option value="">(연결 안 됨)</option>' +
+        creators.map(function (c) { return '<option value="' + c + '"' + (c === guess ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
+        '</select></div>';
+    }).join('');
+  }
+  $('dlgRaw').onblur = renderSpeakerMap;
+  function makeDialogueStory(lineRange) {
+    var raw = $('dlgRaw').value;
+    if (!raw.trim()) { banner('대화 원문이 비어 있다', 'err'); return; }
+    var map = {};
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sp]'), function (sel) {
+      if (sel.value) map[sel.getAttribute('data-sp')] = sel.value;
+    });
+    var mode = document.querySelector('input[name=dlgMode]:checked').value;
+    var place = document.querySelector('input[name=dlgPlace]:checked').value;
+    var input = {
+      mode: 'dialogue', rawDialogue: raw, speakerMap: map, creators: castNow(),
+      requestedPanelCount: dlgState.cut === 'auto' ? 'auto' : Number(dlgState.cut),
+      preservationMode: mode,
+      placeId: place === 'none' ? null : (place === 'auto' ? null : place),
+      lineRange: lineRange || null,
+    };
+    dlgState.lastInput = input;
+    var go = $('goDlg');
+    go.disabled = true;
+    go.innerHTML = '<span class="spin">◐</span> 각색 중… (원문에서 사건을 찾는 중)';
+    api('/api/ops/comic-dialogue', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    }).then(function (r) {
+      go.disabled = false; go.textContent = '대화를 웹툰 시나리오로 만들기';
+      if (r.mode === 'episodes') {
+        var html = '<div class="panel"><h2>긴 대화 — 에피소드 후보 <span class="muted">' + r.totalUtterances + '발화 · 한 편으로 만들지 않는다</span></h2>';
+        (r.episodes || []).forEach(function (ep) {
+          html += '<div class="cut"><b>' + esc(ep.title) + '</b> <span class="muted">' + ep.startLine + '–' + ep.endLine + '행' +
+            (ep.why ? ' · ' + esc(ep.why) : '') + '</span><div style="margin-top:6px"><button data-ep="' + ep.startLine + '-' + ep.endLine + '" class="primary">이 에피소드로</button></div></div>';
+        });
+        html += '</div>';
+        $('out').innerHTML = html;
+        Array.prototype.forEach.call(document.querySelectorAll('[data-ep]'), function (b) {
+          b.onclick = function () {
+            var pr = b.getAttribute('data-ep').split('-');
+            makeDialogueStory({ start: Number(pr[0]), end: Number(pr[1]) });
+          };
+        });
+        return;
+      }
+      if (r.error === 'dialogue_invalid' || r.error === 'scenario_invalid') {
+        banner((r.error === 'dialogue_invalid' ? '입력 문제 — ' : '각색이 계약 미달 — ') + (r.detail || []).join(' / '), 'err');
+        return;
+      }
+      if (r.error) { banner('실패: ' + r.error, 'err'); return; }
+      state.scenario2 = r.scenario2;
+      saveDraft('v2', r.scenario2, { provider: r.provider, model: r.model });
+      renderScenarioV2(r.scenario2, r);
+      if (r.warnings && r.warnings.length) banner('각색 완료 · 경고: ' + r.warnings.join(' · '));
+      else banner('각색 완료 — 원문 근거를 컷별로 확인');
+    }).catch(function (e) { go.disabled = false; go.textContent = '대화를 웹툰 시나리오로 만들기'; banner('요청 실패: ' + e, 'err'); });
+  }
+  $('goDlg').onclick = function () { makeDialogueStory(null); };
 
   checkLock();
   renderArchive();
