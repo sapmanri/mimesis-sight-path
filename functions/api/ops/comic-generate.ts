@@ -11,6 +11,7 @@
 import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
+import { withTransientRetry } from '../_retry.ts';
 import { COMIC_LOCK_PREFIX } from './comic-style-lock.ts';
 
 interface Env extends ComicImageEnv {
@@ -115,13 +116,15 @@ async function runGeneration(
   }
 
   // Style Lock 로드 — 실제로 읽는다. 키만 믿지 않는다.
+  // R2 일시 오류(10001류)에 재시도 — 실사고 07-22 밤: list 한 번의 내부 오류가 생성 전체를 죽였다.
   const lockCache = new Map<string, RefBytes>();
   async function loadRef(slot: string): Promise<RefBytes | null> {
     if (lockCache.has(slot)) return lockCache.get(slot)!;
-    const listed = await env.CAPTURES.list({ prefix: `${COMIC_LOCK_PREFIX}${slot}.`, limit: 1 });
+    const listed = await withTransientRetry(`lock_list:${slot}`, () =>
+      env.CAPTURES.list({ prefix: `${COMIC_LOCK_PREFIX}${slot}.`, limit: 1 }));
     const key = listed.objects[0]?.key;
     if (!key) return null;
-    const obj = await env.CAPTURES.get(key);
+    const obj = await withTransientRetry(`lock_get:${slot}`, () => env.CAPTURES.get(key));
     if (!obj) return null;
     const r: RefBytes = {
       name: `${slot}.png`, bytes: await obj.arrayBuffer(),
@@ -143,12 +146,14 @@ async function runGeneration(
     }
     if (!refs.length) return { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' };
     // 관찰 번호 — 500편이 쌓이면 하나의 아카이브가 된다 (홈즈). 재그리기는 같은 번호 유지.
-    const metaRaw0 = await env.PLANET.get(META_KEY);
+    // 읽기 둘은 멱등이라 재시도. 카운터 put은 재시도 시 결번이 생길 수 있으나 번호 재사용 금지
+    // 원칙(DELETE 참조)상 결번은 무해 — 생성이 죽는 것보다 낫다.
+    const metaRaw0 = await withTransientRetry('meta_get', () => env.PLANET.get(META_KEY));
     const metaLog0: { comicId: string; no?: number }[] = metaRaw0 ? JSON.parse(metaRaw0) : [];
     let obsNo = metaLog0.find((x) => x.comicId === comicId)?.no;
     if (!obsNo) {
-      obsNo = Number(await env.PLANET.get(COUNTER_KEY) ?? 0) + 1;
-      await env.PLANET.put(COUNTER_KEY, String(obsNo));
+      obsNo = Number(await withTransientRetry('counter_get', () => env.PLANET.get(COUNTER_KEY)) ?? 0) + 1;
+      await withTransientRetry('counter_put', () => env.PLANET.put(COUNTER_KEY, String(obsNo)));
     }
     const prompt = buildPagePrompt(s, {
       panelLayoutRef: hasPanelRef,
@@ -158,7 +163,8 @@ async function runGeneration(
     const art = await generatePageImage(env, prompt, refs, s.panelCount);
     if ('error' in art) return { ok: false, error: art.error, provider: art.provider };
     const key = `${COMIC_STRIP_PREFIX}${comicId}/page.png`;
-    await env.CAPTURES.put(key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
+    await withTransientRetry('page_put', () =>
+      env.CAPTURES.put(key, art.bytes, { httpMetadata: { contentType: 'image/png' } }));
     try {
       const raw = await env.PLANET.get(META_KEY);
       const log: { comicId: string }[] = raw ? JSON.parse(raw) : [];
@@ -189,7 +195,8 @@ async function runGeneration(
     const art = await generatePanelImage(env, prompt, refs);
     if ('error' in art) { errors.push(`panel_${idx}: ${art.error}`); continue; }
     const key = panelKey(comicId, idx);
-    await env.CAPTURES.put(key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
+    await withTransientRetry(`panel_put:${idx}`, () =>
+      env.CAPTURES.put(key, art.bytes, { httpMetadata: { contentType: 'image/png' } }));
     made.push({ index: idx, key, model: art.model, provider: art.provider });
   }
 

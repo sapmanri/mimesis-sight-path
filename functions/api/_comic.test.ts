@@ -170,3 +170,43 @@ test('그림일기 제목 체계 — 헤더·epigraph·발치 서명·손글씨 
   delete noEpi.epigraph;
   assert.ok(validateScenario(noEpi).some((e) => e.includes('epigraph')));
 });
+
+// ── _retry: R2/KV 일시 오류 재시도 (실사고 07-22 밤: R2 list 10001 한 번에 생성 전체 사망) ──
+
+test('일시 오류 재시도 — 두 번 실패 후 성공하면 결과가 나온다', async () => {
+  const { withTransientRetry } = await import('./_retry.ts');
+  let calls = 0;
+  const slept: number[] = [];
+  const out = await withTransientRetry('lock_list:test', async () => {
+    calls++;
+    if (calls < 3) throw new Error('list: We encountered an internal error. Please try again. (10001)');
+    return 'ok';
+  }, { sleep: async (ms) => { slept.push(ms); } });
+  assert.equal(out, 'ok');
+  assert.equal(calls, 3, '세 번째 시도에서 성공');
+  assert.deepEqual(slept, [400, 800], 'backoff 간격');
+});
+
+test('재시도 소진 시 라벨과 원문을 실어 던진다 (음성)', async () => {
+  const { withTransientRetry } = await import('./_retry.ts');
+  let calls = 0;
+  await assert.rejects(
+    () => withTransientRetry('lock_list:ch00', async () => {
+      calls++;
+      throw new Error('list: We encountered an internal error. Please try again. (10001)');
+    }, { sleep: async () => {} }),
+    (e: Error) => e.message.includes('retry_exhausted(lock_list:ch00 x3)') && e.message.includes('10001'),
+  );
+  assert.equal(calls, 3, '정확히 attempts만큼만 시도');
+});
+
+test('첫 시도 성공이면 재시도도 대기도 없다 (음성 — 스로틀이 꺼져 있지 않은지)', async () => {
+  const { withTransientRetry } = await import('./_retry.ts');
+  let calls = 0;
+  const slept: number[] = [];
+  const out = await withTransientRetry('noop', async () => { calls++; return 42; },
+    { sleep: async (ms) => { slept.push(ms); } });
+  assert.equal(out, 42);
+  assert.equal(calls, 1);
+  assert.deepEqual(slept, [], '성공 경로에 sleep 0회');
+});
