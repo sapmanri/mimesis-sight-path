@@ -697,12 +697,18 @@ test('비트 검증 — 병합·분리·소실을 잡는다 (Obs #008 실사고 
   assert.ok(lost.errors.some((e) => e.includes('beat_keyline_missing')));
   const kept = validateBeats({ panels: [panel(1, [2, 3], [{ speakerId: 'sap', text: '무엇을 상상하든 그건 아닐걸?' }]), panel(2, [4], []), panel(3, [5], [])] }, beats);
   assert.deepEqual(kept.errors, [], JSON.stringify(kept.errors));
+  // 호명 혼동 — 문장이 살아 있으면 keySpeaker가 달라도 처형하지 않는다, 경고만
+  // (실사고 07-23: "홈즈. AI도 독자가 될까?"는 삽의 대사 — 추출기가 호명된 이름을 화자로 지정)
+  const misattr = validateBeats({ panels: [panel(1, [2, 3], [{ speakerId: 'holmes', text: '무엇을 상상하든 그건 아닐걸?' }]), panel(2, [4], []), panel(3, [5], [])] }, beats);
+  assert.ok(!misattr.errors.some((e) => e.includes('beat_keyline_missing')), '살아 있는 문장을 처형하지 않는다');
+  assert.ok(misattr.warnings.some((w) => w.includes('beat_keyspeaker_mismatch')), '혼동은 경고로 보인다');
   // 추임새 미배정 → 경고 (리듬 소실)
   const noInt = validateBeats({ panels: [panel(1, [2], [{ speakerId: 'sap', text: '무엇을 상상하든 그건 아닐걸?' }])] }, beats);
   assert.ok(noInt.warnings.some((w) => w.includes('interjection_dropped')));
   // 프롬프트 원칙
   const bp = buildBeatPrompt(parseDialogue('Sap: 하나\nHolmes: 둘\nSap: 셋\nHolmes: 넷').utterances);
   assert.match(bp.system, /리듬을 만든다. 지우면 안 된다/, '추임새 보존 원칙');
+  assert.match(bp.system, /실제로 말한 화자/, 'keySpeaker는 호명이 아니라 발화자');
   assert.match(beatsToPromptBlock(beats), /발견은 하나씩 발굴된다/);
   assert.match(beatsToPromptBlock(beats), /준비된 결론처럼 선언하지 않는다/, 'Obs #008 실사고 ③');
 });

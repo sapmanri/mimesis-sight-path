@@ -296,7 +296,8 @@ export function buildBeatPrompt(utterances: Utterance[]): { system: string; user
       '- landing: 결론 없이 내려앉는 마지막',
       '규칙: 발견은 하나씩 온다 — 발견 여러 개를 한 비트로 합치지 마라.',
       '가설과 그 판정("무엇을 상상하든…"↔"맞았소")은 한 세트 — inseparableWith로 묶어라.',
-      'keyQuote는 아껴 쓴다 — 정말로 잃으면 안 되는 문장에만, 전체 비트의 절반 이하. 화자의 creatorId를 keySpeaker로.',
+      'keyQuote는 아껴 쓴다 — 정말로 잃으면 안 되는 문장에만, 전체 비트의 절반 이하. 원문에서 그대로 복사한다 — 고쳐 쓰지 않는다.',
+      'keySpeaker는 그 문장을 실제로 말한 화자의 creatorId다 — 문장 안에서 호명된 이름이 아니다. ("홈즈. 이거 볼래?"를 삽이 말했으면 keySpeaker는 삽이다.)',
       '(실사고 07-23: 비트 전부에 keyQuote를 달면 5컷에 다 넣을 수 없어 각색이 전멸한다.)',
       '📌 표시 발화는 사람이 핀으로 고정한 문장 — 반드시 어느 비트의 keyQuote로 삼는다.',
       '출력 JSON 하나: {"beats": [{"id": n, "type": "...", "startLine": n, "endLine": n,',
@@ -349,11 +350,18 @@ export function validateBeats(
       }
     }
     if (b.keyQuote) {
+      // 문장의 생존만 실패 사유다. 화자 검증은 원문 기준의 validateAdaptation
+      // (speaker_misattributed·pinned_line_missing)이 맡는다 — keySpeaker는 추출기(LLM)의
+      // 2차 정보라 근거가 못 된다 (실사고 07-23: "홈즈. AI도 독자가 될까?"는 삽의 대사인데
+      // 호명된 이름을 화자로 잘못 지정 → 살아 있는 문장을 소실로 처형).
       const kn = b.keyQuote.replace(/[\s"'「」『』.…!?~,]/g, '');
-      const alive = s2.panels.some((p) => p.dialogue.some((d) =>
-        d.text && d.text.replace(/[\s"'「」『』.…!?~,]/g, '').includes(kn)
-        && (!b.keySpeaker || d.speakerId === b.keySpeaker)));
-      if (!alive) errors.push(`beat_keyline_missing: 비트 ${b.id} "${b.keyQuote.slice(0, 30)}" — 잃으면 안 되는 순간이 사라졌다`);
+      const holders = s2.panels.flatMap((p) => p.dialogue.filter((d) =>
+        d.text && d.text.replace(/[\s"'「」『』.…!?~,]/g, '').includes(kn)));
+      if (!holders.length) {
+        errors.push(`beat_keyline_missing: 비트 ${b.id} "${b.keyQuote.slice(0, 30)}" — 잃으면 안 되는 순간이 사라졌다`);
+      } else if (b.keySpeaker && !holders.some((d) => d.speakerId === b.keySpeaker)) {
+        warnings.push(`beat_keyspeaker_mismatch: 비트 ${b.id} — 문장은 살아 있으나 추출기 지정 화자(${b.keySpeaker})와 다름 (호명 혼동 가능성 — 원문 화자 검증은 별도 통과)`);
+      }
     }
     if (b.type === 'interjection' && !(panelOf.get(b.id) ?? []).length) {
       warnings.push(`interjection_dropped: 비트 ${b.id} "${b.gist}" — 추임새가 컷에 배정되지 않음 (리듬 소실 위험)`);
