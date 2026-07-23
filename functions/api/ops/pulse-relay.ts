@@ -13,6 +13,19 @@ const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
+/** 오기 삭제 — 일기의 지우개. 잘못 기록된 항목(at 기준)만 지운다. */
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+  const atRaw = new URL(request.url).searchParams.get('at');
+  const at = Number(atRaw);
+  if (!atRaw || !Number.isFinite(at)) return json(400, { ok: false, error: 'at_required' });
+  const raw = await withTransientRetry('pulse_del_get', () => env.PLANET.get(PULSE_LOG_KEY));
+  const log: PulseEntry[] = raw ? JSON.parse(raw) : [];
+  const next = log.filter((e) => e.at !== at);
+  if (next.length === log.length) return json(404, { ok: false, error: 'not_found' });
+  await withTransientRetry('pulse_del_put', () => env.PLANET.put(PULSE_LOG_KEY, JSON.stringify(next)));
+  return json(200, { ok: true, removed: log.length - next.length });
+};
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let body: { being?: string; entries?: Partial<PulseEntry>[] };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }

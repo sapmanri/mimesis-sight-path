@@ -75,7 +75,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     const b = PULSE_BEINGS[e.being];
     return `<tr><td class="muted">${kst(e.at)}</td><td style="color:${b?.color ?? '#ccc'}">${esc(b?.label ?? e.being)}${e.relay ? ' <span class="muted" title="대필 — 본인 발화를 사람이 옮겨 적음">✍</span>' : ''}</td>` +
       `<td><b>${e.amplitude.toFixed(2)}</b></td><td class="muted">${esc(e.kind ?? '')}</td>` +
-      `<td>${esc(e.note ?? '')}${e.source ? ` <span class="muted">(${esc(e.source.doc)}${e.source.line != null ? ' ' + e.source.line + '행' : ''})</span>` : ''}</td></tr>`;
+      `<td>${esc(e.note ?? '')}${e.source ? ` <span class="muted">(${esc(e.source.doc)}${e.source.line != null ? ' ' + e.source.line + '행' : ''})</span>` : ''}</td>` +
+      `<td><button data-del="${e.at}" title="오기 삭제 — 되돌릴 수 없다" style="background:none;border:0;color:#5d3a3a;cursor:pointer;font-size:11px">✕</button></td></tr>`;
   }).join('');
 
   const legend = Object.entries(PULSE_BEINGS).map(([id, b]) => {
@@ -120,7 +121,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     <input id="rNote" type="text" placeholder="본인의 한 줄 (그대로)" style="flex:1;min-width:220px">
     <button id="rOne">기록</button>
   </div>
-  <details style="margin-top:8px;font-size:12px"><summary class="muted">일괄 붙여넣기 — JSON 배열 [{"amplitude":0.8,"kind":"laugh","note":"..."}]</summary>
+  <details style="margin-top:8px;font-size:12px"><summary class="muted">일괄 붙여넣기 — 던져주는 대로 줍는다 (배열·홑 객체·코드펜스·설명 섞임 전부 OK)</summary>
     <textarea id="rBulk" style="width:100%;box-sizing:border-box;min-height:64px;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;font:inherit;padding:6px"></textarea>
     <button id="rBulkGo" style="margin-top:6px">일괄 기록</button>
   </details>
@@ -143,16 +144,61 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     }).catch(function (e) { $('rbanner').textContent = '요청 실패: ' + e; });
   }
   $('rOne').onclick = function () {
+    var note = $('rNote').value.trim();
+    // 실사고(07-23): JSON 블록이 한 줄 칸에 들어와 진폭 0.00 + JSON 노트로 박제됨
+    if (/^[\[{]/.test(note)) { $('rbanner').textContent = '그건 JSON이다 — 아래 "일괄 붙여넣기"에 넣어라'; return; }
+    if ($('rAmp').value.trim() === '') { $('rbanner').textContent = '진폭이 비어 있다 (0~1)'; return; }
     var amp = Number($('rAmp').value);
     if (!(amp >= 0 && amp <= 1)) { $('rbanner').textContent = '진폭은 0~1'; return; }
-    send([{ amplitude: amp, kind: $('rKind').value || undefined, note: $('rNote').value || undefined }]);
+    send([{ amplitude: amp, kind: $('rKind').value || undefined, note: note || undefined }]);
   };
+  // 관대한 파서 — 애들(AI들)이 던지는 대로 줍는다: 배열, 홑 객체, 코드펜스,
+  // 설명 문장 사이에 흩어진 {...}들까지. 중괄호 균형 스캔 (문자열 내부 무시).
+  var BS = String.fromCharCode(92), QT = String.fromCharCode(34);
+  var FENCE = new RegExp(String.fromCharCode(96) + '{3}[a-z]*', 'gi');
+  function parseLoose(text) {
+    text = text.replace(FENCE, ' ').trim();
+    try { var v = JSON.parse(text); return Array.isArray(v) ? v : [v]; } catch (e) {}
+    var out = [], depth = 0, start = -1, inStr = false, escp = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (inStr) {
+        if (escp) escp = false;
+        else if (ch === BS) escp = true;
+        else if (ch === QT) inStr = false;
+        continue;
+      }
+      if (ch === QT) { if (depth > 0) inStr = true; continue; }
+      if (ch === '{') { if (depth === 0) start = i; depth++; }
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0 && start >= 0) {
+          try { out.push(JSON.parse(text.slice(start, i + 1))); } catch (e2) {}
+          start = -1;
+        }
+        if (depth < 0) depth = 0;
+      }
+    }
+    return out;
+  }
   $('rBulkGo').onclick = function () {
-    var arr;
-    try { arr = JSON.parse($('rBulk').value); } catch (e) { $('rbanner').textContent = 'JSON 파싱 실패: ' + e; return; }
-    if (!Array.isArray(arr)) { $('rbanner').textContent = '배열이어야 한다'; return; }
+    var arr = parseLoose($('rBulk').value);
+    if (!arr.length) { $('rbanner').textContent = '항목을 못 찾았다 — {"amplitude":..} 꼴이 하나는 있어야 한다'; return; }
     send(arr);
   };
+  document.body.addEventListener('click', function (ev) {
+    var t = ev.target;
+    var at = t && t.getAttribute ? t.getAttribute('data-del') : null;
+    if (!at) return;
+    if (!confirm('이 심박을 지운다 — 오기 삭제용. 되돌릴 수 없다.')) return;
+    t.disabled = true;
+    fetch('/api/ops/pulse-relay?at=' + encodeURIComponent(at), { method: 'DELETE' })
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (r.error) { $('rbanner').textContent = '삭제 실패: ' + r.error; t.disabled = false; return; }
+        location.reload();
+      }).catch(function (e) { $('rbanner').textContent = '삭제 요청 실패: ' + e; t.disabled = false; });
+  });
 })();
 </script>
 </body></html>`;
