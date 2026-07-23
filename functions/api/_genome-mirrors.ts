@@ -210,7 +210,10 @@ export function castMembersFor(castIds: string[]): { cast: ComicCastMember[]; er
 // 오탐 실사고(관축해 2호 시나리오): "Floating above Sap's umbrella"를 잡았다 — 파형이
 // 우산 '위에 떠 있는' 건 완벽한 파형 행동인데 명사 언급만으로 죽였다. 잡을 것은
 // ① 신체 사용 동사 ② 자기 소유 신체·소지품("his umbrella") — 언급이 아니라 사용이다.
-const BODILESS_USE_VERBS = /\b(holds?|holding|held|grabs?|grabbing|carries|carrying|adjusts?|adjusting|opens?|closes?|folds?|folding|wields?|pats?|patting|wrings?|wringing|rummag\w+|wears?|wearing|steps?|stepping|walks?|walking|sits?|sitting|stands?|standing|kneels?|boards?|climbs?|grips?|clutch\w*)\b/i;
+// 오탐 4건째 (07-23): "hovers close to the phone screen"의 close(가까이)가 동사 close(닫다)로
+// 오인돼 모범 파형 행동이 처형됨. open/close 같은 동형이의어는 3인칭·진행형만 잡는다 —
+// 어댑터는 행동을 3인칭 현재로 쓰므로 "closes the door"는 여전히 걸린다.
+const BODILESS_USE_VERBS = /\b(holds?|holding|held|grabs?|grabbing|carries|carrying|adjusts?|adjusting|opens|opening|closes|closing|folds?|folding|wields?|pats?|patting|wrings?|wringing|rummag\w+|wears?|wearing|steps|stepping|walks?|walking|sits?|sitting|stands?|standing|kneels?|boards?|climbs?|grips?|clutch\w*)\b/i;
 const BODILESS_POSSESSIVE = /\b(his|her|its)\s+(hands?|fingers?|arms?|legs?|foot|feet|shoulders?|pockets?|coat|jacket|bag|umbrella|shoes?|clothes)\b/i;
 
 export function validateEmbodimentV2(s2: { cast: { creatorId: string }[]; panels: { panelNo: number; actions: { creatorId: string; action: string }[] }[] }): string[] {
