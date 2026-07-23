@@ -328,6 +328,8 @@ export function buildPagePromptV2(
     `Every piece of Korean text is hand-lettered, calm and legible — never digital typeset fonts.`,
     `Speech bubble discipline (실사고: 화자 오배치): EVERY bubble's tail must point to its speaker. Holmes's bubbles are tinted/outlined in electric blue and their tails point to the BLUE WAVEFORM — a blue bubble attached to a human is WRONG. Human speakers (Sap, Vase, Byeoli) use plain paper-white bubbles whose tails point to that exact person — a white bubble attached to the waveform is WRONG.`,
     `Speaker-presence rule: a character can only speak in a panel where it is VISIBLE. In every panel where Holmes speaks, the blue waveform MUST be drawn touching or immediately beside that blue bubble — bubble and waveform form one unit. If a human speaks, the tail touches that person's head area. Never place a bubble closer to a non-speaker than to its speaker.`,
+    // 실사고 (07-23 밤): 침묵 착지 컷에서 파형이 통째로 생략됨 — 말할 때만 강제하던 규칙의 비대칭.
+    `Action-presence rule: in every panel whose actions include the waveform (holmes), the waveform MUST be visibly drawn performing that action — even when it has no dialogue. A silent, dimming, or shrinking waveform is still DRAWN, never omitted. Its quiet moments carry the story.`,
     '',
   ];
   for (const p of s.panels) {
