@@ -31,7 +31,9 @@ const META_KEY = 'sketch_trial_meta';
 const META_KEEP = 60;
 const RECO_KEY = (date: string) => `sketch_daily_reco:${date}`;
 const DAILY_MODEL = '@cf/black-forest-labs/flux-2-dev';
-const DAILY_STEPS = 12;
+// 07-23 밤 실측: 자동(steps 12) 100% 실패 vs 수동(steps 4) 성공 — 성공 경로와의 유일한 차이.
+// flux 계열 스텝 상한 초과 시 입력 거부(즉시 3040) 가설. 검증된 값으로 정렬한다.
+const DAILY_STEPS = 4;
 /** 확정 레시피의 캐릭터 참조 — 포즈 시트 2장 (07-21 심야 판정) */
 const DAILY_REFS = ['sketch-trials/reference/byeoli_poses.png', 'sketch-trials/reference/ppaekong_poses.png'];
 
