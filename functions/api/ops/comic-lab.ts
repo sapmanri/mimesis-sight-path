@@ -461,6 +461,13 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       (s.relations && s.relations.length ? ' · 페어 ' + s.relations.length + '건' : '') + '</div>' +
       (s.relationDiscovery && s.relationDiscovery.length
         ? '<div class="warn" style="margin:4px 0">🔍 Relation Discovery — 이 작품이 첫 관찰이 되는 관계: ' + esc(s.relationDiscovery.join(', ')) + '</div>' : '');
+    // 관찰자 캡션 (07-23) — 처음 보는 독자용 나레이터. Vase가 여기서 직접 고쳐 쓴다.
+    html += '<div style="margin:8px 0">' +
+      '<div class="muted" style="font-size:11px">🖋 관찰자 캡션 — 도입 (그림 위 서술 띠. 고치면 그대로 그려진다)</div>' +
+      '<textarea id="capIntro" style="width:100%;box-sizing:border-box;min-height:44px;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;font:inherit;font-size:12px;padding:6px">' + esc(s.intro || '') + '</textarea>' +
+      '<div class="muted" style="font-size:11px;margin-top:4px">🖋 여운 — 마지막 컷 아래 한 줄</div>' +
+      '<input id="capOutro" type="text" value="' + esc(s.outro || '') + '" style="width:100%;box-sizing:border-box;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;font:inherit;font-size:12px;padding:6px">' +
+      '</div>';
     var ranges = {};
     if (s.provenance) (s.provenance.sourceRanges || []).forEach(function (r) { ranges[r.panelNo] = r; });
     var beats = (meta && meta.beats) || [];
@@ -501,6 +508,17 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         '</div>' : '') +
       '</div>';
     $('out').innerHTML = html;
+    var ci = $('capIntro'), co = $('capOutro');
+    if (ci) ci.onchange = function () {
+      s.intro = ci.value.trim() || null;
+      if (state.scenario2) state.scenario2.intro = s.intro;
+      saveDraft('v2', s, meta);
+    };
+    if (co) co.onchange = function () {
+      s.outro = co.value.trim() || null;
+      if (state.scenario2) state.scenario2.outro = s.outro;
+      saveDraft('v2', s, meta);
+    };
     var rd = $('redo2');
     if (rd) rd.onclick = makeStory;
     var dw = $('draw2');

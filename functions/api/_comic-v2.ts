@@ -52,6 +52,10 @@ export interface ComicScenarioV2 {
   };
   panels: ComicPanelV2[];
   endingBeat: string;
+  /** 관찰자 캡션 (07-23): 처음 보는 독자를 위한 나레이터 레이어 — 원문이 아니라 관찰자의 서술.
+      intro = 도입 2~3문장(인물·상황), outro = 여운 한 줄. Vase가 검수 화면에서 고쳐 쓸 수 있다. */
+  intro?: string | null;
+  outro?: string | null;
 }
 
 const ROLES = ['lead', 'support', 'cameo'] as const;
@@ -311,9 +315,14 @@ export function buildPagePromptV2(
     `Style: ${GWANCHUKHAE_STYLE_EN}.`,
     ...s.cast.map((c) => CAST_FORM_EN[c.creatorId]).filter(Boolean),
     `Only the listed cast appears. No other people anywhere on the page — no crowds, no passers-by, no background figures. Empty streets and empty spaces are correct.`,
-    `Page header, top-left, small and quiet: "관축해" and "${opts.dateKst ?? ''}". Below it the topic "${s.topic}" written as a modest title.`,
-    opts.observationNo
-      ? `At the very bottom of the page, tiny: "Observation #${String(opts.observationNo).padStart(3, '0')} · MIMESIS Studio".`
+    // 도장 제거 (Vase 판정 07-23): 날짜·Observation # 는 페이지에 찍지 않는다 — 기록은 아카이브 메타의 몫.
+    // 제호는 필기: AI 티 나는 조판 금지.
+    `Page header, top-left, hand-lettered: "관축해" in casual Korean pen handwriting — warm, slightly imperfect, human-made, NEVER typeset or digital-looking. Below it the episode title "${s.topic}" in smaller modest handwriting. Every Korean character must still be perfectly accurate — handwritten style, not distorted glyphs.`,
+    s.intro
+      ? `Above the first panel, a quiet narration strip (the observer's voice) in small neat handwriting on a plain band, NOT a speech bubble, no tail: "${s.intro}"`
+      : '',
+    s.outro
+      ? `Below the last panel, one quiet handwritten closing line, narration not speech: "${s.outro}"`
       : '',
     `Every piece of Korean text is hand-lettered, calm and legible — never digital typeset fonts.`,
     `Speech bubble discipline (실사고: 화자 오배치): EVERY bubble's tail must point to its speaker. Holmes's bubbles are tinted/outlined in electric blue and their tails point to the BLUE WAVEFORM — a blue bubble attached to a human is WRONG. Human speakers (Sap, Vase, Byeoli) use plain paper-white bubbles whose tails point to that exact person — a white bubble attached to the waveform is WRONG.`,

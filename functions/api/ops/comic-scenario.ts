@@ -28,10 +28,10 @@ async function scenarioV2(env: Env, theme: string, panelCount: number, castIds: 
   const members = castMembersFor(castIds);
   if (members.errors.length) return json(400, { ok: false, error: members.errors.join(' / ') });
 
-  const user = `상황: ${theme}\npanelCount: ${panelCount}\n출연: ${castIds.join(', ')}\n이 상황으로 ${panelCount}컷 시나리오의 panels·endingBeat만 JSON으로.`;
+  const user = `상황: ${theme}\npanelCount: ${panelCount}\n출연: ${castIds.join(', ')}\n이 상황으로 ${panelCount}컷 시나리오의 intro·outro·panels·endingBeat를 JSON으로.`;
   const out = await generateScenarioText(env, theme, panelCount, { system: built.system, user });
   if ('error' in out) return json(502, { ok: false, error: out.error, provider: out.provider });
-  const parsed = extractJson(out.text) as { panels?: ComicPanelV2[]; endingBeat?: string } | null;
+  const parsed = extractJson(out.text) as { panels?: ComicPanelV2[]; endingBeat?: string; intro?: string; outro?: string } | null;
   if (!parsed) return json(502, { ok: false, error: 'scenario_not_json', raw: out.text.slice(0, 400) });
 
   const scenario2: ComicScenarioV2 = {
@@ -44,6 +44,8 @@ async function scenarioV2(env: Env, theme: string, panelCount: number, castIds: 
     relationDiscovery: built.discovery.length ? built.discovery : undefined,
     panels: parsed.panels ?? [],
     endingBeat: parsed.endingBeat ?? '',
+    intro: parsed.intro ? String(parsed.intro).slice(0, 240) : undefined,
+    outro: parsed.outro ? String(parsed.outro).slice(0, 120) : undefined,
   };
   const errs = [...validateScenarioV2(scenario2), ...validateEmbodimentV2(scenario2)];
   if (errs.length) return json(422, { ok: false, error: 'scenario_invalid', detail: errs, scenario2 });

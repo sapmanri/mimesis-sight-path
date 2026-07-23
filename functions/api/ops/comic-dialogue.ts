@@ -92,6 +92,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     out = o;
     const parsed = extractJson(out.text) as {
       topic?: string; panels?: ComicPanelV2[]; endingBeat?: string;
+      intro?: string; outro?: string;
       provenance?: Partial<DialogueProvenance>;
     } | null;
     if (!parsed?.panels?.length) return json(502, { ok: false, error: 'scenario_not_json', raw: out.text.slice(0, 400) });
@@ -117,6 +118,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       provenance,
       panels: parsed.panels,
       endingBeat: parsed.endingBeat ?? '',
+      intro: parsed.intro ? String(parsed.intro).slice(0, 240) : undefined,
+      outro: parsed.outro ? String(parsed.outro).slice(0, 120) : undefined,
     };
 
     const adaptation = validateAdaptation(scenario2, provenance, utterances, input);
