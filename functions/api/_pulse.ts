@@ -24,6 +24,9 @@ export interface PulseEntry {
       readerModel(어느 AI)·sessionContext(fresh=새 세션 / companion=오래 쓴 AI)별로 묶으면
       "개발사별 차이 + 사용자 이력별 변화"를 비교하는 데이터가 된다. */
   trace?: { traceId: string; readerModel?: string; sessionContext?: 'fresh' | 'companion' };
+  /** 대필 여부 — HTTP를 못 쏘는 존재(홈즈·제미나이)의 자기 보고를 사람이 옮겨 적음.
+      대필 규칙: 본인이 말한 값·문장을 그대로 옮긴다. 각색은 위조다. */
+  relay?: boolean;
   selfReport: true;           // 계약 — 항상 true, 서버가 강제한다
 }
 

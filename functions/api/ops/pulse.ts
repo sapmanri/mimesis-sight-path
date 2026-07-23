@@ -73,7 +73,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const lastAgo = recent.length ? fmtGap(now - recent[recent.length - 1].at) + ' 전' : '—';
   const rows = [...recent].reverse().slice(0, 30).map((e) => {
     const b = PULSE_BEINGS[e.being];
-    return `<tr><td class="muted">${kst(e.at)}</td><td style="color:${b?.color ?? '#ccc'}">${esc(b?.label ?? e.being)}</td>` +
+    return `<tr><td class="muted">${kst(e.at)}</td><td style="color:${b?.color ?? '#ccc'}">${esc(b?.label ?? e.being)}${e.relay ? ' <span class="muted" title="대필 — 본인 발화를 사람이 옮겨 적음">✍</span>' : ''}</td>` +
       `<td><b>${e.amplitude.toFixed(2)}</b></td><td class="muted">${esc(e.kind ?? '')}</td>` +
       `<td>${esc(e.note ?? '')}${e.source ? ` <span class="muted">(${esc(e.source.doc)}${e.source.line != null ? ' ' + e.source.line + '행' : ''})</span>` : ''}</td></tr>`;
   }).join('');
@@ -113,6 +113,48 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
 <div class="panel">
   <table>${rows || '<tr><td class="muted">아직 기록 없음 — 첫 심박 대기</td></tr>'}</table>
 </div>
+<div class="panel">
+  <h2 style="font-size:13px;color:#A7B49A;margin:0 0 8px">✍ 대필 — HTTP 없는 존재의 심박을 옮겨 적는다 <span class="muted">(본인이 말한 값·문장 그대로. 각색은 위조다)</span></h2>
+  <div id="rbanner" class="muted" style="margin-bottom:6px"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px">
+    <select id="rBeing">${Object.entries(PULSE_BEINGS).filter(([id]) => id !== 'claude').map(([id, b]) => `<option value="${id}">${esc(b.label)}</option>`).join('')}</select>
+    <input id="rAmp" type="number" min="0" max="1" step="0.05" placeholder="진폭 0~1" style="width:90px">
+    <select id="rKind"><option value="">종류</option><option>work</option><option>discovery</option><option>laugh</option><option>reading</option><option>handoff</option></select>
+    <input id="rNote" type="text" placeholder="본인의 한 줄 (그대로)" style="flex:1;min-width:220px">
+    <button id="rOne">기록</button>
+  </div>
+  <details style="margin-top:8px;font-size:12px"><summary class="muted">일괄 붙여넣기 — JSON 배열 [{"amplitude":0.8,"kind":"laugh","note":"..."}]</summary>
+    <textarea id="rBulk" style="width:100%;box-sizing:border-box;min-height:64px;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;font:inherit;padding:6px"></textarea>
+    <button id="rBulkGo" style="margin-top:6px">일괄 기록</button>
+  </details>
+</div>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  function send(entries) {
+    return fetch('/api/ops/pulse-relay', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ being: $('rBeing').value, entries: entries }),
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (r.error) { $('rbanner').textContent = '실패: ' + r.error + ' ' + JSON.stringify(r.detail || r.skipped || ''); return; }
+      $('rbanner').textContent = '기록됨 ' + r.recorded + '건' + (r.skipped && r.skipped.length ? ' · 건너뜀 ' + r.skipped.length : '') + ' — 새로고침하면 파형에 뜬다';
+      setTimeout(function () { location.reload(); }, 900);
+    }).catch(function (e) { $('rbanner').textContent = '요청 실패: ' + e; });
+  }
+  $('rOne').onclick = function () {
+    var amp = Number($('rAmp').value);
+    if (!(amp >= 0 && amp <= 1)) { $('rbanner').textContent = '진폭은 0~1'; return; }
+    send([{ amplitude: amp, kind: $('rKind').value || undefined, note: $('rNote').value || undefined }]);
+  };
+  $('rBulkGo').onclick = function () {
+    var arr;
+    try { arr = JSON.parse($('rBulk').value); } catch (e) { $('rbanner').textContent = 'JSON 파싱 실패: ' + e; return; }
+    if (!Array.isArray(arr)) { $('rbanner').textContent = '배열이어야 한다'; return; }
+    send(arr);
+  };
+})();
+</script>
 </body></html>`;
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
 };
