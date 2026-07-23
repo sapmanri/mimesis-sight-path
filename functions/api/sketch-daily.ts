@@ -32,9 +32,10 @@ const META_KEY = 'sketch_trial_meta';
 const META_KEEP = 60;
 const RECO_KEY = (date: string) => `sketch_daily_reco:${date}`;
 const DAILY_MODEL = '@cf/black-forest-labs/flux-2-dev';
-// 07-23 밤 실측: 자동(steps 12) 100% 실패 vs 수동(steps 4) 성공 — 성공 경로와의 유일한 차이.
-// flux 계열 스텝 상한 초과 시 입력 거부(즉시 3040) 가설. 검증된 값으로 정렬한다.
-const DAILY_STEPS = 4;
+// steps 12 = 품질 판정값 (07-21 심야, "하고하고 또 해서" 결정) — 품질값은 상수다.
+// 07-24 실증: 실패 원인은 스텝이 아니라 30초 클라이언트가 생성 도중 끊은 것.
+// 인내심 있는 클라이언트(재시도 경로, 120초)로 부르면 flux-2-dev는 정상 생성된다.
+const DAILY_STEPS = 12;
 /** 확정 레시피의 캐릭터 참조 — 포즈 시트 2장 (07-21 심야 판정) */
 const DAILY_REFS = ['sketch-trials/reference/byeoli_poses.png', 'sketch-trials/reference/ppaekong_poses.png'];
 
