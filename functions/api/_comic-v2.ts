@@ -321,8 +321,9 @@ export function buildPagePromptV2(
     s.intro
       ? `Above the first panel, a quiet narration strip (the observer's voice) in small neat handwriting on a plain band, NOT a speech bubble, no tail: "${s.intro}"`
       : '',
+    // 아웃트로 = 관찰 일지 형식 (Vase 07-23): 웹툰이 끝나고 관찰자가 마지막 메모를 적는 느낌
     s.outro
-      ? `Below the last panel, one quiet handwritten closing line, narration not speech: "${s.outro}"`
+      ? `Below the last panel, an observer's closing log note in quiet small handwriting: first a tiny label "발견", then beneath it the line: "${s.outro}" — narration, not speech, no bubble.`
       : '',
     `Every piece of Korean text is hand-lettered, calm and legible — never digital typeset fonts.`,
     `Speech bubble discipline (실사고: 화자 오배치): EVERY bubble's tail must point to its speaker. Holmes's bubbles are tinted/outlined in electric blue and their tails point to the BLUE WAVEFORM — a blue bubble attached to a human is WRONG. Human speakers (Sap, Vase, Byeoli) use plain paper-white bubbles whose tails point to that exact person — a white bubble attached to the waveform is WRONG.`,
