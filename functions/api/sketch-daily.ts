@@ -112,22 +112,35 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // ② 사람 우선 — 이미 접힌 하루가 있으면 자동은 물러난다
   const storedRaw = await env.PLANET.get(memoryKey(date));
+  let day: DayMemory;
   if (storedRaw) {
-    await recordSkip('human_day');
-    return json(200, { ok: true, skipped: 'human_day', detail: `${date}의 하루가 이미 서 있다 — 사람 우선(조건 ②)` });
+    // 실사고(07-23 첫 실전): 크론이 하루를 접었는데 AI가 3연속 실패(AiError 3040/5030).
+    // 이때 재실행하면 '사람 우선'으로 오인해 물러났다 — 자동 생성이 전멸한 날은
+    // 접힌 하루를 재사용해 생성만 재시도한다 (하루는 다시 접지 않는다).
+    const recoRaw = await env.PLANET.get(RECO_KEY(date));
+    const prevReco = recoRaw ? JSON.parse(recoRaw) as { picks?: unknown[]; errors?: unknown[]; skipped?: string } : null;
+    const failedAuto = !!prevReco && !prevReco.skipped
+      && Array.isArray(prevReco.picks) && prevReco.picks.length === 0
+      && Array.isArray(prevReco.errors) && prevReco.errors.length > 0;
+    if (!failedAuto) {
+      await recordSkip('human_day');
+      return json(200, { ok: true, skipped: 'human_day', detail: `${date}의 하루가 이미 서 있다 — 사람 우선(조건 ②)` });
+    }
+    day = JSON.parse(storedRaw) as DayMemory;
+  } else {
+    // ③ 하루 접기 — 관찰이 없으면 접지 않는다
+    const capturesRaw = await env.PLANET.get('capture_meta');
+    const captures: CaptureLike[] = capturesRaw ? JSON.parse(capturesRaw) : [];
+    const built = buildDayMemory(captures, date);
+    if (!built) {
+      await recordSkip('no_observations');
+      return json(200, { ok: true, skipped: 'no_observations', detail: `${date}에 관찰이 없다 — 빈 기억을 지어내지 않는다(조건 ③)` });
+    }
+    const errs = validateDayMemory(built);
+    if (errs.length) return json(500, { ok: false, error: 'invalid_memory', detail: errs });
+    await env.PLANET.put(memoryKey(date), JSON.stringify(built));
+    day = built;
   }
-
-  // ③ 하루 접기 — 관찰이 없으면 접지 않는다
-  const capturesRaw = await env.PLANET.get('capture_meta');
-  const captures: CaptureLike[] = capturesRaw ? JSON.parse(capturesRaw) : [];
-  const day = buildDayMemory(captures, date);
-  if (!day) {
-    await recordSkip('no_observations');
-    return json(200, { ok: true, skipped: 'no_observations', detail: `${date}에 관찰이 없다 — 빈 기억을 지어내지 않는다(조건 ③)` });
-  }
-  const errs = validateDayMemory(day);
-  if (errs.length) return json(500, { ok: false, error: 'invalid_memory', detail: errs });
-  await env.PLANET.put(memoryKey(date), JSON.stringify(day));
 
   // 생성 준비 — 확정 레시피 그대로 (수동 흐름과 동일 재료)
   const provider = selectProvider('workers-ai', env);
@@ -150,12 +163,22 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const made: TrialRecord[] = [];
   const errors: string[] = [...subjTr.notes];
   const judged: { seed: number; bytes: ArrayBuffer }[] = [];
+  const TRANSIENT_AI = /3040|5030|429|capacity|timeout|temporarily/i;
   for (let n = 0; n < 3; n++) {
-    const art = await provider.generate(env, {
+    let art = await provider.generate(env, {
       plan: { memory: day.event, prompt, referenceKeys: refKeys },
       model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
       references: refs, seed: base + n,
     });
+    // 일시 오류 재시도 — 첫 실전(07-23)에서 AiError 3040/5030 3연속으로 전멸
+    for (let attempt = 1; attempt < 3 && 'error' in art && TRANSIENT_AI.test(String(art.error)); attempt++) {
+      await new Promise((r) => setTimeout(r, 800 * attempt));
+      art = await provider.generate(env, {
+        plan: { memory: day.event, prompt, referenceKeys: refKeys },
+        model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
+        references: refs, seed: base + n,
+      });
+    }
     if ('error' in art) { errors.push(`#${n}: ${art.error}`); continue; }
     if (!art.bytes) { errors.push(`#${n}: empty`); continue; }
     const r2Key = trialKey(trialId, DAILY_MODEL, n);
