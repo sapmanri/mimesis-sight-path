@@ -140,6 +140,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 
 </div>
 <div class="results" id="results">
+  <div id="daily"></div>
   <div class="panel">
     <h2>판정 축 (예쁘냐가 아니라)</h2>
     <ul class="judge">
@@ -255,6 +256,58 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         });
         renderDay();
       });
+    loadDaily();
+  }
+
+  // ── 🌙 별이가 그린 그림 (431-AUTO) — 아침의 두 클릭이 시작되는 자리.
+  //    실사고(07-23): 자동 생성분이 '최근 생성' 구석에 섞여 보였고, 크론이 건너뛴 날은
+  //    아무 기록도 없어 침묵했다 — "별이가 그린 게 올라와 있어야 하는 거 아닌가" (Vase) ──
+  function loadDaily() {
+    var date = $('date').value;
+    api('/api/ops/sketch-daily-reco?date=' + date).then(function (r) {
+      var el = $('daily');
+      if (!r || r.error) { el.innerHTML = ''; return; }
+      var head = '<div class="panel"><h2>🌙 별이가 그린 그림 <span class="muted">' + esc(date) +
+        ' · 매일 23:30 자동 3장 — 채택은 사람(조건 ⑤)</span></h2>';
+      if (r.empty) {
+        el.innerHTML = head + '<div class="muted">이 날짜의 자동 생성 기록이 없다 — 크론(23:30 KST)이 아직 안 돌았거나 ' +
+          '<b>미등록</b>이다 (인계서 431-AUTO의 남은 손일). 그동안은 아래 ④로 수동 생성.</div></div>';
+        return;
+      }
+      if (r.skipped) {
+        var why = r.skipped === 'human_day' ? '사람이 먼저 하루를 접어서 자동은 물러났다 (조건 ② — 수동 생성분은 아래 최근 생성에)'
+          : r.skipped === 'no_observations' ? '관찰이 없어 하루를 접지 않았다 (조건 ③ — 빈 기억을 지어내지 않는다)'
+          : r.skipped;
+        el.innerHTML = head + '<div class="muted">이 날은 자동 생성 없음 — ' + esc(why) + '</div></div>';
+        return;
+      }
+      var picks = r.picks || [];
+      var cards = '';
+      picks.forEach(function (p, i) {
+        if (!p.r2Key) return;
+        var isPick = r.reco && r.reco.pick === i + 1;
+        cards += '<div class="refcard"' + (isPick ? ' style="border-color:#5d7548"' : '') + '>' +
+          '<a href="/api/ops/sketch-image?key=' + encodeURIComponent(p.r2Key) + '" target="_blank">' +
+          '<img src="/api/ops/sketch-image?key=' + encodeURIComponent(p.r2Key) + '" style="height:150px" loading="lazy"></a>' +
+          '<div class="nm">' + (i + 1) + '장 · seed ' + esc(p.seed) + (isPick ? ' · <b class="ok">🤖 추천</b>' : '') + '</div>' +
+          '<button class="del" data-attach="' + esc(p.r2Key) + '">📌 이 장을 채택</button></div>';
+      });
+      var recoLine = '';
+      if (r.reco) {
+        recoLine = '<div class="muted" style="margin-top:8px">🤖 판정기(기록용 — 발행 권한 없음): ' +
+          (r.reco.pick ? '<b class="ok">' + r.reco.pick + '장 추천</b>' : '<span class="warn">전부 불합격 — 없음 추천</span>') +
+          (r.reco.reasons ? ' — ' + esc(r.reco.reasons) : '') +
+          ((r.reco.verdicts || []).length ? '<br><span style="font-size:10px">' + (r.reco.verdicts || []).map(esc).join(' · ') + '</span>' : '') +
+          '</div>';
+      }
+      var errLine = (r.errors && r.errors.length)
+        ? '<div class="bad" style="font-size:11px;margin-top:6px">' + r.errors.map(esc).join('<br>') + '</div>' : '';
+      el.innerHTML = head +
+        (cards ? '<div class="refgrid" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr))">' + cards + '</div>'
+               : '<div class="muted">생성 기록은 있는데 남은 이미지가 없다' +
+                 ((r.errors || []).length ? ' — 아래 오류 참조' : '') + '</div>') +
+        recoLine + errLine + '</div>';
+    });
   }
   $('loadDay').onclick = loadDay;
   $('buildDay').onclick = function () {
@@ -472,8 +525,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     out.innerHTML = html + out.innerHTML;   // 최신이 위 — 비교는 스타일 보드에서
   }
 
-  // ── 채택 → 기억 부착 (431-A) — 결과 영역 위임 리스너 ──
-  $('out').addEventListener('click', function (ev) {
+  // ── 채택 → 기억 부착 (431-A) — 결과·별이 그림 영역 공용 위임 리스너 ──
+  function onAttachClick(ev) {
     var t = ev.target;
     var key = t && t.getAttribute ? t.getAttribute('data-attach') : null;
     if (!key) return;
@@ -493,7 +546,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       t.disabled = false;
       banner('붙이기 요청 실패: ' + e, 'err');
     });
-  });
+  }
+  $('out').addEventListener('click', onAttachClick);
+  $('daily').addEventListener('click', onAttachClick);
 
   // ── 최근 생성 목록 — 새로고침해도 붙일 수 있게 (결과 영역은 세션 휘발이라
   //    "이미 만든 그림을 채택"하는 길이 없었다. 실사용 실발생 2026-07-21) ──
@@ -507,18 +562,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         '<button class="del" data-attach="' + esc(r.r2Key) + '">📌 붙이기</button></div>';
     });
     if (!cards) return;
-    $('out').innerHTML += '<div class="panel"><h2>최근 생성 <span class="muted">(새로고침해도 남음 — 여기서도 붙일 수 있다)</span></h2>' +
-      '<div id="dailyReco" class="muted" style="margin-bottom:8px"></div>' +
+    // 판정기 추천 표시는 위 '🌙 별이가 그린 그림' 패널로 이사함 (07-23)
+    $('out').innerHTML += '<div class="panel"><h2>최근 생성 <span class="muted">(수동 시험 포함 — 새로고침해도 남음, 여기서도 붙일 수 있다)</span></h2>' +
       '<div class="refgrid">' + cards + '</div></div>';
-    // 병행 운전(B): 판정기 추천은 표시만 — 채택은 사람 (조건 ⑥)
-    api('/api/ops/sketch-daily-reco?date=' + $('date').value).then(function (r) {
-      var el = $('dailyReco');
-      if (!el || !r || r.empty || !r.reco) return;
-      el.innerHTML = '🤖 판정기 추천(기록용): ' +
-        (r.reco.pick ? '<b class="ok">' + r.reco.pick + '번째 장</b>' : '<span class="warn">전부 불합격 — 오늘은 없음 추천</span>') +
-        (r.reco.reasons ? ' — ' + esc(r.reco.reasons) : '') +
-        '<br><span style="font-size:10px">' + (r.reco.verdicts || []).map(esc).join(' · ') + '</span>';
-    });
   }
 
   // ── 초기화 ──

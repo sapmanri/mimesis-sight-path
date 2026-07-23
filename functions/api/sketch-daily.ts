@@ -102,9 +102,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const date = kstDate(Date.now());
 
+  // 건너뛰어도 기록은 남긴다 — 아침 실험실이 "왜 없는지"를 말할 수 있게 (침묵이 버그다).
+  // 이미 생성 기록이 있으면 덮지 않는다.
+  const recordSkip = async (skipped: string) => {
+    if (!(await env.PLANET.get(RECO_KEY(date)))) {
+      await env.PLANET.put(RECO_KEY(date), JSON.stringify({ date, at: Date.now(), skipped }));
+    }
+  };
+
   // ② 사람 우선 — 이미 접힌 하루가 있으면 자동은 물러난다
   const storedRaw = await env.PLANET.get(memoryKey(date));
   if (storedRaw) {
+    await recordSkip('human_day');
     return json(200, { ok: true, skipped: 'human_day', detail: `${date}의 하루가 이미 서 있다 — 사람 우선(조건 ②)` });
   }
 
@@ -112,7 +121,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const capturesRaw = await env.PLANET.get('capture_meta');
   const captures: CaptureLike[] = capturesRaw ? JSON.parse(capturesRaw) : [];
   const day = buildDayMemory(captures, date);
-  if (!day) return json(200, { ok: true, skipped: 'no_observations', detail: `${date}에 관찰이 없다 — 빈 기억을 지어내지 않는다(조건 ③)` });
+  if (!day) {
+    await recordSkip('no_observations');
+    return json(200, { ok: true, skipped: 'no_observations', detail: `${date}에 관찰이 없다 — 빈 기억을 지어내지 않는다(조건 ③)` });
+  }
   const errs = validateDayMemory(day);
   if (errs.length) return json(500, { ok: false, error: 'invalid_memory', detail: errs });
   await env.PLANET.put(memoryKey(date), JSON.stringify(day));
