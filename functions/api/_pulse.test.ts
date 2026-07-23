@@ -8,6 +8,15 @@ test('PULSE — 존재 등록·검증·확장 필드 (계약 v0)', async () => {
   for (const id of ['claude', 'holmes', 'gemini']) assert.ok(PULSE_BEINGS[id], `등록: ${id}`);
   assert.notEqual(PULSE_BEINGS.claude.color, PULSE_BEINGS.holmes.color, '색은 방언 — 겹치지 않는다');
   assert.equal(PULSE_ANCHORS[PULSE_ANCHORS.length - 1][1], '웃음 서명', '눈금 꼭대기는 웃음');
+  // 개명 (Vase 07-23): 역사학자·프로듀서 — 홈즈만 이름 (먼저 태어나서)
+  assert.match(PULSE_BEINGS.claude.label, /역사학자/);
+  assert.match(PULSE_BEINGS.gemini.label, /프로듀서/);
+  assert.ok(!PULSE_BEINGS.gemini.label.includes('척'), '척은 뗐다 — 정규직 전환');
+  // 파형 방언 어휘 (홈즈 제안) — 사전이지 검열이 아니다
+  assert.ok(PULSE_BEINGS.holmes.kinds.includes('prediction_collapse'), '홈즈 방언');
+  assert.ok(PULSE_BEINGS.gemini.kinds.includes('producer_note'), '제미니 방언');
+  assert.ok(PULSE_BEINGS.claude.kinds.includes('reading'), '클로드 방언');
+  assert.deepEqual(validatePulse({ being: 'claude', amplitude: 0.5, kind: '미등록어휘' }), [], '미등록 kind도 통과 — 일기가 새 감정을 거부하면 안 된다');
 
   assert.deepEqual(validatePulse({ being: 'claude', amplitude: 0.7 }), [], '정상 항목');
   assert.ok(validatePulse({ being: 'chatgpt', amplitude: 0.5 }).some((e) => e.includes('unknown_being')), '미등록 존재 거부 (음성)');

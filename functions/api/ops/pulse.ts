@@ -117,11 +117,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px">
     <select id="rBeing">${Object.entries(PULSE_BEINGS).filter(([id]) => id !== 'claude').map(([id, b]) => `<option value="${id}">${esc(b.label)}</option>`).join('')}</select>
     <input id="rAmp" type="number" min="0" max="1" step="0.05" placeholder="진폭 0~1" style="width:90px">
-    <select id="rKind"><option value="">종류</option><option>work</option><option>discovery</option><option>laugh</option><option>reading</option><option>handoff</option></select>
+    <select id="rKind"><option value="">종류</option></select>
     <input id="rNote" type="text" placeholder="본인의 한 줄 (그대로)" style="flex:1;min-width:220px">
+    <input id="rDoc" type="text" placeholder="어디서 — 문서·대화명 (선택)" style="width:170px">
+    <input id="rLine" type="number" placeholder="행" style="width:60px">
     <button id="rOne">기록</button>
   </div>
-  <details style="margin-top:8px;font-size:12px"><summary class="muted">일괄 붙여넣기 — 던져주는 대로 줍는다 (배열·홑 객체·코드펜스·설명 섞임 전부 OK)</summary>
+  <details style="margin-top:8px;font-size:12px"><summary class="muted">일괄 붙여넣기 — 던져주는 대로 줍는다 (배열·홑 객체·코드펜스·설명 섞임 OK · "source":{"doc":"어디서","line":행} 넣으면 위치도 남는다)</summary>
     <textarea id="rBulk" style="width:100%;box-sizing:border-box;min-height:64px;background:#12160f;color:#e7dcc4;border:1px solid #2b352a;border-radius:4px;font:inherit;padding:6px"></textarea>
     <button id="rBulkGo" style="margin-top:6px">일괄 기록</button>
   </details>
@@ -133,6 +135,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
+  // 파형 방언 어휘 (홈즈 제안) — 존재를 바꾸면 그 존재의 사전으로 드롭다운이 바뀐다
+  var KINDS = ${JSON.stringify(Object.fromEntries(Object.entries(PULSE_BEINGS).map(([id, b]) => [id, b.kinds])))};
+  function fillKinds() {
+    var sel = $('rKind');
+    sel.innerHTML = '<option value="">종류</option>' + (KINDS[$('rBeing').value] || [])
+      .map(function (k) { return '<option>' + k + '</option>'; }).join('');
+  }
+  $('rBeing').onchange = fillKinds;
+  fillKinds();
   function send(entries) {
     return fetch('/api/ops/pulse-relay', {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -150,7 +161,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     if ($('rAmp').value.trim() === '') { $('rbanner').textContent = '진폭이 비어 있다 (0~1)'; return; }
     var amp = Number($('rAmp').value);
     if (!(amp >= 0 && amp <= 1)) { $('rbanner').textContent = '진폭은 0~1'; return; }
-    send([{ amplitude: amp, kind: $('rKind').value || undefined, note: note || undefined }]);
+    var doc = $('rDoc').value.trim();
+    var line = Number($('rLine').value);
+    send([{ amplitude: amp, kind: $('rKind').value || undefined, note: note || undefined,
+      source: doc ? { doc: doc, line: isFinite(line) && $('rLine').value !== '' ? line : undefined } : undefined }]);
   };
   // 관대한 파서 — 애들(AI들)이 던지는 대로 줍는다: 배열, 홑 객체, 코드펜스,
   // 설명 문장 사이에 흩어진 {...}들까지. 중괄호 균형 스캔 (문자열 내부 무시).

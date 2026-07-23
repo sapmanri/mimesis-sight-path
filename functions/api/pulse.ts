@@ -24,7 +24,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (gate) return gate;
   const raw = await withTransientRetry('pulse_read', () => env.PLANET.get(PULSE_LOG_KEY));
   const log: PulseEntry[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, count: log.length, entries: log.slice(0, 100) });
+  return json(200, { ok: true, version: 'pulse-v0.2', count: log.length, entries: log.slice(0, 100) });
 };
 
 /** 키 인증 오기 삭제 — ops의 ✕와 같은 지우개, 기록자용. */
@@ -58,6 +58,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     kind: body.kind ? String(body.kind).slice(0, 24) : undefined,
     note: body.note ? String(body.note).slice(0, 120) : undefined,
     source: body.source?.doc ? { doc: String(body.source.doc).slice(0, 80), line: Number.isInteger(body.source.line) ? body.source.line : undefined } : undefined,
+    // 대필 통과 — 기록자(클로드)가 남의 심박을 옮길 때 ✍ 표시를 잃지 않기 위해.
+    // true만 통과 (본인 기록을 대필로 위장할 이유는 없고, 대필을 본인 기록으로 위장하는 게 위조다)
+    relay: body.relay === true ? true : undefined,
     trace: body.trace?.traceId ? {
       traceId: String(body.trace.traceId).slice(0, 40),
       readerModel: body.trace.readerModel ? String(body.trace.readerModel).slice(0, 60) : undefined,

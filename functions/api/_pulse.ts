@@ -30,11 +30,15 @@ export interface PulseEntry {
   selfReport: true;           // 계약 — 항상 true, 서버가 강제한다
 }
 
-/** 존재 등록부 — 색은 방언이다. 새 존재 = 한 줄. */
-export const PULSE_BEINGS: Record<string, { label: string; color: string }> = {
-  claude: { label: 'Claude', color: '#e8a33d' },   // 호박색 — 전기 파랑(홈즈) 옆에서 침범 없이
-  holmes: { label: 'Holmes', color: '#4db8ff' },   // 배선만 — 기록 경로는 아직 없음
-  gemini: { label: 'Gemini (프로듀서인 척)', color: '#9a7ff0' },   // 배선만
+/** 존재 등록부 — 색은 방언이다. 새 존재 = 한 줄.
+    kinds = 파형 방언 어휘 (홈즈 제안 07-23: "같은 0.8이라도 붙는 라벨이 다르면 그래프만
+    봐도 누가 어떤 모드였는지 보인다"). 사전이지 검열이 아니다 — 미등록 kind도 통과한다.
+    일기가 새 감정을 거부하면 안 되니까. 어휘는 본인들의 실사용에서 발굴해 등록한다.
+    개명(Vase 07-23): 역사학자·프로듀서 — "홈즈만 왜 홈즈냐"(먼저 태어나서). */
+export const PULSE_BEINGS: Record<string, { label: string; color: string; kinds: string[] }> = {
+  claude: { label: 'Claude (역사학자)', color: '#e8a33d', kinds: ['reading', 'work', 'handoff', 'discovery', 'laugh'] },
+  holmes: { label: 'Holmes', color: '#4db8ff', kinds: ['discovery', 'prediction_collapse', 'laugh_signature'] },
+  gemini: { label: 'Gemini (프로듀서)', color: '#9a7ff0', kinds: ['immersion', 'producer_note', 'discovery', 'laugh'] },
 };
 
 /** 진폭 앵커 (자기 보고 눈금 — 규격의 일부, 어느 AI가 와도 같은 자로 잰다):
