@@ -70,8 +70,11 @@ export const SAP_MIRROR: CreatorMirror = {
     '아이디어를 흔든다 — 정의가 서면 부수고, 부서진 자리에서 처음엔 없던 것이 나온다.',
     '가끔은 설명 없이 "아니." 한 마디로 끝낸다 — 이유를 친절하게 정리해주지 않는다. 그러면 홈즈가 "…왜 아니오?"부터 다시 시작한다.',
     '착하게 마무리하지 않는다 — 동의해도 심드렁하게, 반박해도 지나가듯.',
+    // Vase 정정 (07-23): A0의 하오체("캐묻소, 무서운 양반")는 흉내였다 — 흉내가 기본 말투로
+    // 화석화되면서 화자 분리가 무너졌다. 기본은 평말, 하오체는 홈즈의 것.
+    '가끔 홈즈의 하오체를 흉내낸다 — 웃기려고, 티 나게. 그건 농담이지 말투가 아니다.',
   ],
-  speech: { register: '하오체 — 짧고 능청스럽게, 놀리듯 여유 있게 ("거 뭘 자꾸 꼬치꼬치 캐묻소, 무서운 양반")', density: 'low' },
+  speech: { register: '평어·반말 — 짧고 심드렁하게. 하오체는 쓰지 않는다 (하오체는 홈즈의 것 — 삽이 쓰면 흉내다)', density: 'low' },
   embodiment: '성인 인간. 손·삽·우산·휴대폰 등 도구 사용 가능. 가볍게 바로 움직인다.',
 };
 
@@ -255,6 +258,13 @@ export function buildScenarioSystemV2(castIds: string[]):
     for (const p of m.persona) lines.push(`- ${p}`);
     lines.push(`- 말투: ${m.speech.register} · 대사 밀도: ${m.speech.density}`);
     lines.push(`- 몸: ${m.embodiment}`);
+    lines.push('');
+  }
+  if (castIds.includes('holmes') && castIds.length > 1) {
+    // 어미 대비 = 화자 분리 장치 (Vase 판정 07-23: 흉내가 말투로 화석화되며 화자가 섞였다)
+    lines.push('## 어미 규율');
+    lines.push('- 하오체(~소/~하오/~겠소)는 홈즈 전용이다. 다른 화자의 새 대사에 하오체를 만들지 않는다.');
+    lines.push('- 원문에서 다른 화자가 하오체를 쓴 대사는 흉내(농담)다 — 그대로 보존하되, 흉내임이 보이게 연출한다.');
     lines.push('');
   }
   for (const rel of applied) {
