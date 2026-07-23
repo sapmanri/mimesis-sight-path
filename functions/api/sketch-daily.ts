@@ -152,21 +152,20 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     day = built;
   }
 
-  // 실사고(07-23 밤): 30초 클라이언트(크론) 타임아웃이 재시도 중인 실행을 끊었다 —
-  // 자동 생성 성공률 0%의 두 번째 원인. 무거운 생성은 백그라운드로, 응답은 즉시.
-  context.waitUntil(generateDaily(env, date, day).catch(async (e) => {
-    await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-      date, at: Date.now(), trialId: 'bg-crash', picks: [], reco: null,
-      errors: [`bg_crash: ${String(e).slice(0, 200)}`],
-    }));
-  }));
-  return json(202, {
-    ok: true, accepted: true, date, memoryEventId: day.memoryEventId,
-    note: '하루는 접혔고 생성은 백그라운드에서 계속된다 — 결과는 실험실 🌙 패널 (조건 ⑤ 유지)',
+  // 실측 확정(07-24): 응답 이후의 백그라운드 실행(waitUntil)은 이 환경에서 기록을 남기지
+  // 못한다 (202 후 무변화 2회 실증). 결론: 30초 안에 동기로 끝내고, 한 장 끝날 때마다
+  // 즉시 기록한다 — 도중에 끊겨도 부분 결과가 남는다.
+  const summary = await generateDaily(env, date, day, context);
+  return json(summary.made > 0 ? 200 : 502, {
+    ok: summary.made > 0, date, memoryEventId: day.memoryEventId,
+    generated: summary.made, trialId: summary.trialId, errors: summary.errors,
+    next: '아침에 실험실 🌙에서 📌 → 🕊 (조건 ⑤ — 채택·발행은 사람)',
   });
 };
 
-async function generateDaily(env: Env, date: string, day: DayMemory): Promise<void> {
+async function generateDaily(
+  env: Env, date: string, day: DayMemory, context: Parameters<PagesFunction<Env>>[0],
+): Promise<{ made: number; trialId: string; errors: string[] }> {
   // 생성 준비 — 확정 레시피 그대로 (수동 흐름과 동일 재료)
   const provider = selectProvider('workers-ai', env);
   const sceneEn = await translateScene(env, day.event.lines).catch(() => null);
@@ -183,34 +182,39 @@ async function generateDaily(env: Env, date: string, day: DayMemory): Promise<vo
   const promptHash = hashPrompt(prompt);
   const trialId = `${date}-${hashPrompt(`${prompt}\n#refs:${refKeys.join(',')}|\n#steps:${DAILY_STEPS}`)}`;
 
-  // ④⑤ 3장 생성 — 날짜 파생 seed, 생성까지만
   const base = dailySeed(date);
   const made: TrialRecord[] = [];
   const errors: string[] = [...subjTr.notes];
   const judged: { seed: number; bytes: ArrayBuffer }[] = [];
   const TRANSIENT_AI = /3040|5030|429|capacity|timeout|temporarily/i;
+  let useRefs = refs.length > 0;   // 한 번 일시 오류가 나면 남은 장 전부 무참조로 강등 (시간 절약 + 확정 그림체가 원래 무참조)
+
+  const persist = async (status: 'running' | 'done') => {
+    await env.PLANET.put(RECO_KEY(date), JSON.stringify({
+      date, at: Date.now(), trialId, status,
+      picks: made.map((m) => ({ seed: m.seed, r2Key: m.r2Key })),
+      reco: null, errors,
+    }));
+    const metaRaw = await env.PLANET.get(META_KEY);
+    const prev: TrialRecord[] = metaRaw ? JSON.parse(metaRaw) : [];
+    const others = prev.filter((r) => r.trialId !== trialId);
+    await env.PLANET.put(META_KEY, JSON.stringify([...made.slice().reverse(), ...others].slice(0, META_KEEP)));
+  };
+
   for (let n = 0; n < 3; n++) {
-    const gen = (useRefs: boolean) => provider.generate(env, {
-      plan: { memory: day.event, prompt, referenceKeys: useRefs ? refKeys : [] },
+    const gen = (withRefs: boolean) => provider.generate(env, {
+      plan: { memory: day.event, prompt, referenceKeys: withRefs ? refKeys : [] },
       model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
-      references: useRefs ? refs : [], seed: base + n,
+      references: withRefs ? refs : [], seed: base + n,
     });
-    let usedRefs = refs.length > 0;
-    let art = await gen(usedRefs);
-    // 일시 오류 재시도 — 첫 실전(07-23)에서 AiError 3040/5030 3연속으로 전멸
-    for (let attempt = 1; attempt < 3 && 'error' in art && TRANSIENT_AI.test(String(art.error)); attempt++) {
-      await new Promise((r) => setTimeout(r, 800 * attempt));
-      art = await gen(usedRefs);
-    }
-    // 실사고(07-23 재실행): 참조 2장을 실은 호출만 3040 반복, 무참조는 성공 —
-    // 마지막 수단: 무참조 폴백. 확정 그림체(07-20)가 원래 무참조 텍스트-only였다.
-    if ('error' in art && TRANSIENT_AI.test(String(art.error)) && usedRefs) {
-      usedRefs = false;
-      errors.push(`#${n}: refs_dropped_after_transient — 무참조 폴백`);
+    let art = await gen(useRefs);
+    if ('error' in art && TRANSIENT_AI.test(String(art.error)) && useRefs) {
+      errors.push(`#${n}: refs_dropped_after_transient — 무참조 강등`);
+      useRefs = false;
       art = await gen(false);
     }
-    if ('error' in art) { errors.push(`#${n}: ${art.error}`); continue; }
-    if (!art.bytes) { errors.push(`#${n}: empty`); continue; }
+    if ('error' in art) { errors.push(`#${n}: ${art.error}`); await persist('running'); continue; }
+    if (!art.bytes) { errors.push(`#${n}: empty`); await persist('running'); continue; }
     const r2Key = trialKey(trialId, DAILY_MODEL, n);
     await env.CAPTURES.put(r2Key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
     judged.push({ seed: base + n, bytes: art.bytes });
@@ -218,22 +222,23 @@ async function generateDaily(env: Env, date: string, day: DayMemory): Promise<vo
       trialId, createdAt: Date.now(), providerId: 'workers-ai', model: DAILY_MODEL,
       params: { steps: DAILY_STEPS, width: 1024, height: 1024 }, seed: base + n, r2Key,
       promptHash, sketchVersion: SKETCH_VERSION, note: 'daily-auto (조건표 A — 채택·발행은 사람)',
-      referenceApplied: usedRefs, role: usedRefs ? 'candidate' : 'control',
-      sceneLabel: null, refKeys: usedRefs ? refKeys : [],
+      referenceApplied: useRefs, role: useRefs ? 'candidate' : 'control',
+      sceneLabel: null, refKeys: useRefs ? refKeys : [],
     });
+    await persist('running');   // 한 장 끝날 때마다 즉시 — 도중에 끊겨도 이 장은 산다
   }
-  // 최근 생성 목록에 편입 — 아침의 📌·🕊는 실험실 기존 UI 그대로
-  const metaRaw = await env.PLANET.get(META_KEY);
-  const prev: TrialRecord[] = metaRaw ? JSON.parse(metaRaw) : [];
-  await env.PLANET.put(META_KEY, JSON.stringify([...made, ...prev].slice(0, META_KEEP)));
+  await persist('done');
 
-  // ⑥ 판정기 — 기록만
-  const reco = made.length ? await judgeCandidates(env, day, judged) : null;
-  await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-    date, at: Date.now(), trialId,
-    picks: made.map((m) => ({ seed: m.seed, r2Key: m.r2Key })),
-    reco, errors,
-  }));
+  // ⑥ 판정기 — 기록용 보너스. 살아남으면 좋고, 죽어도 그림은 이미 저장됐다.
+  if (made.length) {
+    context.waitUntil((async () => {
+      const reco = await judgeCandidates(env, day, judged);
+      const raw = await env.PLANET.get(RECO_KEY(date));
+      const cur = raw ? JSON.parse(raw) : {};
+      await env.PLANET.put(RECO_KEY(date), JSON.stringify({ ...cur, reco }));
+    })().catch(() => { /* 판정기 실패가 그림을 지우지 않는다 */ }));
+  }
 
-  console.log(`sketch-daily bg date=${date} made=${made.length} reco=${reco?.pick ?? '-'} errors=${errors.length}`);
+  console.log(`sketch-daily sync date=${date} made=${made.length} errors=${errors.length}`);
+  return { made: made.length, trialId, errors };
 }
