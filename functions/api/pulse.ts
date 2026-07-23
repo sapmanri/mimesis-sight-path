@@ -12,9 +12,39 @@ const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+const keyGate = (request: Request, env: Env): Response | null => {
   if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
   if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
+  return null;
+};
+
+/** 키 인증 읽기 — 기록자가 자기 일기를 읽는 길 (공개 GET은 여전히 없음). */
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const gate = keyGate(request, env);
+  if (gate) return gate;
+  const raw = await withTransientRetry('pulse_read', () => env.PLANET.get(PULSE_LOG_KEY));
+  const log: PulseEntry[] = raw ? JSON.parse(raw) : [];
+  return json(200, { ok: true, count: log.length, entries: log.slice(0, 100) });
+};
+
+/** 키 인증 오기 삭제 — ops의 ✕와 같은 지우개, 기록자용. */
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+  const gate = keyGate(request, env);
+  if (gate) return gate;
+  const atRaw = new URL(request.url).searchParams.get('at');
+  const at = Number(atRaw);
+  if (!atRaw || !Number.isFinite(at)) return json(400, { ok: false, error: 'at_required' });
+  const raw = await withTransientRetry('pulse_del_get', () => env.PLANET.get(PULSE_LOG_KEY));
+  const log: PulseEntry[] = raw ? JSON.parse(raw) : [];
+  const next = log.filter((e) => e.at !== at);
+  if (next.length === log.length) return json(404, { ok: false, error: 'not_found' });
+  await withTransientRetry('pulse_del_put', () => env.PLANET.put(PULSE_LOG_KEY, JSON.stringify(next)));
+  return json(200, { ok: true, removed: log.length - next.length });
+};
+
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const gate = keyGate(request, env);
+  if (gate) return gate;
 
   let body: Partial<PulseEntry>;
   try { body = (await request.json()) as Partial<PulseEntry>; } catch { return json(400, { ok: false, error: 'bad_json' }); }
