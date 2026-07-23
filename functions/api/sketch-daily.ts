@@ -102,7 +102,9 @@ async function judgeCandidates(
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
   // 날짜 오버라이드 — 이미 접힌 날짜의 생성 재시도 전용. 과거 하루를 새로 접지는 않는다.
-  const dateParam = new URL(request.url).searchParams.get('date');
+  const url = new URL(request.url);
+  const dateParam = url.searchParams.get('date');
+  const resetParam = url.searchParams.get('reset') === '1';
   if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return json(400, { ok: false, error: 'bad_date' });
   const date = dateParam ?? kstDate(Date.now());
 
@@ -131,8 +133,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // 접힌 하루를 재사용해 생성만 재시도한다 (하루는 다시 접지 않는다).
     const recoRaw = await env.PLANET.get(RECO_KEY(date));
     const prevReco = recoRaw ? JSON.parse(recoRaw) as { picks?: unknown[]; errors?: unknown[]; skipped?: string } : null;
-    const resumable = !!prevReco && !prevReco.skipped
-      && Array.isArray(prevReco.picks) && prevReco.picks.length < 3;
+    const resumable = (!!prevReco && !prevReco.skipped
+      && Array.isArray(prevReco.picks) && prevReco.picks.length < 3)
+      || (resetParam && pulseRetryOk);   // 리셋: 시험분 폐기 후 정규 품질로 재생성 (재시도 경로 전용)
     if (!resumable) {
       await recordSkip('human_day');
       return json(200, { ok: true, skipped: 'human_day', detail: `${date}의 하루가 이미 서 있다 — 사람 우선(조건 ②)` });
@@ -159,7 +162,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   // 실측 확정(07-24): 응답 이후의 백그라운드 실행(waitUntil)은 이 환경에서 기록을 남기지
   // 못한다 (202 후 무변화 2회 실증). 결론: 30초 안에 동기로 끝내고, 한 장 끝날 때마다
   // 즉시 기록한다 — 도중에 끊겨도 부분 결과가 남는다.
-  const summary = await generateDaily(env, date, day, context);
+  const summary = await generateDaily(env, date, day, context, resetParam && pulseRetryOk);
   return json(summary.made > 0 || summary.done ? 200 : 502, {
     ok: summary.made > 0 || summary.done, date, memoryEventId: day.memoryEventId,
     generatedNow: summary.made, totalImages: summary.total, done: summary.done,
@@ -169,15 +172,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 };
 
 async function generateDaily(
-  env: Env, date: string, day: DayMemory, context: Parameters<PagesFunction<Env>>[0],
+  env: Env, date: string, day: DayMemory, context: Parameters<PagesFunction<Env>>[0], reset = false,
 ): Promise<{ made: number; total: number; done: boolean; trialId: string; errors: string[] }> {
   // 이어 그리기 상태 — flux-2-dev는 느리다(장당 10~20초). 한 호출은 한 장만 (30초 창 준수).
   const prevRaw = await env.PLANET.get(RECO_KEY(date));
   const prev = prevRaw ? JSON.parse(prevRaw) as {
     trialId?: string; picks?: { seed: number; r2Key: string }[]; errors?: string[]; skipped?: string;
   } : null;
-  const priorPicks = (!prev?.skipped && Array.isArray(prev?.picks)) ? prev!.picks! : [];
+  const priorPicks = (!reset && !prev?.skipped && Array.isArray(prev?.picks)) ? prev!.picks! : [];
   const errors: string[] = [];
+  if (reset && (prev?.picks?.length ?? 0) > 0) errors.push(`reset: 이전 ${prev!.picks!.length}장 폐기 후 정규 품질로 재생성`);
   if (priorPicks.length >= 3) {
     return { made: 0, total: 3, done: true, trialId: prev?.trialId ?? '', errors: ['already_complete'] };
   }
