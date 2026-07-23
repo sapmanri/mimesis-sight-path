@@ -24,6 +24,7 @@ interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
   CAPTURES: R2Bucket;
   PUBLISH_KEY?: string;
+  PULSE_KEY?: string;
   ANTHROPIC_API_KEY?: string;
 }
 
@@ -99,15 +100,18 @@ async function judgeCandidates(
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
-  // autopost와 같은 보호 — Access 밖(크론)이므로 키가 유일한 문
-  if (!env.PUBLISH_KEY) return json(500, { ok: false, error: 'PUBLISH_KEY not configured' });
-  if (request.headers.get('X-Publish-Key') !== env.PUBLISH_KEY) return json(403, { ok: false, error: 'forbidden' });
-
-  // 날짜 오버라이드 (07-24: "검증은 다음 크론에게" 패턴 제거 — 즉시 재시도 경로)
-  // ?date=YYYY-MM-DD — 이미 접힌 날짜의 생성 재시도 전용. 과거 하루를 새로 접지는 않는다.
+  // 날짜 오버라이드 — 이미 접힌 날짜의 생성 재시도 전용. 과거 하루를 새로 접지는 않는다.
   const dateParam = new URL(request.url).searchParams.get('date');
   if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return json(400, { ok: false, error: 'bad_date' });
   const date = dateParam ?? kstDate(Date.now());
+
+  // 인증: 크론(PUBLISH_KEY)이 정문. 재시도(?date=)에 한해 PULSE_KEY 보조 허용 —
+  // (07-24: 검증·완주를 기록자가 직접 할 수 있어야 한다. 48시간 실사고의 구조적 수리.
+  //  하루를 접는 권한은 여전히 PUBLISH_KEY 전용이다.)
+  if (!env.PUBLISH_KEY) return json(500, { ok: false, error: 'PUBLISH_KEY not configured' });
+  const pubOk = request.headers.get('X-Publish-Key') === env.PUBLISH_KEY;
+  const pulseRetryOk = !!dateParam && !!env.PULSE_KEY && request.headers.get('X-Pulse-Key') === env.PULSE_KEY;
+  if (!pubOk && !pulseRetryOk) return json(403, { ok: false, error: 'forbidden' });
 
   // 건너뛰어도 기록은 남긴다 — 아침 실험실이 "왜 없는지"를 말할 수 있게 (침묵이 버그다).
   // 이미 생성 기록이 있으면 덮지 않는다.
@@ -126,10 +130,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // 접힌 하루를 재사용해 생성만 재시도한다 (하루는 다시 접지 않는다).
     const recoRaw = await env.PLANET.get(RECO_KEY(date));
     const prevReco = recoRaw ? JSON.parse(recoRaw) as { picks?: unknown[]; errors?: unknown[]; skipped?: string } : null;
-    const failedAuto = !!prevReco && !prevReco.skipped
-      && Array.isArray(prevReco.picks) && prevReco.picks.length === 0
-      && Array.isArray(prevReco.errors) && prevReco.errors.length > 0;
-    if (!failedAuto) {
+    const resumable = !!prevReco && !prevReco.skipped
+      && Array.isArray(prevReco.picks) && prevReco.picks.length < 3;
+    if (!resumable) {
       await recordSkip('human_day');
       return json(200, { ok: true, skipped: 'human_day', detail: `${date}의 하루가 이미 서 있다 — 사람 우선(조건 ②)` });
     }
@@ -156,22 +159,36 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   // 못한다 (202 후 무변화 2회 실증). 결론: 30초 안에 동기로 끝내고, 한 장 끝날 때마다
   // 즉시 기록한다 — 도중에 끊겨도 부분 결과가 남는다.
   const summary = await generateDaily(env, date, day, context);
-  return json(summary.made > 0 ? 200 : 502, {
-    ok: summary.made > 0, date, memoryEventId: day.memoryEventId,
-    generated: summary.made, trialId: summary.trialId, errors: summary.errors,
-    next: '아침에 실험실 🌙에서 📌 → 🕊 (조건 ⑤ — 채택·발행은 사람)',
+  return json(summary.made > 0 || summary.done ? 200 : 502, {
+    ok: summary.made > 0 || summary.done, date, memoryEventId: day.memoryEventId,
+    generatedNow: summary.made, totalImages: summary.total, done: summary.done,
+    trialId: summary.trialId, errors: summary.errors,
+    next: summary.done ? '3장 완성 — 아침에 📌 → 🕊' : '아직 부족 — 같은 호출을 다시 (한 호출 = 한 장)',
   });
 };
 
 async function generateDaily(
   env: Env, date: string, day: DayMemory, context: Parameters<PagesFunction<Env>>[0],
-): Promise<{ made: number; trialId: string; errors: string[] }> {
-  // 생성 준비 — 확정 레시피 그대로 (수동 흐름과 동일 재료)
+): Promise<{ made: number; total: number; done: boolean; trialId: string; errors: string[] }> {
+  // 이어 그리기 상태 — flux-2-dev는 느리다(장당 10~20초). 한 호출은 한 장만 (30초 창 준수).
+  const prevRaw = await env.PLANET.get(RECO_KEY(date));
+  const prev = prevRaw ? JSON.parse(prevRaw) as {
+    trialId?: string; picks?: { seed: number; r2Key: string }[]; errors?: string[]; skipped?: string;
+  } : null;
+  const priorPicks = (!prev?.skipped && Array.isArray(prev?.picks)) ? prev!.picks! : [];
+  const errors: string[] = [];
+  if (priorPicks.length >= 3) {
+    return { made: 0, total: 3, done: true, trialId: prev?.trialId ?? '', errors: ['already_complete'] };
+  }
+  const n = priorPicks.length;   // 다음에 그릴 장 번호 (seed 결정론 유지)
+
+  // 생성 준비 — 확정 레시피 그대로 (수동 흐름과 동일 재료·동일 모델 flux-2-dev)
   const provider = selectProvider('workers-ai', env);
   const sceneEn = await translateScene(env, day.event.lines).catch(() => null);
   const subjTr = day.event.targetLabel
     ? await translateSubjects(env, [day.event.targetLabel])
     : { subjects: [] as string[], notes: [] as string[] };
+  errors.push(...subjTr.notes);
   const refKeys = orderCharacterRefs(DAILY_REFS);
   const refs: { name: string; bytes: ArrayBuffer; contentType: string }[] = [];
   for (const key of refKeys) {
@@ -180,65 +197,69 @@ async function generateDaily(
   }
   const prompt = buildImagePrompt(day.event, null, sceneEn, subjTr.subjects, { characters: refs.length, styles: 0 });
   const promptHash = hashPrompt(prompt);
-  const trialId = `${date}-${hashPrompt(`${prompt}\n#refs:${refKeys.join(',')}|\n#steps:${DAILY_STEPS}`)}`;
+  // trialId는 첫 호출 것을 계승 — 번역이 매번 조금 달라도 같은 하루의 한 시도로 묶는다
+  const trialId = prev?.trialId && !prev.skipped
+    ? prev.trialId
+    : `${date}-${hashPrompt(`${prompt}\n#refs:${refKeys.join(',')}|\n#steps:${DAILY_STEPS}`)}`;
 
   const base = dailySeed(date);
-  const made: TrialRecord[] = [];
-  const errors: string[] = [...subjTr.notes];
-  const judged: { seed: number; bytes: ArrayBuffer }[] = [];
   const TRANSIENT_AI = /3040|5030|429|capacity|timeout|temporarily/i;
-  let useRefs = refs.length > 0;   // 한 번 일시 오류가 나면 남은 장 전부 무참조로 강등 (시간 절약 + 확정 그림체가 원래 무참조)
+  const gen = (withRefs: boolean) => provider.generate(env, {
+    plan: { memory: day.event, prompt, referenceKeys: withRefs ? refKeys : [] },
+    model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
+    references: withRefs ? refs : [], seed: base + n,
+  });
+  let usedRefs = refs.length > 0;
+  let art = await gen(usedRefs);
+  if ('error' in art && TRANSIENT_AI.test(String(art.error)) && usedRefs) {
+    errors.push(`#${n}: refs_dropped_after_transient — 무참조 재시도`);
+    usedRefs = false;
+    art = await gen(false);
+  }
 
-  const persist = async (status: 'running' | 'done') => {
+  const persist = async (newPick: { seed: number; r2Key: string } | null) => {
     await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-      date, at: Date.now(), trialId, status,
-      picks: made.map((m) => ({ seed: m.seed, r2Key: m.r2Key })),
-      reco: null, errors,
+      date, at: Date.now(), trialId,
+      picks: newPick ? [...priorPicks, newPick] : priorPicks,
+      reco: null,
+      errors: [...(prev?.errors ?? []).filter((e) => typeof e === 'string'), ...errors],
+      status: (newPick ? priorPicks.length + 1 : priorPicks.length) >= 3 ? 'done' : 'partial',
     }));
-    const metaRaw = await env.PLANET.get(META_KEY);
-    const prev: TrialRecord[] = metaRaw ? JSON.parse(metaRaw) : [];
-    const others = prev.filter((r) => r.trialId !== trialId);
-    await env.PLANET.put(META_KEY, JSON.stringify([...made.slice().reverse(), ...others].slice(0, META_KEEP)));
   };
 
-  for (let n = 0; n < 3; n++) {
-    const gen = (withRefs: boolean) => provider.generate(env, {
-      plan: { memory: day.event, prompt, referenceKeys: withRefs ? refKeys : [] },
-      model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
-      references: withRefs ? refs : [], seed: base + n,
-    });
-    let art = await gen(useRefs);
-    if ('error' in art && TRANSIENT_AI.test(String(art.error)) && useRefs) {
-      errors.push(`#${n}: refs_dropped_after_transient — 무참조 강등`);
-      useRefs = false;
-      art = await gen(false);
-    }
-    if ('error' in art) { errors.push(`#${n}: ${art.error}`); await persist('running'); continue; }
-    if (!art.bytes) { errors.push(`#${n}: empty`); await persist('running'); continue; }
-    const r2Key = trialKey(trialId, DAILY_MODEL, n);
-    await env.CAPTURES.put(r2Key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
-    judged.push({ seed: base + n, bytes: art.bytes });
-    made.push({
-      trialId, createdAt: Date.now(), providerId: 'workers-ai', model: DAILY_MODEL,
-      params: { steps: DAILY_STEPS, width: 1024, height: 1024 }, seed: base + n, r2Key,
-      promptHash, sketchVersion: SKETCH_VERSION, note: 'daily-auto (조건표 A — 채택·발행은 사람)',
-      referenceApplied: useRefs, role: useRefs ? 'candidate' : 'control',
-      sceneLabel: null, refKeys: useRefs ? refKeys : [],
-    });
-    await persist('running');   // 한 장 끝날 때마다 즉시 — 도중에 끊겨도 이 장은 산다
-  }
-  await persist('done');
+  if ('error' in art) { errors.push(`#${n}: ${art.error}`); await persist(null); return { made: 0, total: priorPicks.length, done: false, trialId, errors }; }
+  if (!art.bytes) { errors.push(`#${n}: empty`); await persist(null); return { made: 0, total: priorPicks.length, done: false, trialId, errors }; }
 
-  // ⑥ 판정기 — 기록용 보너스. 살아남으면 좋고, 죽어도 그림은 이미 저장됐다.
-  if (made.length) {
+  const r2Key = trialKey(trialId, DAILY_MODEL, n);
+  await env.CAPTURES.put(r2Key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
+  const record: TrialRecord = {
+    trialId, createdAt: Date.now(), providerId: 'workers-ai', model: DAILY_MODEL,
+    params: { steps: DAILY_STEPS, width: 1024, height: 1024 }, seed: base + n, r2Key,
+    promptHash, sketchVersion: SKETCH_VERSION, note: 'daily-auto (조건표 A — 채택·발행은 사람)',
+    referenceApplied: usedRefs, role: usedRefs ? 'candidate' : 'control',
+    sceneLabel: null, refKeys: usedRefs ? refKeys : [],
+  };
+  const metaRaw = await env.PLANET.get(META_KEY);
+  const prevMeta: TrialRecord[] = metaRaw ? JSON.parse(metaRaw) : [];
+  await env.PLANET.put(META_KEY, JSON.stringify([record, ...prevMeta.filter((r) => r.r2Key !== r2Key)].slice(0, META_KEEP)));
+  await persist({ seed: base + n, r2Key });
+
+  const total = priorPicks.length + 1;
+  // 3장 완성 시 판정기 — 보너스 (완주 확인된 그림들만 대상, 실패해도 그림은 안전)
+  if (total >= 3) {
     context.waitUntil((async () => {
-      const reco = await judgeCandidates(env, day, judged);
+      const imgs: { seed: number; bytes: ArrayBuffer }[] = [];
+      for (const pk of [...priorPicks, { seed: base + n, r2Key }]) {
+        const obj = await env.CAPTURES.get(pk.r2Key);
+        if (obj) imgs.push({ seed: pk.seed, bytes: await obj.arrayBuffer() });
+      }
+      const reco = await judgeCandidates(env, day, imgs);
       const raw = await env.PLANET.get(RECO_KEY(date));
       const cur = raw ? JSON.parse(raw) : {};
       await env.PLANET.put(RECO_KEY(date), JSON.stringify({ ...cur, reco }));
     })().catch(() => { /* 판정기 실패가 그림을 지우지 않는다 */ }));
   }
 
-  console.log(`sketch-daily sync date=${date} made=${made.length} errors=${errors.length}`);
-  return { made: made.length, trialId, errors };
+  console.log(`sketch-daily one-shot date=${date} n=${n} total=${total} errors=${errors.length}`);
+  return { made: 1, total, done: total >= 3, trialId, errors };
 }

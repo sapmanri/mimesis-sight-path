@@ -18,13 +18,19 @@ const keyGate = (request: Request, env: Env): Response | null => {
   return null;
 };
 
-/** 키 인증 읽기 — 기록자가 자기 일기를 읽는 길 (공개 GET은 여전히 없음). */
+/** 키 인증 읽기 — 기록자가 자기 일기를 읽는 길 (공개 GET은 여전히 없음).
+    ?reco=YYYY-MM-DD — 그날 그림일기 생성 기록도 함께 (07-24: 검증을 남에게 시키지 않기). */
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const gate = keyGate(request, env);
   if (gate) return gate;
+  const recoDate = new URL(request.url).searchParams.get('reco');
+  if (recoDate && /^\d{4}-\d{2}-\d{2}$/.test(recoDate)) {
+    const recoRaw = await withTransientRetry('pulse_reco', () => env.PLANET.get(`sketch_daily_reco:${recoDate}`));
+    return json(200, { ok: true, version: 'pulse-v0.3', reco: recoRaw ? JSON.parse(recoRaw) : null });
+  }
   const raw = await withTransientRetry('pulse_read', () => env.PLANET.get(PULSE_LOG_KEY));
   const log: PulseEntry[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, version: 'pulse-v0.2', count: log.length, entries: log.slice(0, 100) });
+  return json(200, { ok: true, version: 'pulse-v0.3', count: log.length, entries: log.slice(0, 100) });
 };
 
 /** 키 인증 오기 삭제 — ops의 ✕와 같은 지우개, 기록자용. */
