@@ -165,19 +165,24 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const judged: { seed: number; bytes: ArrayBuffer }[] = [];
   const TRANSIENT_AI = /3040|5030|429|capacity|timeout|temporarily/i;
   for (let n = 0; n < 3; n++) {
-    let art = await provider.generate(env, {
-      plan: { memory: day.event, prompt, referenceKeys: refKeys },
+    const gen = (useRefs: boolean) => provider.generate(env, {
+      plan: { memory: day.event, prompt, referenceKeys: useRefs ? refKeys : [] },
       model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
-      references: refs, seed: base + n,
+      references: useRefs ? refs : [], seed: base + n,
     });
+    let usedRefs = refs.length > 0;
+    let art = await gen(usedRefs);
     // 일시 오류 재시도 — 첫 실전(07-23)에서 AiError 3040/5030 3연속으로 전멸
     for (let attempt = 1; attempt < 3 && 'error' in art && TRANSIENT_AI.test(String(art.error)); attempt++) {
       await new Promise((r) => setTimeout(r, 800 * attempt));
-      art = await provider.generate(env, {
-        plan: { memory: day.event, prompt, referenceKeys: refKeys },
-        model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
-        references: refs, seed: base + n,
-      });
+      art = await gen(usedRefs);
+    }
+    // 실사고(07-23 재실행): 참조 2장을 실은 호출만 3040 반복, 무참조는 성공 —
+    // 마지막 수단: 무참조 폴백. 확정 그림체(07-20)가 원래 무참조 텍스트-only였다.
+    if ('error' in art && TRANSIENT_AI.test(String(art.error)) && usedRefs) {
+      usedRefs = false;
+      errors.push(`#${n}: refs_dropped_after_transient — 무참조 폴백`);
+      art = await gen(false);
     }
     if ('error' in art) { errors.push(`#${n}: ${art.error}`); continue; }
     if (!art.bytes) { errors.push(`#${n}: empty`); continue; }
@@ -188,8 +193,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       trialId, createdAt: Date.now(), providerId: 'workers-ai', model: DAILY_MODEL,
       params: { steps: DAILY_STEPS, width: 1024, height: 1024 }, seed: base + n, r2Key,
       promptHash, sketchVersion: SKETCH_VERSION, note: 'daily-auto (조건표 A — 채택·발행은 사람)',
-      referenceApplied: refs.length > 0, role: refs.length > 0 ? 'candidate' : 'control',
-      sceneLabel: null, refKeys,
+      referenceApplied: usedRefs, role: usedRefs ? 'candidate' : 'control',
+      sceneLabel: null, refKeys: usedRefs ? refKeys : [],
     });
   }
   // 최근 생성 목록에 편입 — 아침의 📌·🕊는 실험실 기존 UI 그대로
