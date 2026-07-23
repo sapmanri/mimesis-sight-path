@@ -103,7 +103,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!env.PUBLISH_KEY) return json(500, { ok: false, error: 'PUBLISH_KEY not configured' });
   if (request.headers.get('X-Publish-Key') !== env.PUBLISH_KEY) return json(403, { ok: false, error: 'forbidden' });
 
-  const date = kstDate(Date.now());
+  // 날짜 오버라이드 (07-24: "검증은 다음 크론에게" 패턴 제거 — 즉시 재시도 경로)
+  // ?date=YYYY-MM-DD — 이미 접힌 날짜의 생성 재시도 전용. 과거 하루를 새로 접지는 않는다.
+  const dateParam = new URL(request.url).searchParams.get('date');
+  if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return json(400, { ok: false, error: 'bad_date' });
+  const date = dateParam ?? kstDate(Date.now());
 
   // 건너뛰어도 기록은 남긴다 — 아침 실험실이 "왜 없는지"를 말할 수 있게 (침묵이 버그다).
   // 이미 생성 기록이 있으면 덮지 않는다.
@@ -131,6 +135,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
     day = JSON.parse(storedRaw) as DayMemory;
   } else {
+    if (dateParam) {
+      return json(400, { ok: false, error: `not_folded: ${date} — 날짜 지정은 접힌 하루의 재시도 전용 (과거 하루를 새로 접지 않는다)` });
+    }
     // ③ 하루 접기 — 관찰이 없으면 접지 않는다
     const capturesRaw = await env.PLANET.get('capture_meta');
     const captures: CaptureLike[] = capturesRaw ? JSON.parse(capturesRaw) : [];
