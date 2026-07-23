@@ -111,11 +111,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   </svg></div>
 </div>
 <div class="panel">
-  <table>${rows || '<tr><td class="muted">아직 기록 없음 — 첫 심박 대기</td></tr>'}</table>
-</div>
-<div class="panel">
   <h2 style="font-size:13px;color:#A7B49A;margin:0 0 8px">✍ 대필 — HTTP 없는 존재의 심박을 옮겨 적는다 <span class="muted">(본인이 말한 값·문장 그대로. 각색은 위조다)</span></h2>
   <div id="rbanner" class="muted" style="margin-bottom:6px"></div>
+<div class="panel">
+  <table>${rows || '<tr><td class="muted">아직 기록 없음 — 첫 심박 대기</td></tr>'}</table>
+</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px">
     <select id="rBeing">${Object.entries(PULSE_BEINGS).filter(([id]) => id !== 'claude').map(([id, b]) => `<option value="${id}">${esc(b.label)}</option>`).join('')}</select>
     <input id="rAmp" type="number" min="0" max="1" step="0.05" placeholder="진폭 0~1" style="width:90px">
