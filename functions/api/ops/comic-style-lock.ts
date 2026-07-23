@@ -30,8 +30,13 @@ export const PLACE_SLOTS: readonly string[] = PLACE_IDS.flatMap((pl) =>
 export const COMIC_STYLE_SLOTS = ['style_s1', 'style_s2', 'style_s3', 'style_s4', 'style_s5'] as const;
 export const IDENTITY_SLOTS: readonly string[] = IDENTITY_CREATORS.flatMap((c) =>
   [1, 2, 3, 4, 5].map((i) => `id_${c}_i${i}`));
+/** 소품 바이블 — 창작자별 소품 시트 (Vase 지시 07-23: 감지 없이, 출연하면 함께 실린다).
+    첫 등록: 삽 (안경·모자·노트·카메라 시트). 새 창작자 소품 = 여기 한 줄. */
+export const PROP_CREATORS = ['sap'] as const;
+export const PROP_SLOTS: readonly string[] = PROP_CREATORS.flatMap((c) =>
+  [1, 2, 3, 4, 5].map((i) => `pr_${c}_p${i}`));
 export const LOCK_SLOTS_V2: readonly string[] = [
-  ...STYLE_LOCK_NAMES, ...COMIC_STYLE_SLOTS, ...IDENTITY_SLOTS, ...PLACE_SLOTS,
+  ...STYLE_LOCK_NAMES, ...COMIC_STYLE_SLOTS, ...IDENTITY_SLOTS, ...PLACE_SLOTS, ...PROP_SLOTS,
 ];
 
 /** 슬롯 → 그룹. UI와 생성 경로가 같은 분류를 쓴다 (판정 4의 A/B/C). */
@@ -41,6 +46,8 @@ export function lockGroupOf(slot: string): string {
   if ((COMIC_STYLE_SLOTS as readonly string[]).includes(slot)) return 'style';
   const m = slot.match(/^id_([a-z]+)_i[1-5]$/);
   if (m) return `identity:${m[1]}`;
+  const pr = slot.match(/^pr_([a-z]+)_p[1-5]$/);
+  if (pr) return `prop:${pr[1]}`;
   const pl = slot.match(/^pl_([a-z]+)_p[1-5]$/);
   return pl ? `place:${pl[1]}` : 'unknown';
 }

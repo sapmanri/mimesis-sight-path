@@ -184,7 +184,7 @@ export const CAST_FORM_EN: Record<string, string> = {
   ppaekong: 'Ppaekong: the small white cat exactly as in the reference sheets',
 };
 
-export const V2_REF_CAPS = { style: 3, identityPerCreator: 4, place: 2, total: 13 };   // 제미나이 참조 한도(±14) 안
+export const V2_REF_CAPS = { style: 3, identityPerCreator: 4, place: 2, propPerCreator: 2, total: 13 };   // 제미나이 참조 한도(±14) 안
 
 /* ── Place Registry — 자주 등장하는 장소의 고정 (첫 장소: 작업실) ──
    장소 참조에서는 공간만 빌린다 — 사람·캐릭터는 절대 장소 이미지에서 오지 않는다. */
@@ -230,6 +230,17 @@ export function planV2Refs(
       warnings.push(`identity_refs_truncated: ${c} ${ids.length} → ${V2_REF_CAPS.identityPerCreator}`);
     }
     ids.slice(0, V2_REF_CAPS.identityPerCreator).forEach((s) => order.push({ slot: s, kind: `identity:${c}` }));
+  }
+  // 소품 바이블 — 출연자의 소품 시트는 감지 없이 함께 실린다 (Vase 지시 07-23).
+  // 장소와 같은 지위: 없으면 조용히 생략, 필수 아님.
+  for (const c of castIds) {
+    if (c === 'ppaekong') continue;
+    const props = [1, 2, 3, 4, 5].map((i) => `pr_${c}_p${i}`).filter((s) => loadedSlots.has(s));
+    if (!props.length) continue;
+    if (props.length > V2_REF_CAPS.propPerCreator) {
+      warnings.push(`prop_refs_truncated: ${c} ${props.length} → ${V2_REF_CAPS.propPerCreator}`);
+    }
+    props.slice(0, V2_REF_CAPS.propPerCreator).forEach((s) => order.push({ slot: s, kind: `prop:${c}` }));
   }
   for (const pl of placeIds) {
     const slots = [1, 2, 3, 4, 5].map((i) => `pl_${pl}_p${i}`).filter((s) => loadedSlots.has(s));
@@ -277,6 +288,12 @@ export function buildPagePromptV2(
   for (const c of idGroups) {
     const n = refPlan.filter((r) => r.kind === `identity:${c}`).length;
     refDesc.push(`images ${cursor + 1}–${cursor + n} define the identity of ${c}`);
+    cursor += n;
+  }
+  const propGroups = [...new Set(refPlan.filter((r) => r.kind.startsWith('prop:')).map((r) => r.kind.slice(5)))];
+  for (const pg of propGroups) {
+    const n = refPlan.filter((r) => r.kind === `prop:${pg}`).length;
+    refDesc.push(`images ${cursor + 1}–${cursor + n} are the PROP BIBLE of ${pg} — this character's recurring personal items (glasses, hats, notebook, camera etc.). Whenever ${pg} wears or uses such an item, match these exact designs. Borrow the ITEMS only: the person, face, hair and pose NEVER come from prop references`);
     cursor += n;
   }
   for (const pl of placeGroups) {

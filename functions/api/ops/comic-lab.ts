@@ -263,6 +263,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     { g: 'identity:sap',     label: '👤 Sap Identity',            max: 5 },
     { g: 'identity:vase',    label: '👤 Vase Identity',           max: 5 },
     { g: 'identity:holmes',  label: '〰 Holmes Identity',         max: 5 },
+    { g: 'prop:sap',         label: '🎒 Prop — 삽의 소품',        max: 5 },
     { g: 'place:workshop',   label: '🏠 Place — 작업실',          max: 5 },
     { g: 'panel',            label: '▦ Panel Bible (공용)',       max: 1 },
   ];

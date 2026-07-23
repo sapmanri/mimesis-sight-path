@@ -278,9 +278,11 @@ test('Lock v2 슬롯 — 그룹 분류와 레거시 보존 (S-04 판정 4)', asy
   assert.equal(lockGroupOf('id_holmes_i5'), 'identity:holmes');
   assert.ok(!isLockSlot('id_hacker_i1'), '미등록 Creator 슬롯 거부 (음성)');
   assert.ok(!isLockSlot('style_s6'), '슬롯 범위 밖 거부 (음성)');
-  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 20 + 5, '레거시6 + 스타일5 + 정체성20 + 장소5');
+  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 20 + 5 + 5, '레거시6 + 스타일5 + 정체성20 + 장소5 + 소품5');
   assert.equal(lockGroupOf('pl_workshop_p2'), 'place:workshop', 'Place Bible 그룹');
   assert.ok(!isLockSlot('pl_bedroom_p1'), '미등록 장소 거부 (음성)');
+  assert.equal(lockGroupOf('pr_sap_p1'), 'prop:sap', 'Prop Bible 그룹 (07-23 신설)');
+  assert.ok(!isLockSlot('pr_holmes_p1'), '미등록 소품 창작자 거부 (음성 — 등록은 PROP_CREATORS 한 줄)');
 });
 
 // ── S-04 5~7단: Genome 미러 + Relation 게이트 + 시나리오 v2 두뇌 파생 ──
@@ -390,6 +392,11 @@ test('참조 계획 — 순서·상한·경고 (조용한 상한 금지)', async
   // 전용 락이 생기면 그쪽 우선
   const byeoliDedicated = planV2Refs(['byeoli'], [], new Set(['id_byeoli_i1', 'ch00_master']));
   assert.equal(byeoliDedicated.order[0].slot, 'id_byeoli_i1', '전용 락 우선 — Lock 분리 원칙');
+  // Prop Bible (07-23): 출연자의 소품 시트는 감지 없이 함께 — 상한 2장, 없으면 조용히 생략
+  const prPlan = planV2Refs(['sap', 'holmes'], [], new Set(['id_sap_i1', 'id_holmes_i1', 'pr_sap_p1', 'pr_sap_p2', 'pr_sap_p3']));
+  assert.equal(prPlan.order.filter((r) => r.kind === 'prop:sap').length, V2_REF_CAPS.propPerCreator, '소품 상한 2장');
+  assert.ok(prPlan.warnings.some((w) => w.includes('prop_refs_truncated: sap')), '잘렸으면 말한다');
+  assert.ok(!prPlan.order.some((r) => r.kind === 'prop:holmes'), '시트 없는 출연자는 조용히 생략');
   // Place Bible: 감지된 장소만 싣는다 + 공간만 빌린다
   const { detectPlaces, buildPagePromptV2: bpp2, toV2: toV2b } = await import('./_comic-v2.ts');
   const wsLoaded = new Set(['id_sap_i1', 'id_holmes_i1', 'pl_workshop_p1', 'pl_workshop_p2', 'pl_workshop_p3']);
