@@ -95,7 +95,8 @@ async function judgeCandidates(
   } catch { return null; }
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   // autopost와 같은 보호 — Access 밖(크론)이므로 키가 유일한 문
   if (!env.PUBLISH_KEY) return json(500, { ok: false, error: 'PUBLISH_KEY not configured' });
   if (request.headers.get('X-Publish-Key') !== env.PUBLISH_KEY) return json(403, { ok: false, error: 'forbidden' });
@@ -142,6 +143,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     day = built;
   }
 
+  // 실사고(07-23 밤): 30초 클라이언트(크론) 타임아웃이 재시도 중인 실행을 끊었다 —
+  // 자동 생성 성공률 0%의 두 번째 원인. 무거운 생성은 백그라운드로, 응답은 즉시.
+  context.waitUntil(generateDaily(env, date, day).catch(async (e) => {
+    await env.PLANET.put(RECO_KEY(date), JSON.stringify({
+      date, at: Date.now(), trialId: 'bg-crash', picks: [], reco: null,
+      errors: [`bg_crash: ${String(e).slice(0, 200)}`],
+    }));
+  }));
+  return json(202, {
+    ok: true, accepted: true, date, memoryEventId: day.memoryEventId,
+    note: '하루는 접혔고 생성은 백그라운드에서 계속된다 — 결과는 실험실 🌙 패널 (조건 ⑤ 유지)',
+  });
+};
+
+async function generateDaily(env: Env, date: string, day: DayMemory): Promise<void> {
   // 생성 준비 — 확정 레시피 그대로 (수동 흐름과 동일 재료)
   const provider = selectProvider('workers-ai', env);
   const sceneEn = await translateScene(env, day.event.lines).catch(() => null);
@@ -210,10 +226,5 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     reco, errors,
   }));
 
-  console.log(`sketch-daily date=${date} made=${made.length} reco=${reco?.pick ?? '-'} errors=${errors.length}`);
-  return json(200, {
-    ok: made.length > 0, date, memoryEventId: day.memoryEventId,
-    generated: made.length, trialId, reco, errors,
-    next: '아침에 실험실 최근 생성에서 📌 → 🕊 (조건 ⑤ — 채택·발행은 사람)',
-  });
-};
+  console.log(`sketch-daily bg date=${date} made=${made.length} reco=${reco?.pick ?? '-'} errors=${errors.length}`);
+}
