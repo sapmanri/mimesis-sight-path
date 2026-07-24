@@ -135,6 +135,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const prevReco = recoRaw ? JSON.parse(recoRaw) as { picks?: unknown[]; errors?: unknown[]; skipped?: string } : null;
     const resumable = (!!prevReco && !prevReco.skipped
       && Array.isArray(prevReco.picks) && prevReco.picks.length < 3)
+      // 실사고(07-24, 매일 밤 반복된 교착): 크론이 하루를 접은 직후 30초에 살해당하면
+      // memoryKey는 있는데 reco엔 자정의 no_observations 잔해만 남는다. 하루가 접혔다는
+      // 것은 관측이 있었다는 뜻 — 그 위의 '관측 없음' 기록은 모순이며 사람일 수 없다.
+      // 이 잔해는 재개 신호로 읽는다 (human_day는 그대로 존중 — 사람 우선 원칙 무손상).
+      || prevReco?.skipped === 'no_observations'
       || (resetParam && pulseRetryOk);   // 리셋: 시험분 폐기 후 정규 품질로 재생성 (재시도 경로 전용)
     if (!resumable) {
       await recordSkip('human_day');
