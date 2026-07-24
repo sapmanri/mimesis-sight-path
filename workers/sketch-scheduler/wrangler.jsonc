@@ -1,0 +1,13 @@
+{
+  // byeoli-sketch-scheduler — 그림일기 서버측 크론 (cron-job.org 30초 캡 대체)
+  // 배포: 이 폴더에서 `npx wrangler deploy` / 관측: `npx wrangler tail byeoli-sketch-scheduler`
+  // 비밀: PUBLISH_KEY (wrangler secret put — Pages 프로젝트와 동일 값)
+  "name": "byeoli-sketch-scheduler",
+  "main": "index.mjs",
+  "compatibility_date": "2026-07-01",
+  "triggers": {
+    // 23:30 KST = 14:30 UTC — cron-job.org와 같은 시각 (실패 메일로 실측된 스케줄)
+    "crons": ["30 14 * * *"]
+  },
+  "observability": { "enabled": true }
+}
