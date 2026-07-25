@@ -212,8 +212,14 @@ function pageGridOf(panelCount: number): string {
 const ORGANIC_GRAMMAR_EN = [
   'Use the panel-layout reference only as an ORGANIC WHITE-SPACE ISLAND grammar, never as story content or drawing style.',
   'Create exactly {panelCount} clearly separate scene islands on a pure white paper field, in the required reading order.',
-  'Each island is one panel: it has no rectangular frame and no drawn border; the irregular painted edge of the background itself is the panel boundary.',
-  'Fill each island with a coherent scene up to that soft, slightly worn edge.',
+  // 실사고 2026-07-25: "가장자리가 곧 경계"라고만 쓰니 모델이 **네모 그림에 물결 마스크를 씌웠다.**
+  // 참조 그림에서는 지붕 넝쿨·화분·담 모서리 같은 **장면의 사물이 끝나는 자리**가 윤곽이었다.
+  // 모양을 요구하면 모양이 나온다. 내용이 모양을 만들게 해야 한다.
+  'Each island is one panel: it has no rectangular frame, no drawn border, and no mask.',
+  'CRITICAL — the island silhouette must be produced BY THE SCENE ITSELF: foliage, walls, roofs, furniture, plants, ground and objects reach their natural end and the painting simply stops there, dissolving into bare paper.',
+  'Never draw a rectangle and then round, wave or crop its corners. Never place a decorative outline, blob mask or soft-edged frame over a rectangular illustration. If the silhouette could be removed and still leave a complete rectangular picture underneath, it is wrong.',
+  'Therefore no straight horizon, floor line, wall edge or window frame may run uninterrupted from one side of an island to the other; let objects interrupt and terminate those lines before the edge.',
+  'The composition is built outward from its subject and thins toward the paper — denser at the centre, sparse and open where it meets the white.',
   'Keep generous clean white space between all islands, with no touching or overlap.',
   'Only an explicitly designated subject may extend beyond one island edge onto the white field, including its natural cast shadow, while remaining inside that panel\'s crop-safe region.',
   'Never let an overflow enter another island or obscure captions.',

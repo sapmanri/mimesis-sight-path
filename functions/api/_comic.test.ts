@@ -822,7 +822,12 @@ test('패널 바이블 2종 — 격자/여백섬이 서로 다른 문법을 내�
   // 여백섬 — 테두리 어휘가 사라지고 섬 문법이 실린다
   const org = bpp(s, { panelMode: 'organic' });
   assert.match(org, /ORGANIC WHITE-SPACE ISLAND grammar/);
-  assert.match(org, /no rectangular frame and no drawn border/);
+  assert.match(org, /no rectangular frame, no drawn border, and no mask/);
+  // 실사고 회귀: 네모에 물결 마스크를 씌우는 실패를 문장으로 막았는지
+  assert.match(org, /silhouette must be produced BY THE SCENE ITSELF/, '내용이 윤곽을 만든다');
+  assert.match(org, /Never draw a rectangle and then round, wave or crop its corners/, '마스크 금지');
+  assert.match(org, /still leave a complete rectangular picture underneath, it is wrong/, '판별 기준');
+  assert.match(org, /no straight horizon, floor line, wall edge or window frame/, '직선이 끝까지 가지 않게');
   assert.match(org, /exactly 6 scene islands/, '컷 수가 섬 수로 못박힌다');
   assert.match(org, /There are no panel borders anywhere on this page/);
   assert.doesNotMatch(org, /borrow only its border style, gutters/, '격자용 문장이 새면 테두리가 되살아난다');
