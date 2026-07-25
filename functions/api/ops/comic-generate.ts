@@ -10,7 +10,7 @@
 
 import { validateScenario, extractQuotedLines, splitScenarioErrors, PANEL_BIBLE_SLOT, isPanelBibleSlot, type PanelBibleMode, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
 import { judgeByPhilosophy, finalVerdict, formatJudgment, PHILOSOPHY_SLOT, type PhilosophyJudgment, type FinalVerdict } from '../_philosophy.ts';
-import { resolveRenderMode, type RenderMode, type RenderModeRequest } from '../_comic-layout.ts';
+import { resolveRenderMode, planPageContext, validatePageContext, pageContextClause, type RenderMode, type RenderModeRequest, type PageContext } from '../_comic-layout.ts';
 import { validateScenarioV2, planV2Refs, buildPagePromptV2, detectPlaces, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
@@ -29,6 +29,34 @@ const COUNTER_KEY = 'comic_counter';
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+
+/**
+ * pageContext 조회-또는-생성. **한 번 확정되면 다시 만들지 않는다** (홈즈 판정 1).
+ *
+ * "결정론은 같은 호출에서 나오는가가 아니라, 확정된 문맥을 다시 만들지 않는가로 보장된다."
+ * → comicId로 `comic_meta`에서 찾고, 없을 때만 planner를 부르고, 부른 결과를 그 자리에 박는다.
+ *   컷 하나만 다시 그려도 같은 빛·같은 팔레트가 나오는 이유가 이것이다.
+ */
+export async function getOrCreatePageContext(
+  env: Env, comicId: string, s: ComicScenario,
+): Promise<{ context: PageContext; cached: boolean } | { error: string }> {
+  const raw = await env.PLANET.get(META_KEY).catch(() => null);
+  const log: { comicId: string; pageContext?: PageContext }[] = raw ? JSON.parse(raw) : [];
+  const hit = log.find((x) => x.comicId === comicId)?.pageContext;
+  if (hit && !validatePageContext(hit).length) return { context: hit, cached: true };
+
+  const made = await planPageContext(env, s);
+  if ('error' in made) return made;
+  // 메타에 박는다. 실패해도 생성을 막지 않는다 — 다음 호출이 다시 만들 뿐이다.
+  try {
+    const cur: { comicId: string }[] = JSON.parse((await env.PLANET.get(META_KEY)) ?? '[]');
+    const i = cur.findIndex((x) => x.comicId === comicId);
+    if (i >= 0) cur[i] = { ...cur[i], pageContext: made.context };
+    else cur.unshift({ comicId, pageContext: made.context } as never);
+    await env.PLANET.put(META_KEY, JSON.stringify(cur.slice(0, META_KEEP)));
+  } catch { /* 영속화 실패는 다음 호출이 만회한다 */ }
+  return { context: made.context, cached: false };
+}
 
 /** 시나리오 → 결정론 id. 같은 시나리오의 컷들이 같은 폴더에 모인다. */
 export function comicIdOf(s: ComicScenario): string {
@@ -326,6 +354,16 @@ async function runGeneration(
     };
   }
 
+  // 컷별 경로 — 컷을 따로 그리므로 **공통 문맥이 없으면 여섯 장이 따로 논다.**
+  // 페이지 경로(원샷)는 한 캔버스가 이미 문맥을 강제하므로 부르지 않는다(불필요한 LLM 호출 금지).
+  const panelWarnings: string[] = [];
+  let pageCtx: PageContext | null = null;
+  {
+    const got = await getOrCreatePageContext(env, comicId, s);
+    if ('error' in got) panelWarnings.push(`page_context 없음 — 컷들이 서로 다른 빛으로 나올 수 있다: ${got.error}`);
+    else pageCtx = got.context;
+  }
+
   const made: { index: number; key: string; model: string; provider: string }[] = [];
   const errors: string[] = [];
   for (const idx of want) {
@@ -338,7 +376,7 @@ async function runGeneration(
       else errors.push(`lock_missing:${slot} (컷 ${idx} — 바이블 없이 그리면 남의 그림체가 된다)`);
     }
     if (!refs.length) { errors.push(`panel_${idx}_skipped: Style Lock이 비어 있다`); continue; }
-    const prompt = buildPanelPrompt(panel);
+    const prompt = pageCtx ? `${buildPanelPrompt(panel)}\n${pageContextClause(pageCtx)}` : buildPanelPrompt(panel);
     const art = await generatePanelImage(env, prompt, refs);
     if ('error' in art) { errors.push(`panel_${idx}: ${art.error}`); continue; }
     const key = panelKey(comicId, idx);
@@ -360,8 +398,9 @@ async function runGeneration(
 
   // 조용한 무효화 금지 — 컷 모드는 참조 상한(4~5장)이 있어 최상위 계약 시트를 싣지 않는다.
   // 켜 뒀는데 아무 일도 안 일어나는 상태를 만들지 않는다 (2026-07-25 교훈).
-  const warnings = philosophyRef
-    ? ['philosophy_bible 그림 참조는 페이지 모드(제미나이)에서만 실린다 — 컷 모드는 참조 상한 때문에 제외. 문장·판정은 그대로 적용된다']
-    : [];
-  return { ok: errors.length === 0, mode: 'panels', renderMode: mode, layoutMode: panelMode, comicId, made, errors, warnings: [...warnings, ...modeNotes], provider };
+  const warnings = [
+    ...panelWarnings,
+    ...(philosophyRef ? ['philosophy_bible 그림 참조는 페이지 모드(제미나이)에서만 실린다 — 컷 모드는 참조 상한 때문에 제외. 문장·판정은 그대로 적용된다'] : []),
+  ];
+  return { ok: errors.length === 0, mode: 'panels', renderMode: mode, layoutMode: panelMode, comicId, made, errors, warnings: [...warnings, ...modeNotes], pageContext: pageCtx, provider };
 }

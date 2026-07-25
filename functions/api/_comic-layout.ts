@@ -15,6 +15,7 @@
 //   **"caption을 전부 지워도 각 컷의 사건과 페이지 흐름이 남는가."**
 
 import { PAGE_COLUMNS, pageRowsOf, type ComicScenario, type PanelBibleMode } from './_comic.ts';
+import { generateScenarioText, extractJson, type ComicLlmEnv } from './_comic-llm.ts';
 
 /* ── 두 축을 가른다 (홈즈 판정 4) ────────────────────────────────
    `grid/organic/none`은 **레이아웃 문법**이고 `page/panels`는 **렌더 방식**이다.
@@ -66,6 +67,39 @@ export interface PageContext {
   continuityNotes: string;  // EN — 한 페이지로 읽히게 하는 메모
 }
 
+/**
+ * pageContext planner 프롬프트 — **시나리오와 같은 호출로 섞지 않는다**(홈즈 판정 1).
+ *
+ * 여기서 Story를 다시 쓰게 하면 안 된다. 이 단계는 이미 확정된 사건 위에 **빛과 공간만**
+ * 얹는다. 그래서 프롬프트가 첫 줄부터 "사건을 바꾸지 마라"로 시작한다.
+ */
+export const PAGE_CONTEXT_SYSTEM = `You establish the shared visual context for one page of a hand-drawn children's picture diary.
+
+The story is ALREADY DECIDED. You do not change it, add events, or reinterpret it.
+Your only job: decide the light, time, weather and space that all panels of this page share,
+so that panels drawn separately still read as one page.
+
+Rules:
+- Output ONE JSON object only. No markdown, no commentary.
+- Every value is ENGLISH. Korean characters are forbidden (the image model would draw them as glyphs).
+- palette: 3~5 hex colors (#rrggbb), warm and quiet, consistent with a soft picture-book.
+- spatialAnchors: physical things that recur across panels and anchor the space (a low wall, a window frame).
+  These are what make separate drawings feel like one place. Prefer things already implied by the panels.
+- continuityNotes: one or two sentences a painter would need to keep panels continuous.
+- Keep it quiet. This is a page about looking at a small thing for a long time, not a dramatic scene.
+
+Schema:
+{"version":"page-context-v1","timeOfDay":en,"weather":en,"lightDirection":en,
+ "palette":["#rrggbb",...],"spatialAnchors":[en,...],"continuityNotes":en}`;
+
+/** planner 유저 프롬프트 — 확정된 시나리오를 사실로만 넘긴다. */
+export function pageContextUserPrompt(s: Pick<ComicScenario, 'title' | 'theme' | 'panels'>): string {
+  const lines = s.panels.map((p) =>
+    `${p.index}. ${p.location} · ${p.shot} · ${p.subject} — ${p.action}`).join('\n');
+  return `Page title: ${s.title}\nTheme: ${s.theme}\n\nPanels (already decided — do not change):\n${lines}\n\n`
+    + `Give the shared page context as JSON.`;
+}
+
 export function validatePageContext(x: unknown): string[] {
   const errs: string[] = [];
   if (typeof x !== 'object' || x === null) return ['not an object'];
@@ -80,6 +114,44 @@ export function validatePageContext(x: unknown): string[] {
   else if (!c.palette.every((p) => /^#[0-9a-fA-F]{6}$/.test(p))) errs.push('palette entries must be #rrggbb');
   if (!Array.isArray(c.spatialAnchors)) errs.push('spatialAnchors must be an array');
   return errs;
+}
+
+/**
+ * 시나리오 → pageContext. **두 번째 호출이다** — 시나리오 두뇌와 같은 어댑터를 쓰되
+ * 프롬프트를 갈아끼워 부른다(`ScenarioPrompts` 오버라이드).
+ *
+ * 실패는 에러로 돌려준다. 지어내지 않는다 — 빈 문맥으로 그리면 컷들이 따로 논다는 것이
+ * 애초에 이 단계가 생긴 이유다. 호출자가 "문맥 없이 갈지"를 정하게 한다.
+ */
+export async function planPageContext(
+  env: ComicLlmEnv,
+  s: Pick<ComicScenario, 'title' | 'theme' | 'panels'>,
+): Promise<{ context: PageContext; model: string; provider: string } | { error: string }> {
+  const out = await generateScenarioText(env, '', 0, {
+    system: PAGE_CONTEXT_SYSTEM,
+    user: pageContextUserPrompt(s),
+  });
+  if ('error' in out) return { error: `page_context_llm: ${out.error}` };
+  const parsed = extractJson(out.text);
+  if (!parsed) return { error: 'page_context_unparsable' };
+  const errs = validatePageContext(parsed);
+  if (errs.length) return { error: `page_context_invalid: ${errs.join(' / ')}` };
+  return { context: parsed as PageContext, model: out.model, provider: out.provider };
+}
+
+/**
+ * 컷 프롬프트에 붙일 공통 문맥 한 덩어리.
+ * 홈즈: *"바이블들은 참조 자료가 아니라, 컷을 따로 생성해도 같은 작품으로 보이게 하는
+ * 조립식 생성 엔진의 접착제였다."* — 이 문자열이 그 접착제의 문장판이다.
+ */
+export function pageContextClause(c: PageContext): string {
+  return [
+    `Page context (identical for every panel of this page — do not vary):`,
+    `time of day: ${c.timeOfDay}. weather: ${c.weather}. light: ${c.lightDirection}.`,
+    `palette: ${c.palette.join(', ')}.`,
+    c.spatialAnchors.length ? `recurring spatial anchors: ${c.spatialAnchors.join('; ')}.` : '',
+    c.continuityNotes,
+  ].filter(Boolean).join(' ');
 }
 
 /* ── Layout Plan — 자리와 넘침 권한. 섬의 윤곽은 생성이 만든다 ──────── */

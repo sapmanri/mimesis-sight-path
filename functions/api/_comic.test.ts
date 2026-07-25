@@ -1044,3 +1044,24 @@ test('Page Context — 영어 강제·팔레트 형식 (한글은 그림으로 �
   assert.ok(validatePageContext({ ...ok, palette: [] }).some((e) => e.includes('non-empty')));
   assert.ok(validatePageContext({ ...ok, version: 'x' }).some((e) => e.includes('page-context-v1')));
 });
+
+test('pageContext planner — 시나리오를 다시 쓰지 말라고 못박고, 영어·형식을 강제한다', async () => {
+  const { PAGE_CONTEXT_SYSTEM, pageContextUserPrompt, pageContextClause } = await import('./_comic-layout.ts');
+  // 이 단계는 사건을 바꾸지 않는다 — 프롬프트가 그걸 첫 줄부터 못박아야 한다
+  assert.match(PAGE_CONTEXT_SYSTEM, /ALREADY DECIDED/);
+  assert.match(PAGE_CONTEXT_SYSTEM, /do not change it/i);
+  assert.match(PAGE_CONTEXT_SYSTEM, /Korean characters are forbidden/i);
+  // 유저 프롬프트는 확정된 컷을 사실로만 넘긴다
+  const u = pageContextUserPrompt(scenario(4));
+  assert.match(u, /do not change/i);
+  assert.ok(u.includes('bedroom'), '컷의 장소가 실려야 한다');
+  assert.ok(!/panelCount/.test(u), '컷 수를 다시 정하게 하지 않는다');
+  // 접착제 문장 — 모든 컷에 같은 문맥을 주입한다
+  const clause = pageContextClause({
+    version: 'page-context-v1', timeOfDay: 'late afternoon', weather: 'clear',
+    lightDirection: 'low sun from the left', palette: ['#FAF7F2'],
+    spatialAnchors: ['low brick wall'], continuityNotes: 'same wall in every panel',
+  });
+  assert.match(clause, /identical for every panel/);
+  assert.ok(clause.includes('low brick wall') && clause.includes('#FAF7F2'));
+});
