@@ -4,8 +4,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateScenario, pickStyleRefs, buildPanelPrompt, STYLE_LOCK_NAMES,
+  splitScenarioErrors, SCENARIO_SYSTEM,
   type ComicScenario, type ComicPanel,
 } from './_comic.ts';
+import {
+  judgeByPhilosophy, finalVerdict, formatJudgment, PHILOSOPHY_REF_DEFAULT,
+} from './_philosophy.ts';
 import { extractJson, userPrompt } from './_comic-llm.ts';
 
 function panel(i: number, over: Partial<ComicPanel> = {}): ComicPanel {
@@ -286,7 +290,7 @@ test('Lock v2 슬롯 — 그룹 분류와 레거시 보존 (S-04 판정 4)', asy
   assert.equal(lockGroupOf('id_holmes_i5'), 'identity:holmes');
   assert.ok(!isLockSlot('id_hacker_i1'), '미등록 Creator 슬롯 거부 (음성)');
   assert.ok(!isLockSlot('style_s6'), '슬롯 범위 밖 거부 (음성)');
-  assert.equal(LOCK_SLOTS_V2.length, 7 + 5 + 20 + 5 + 5, '레거시7(패널 바이블 2종 포함) + 스타일5 + 정체성20 + 장소5 + 소품5');
+  assert.equal(LOCK_SLOTS_V2.length, 7 + 5 + 20 + 5 + 5 + 1, '레거시7(패널 바이블 2종 포함) + 스타일5 + 정체성20 + 장소5 + 소품5 + 철학1');
   assert.equal(lockGroupOf('pl_workshop_p2'), 'place:workshop', 'Place Bible 그룹');
   assert.ok(!isLockSlot('pl_bedroom_p1'), '미등록 장소 거부 (음성)');
   assert.equal(lockGroupOf('pr_sap_p1'), 'prop:sap', 'Prop Bible 그룹 (07-23 신설)');
@@ -874,4 +878,98 @@ test('샷 배분 — 6컷이 전부 얼굴이거나 전부 풀샷이 되지 않�
   assert.deepEqual(validateScenario(mk(['wide','medium','close','back','medium','wide'])), []);
   // 3컷 이하는 규칙 적용 안 함 — 짧은 편에 강제하면 오히려 부자연스럽다
   assert.deepEqual(validateScenario(mk(['close','close','close'])), []);
+});
+
+/* ── PHILOSOPHY BIBLE v1.0 — 최상위 계약 (홈즈 판정 2026-07-26) ── */
+
+test('계층의 비대칭 — 철학 위반은 폐기, 하위 바이블만 어긋나면 수정 대상 (가장 중요한 규칙)', () => {
+  const clean = judgeByPhilosophy(scenario());
+  assert.equal(clean.verdict, 'pass', '별이다운 시나리오는 자동 표지가 없어야 한다');
+
+  // 하위 바이블(카메라·문장)만 어긋난 경우 — 폐기가 아니라 수정 대상
+  assert.equal(finalVerdict(clean, ['shot balance: wide 컷이 최소 하나는 있어야 한다']), 'revise');
+  assert.equal(finalVerdict(clean, []), 'pass');
+
+  // 철학 위반 — 하위가 전부 통과해도 폐기
+  const bad = scenario();
+  bad.panels[1].caption = '비가 오는 이유는 구름이 무거워졌기 때문이다.';
+  const j = judgeByPhilosophy(bad);
+  assert.equal(j.verdict, 'discard');
+  assert.equal(finalVerdict(j, []), 'discard', '하위 오류가 0이어도 철학 위반이면 폐기다');
+  assert.equal(j.findings[0].promise, 2);
+  assert.ok(j.findings[0].where.includes('caption'), '실물 위치를 가리켜야 한다');
+});
+
+test('다섯 약속 — 설명·교훈·감정 명명·매듭을 잡는다', () => {
+  const at = (over: Partial<ComicPanel>, idx = 1) => {
+    const s = scenario();
+    Object.assign(s.panels[idx], over);
+    return judgeByPhilosophy(s).findings;
+  };
+  const promises = (f: ReturnType<typeof at>) => f.map((x) => x.promise);
+
+  assert.ok(promises(at({ caption: '왜냐하면 밤이 길어졌다.' })).includes(2), '설명 = 약속2');
+  assert.ok(promises(at({ caption: '작은 것도 소중히 여겨야 한다.' })).includes(3), '교훈 = 약속3');
+  assert.ok(promises(at({ caption: '별이는 너무너무 슬펐다.' })).includes(4), '감정 과장 = 약속4');
+  assert.ok(promises(at({ dialogue: '우리도 그렇게 하자' })).includes(3), '대사도 본다');
+
+  // 약속1은 마지막 컷에서만 — 중간의 '결국'은 매듭이 아니라 흐름일 수 있다
+  const mid = scenario(4);
+  mid.panels[1].caption = '결국 비가 그쳤다.';
+  assert.equal(judgeByPhilosophy(mid).verdict, 'pass', '중간 컷의 결론어는 잡지 않는다');
+  const end = scenario(4);
+  end.panels[3].caption = '그렇게 해서 하루가 끝났다.';
+  assert.ok(judgeByPhilosophy(end).findings.some((f) => f.promise === 1), '마지막 컷의 매듭은 잡는다');
+
+  // 설명을 길게 하지 않는다
+  const longCap = scenario();
+  longCap.panels[0].caption = '아침부터 비가 내렸고 창문에는 물방울이 계속 맺혔는데 별이는 그것을 한참 동안 바라보았다.';
+  assert.ok(judgeByPhilosophy(longCap).findings.some((f) => f.why.includes('설명이 길다')));
+});
+
+test('음성 — 조용한 별이 문장을 오탐하지 않는다 (새벽에 멀쩡한 시나리오를 죽이지 마라)', () => {
+  const quiet = [
+    '빗소리가 먼저 일어났다.', '작은 물방울 둘이 합쳐져 커진다.', '빼콩이 숨소리가 고르게 떨린다.',
+    '창문 위로 새로운 물방울이 계속 번진다.', '아침부터 비가 길게 내렸다.', '조용해', '비 좋아',
+  ];
+  for (const c of quiet) {
+    const s = scenario();
+    s.panels[0].caption = c;
+    assert.deepEqual(judgeByPhilosophy(s).findings, [], `오탐: "${c}"`);
+  }
+});
+
+test('판정문은 기계가 답 못 하는 질문을 항상 사람에게 넘긴다 (잔꾀 금지)', () => {
+  const j = judgeByPhilosophy(scenario());
+  assert.equal(j.questions.length, 5);
+  assert.ok(j.questions.some((q) => q.includes('작은 것이 정말')));
+  assert.ok(formatJudgment(j, 'pass').includes('멈춰 설 시간'), 'pass여도 질문은 실린다');
+  assert.ok(formatJudgment(j, 'revise').includes('폐기 아님'));
+});
+
+test('철학이 게놈보다 먼저 온다 — Philosophy → Story → Episode', () => {
+  const iPhil = SCENARIO_SYSTEM.indexOf('PHILOSOPHY BIBLE v1.0');
+  const iStory = SCENARIO_SYSTEM.indexOf('[STORY');
+  assert.ok(iPhil >= 0 && iStory > iPhil, '최상위 계약이 게놈보다 앞에 있어야 한다');
+  assert.ok(SCENARIO_SYSTEM.includes('해결하지 않는다'));
+  assert.ok(SCENARIO_SYSTEM.includes('이쪽이 이긴다'), '충돌 시 우선순위가 명시돼야 한다');
+});
+
+test('철학 칸 — 다른 바이블처럼 올리고 지울 수 있고, 그림 참조는 기본 제외', async () => {
+  const { isLockSlot, lockGroupOf } = await import('./ops/comic-style-lock.ts');
+  assert.ok(isLockSlot('philosophy_bible'), '업로드·삭제가 되려면 락 슬롯이어야 한다');
+  assert.equal(lockGroupOf('philosophy_bible'), 'philosophy', '자기 그룹(칸)을 가진다');
+  assert.equal(PHILOSOPHY_REF_DEFAULT, false, '그림 참조는 기본 제외 — 판정용이 먼저다');
+  // 음성: 자동 장착 목록에 섞이면 안 된다. 켜지 않았는데 실리는 일은 없어야 한다.
+  assert.ok(!(STYLE_LOCK_NAMES as readonly string[]).includes('philosophy_bible'));
+});
+
+test('하위 바이블 오류만으로는 생성을 막지 않는다 — 층 가르기', () => {
+  const { structural, lowerBible } = splitScenarioErrors([
+    'panels[0].location required',
+    'shot balance: wide 컷이 최소 하나는 있어야 한다',
+    'too much dialogue: 별이는 말이 적다 (대사는 절반 이하)',
+  ]);
+  assert.deepEqual(structural, ['panels[0].location required']);
+  assert.equal(lowerBible.length, 2);
 });

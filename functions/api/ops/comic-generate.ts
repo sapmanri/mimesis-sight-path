@@ -8,7 +8,8 @@
 //
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
-import { validateScenario, extractQuotedLines, PANEL_BIBLE_SLOT, isPanelBibleSlot, type PanelBibleMode, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
+import { validateScenario, extractQuotedLines, splitScenarioErrors, PANEL_BIBLE_SLOT, isPanelBibleSlot, type PanelBibleMode, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
+import { judgeByPhilosophy, finalVerdict, formatJudgment, PHILOSOPHY_SLOT, type PhilosophyJudgment, type FinalVerdict } from '../_philosophy.ts';
 import { validateScenarioV2, planV2Refs, buildPagePromptV2, detectPlaces, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
@@ -79,14 +80,36 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
-  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[]; panelRef?: boolean; panelMode?: PanelBibleMode };
+  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[]; panelRef?: boolean; panelMode?: PanelBibleMode; philosophyRef?: boolean; philosophyOverride?: boolean };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
   const scenario = body.scenario;
   const scenario2 = body.scenario2;
-  const errs = scenario2 ? validateScenarioV2(scenario2)
+  const rawErrs = scenario2 ? validateScenarioV2(scenario2)
     : scenario ? validateScenario(scenario, extractQuotedLines(scenario.theme ?? '').length)
     : ['scenario required'];
-  if (errs.length) return json(400, { ok: false, error: 'scenario_invalid', detail: errs });
+  // 계층 (홈즈 2026-07-26): 기계 계약 위반만 막는다. 카메라·문장 층의 어긋남은
+  // **수정 대상이지 폐기 사유가 아니다** — 생성을 막지 않고 판정문에 실어 보낸다.
+  const { structural, lowerBible } = scenario2
+    ? { structural: rawErrs, lowerBible: [] as string[] }
+    : splitScenarioErrors(rawErrs);
+  if (structural.length) return json(400, { ok: false, error: 'scenario_invalid', detail: structural });
+
+  // 최상위 계약 — 하위 바이블이 전부 통과해도 철학을 위반하면 폐기다.
+  // 자동 표지는 문장 표면만 보므로 오탐이 있을 수 있다 → `philosophyOverride`로 사람이 뒤집는다
+  // (조용히 통과시키지 않는다. 뒤집어도 판정문은 결과에 그대로 실린다).
+  let judgment: PhilosophyJudgment | null = null;
+  let verdict: FinalVerdict = 'pass';
+  if (scenario) {
+    judgment = judgeByPhilosophy(scenario);
+    verdict = finalVerdict(judgment, lowerBible);
+    if (verdict === 'discard' && body.philosophyOverride !== true) {
+      return json(422, {
+        ok: false, error: 'philosophy_violation', verdict,
+        philosophy: judgment, report: formatJudgment(judgment, verdict), lowerBible,
+        hint: '최상위 계약 위반은 폐기다. 문장을 고치거나, 사람이 판정해 넘기려면 philosophyOverride: true',
+      });
+    }
+  }
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -96,8 +119,12 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     try {
       const result = scenario2
         ? await runGenerationV2(env, scenario2, Array.isArray(body.styleSlots) ? body.styleSlots : [], body.panelRef === true)
-        : await runGeneration(env, scenario as ComicScenario, body.panels, body.panelMode ?? (body.panelRef === true ? 'grid' : 'none'));
-      await writer.write(enc.encode(JSON.stringify(result) + '\n'));
+        : await runGeneration(env, scenario as ComicScenario, body.panels, body.panelMode ?? (body.panelRef === true ? 'grid' : 'none'), body.philosophyRef === true);
+      // 판정문은 통과했을 때도 함께 간다 — 기계가 못 잡는 다섯 질문은 사람이 답해야 하므로.
+      const withJudgment = judgment
+        ? { ...result, philosophy: judgment, verdict, philosophyReport: formatJudgment(judgment, verdict), lowerBible }
+        : result;
+      await writer.write(enc.encode(JSON.stringify(withJudgment) + '\n'));
     } catch (e) {
       await writer.write(enc.encode(JSON.stringify({ ok: false, error: `generate_crashed: ${String(e).slice(0, 200)}` }) + '\n'));
     } finally {
@@ -192,6 +219,7 @@ async function runGenerationV2(
 
 async function runGeneration(
   env: Env, s: ComicScenario, panelsWanted?: number[], panelMode: PanelBibleMode = 'none',
+  philosophyRef = false,
 ): Promise<Record<string, unknown>> {
   const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
   const cap = refCapFor(provider);
@@ -240,6 +268,13 @@ async function runGeneration(
       const r = await loadRef(slot);
       if (r) { refs.push(r); if (slot === wantSlot) hasPanelRef = true; }
       else if ((STYLE_LOCK_REQUIRED as readonly string[]).includes(slot)) missing.push(slot);
+    }
+    // 최상위 계약 시트 — 칸의 [적용]을 켰을 때만. 기본 제외이므로 여기 오는 일은 드물다.
+    // 페이지 모드(제미나이)에서만 싣는다: 컷 모드는 참조 상한이 4~5장이라 정체성 시트를 밀어낸다.
+    if (philosophyRef) {
+      const pr = await loadRef(PHILOSOPHY_SLOT);
+      if (pr) refs.unshift(pr);   // 최상위 계약이 맨 앞
+      else warnings.push('philosophy_bible 칸이 비어 있음 — 그림 참조 없이 문장·판정으로만 적용된다');
     }
     if (!refs.length) return { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' };
     // 관찰 번호 — 500편이 쌓이면 하나의 아카이브가 된다 (홈즈). 재그리기는 같은 번호 유지.
@@ -313,5 +348,10 @@ async function runGeneration(
     ].slice(0, META_KEEP)));
   } catch { /* 메타 실패가 생성을 막지 않는다 */ }
 
-  return { ok: errors.length === 0, mode: 'panels', comicId, made, errors, provider };
+  // 조용한 무효화 금지 — 컷 모드는 참조 상한(4~5장)이 있어 최상위 계약 시트를 싣지 않는다.
+  // 켜 뒀는데 아무 일도 안 일어나는 상태를 만들지 않는다 (2026-07-25 교훈).
+  const warnings = philosophyRef
+    ? ['philosophy_bible 그림 참조는 페이지 모드(제미나이)에서만 실린다 — 컷 모드는 참조 상한 때문에 제외. 문장·판정은 그대로 적용된다']
+    : [];
+  return { ok: errors.length === 0, mode: 'panels', comicId, made, errors, warnings, provider };
 }

@@ -34,6 +34,12 @@ npm run build
 - `index.html`을 옛 standalone 사본으로 덮어쓰지 말 것.
 
 ## 하드 룰
+- ⚖ **Philosophy Bible = 최상위 계약 (Constitution)** — Story·Character·Sentence·Camera·Layout·
+  Wave·Expression **전부보다 우선한다** (홈즈 판정 2026-07-26). 정본 `functions/api/_philosophy.ts`,
+  문서 vault `01 Projects/MIMESIS Studio/PHILOSOPHY_BIBLE_CONTRACT_v1.0.md`.
+  **비대칭이 핵심**: 하위 바이블이 전부 통과해도 철학을 위반하면 **폐기**, 카메라·레이아웃이
+  어긋나도 철학이 살아 있으면 **수정 대상**(폐기 아님). 하위 오류는 단독 폐기 사유가 못 된다.
+  순서는 **Philosophy → Story → Episode**. 생성용이 아니라 판정용이다.
 - 행성 맵은 의도적으로 비어 있음 — 하드코딩 금지.
 - 별이 상호작용은 editor-placed props(`SP.props`) 기반 drive/disposition으로만 — 스크립트 조합 금지.
 - **자율 시스템 건드리지 말 것**: Threads 봇(크론 실발행 중) · Authority DO(관찰자 무지 유지가 설계 원칙).

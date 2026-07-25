@@ -792,6 +792,7 @@ async function pollThreadsReplies(force){
         btn('후보 만들기', true, async () => {
           const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId });
           if (!res.ok) alert(`후보 실패: ${res.error}`);
+          else if (res.record && res.record.decision === 'ignored') alert(`별이가 무응답으로 판단했다:\n${res.record.reason ?? ''}\n\n(무응답 줄의 [후보 만들기]로 강제 후보를 만들 수 있다)`);
           refresh();
         });
       }
@@ -828,9 +829,12 @@ async function pollThreadsReplies(force){
       s.textContent = `${r.decision === 'failed' ? '실패' : '무응답'} — ${r.reason ?? ''}`;
       act.appendChild(s);
       // 거절·실패는 봉인이 아니다 — 언제든 다시 후보를 만들 수 있다 (정책 위반이면 서버가 사유로 거부)
+      // force: 사람이 무응답 판단을 뒤집는 요청이다. 재판단이 또 무응답이면 그 사유를
+      // 반드시 보여준다 — 조용히 같은 화면이면 버튼이 죽은 것처럼 보인다(실사고 2026-07-20).
       btn('후보 만들기', false, async () => {
-        const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId });
+        const res = await postThreadsReplies({ action: 'draft', sourceCommentId: r.sourceCommentId, force: true });
         if (!res.ok) alert(`후보 실패: ${res.error}`);
+        else if (res.record && res.record.decision === 'ignored') alert(`별이가 다시 판단했지만 여전히 무응답:\n${res.record.reason ?? ''}`);
         refresh();
       });
     }
@@ -852,8 +856,10 @@ async function pollPresence(){
     lastPresence = d;
     $('prNow').textContent = `함께 열린 세션 ${d.active.sessions}개 · live ${d.active.live}개`;
     $('prToday').textContent = `감지된 브라우저 세션 ${d.today.sessions}개`;
-    $('prDur').textContent = d.today.sessions
-      ? `평균 ${dur(d.today.avgMs)} · 가장 오래 ${dur(d.today.maxMs)}`
+    // 431-P: 체류시간이 today → active로 이동(의미도 다르다 — 접속 중인 세션이 여태 머문 시간).
+    // today.avgMs를 계속 읽어 NaN이 표시되던 실사고(2026-07-20 밤) 수정.
+    $('prDur').textContent = d.active.sessions
+      ? `접속 중 평균 ${dur(d.active.avgMs)} · 가장 오래 ${dur(d.active.maxMs)}`
       : '—';
     renderWatch(); // 메타 일기에 세션 수 반영
   } catch (e) { /* 유지 */ }
@@ -991,7 +997,20 @@ async function pollPublishLog(){
       } else {
         lines.push('사진 없이 나섰다.');
       }
-      lines.push(r.result === 'success' ? '사람들에게 이 이야기를 남겼다. ✓' : 'Threads에 올리지 못했다. ✕');
+      // 실패 사유 노출 (실사고 07-22 저녁: 18:00 실패가 "올리지 못했다"로만 보여 원인 조회가 막혔다
+      // — 422-OPS-A가 이 질문에 답하려고 Layer1을 저장하는데 화면이 답을 감추고 있었다)
+      if (r.result === 'success') {
+        lines.push('사람들에게 이 이야기를 남겼다. ✓');
+      } else {
+        const t = r.threads ?? {};
+        const why = [
+          t.errorCode ? `code ${t.errorCode}` : null,
+          typeof r.httpStatus === 'number' ? `HTTP ${r.httpStatus}` : null,
+          t.requestId ? `trace ${t.requestId}` : null,
+          t.attempted === false ? '호출 자체가 없었다' : null,
+        ].filter(Boolean).join(' · ');
+        lines.push(`Threads에 올리지 못했다. ✕${why ? ` (${why})` : ''}`);
+      }
     }
     for (const t of lines) {
       const p = document.createElement('div'); p.className = 'what';

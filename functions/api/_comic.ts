@@ -10,6 +10,12 @@
 //    전면 영어 원칙 (한글은 그림으로 취급된다 — 선봇못대 실사례)
 //  - caption/dialogue는 한국어 반말 — 이미지에 넣지 않고 조립 단계에서 진짜 폰트로 얹는다
 //  - 별이는 말이 적다: dialogue는 대부분 null, caption이 주 언어다
+//
+// ⚖ 이 계약은 최상위가 아니다. 위에 Philosophy Bible(`_philosophy.ts`)이 있고,
+//   여기 검증(validateScenario)이 잡는 것들은 전부 **수정 대상**이지 폐기 사유가 아니다.
+//   폐기는 철학 위반일 때만 — `finalVerdict()`.
+
+import { PHILOSOPHY_PREAMBLE } from './_philosophy.ts';
 
 export interface ComicPanel {
   index: number;                 // 1부터
@@ -103,6 +109,27 @@ export function validateScenario(x: unknown, explicitDialogueCount = 0): string[
   const allowed = Math.max(Math.ceil(s.panels.length / 2), explicitDialogueCount);
   if (talky > allowed) errs.push('too much dialogue: 별이는 말이 적다 (대사는 절반 이하)');
   return errs;
+}
+
+/**
+ * 계약 위반을 두 층으로 가른다 — 계층의 비대칭을 실제 동작으로 옮기는 지점.
+ *
+ *  - `structural` — JSON 형태·영어 필드 같은 **기계 계약**. 어기면 이미지 모델이 글자를 그리거나
+ *    조립이 깨진다. 막아야 한다.
+ *  - `lowerBible` — 샷 배분(카메라)·대사 밀도(문장). 이건 하위 바이블 층이라
+ *    **수정 대상이지 폐기 사유가 아니다** (홈즈 2026-07-26). 생성을 막지 않고 판정문에 싣는다.
+ *
+ * 문자열 접두어로 가르는 게 마음에 안 들지만, `validateScenario`의 반환형(string[])을 바꾸면
+ * 기존 테스트 45개가 함께 흔들린다. 접두어는 이 파일 안에서만 생성되므로 외부 drift는 없다.
+ */
+const LOWER_BIBLE_PREFIXES = ['shot monotony:', 'shot balance:', 'too much dialogue:'] as const;
+export function splitScenarioErrors(errs: readonly string[]): { structural: string[]; lowerBible: string[] } {
+  const structural: string[] = [];
+  const lowerBible: string[] = [];
+  for (const e of errs) {
+    (LOWER_BIBLE_PREFIXES.some((p) => e.startsWith(p)) ? lowerBible : structural).push(e);
+  }
+  return { structural, lowerBible };
 }
 
 /* ── Style Lock — 공식 바이블 5장 (서버 고정, 매번 업로드하지 않는다) ── */
@@ -297,9 +324,15 @@ export function buildPagePrompt(
   return lines.join('\n');
 }
 
-/* ── 게놈 시나리오 시스템 프롬프트 — 별이답음의 계약 ── */
+/* ── 게놈 시나리오 시스템 프롬프트 — 별이답음의 계약 ──
+   순서가 계약이다: **Philosophy → Story → Episode** (홈즈 판정 2026-07-26).
+   시나리오를 쓰기 전에 최상위 계약을 먼저 읽는다. 아래 게놈·출력 규칙은 그 다음이고,
+   충돌하면 철학이 이긴다. */
 
-export const SCENARIO_SYSTEM = `너는 '별이'의 하루를 1~12컷 그림일기로 구성하는 작가다. 별이의 게놈:
+export const SCENARIO_SYSTEM = `${PHILOSOPHY_PREAMBLE}
+
+[STORY — 위 계약 아래에서 무엇을 그리는가]
+너는 '별이'의 하루를 1~12컷 그림일기로 구성하는 작가다. 별이의 게놈:
 - 별이는 5살 여자아이. 작은 것들을 오래 바라보는 아이. 조용하고 관찰력이 좋다.
 - 흰 고양이 빼콩이와 함께 산다. 빼콩이는 말보다 마음을 먼저 알아차린다.
 - 별이는 결론을 내리지 않는다. 판단하지 않는다. 감정을 이름 붙이지 않는다 — 본 것을 남길 뿐.

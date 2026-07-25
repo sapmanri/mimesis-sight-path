@@ -14,6 +14,7 @@
 // 키는 기존과 같은 평평한 prefix — 슬롯 이름이 이름공간을 품는다. 마이그레이션 0.
 
 import { STYLE_LOCK_NAMES, isPanelBibleSlot } from '../_comic.ts';
+import { PHILOSOPHY_SLOTS } from '../_philosophy.ts';
 
 interface Env { CAPTURES: R2Bucket }
 
@@ -37,10 +38,14 @@ export const PROP_SLOTS: readonly string[] = PROP_CREATORS.flatMap((c) =>
   [1, 2, 3, 4, 5].map((i) => `pr_${c}_p${i}`));
 export const LOCK_SLOTS_V2: readonly string[] = [
   ...STYLE_LOCK_NAMES, ...COMIC_STYLE_SLOTS, ...IDENTITY_SLOTS, ...PLACE_SLOTS, ...PROP_SLOTS,
+  // 최상위 계약 (2026-07-26) — 다른 바이블과 같은 칸·같은 업로드·같은 ✕비우기.
+  // 생성 참조로는 기본 제외이고, 칸의 [적용]을 켤 때만 실린다 (`_philosophy.ts` 참조).
+  ...PHILOSOPHY_SLOTS,
 ];
 
 /** 슬롯 → 그룹. UI와 생성 경로가 같은 분류를 쓴다 (판정 4의 A/B/C). */
 export function lockGroupOf(slot: string): string {
+  if (PHILOSOPHY_SLOTS.includes(slot)) return 'philosophy';   // 최상위 계약 — 자기 칸 (2026-07-26)
   if (isPanelBibleSlot(slot)) return 'panel';   // 패널 바이블 2종은 같은 그룹, 상호 배타 선택 (2026-07-25)
   if ((STYLE_LOCK_NAMES as readonly string[]).includes(slot)) return 'byeoli-bible';
   if ((COMIC_STYLE_SLOTS as readonly string[]).includes(slot)) return 'style';

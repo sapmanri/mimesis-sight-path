@@ -265,11 +265,19 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   }
   function setPanelMode(m) { localStorage.setItem(PANEL_MODE_KEY, m); }
   function panelApplied() { return panelMode() !== 'none'; }
+  // 최상위 계약 시트 — 칸은 있지만 **기본 제외**다. 시트가 다섯 약속의 삽화·한글 라벨로 가득해서
+  // 참조로 실으면 모델이 그걸 그리려 든다(annotation 사고 계열). 철학은 문장과 판정으로 먼저 흐르고,
+  // 이 체크박스는 "그림 참조로도 써 보겠다"는 Vase의 명시 선택일 때만 켜진다.
+  var PHILO_APPLY_KEY = 'comic_philosophy_apply';
+  function philosophyApplied() { return localStorage.getItem(PHILO_APPLY_KEY) === '1'; }
+  function setPhilosophyApplied(on) { localStorage.setItem(PHILO_APPLY_KEY, on ? '1' : '0'); }
   function styleApplied() {
     try { return JSON.parse(localStorage.getItem(STYLE_APPLY_KEY) || '[]'); } catch (e) { return []; }
   }
   function setStyleApplied(list) { localStorage.setItem(STYLE_APPLY_KEY, JSON.stringify(list)); }
   var LOCK_GROUP_META = [
+    // 최상위 계약이 맨 위. 다른 칸과 똑같이 올리고 ✕로 비운다 — 문제 생기면 빼면 된다.
+    { g: 'philosophy',       label: '⚖ Philosophy Bible — 최상위 계약', max: 1 },
     { g: 'style',            label: '🎨 Comic Style (작품 공통)', max: 5 },
     { g: 'byeoli-bible',     label: '👤 Byeoli — 바이블',         max: 5 },
     { g: 'identity:sap',     label: '👤 Sap Identity',            max: 5 },
@@ -298,7 +306,11 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         head.textContent = gm.label + '  ' + n + '/' + gm.max +
           (gm.g === 'style' ? ' · 적용 ' + styleApplied().filter(function (sl) {
             return mine.some(function (s) { return s.slot === sl && s.loaded; });
-          }).length + '장 (기본 제외 — 켠 것만 그리기에 들어간다)' : '');
+          }).length + '장 (기본 제외 — 켠 것만 그리기에 들어간다)' : '') +
+          (gm.g === 'philosophy'
+            ? ' · 시나리오·판정에는 항상 적용 (문장으로) · 그림 참조는 ' +
+              (philosophyApplied() ? '켜짐' : '기본 제외')
+            : '');
         wrap.appendChild(head);
         var grid = document.createElement('div');
         grid.className = 'lockgrid';
@@ -329,6 +341,20 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
             ap2.appendChild(document.createTextNode(
               myMode === 'organic' ? ' 여백섬으로 그리기' : ' 격자 프레임으로 그리기'));
             cell.appendChild(ap2);
+          }
+          // 최상위 계약 슬롯: 그림 참조로 실을지만 정하는 토글. 꺼도 철학은 문장·판정으로 계속 간다.
+          if (gm.g === 'philosophy' && s.loaded) {
+            var apf = document.createElement('label');
+            apf.style.cssText = 'display:block;font-size:10px;cursor:pointer;margin-top:2px';
+            var cbf = document.createElement('input');
+            cbf.type = 'checkbox';
+            cbf.checked = philosophyApplied();
+            cbf.onclick = function (ev) { ev.stopPropagation(); };
+            cbf.onchange = function () { setPhilosophyApplied(cbf.checked); checkLock(); };
+            apf.onclick = function (ev) { ev.stopPropagation(); };
+            apf.appendChild(cbf);
+            apf.appendChild(document.createTextNode(' 그림 참조로도 싣기'));
+            cell.appendChild(apf);
           }
           // 스타일 슬롯: 생성별 [적용] 토글 — 별이체와 관축해체가 같은 칸을 쓰므로 골라 쓴다
           if (gm.g === 'style' && s.loaded) {
@@ -833,7 +859,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     // 먼저 서버에 물어본다 — 페이지 모드(제미나이)면 한 방, 아니면 컷별
     var probe = $('out');
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
-    generateCall({ scenario: s, panelMode: panelMode() }).then(function (r) {
+    generateCall({ scenario: s, panelMode: panelMode(), philosophyRef: philosophyApplied() }).then(function (r) {
       if (r.mode === 'page') {
         var pg = '<div class="panel" style="max-width:760px"><h2>「' + esc(s.title) + '」 <span class="muted">' +
           (r.no ? 'Observation #' + String(r.no).padStart(3, '0') + ' · ' : '') +
