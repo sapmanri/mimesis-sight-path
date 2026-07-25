@@ -826,6 +826,7 @@ test('패널 바이블 2종 — 격자/여백섬이 서로 다른 문법을 내�
   assert.doesNotMatch(org, /borrow only its border style, gutters/, '격자용 문장이 새면 테두리가 되살아난다');
   assert.doesNotMatch(org, /Panel borders may look hand-ruled/);
   assert.match(org, /Caption below this island, on the white field/, '캡션은 섬 아래 흰 여백');
+  assert.match(org, /Never reproduce any of them/, '참조 시트의 규칙 라벨이 만화로 새지 않게');
   assert.doesNotMatch(org, /Caption box/);
 
   // 격자 — 기존 문장 그대로

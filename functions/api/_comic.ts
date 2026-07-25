@@ -207,6 +207,9 @@ const ORGANIC_GRAMMAR_EN = [
   'Only an explicitly designated subject may extend beyond one island edge onto the white field, including its natural cast shadow, while remaining inside that panel\'s crop-safe region.',
   'Never let an overflow enter another island or obscure captions.',
   'The reference defines only island shape, spacing, boundary behavior and rhythm — never copy its characters, places, colors, style, or frame count.',
+  // 2026-07-25: 참조 시트에 규칙 라벨·설명 블록이 많다. 프롬프트 첫 줄이 "한국어 텍스트 정확히 렌더링"이라
+  // 모델이 시트 안의 글자를 '그려야 할 텍스트'로 오인할 수 있다 — 배제 목록에 텍스트가 빠져 있었다.
+  'The reference sheet may contain written rules, labels, numbers, arrows and legends for human readers. Never reproduce any of them. No text from the reference appears on the page; the only text on the page is the title, the epigraph, and the Korean captions and speech given below.',
 ].join(' ');
 
 export function buildPagePrompt(
