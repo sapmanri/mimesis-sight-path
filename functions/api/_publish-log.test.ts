@@ -39,3 +39,56 @@ test('24시간 밖 슬롯은 missed로 잡지 않는다', () => {
   assert.ok(!missed.includes('2026-07-17T08:00:00+09:00'), '24h 밖 제외');
   assert.ok(missed.includes('2026-07-17T22:00:00+09:00'), '전날 22:00은 missed');
 });
+
+/* ── 슬롯 멱등 영수증 (홈즈 처방 ③, 2026-07-26) ── */
+
+import { slotOf, receiptKey, readSlotReceipt, writeSlotReceipt } from './_publish-log.ts';
+
+/** KV 스텁 — put/get만. expirationTtl이 실제로 넘어오는지도 본다. */
+function kvStub() {
+  const store = new Map<string, string>();
+  const ttls: number[] = [];
+  return {
+    store, ttls,
+    env: {
+      PLANET: {
+        get: async (k: string) => store.get(k) ?? null,
+        put: async (k: string, v: string, o?: { expirationTtl?: number }) => {
+          store.set(k, v);
+          if (o?.expirationTtl) ttls.push(o.expirationTtl);
+        },
+      },
+    } as never,
+  };
+}
+
+test('슬롯 판정 — 정시 ±40분만 슬롯이고, 그 밖은 null(수동 호출은 멱등 대상 아님)', () => {
+  const at8 = kstSlotUtc(2026, 7, 26, 8);
+  assert.equal(slotOf(at8), '2026-07-26T08:00:00+09:00');
+  assert.equal(slotOf(at8 + 30 * 60 * 1000), '2026-07-26T08:00:00+09:00', '08:30 재시도도 같은 슬롯');
+  assert.equal(slotOf(at8 + 45 * 60 * 1000), null, '±40분 밖은 슬롯 없음 — 기존 동작 유지');
+  assert.equal(slotOf(kstSlotUtc(2026, 7, 26, 13)), null, '비정시 호출');
+  // 워치독(threads-watchdog.sh SLOTS="8 18 22")과 같은 세 슬롯인지
+  assert.equal(slotOf(kstSlotUtc(2026, 7, 26, 18)), '2026-07-26T18:00:00+09:00');
+  assert.equal(slotOf(kstSlotUtc(2026, 7, 26, 22)), '2026-07-26T22:00:00+09:00');
+});
+
+test('영수증 — 쓰면 읽히고, TTL이 붙고, 키가 슬롯별로 갈린다', async () => {
+  const kv = kvStub();
+  const slot = '2026-07-26T08:00:00+09:00';
+  assert.equal(await readSlotReceipt(kv.env, slot), null, '처음엔 없다');
+  await writeSlotReceipt(kv.env, { slot, at: 123, textIndex: 7 });
+  const got = await readSlotReceipt(kv.env, slot);
+  assert.equal(got?.textIndex, 7);
+  assert.equal(got?.slot, slot);
+  assert.ok(kv.ttls.length === 1 && kv.ttls[0] > 0, '영수증은 TTL과 함께 저장된다 (영구 누적 금지)');
+  assert.equal(await readSlotReceipt(kv.env, '2026-07-26T18:00:00+09:00'), null, '다른 슬롯은 독립');
+  assert.equal(receiptKey(slot), `publish_receipt:${slot}`);
+});
+
+test('깨진 영수증은 없는 것으로 읽는다 (음성 — 멱등이 발행을 영영 막으면 안 된다)', async () => {
+  const kv = kvStub();
+  const slot = '2026-07-26T22:00:00+09:00';
+  kv.store.set(receiptKey(slot), '{깨진 JSON');
+  assert.equal(await readSlotReceipt(kv.env, slot), null);
+});

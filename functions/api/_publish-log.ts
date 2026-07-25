@@ -21,7 +21,7 @@ const MISSED_GRACE_MS = 10 * 60 * 1000;
 const K_401_TTL_S = 24 * 60 * 60;
 const SLOT_401_MS = 10 * 60 * 1000; // 10분 버킷
 
-export type PublishResult = 'success' | 'threads_failed' | 'key_missing';
+export type PublishResult = 'success' | 'threads_failed' | 'key_missing' | 'slot_duplicate';
 
 export interface PublishLogRecord {
   runId: string;
@@ -82,6 +82,46 @@ export async function appendPublishLog(
   const log: PublishLogRecord[] = raw ? JSON.parse(raw) : [];
   const next = [record, ...log].slice(0, LOG_KEEP);
   await env.PLANET.put(LOG_KEY, JSON.stringify(next));
+}
+
+/* ── 슬롯 멱등 영수증 (홈즈 처방 ③, 2026-07-26) ──────────────────
+   자동발행이 21시간 죽었던 사고(07-25)의 근본 결함은 크론이 아니라 **전달 보장·멱등성 부재**였다.
+   지금 autopost는 인증만 통과하면 무조건 발행한다 — 같은 슬롯을 두 번 때리면 별이가 두 번 말한다.
+
+   ⚠ 이 영수증이 ②(스케줄러 Worker 신설)의 **선행 조건**이다. 외부 크론을 살려둔 채 새 Worker를
+     병행 검증하려면, 두 경로가 같은 슬롯에 겹쳐도 한 번만 나가야 한다. 멱등이 먼저다.
+
+   슬롯 정의는 새로 만들지 않는다 — 이 파일의 `SLOT_HOURS_KST`·`nearestScheduledSlot`을
+   그대로 쓴다(워치독 `threads-watchdog.sh`의 `SLOTS="8 18 22"`와 같은 값).
+   ⚠ 알려진 틈: ±40분 밖의 늦은 재시도는 슬롯이 null이라 멱등 대상이 아니다. 그 경우는
+     기존과 동일하게 발행된다 — 창을 넓히려면 슬롯 정의 한 곳만 고치면 된다. */
+
+const RECEIPT_TTL_S = 7 * 24 * 60 * 60;
+export const receiptKey = (slotIso: string) => `publish_receipt:${slotIso}`;
+
+/** 이 호출이 속한 예정 슬롯. null이면 비정시(수동) 호출 — 멱등 대상이 아니다. */
+export function slotOf(invokedAt: number): string | null {
+  return nearestScheduledSlot(invokedAt);
+}
+
+export interface SlotReceipt {
+  slot: string;
+  at: number;
+  textIndex: number | null;
+}
+
+export async function readSlotReceipt(env: PublishLogEnv, slot: string): Promise<SlotReceipt | null> {
+  const raw = await env.PLANET.get(receiptKey(slot));
+  if (!raw) return null;
+  try { return JSON.parse(raw) as SlotReceipt; } catch { return null; }
+}
+
+/**
+ * 영수증은 **실제 발행에 성공했을 때만** 쓴다.
+ * 실패한 슬롯에 영수증을 남기면 재시도·자동 보충이 영영 막힌다 — 멱등이 침묵으로 바뀐다.
+ */
+export async function writeSlotReceipt(env: PublishLogEnv, r: SlotReceipt): Promise<void> {
+  await env.PLANET.put(receiptKey(r.slot), JSON.stringify(r), { expirationTtl: RECEIPT_TTL_S });
 }
 
 /** 401은 건별 기록 금지 — 10분 슬롯 카운터만. IP·헤더·UA 저장하지 않는다. */

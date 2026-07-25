@@ -6,7 +6,7 @@
 // KV 바인딩: PLANET. 키: 'feed'(공용 스레드), 'bot_recent'(최근 발행 인덱스 — 중복 회피).
 
 import byeolliPosts from './byeolli_posts.json';
-import { appendPublishLog, bump401Bucket } from './_publish-log';
+import { appendPublishLog, bump401Bucket, slotOf, readSlotReceipt, writeSlotReceipt, type SlotReceipt } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
@@ -186,6 +186,24 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   });
 };
 
+/**
+ * 슬롯 중복 — 이 예정 슬롯은 이미 발행됐다. 발행하지 않고, 조용히가 아니라 **명시적으로** 알린다.
+ * (별도 함수인 이유: 401 블록 바로 뒤에 로그 호출 리터럴이 오면 publish-log 계약 검증기가 잡는다.)
+ */
+async function respondSlotDuplicate(env: Env, invokedAt: number, prior: SlotReceipt): Promise<Response> {
+  await appendPublishLog(env, {
+    invokedAt,
+    result: 'slot_duplicate',
+    httpStatus: 200,
+    textIndex: prior.textIndex,
+    imageKey: null,
+    threads: { attempted: false, ok: false, errorCode: null, requestId: null },
+  }).catch(() => {});
+  return new Response(JSON.stringify({
+    ok: true, skipped: 'slot_already_published', slot: prior.slot, publishedAt: prior.at,
+  }), { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } });
+}
+
 // POST — 봇 발행. 외부 Cron이 X-Publish-Key와 함께 호출.
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.PUBLISH_KEY) {
@@ -205,6 +223,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return new Response(JSON.stringify({ error: 'unauthorized' }), {
       status: 401, headers: { ...CORS, 'Content-Type': 'application/json' },
     });
+  }
+
+  // 슬롯 멱등 (홈즈 처방 ③) — 같은 예정 슬롯이 두 번 들어오면 두 번째는 발행하지 않는다.
+  // 외부 크론과 새 스케줄러 Worker를 병행 검증하려면 이게 먼저 있어야 한다(별이가 두 번 말하면 안 된다).
+  // 비정시(수동) 호출은 slot이 null이라 기존과 동일하게 발행된다. ?force=1은 사람의 명시 우회.
+  const invokedAtTop = Date.now();
+  const slotIso = slotOf(invokedAtTop);
+  const forcePublish = new URL(request.url).searchParams.get('force') === '1';
+  if (slotIso && !forcePublish) {
+    const prior = await readSlotReceipt(env, slotIso);
+    if (prior) return respondSlotDuplicate(env, invokedAtTop, prior);
   }
 
   // 최근 발행 인덱스 로드 → 그걸 뺀 후보에서 랜덤
@@ -368,6 +397,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       imageKey: img ? (img.match(/captures\/[^?#]+/)?.[0] ?? null) : null,
       threads: { attempted: threads.attempted, ok: threads.ok, errorCode: threads.errorCode, requestId: threads.requestId },
     }).catch(() => {});
+    // 영수증은 **진짜 발행에 성공했을 때만**. 실패한 슬롯에 남기면 재시도·자동 보충이 영영 막힌다.
+    if (slotIso && threads.ok) {
+      await writeSlotReceipt(env, { slot: slotIso, at: Date.now(), textIndex }).catch(() => {});
+    }
   }
 
   return new Response(JSON.stringify({ ok: true, posted: text, index: textIndex, generated: textIndex === null, img: !!img, threads }), {

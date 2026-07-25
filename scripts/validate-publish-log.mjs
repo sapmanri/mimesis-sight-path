@@ -56,6 +56,31 @@ for (const f of ['httpStatus', 'threads', 'textIndex', 'imageKey', 'missedSlots'
   if (!opsApi.includes(f)) errors.push(`ops/publish-log.ts response missing: ${f}`);
 }
 
+// 6. 슬롯 멱등 배선 (홈즈 처방 ③, 2026-07-26) — 순서가 계약이다.
+//    같은 슬롯이 두 번 들어오면 두 번째는 발행하면 안 된다. 외부 크론과 새 스케줄러 Worker를
+//    병행 검증하려면 이 멱등이 먼저 서 있어야 한다 — 없으면 별이가 한 슬롯에 두 번 말한다.
+//    런타임 검증은 정시(08/18/22 KST)에만 발동하므로, 배선 순서는 여기서 정적으로 잠근다.
+// ⚠ `await`를 포함해 찾는다 — 이름만 찾으면 상단 import 줄에 걸려 검사가 공허해진다
+//   (2026-07-26 음성 테스트에서 실제로 걸렸다: 검증기가 import를 보고 통과시키고 있었다).
+// ⚠ 범위를 POST 본문으로 좁힌다 — GET 핸들러(미리보기)도 RECENT_KEY를 읽으므로
+//   파일 전체에서 indexOf하면 그쪽이 먼저 잡혀 순서 검사가 뒤집힌다 (2026-07-26 음성 테스트에서 확인).
+// ⚠ `await`를 포함해 찾는다 — 이름만 찾으면 상단 import 줄에 걸려 검사가 공허해진다 (같은 날 확인).
+const iPost = autopost.indexOf('export const onRequestPost');
+const postBody = iPost >= 0 ? autopost.slice(iPost) : autopost;
+if (iPost < 0) errors.push('autopost: could not locate onRequestPost');
+const iReceiptRead = postBody.indexOf('await readSlotReceipt(');
+const iPickWork = postBody.indexOf('env.PLANET.get(RECENT_KEY)');
+if (iReceiptRead < 0) errors.push('autopost: slot idempotency check (await readSlotReceipt) is missing');
+else if (iPickWork >= 0 && iReceiptRead > iPickWork) {
+  errors.push('autopost: slot receipt must be checked BEFORE picking/publishing work');
+}
+// 영수증은 실제 발행 성공에만 — 실패 슬롯에 남기면 재시도·자동 보충이 영영 막힌다
+const iWrite = postBody.indexOf('await writeSlotReceipt(');
+if (iWrite < 0) errors.push('autopost: writeSlotReceipt is missing — 성공한 슬롯이 기록되지 않는다');
+else if (!/threads\.ok\s*\)/.test(postBody.slice(Math.max(0, iWrite - 200), iWrite))) {
+  errors.push('autopost: writeSlotReceipt must be guarded by threads.ok (실패 슬롯에 영수증 금지)');
+}
+
 if (errors.length) {
   console.error('publish_log contract validation FAILED:');
   for (const e of errors) console.error('  - ' + e);
