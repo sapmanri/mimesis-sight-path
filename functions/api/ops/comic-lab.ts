@@ -689,6 +689,68 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 
   function fileUrl(key) { return '/api/ops/comic-file?key=' + encodeURIComponent(key); }
 
+  // ── 조립기 (여백섬 컷별 경로) — 홈즈 판정 2026-07-26 ─────────────────
+  // 조건 넷: Layout Plan 좌표를 입력으로 받는 **순수 함수** / 고정 캔버스·고정 DPR /
+  //          FontFace 적재 후 렌더 / 완성 bitmap과 manifest를 R2에 함께 저장.
+  // "브라우저에서 보이는 결과가 정본이 되면 안 된다" — 같은 입력이 기기마다 달라지면
+  // 나중에 서버 렌더러로 옮길 때 계약이 깨진다. 그래서 DPR을 1로 못박는다.
+  //
+  // ⚠ 조판(캡션)은 **아직 막혀 있다.** 레포에 폰트 자산이 없다(woff/ttf 0개).
+  //   시스템 폰트로 조용히 대체하면 기기마다 다른 결과가 나오고, 홈즈 QC의
+  //   "폰트가 fallback 없이 실제 지정 폰트로 적재됐는가"를 통과한 척하게 된다.
+  //   그래서 폰트가 없으면 **캡션을 그리지 않고 경고를 낸다** (조용한 실패 금지).
+  var ASSEMBLY_FONT = null;   // 폰트 자산이 정해지면 { family, url }을 여기 넣는다
+
+  function loadAssemblyFont() {
+    if (!ASSEMBLY_FONT) return Promise.resolve(null);
+    var ff = new FontFace(ASSEMBLY_FONT.family, 'url(' + ASSEMBLY_FONT.url + ')');
+    return ff.load().then(function (f) {
+      document.fonts.add(f);
+      return document.fonts.ready.then(function () { return ASSEMBLY_FONT.family; });
+    }).catch(function () { return null; });
+  }
+
+  /** 이미지를 박스 안에 비율 유지로 앉힌다 (contain). 잘리지 않는다. */
+  function containRect(iw, ih, box) {
+    var s = Math.min(box.w / iw, box.h / ih);
+    var w = iw * s, h = ih * s;
+    return { x: box.x + (box.w - w) / 2, y: box.y + (box.h - h) / 2, w: w, h: h };
+  }
+
+  /**
+   * plan + 컷 이미지들 → 한 장. 같은 입력이면 같은 결과다(DPR 고정, 랜덤 없음).
+   * images: { index → HTMLImageElement }
+   */
+  function assemblePage(plan, images, fontFamily) {
+    var warn = [];
+    var cv = document.createElement('canvas');
+    cv.width = plan.canvas.width; cv.height = plan.canvas.height;   // DPR 1 고정
+    var cx = cv.getContext('2d');
+    cx.imageSmoothingQuality = 'high';
+    cx.fillStyle = '#FAF7F2';                       // 종이 — 섬 사이 여백이 실제로 끊겨 보이게
+    cx.fillRect(0, 0, cv.width, cv.height);
+
+    // 읽기 순서대로. zIndex가 큰 컷(넘침)이 나중에 그려져 위로 온다.
+    var order = plan.panels.slice().sort(function (a, b) {
+      return (a.zIndex - b.zIndex) || (plan.readingOrder.indexOf(a.index) - plan.readingOrder.indexOf(b.index));
+    });
+    order.forEach(function (p) {
+      var img = images[p.index];
+      if (!img) { warn.push(p.index + '컷 이미지 없음 — 자리를 비운다'); return; }
+      var box = p.islandSafeBox;
+      var r = containRect(img.naturalWidth, img.naturalHeight, box);
+      cx.drawImage(img, r.x, r.y, r.w, r.h);
+    });
+
+    // 조판 — 폰트가 없으면 그리지 않는다. 시스템 폰트로 때우지 않는다.
+    var captions = plan.panels.filter(function (p) { return p.captionBox; });
+    if (captions.length && !fontFamily) {
+      warn.push('캡션 ' + captions.length + '개를 그리지 않았다 — 조판 폰트가 없다. '
+        + '시스템 폰트로 대체하면 기기마다 결과가 달라져 계약이 깨진다(홈즈 QC). 폰트 자산을 정해야 한다.');
+    }
+    return { canvas: cv, warnings: warn };
+  }
+
   function downloadBlob(blob, name) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
