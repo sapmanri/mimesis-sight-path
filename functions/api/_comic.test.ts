@@ -16,10 +16,12 @@ function panel(i: number, over: Partial<ComicPanel> = {}): ComicPanel {
     ...over,
   };
 }
+// 샷은 섞는다 — 4컷 이상 전부 같은 샷이면 계약 위반이다 (2026-07-25 shot balance 규칙).
+const SHOT_CYCLE = ['wide', 'medium', 'close', 'back'] as const;
 function scenario(n: 4 | 6 | 8 = 4): ComicScenario {
   return {
     title: '빗소리 하나', epigraph: '빗소리를 데려온 날.', theme: '비 오는 출근길', panelCount: n,
-    panels: Array.from({ length: n }, (_, i) => panel(i + 1)),
+    panels: Array.from({ length: n }, (_, i) => panel(i + 1, { shot: SHOT_CYCLE[i % 4] })),
   };
 }
 
@@ -127,11 +129,11 @@ test('제미나이 키 이름 관용 — 언더바 없이 만들어도 읽힌다
 
 
 test('임의 컷수 — 1~12 정수는 계약 통과, 밖은 위반', () => {
-  const five = { ...scenario(), panelCount: 5, panels: Array.from({ length: 5 }, (_, i) => panel(i + 1)) };
+  const five = { ...scenario(), panelCount: 5, panels: Array.from({ length: 5 }, (_, i) => panel(i + 1, { shot: SHOT_CYCLE[i % 4] })) };
   assert.deepEqual(validateScenario(five), []);
   const zero = { ...scenario(), panelCount: 0, panels: [] };
   assert.ok(validateScenario(zero).length > 0);
-  const thirteen = { ...scenario(), panelCount: 13, panels: Array.from({ length: 13 }, (_, i) => panel(i + 1)) };
+  const thirteen = { ...scenario(), panelCount: 13, panels: Array.from({ length: 13 }, (_, i) => panel(i + 1, { shot: SHOT_CYCLE[i % 4] })) };
   assert.ok(validateScenario(thirteen).some((e) => e.includes('1~12')));
 });
 
@@ -140,7 +142,7 @@ test('패널 레이아웃 참조가 있으면 원샷이 그 프레임을 따르�
   const withRef = bpp(scenario(), { panelLayoutRef: true });
   assert.match(withRef, /panel-layout reference image/);
   assert.match(withRef, /frame design only, not the content/);
-  const five = { ...scenario(), panelCount: 5, panels: Array.from({ length: 5 }, (_, i) => panel(i + 1)) };
+  const five = { ...scenario(), panelCount: 5, panels: Array.from({ length: 5 }, (_, i) => panel(i + 1, { shot: SHOT_CYCLE[i % 4] })) };
   // 2026-07-25: 격자는 항상 2단. 컷 수는 행 수만 바꾼다 (8컷도 2단 — 인스타 4:5 분절이 행 단위이므로)
   assert.match(bpp(five), /3 rows of 2 panels, the last row holding a single panel/, '홀수 컷도 2단 유지');
   assert.equal(STYLE_LOCK_REQUIRED.length, 5);
@@ -826,7 +828,8 @@ test('패널 바이블 2종 — 격자/여백섬이 서로 다른 문법을 내�
   assert.doesNotMatch(org, /borrow only its border style, gutters/, '격자용 문장이 새면 테두리가 되살아난다');
   assert.doesNotMatch(org, /Panel borders may look hand-ruled/);
   assert.match(org, /Caption below this island, on the white field/, '캡션은 섬 아래 흰 여백');
-  assert.match(org, /Never reproduce any of them/, '참조 시트의 규칙 라벨이 만화로 새지 않게');
+  assert.match(org, /Never reproduce reference annotations/, '참조 시트의 주석이 만화로 새지 않게');
+  assert.match(org, /Reference priority, in this order/, '무엇을 베낄지도 알려준다 (배제 목록만으론 부족)');
   assert.doesNotMatch(org, /Caption box/);
 
   // 격자 — 기존 문장 그대로
@@ -840,4 +843,25 @@ test('패널 바이블 2종 — 격자/여백섬이 서로 다른 문법을 내�
   const none = bpp(s);
   assert.match(none, /arranged in 3 rows of 2 panels/, '바이블 미적용은 기본 격자');
   assert.doesNotMatch(none, /ISLAND grammar/);
+});
+
+test('샷 배분 — 6컷이 전부 얼굴이거나 전부 풀샷이 되지 않게 (Scale Rule 2026-07-25)', () => {
+  const mk = (shots: string[]) => ({
+    title: 't', epigraph: 'e', theme: 'x', panelCount: shots.length,
+    panels: shots.map((sh, i) => ({
+      index: i + 1, location: 'yard', shot: sh, subject: 's',
+      action: 'crouching', expression: 'quiet', ppaekong: null, dialogue: null, caption: null,
+    })),
+  });
+  const has = (s: unknown, kw: string) => validateScenario(s).some((e) => e.includes(kw));
+
+  assert.ok(has(mk(['close','close','close','close','close','close']), 'monotony'), '전부 클로즈업은 반려');
+  assert.ok(has(mk(['medium','medium','medium','medium']), 'monotony'), '전부 미디엄도 반려');
+  assert.ok(has(mk(['medium','close','medium','back']), 'wide 컷이 최소'), 'wide가 없으면 반려');
+  assert.ok(has(mk(['wide','close','close','close','medium','back']), 'close가 너무 많다'), 'close 3/6은 상한 초과');
+
+  // 정상 배분은 통과
+  assert.deepEqual(validateScenario(mk(['wide','medium','close','back','medium','wide'])), []);
+  // 3컷 이하는 규칙 적용 안 함 — 짧은 편에 강제하면 오히려 부자연스럽다
+  assert.deepEqual(validateScenario(mk(['close','close','close'])), []);
 });

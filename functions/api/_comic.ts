@@ -88,6 +88,17 @@ export function validateScenario(x: unknown, explicitDialogueCount = 0): string[
     }
     // 별이는 말이 적다 — 대사가 모든 컷에 있으면 별이답지 않다
   });
+  // 샷 배분 (2026-07-25) — 규칙이 없어서 6컷이 전부 클로즈업으로 나올 수 있었다.
+  // 카메라 바이블이 따로 있어도, 페이지의 최소 리듬은 이 계약이 지킨다.
+  if (s.panels.length >= 4) {
+    const shots = s.panels.map((p) => p.shot);
+    if (new Set(shots).size < 2) errs.push('shot monotony: 4컷 이상인데 샷 크기가 하나뿐 (리듬이 죽는다)');
+    if (!shots.includes('wide')) errs.push('shot balance: wide 컷이 최소 하나는 있어야 한다');
+    const close = shots.filter((x) => x === 'close').length;
+    if (close > Math.ceil(s.panels.length / 3)) {
+      errs.push(`shot balance: close가 너무 많다 (${close}/${s.panels.length}, 상한 ${Math.ceil(s.panels.length / 3)})`);
+    }
+  }
   const talky = s.panels.filter((p) => p.dialogue && p.dialogue.trim()).length;
   const allowed = Math.max(Math.ceil(s.panels.length / 2), explicitDialogueCount);
   if (talky > allowed) errs.push('too much dialogue: 별이는 말이 적다 (대사는 절반 이하)');
@@ -206,10 +217,12 @@ const ORGANIC_GRAMMAR_EN = [
   'Keep generous clean white space between all islands, with no touching or overlap.',
   'Only an explicitly designated subject may extend beyond one island edge onto the white field, including its natural cast shadow, while remaining inside that panel\'s crop-safe region.',
   'Never let an overflow enter another island or obscure captions.',
-  'The reference defines only island shape, spacing, boundary behavior and rhythm — never copy its characters, places, colors, style, or frame count.',
+  // Reference Priority — 배제 목록만 있으면 모델이 무엇을 참조할지 모른다. 우선순위를 준다.
+  'Reference priority, in this order: (1) composition, (2) whitespace rhythm, (3) island silhouette, (4) caption position.',
+  'Ignore from the reference: characters, background, objects, lighting, color, typography, frame count.',
   // 2026-07-25: 참조 시트에 규칙 라벨·설명 블록이 많다. 프롬프트 첫 줄이 "한국어 텍스트 정확히 렌더링"이라
   // 모델이 시트 안의 글자를 '그려야 할 텍스트'로 오인할 수 있다 — 배제 목록에 텍스트가 빠져 있었다.
-  'The reference sheet may contain written rules, labels, numbers, arrows and legends for human readers. Never reproduce any of them. No text from the reference appears on the page; the only text on the page is the title, the epigraph, and the Korean captions and speech given below.',
+  'The reference sheet may contain written rules, labels, numbers, arrows and legends for human readers — these are annotations. Never reproduce reference annotations. No text from the reference appears on the page; the only text on the page is the title, the epigraph, and the Korean captions and speech given below.',
 ].join(' ');
 
 export function buildPagePrompt(
@@ -286,6 +299,9 @@ export const SCENARIO_SYSTEM = `너는 '별이'의 하루를 1~12컷 그림일�
   옮기면 말풍선이 아니라 관찰문으로 그려져서 작가의 의도가 사라진다.
   이때만은 "대사는 절반 이하" 기본값보다 작가의 지정이 우선한다.
 - 마지막 컷은 결론이 아니라 여운 — 별이는 정리하지 않는다.
+- **샷 크기를 섞어라.** 6컷이 전부 얼굴이거나 전부 풀샷이면 리듬이 죽는다.
+  4컷 이상이면 wide를 최소 하나 넣고, close는 전체의 3분의 1을 넘기지 마라.
+  같은 shot이 세 컷 넘게 이어지지 않게 한다.
 - **제목은 마지막에 짓는다**: 컷을 모두 구상한 뒤, 주제의 반복이 아니라 마지막 컷 이후에
   남는 기억의 이름으로 (예: 주제 "비 오는 아침" → title "두 개가 만나면").
   웹툰이 제목을 설명하는 게 아니라, 제목이 웹툰을 기억하게 한다.
