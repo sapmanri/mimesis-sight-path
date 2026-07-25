@@ -517,3 +517,52 @@ test('일일 자동 seed — 날짜 결정론 (같은 날 같은 3장, 조건 �
   const s = dailySeed('2026-07-22');
   assert.ok(s >= 400000 && s < 490000);
 });
+
+/* ── 431-M A안 — 발행과 기억이 같은 사건을 공유한다 (홈즈 판정, 집행 2026-07-26) ── */
+
+import { attachPublishedDiary, diaryBranchStatus, memoryKey as mKey } from './_memory-event.ts';
+
+function kvWith(entries: Record<string, string> = {}) {
+  const store = new Map(Object.entries(entries));
+  return { store, env: { PLANET: { get: async (k: string) => store.get(k) ?? null, put: async (k: string, v: string) => { store.set(k, v); } } } as never };
+}
+function dayFixture(over: Record<string, unknown> = {}) {
+  return {
+    version: '431M-v1', memoryEventId: '2026-07-26T05:00:00Z:flowerpot', sourceCaptureIds: ['c1'],
+    date: '2026-07-26', builtAt: 1, momentCount: 3, photoKey: 'captures/a.jpg', density: 'normal',
+    event: { date: '2026-07-26', momentAt: 1, targetLabel: '화분', lines: ['오래 머물렀다.'], diaryText: null, selectedPhoto: null, sketchDiary: null },
+    ...over,
+  };
+}
+
+test('A안 — 발행 시점에 글 갈래가 붙고, 사진 갈래도 같은 순간으로 승격된다', async () => {
+  const kv = kvWith({ [mKey('2026-07-26')]: JSON.stringify(dayFixture()) });
+  const r = await attachPublishedDiary(kv.env, '2026-07-26', '2026-07-26T05:00:00Z:flowerpot', '화분 앞에 오래 있었다.');
+  assert.equal(r, 'attached');
+  const saved = JSON.parse(kv.store.get(mKey('2026-07-26'))!);
+  assert.equal(saved.event.diaryText, '화분 앞에 오래 있었다.');
+  assert.equal(saved.event.selectedPhoto, 'captures/a.jpg', '사진도 같은 사건의 photoKey로 승격');
+});
+
+test('A안 음성 — 멱등하고, 사건이 바뀌었으면 붙이지 않는다', async () => {
+  // 이미 붙어 있으면 덮지 않는다
+  const filled = kvWith({ [mKey('2026-07-26')]: JSON.stringify(dayFixture({ event: { ...dayFixture().event, diaryText: '먼저 쓴 글' } })) });
+  assert.equal(await attachPublishedDiary(filled.env, '2026-07-26', '2026-07-26T05:00:00Z:flowerpot', '나중 글'), 'already');
+  assert.equal(JSON.parse(filled.store.get(mKey('2026-07-26'))!).event.diaryText, '먼저 쓴 글');
+  // 발행 도중 하루가 다시 세워져 다른 사건이 뽑혔으면 붙이지 않는다 (엉뚱한 사건에 매다는 게 빈칸보다 나쁘다)
+  const moved = kvWith({ [mKey('2026-07-26')]: JSON.stringify(dayFixture({ memoryEventId: '2026-07-26T09:00:00Z:rain' })) });
+  assert.equal(await attachPublishedDiary(moved.env, '2026-07-26', '2026-07-26T05:00:00Z:flowerpot', '글'), 'event_changed');
+  assert.equal(JSON.parse(moved.store.get(mKey('2026-07-26'))!).event.diaryText, null);
+  // 기억이 없으면 아무 일도 없다
+  assert.equal(await attachPublishedDiary(kvWith().env, '2026-07-26', 'x', '글'), 'no_memory');
+});
+
+test('글 갈래 상태 다섯 — 표시가 아니라 실제 상태에서 파생된다', () => {
+  const ok = [{ result: 'success' }];
+  const fail = [{ result: 'threads_failed' }];
+  assert.equal(diaryBranchStatus(dayFixture({ event: { ...dayFixture().event, diaryText: '글' } }) as never, ok), 'linked');
+  assert.equal(diaryBranchStatus(dayFixture() as never, []), 'unused', '그날 발행 시도가 없었다');
+  assert.equal(diaryBranchStatus(dayFixture() as never, fail), 'publish_failed', '시도는 있었으나 성공이 없다');
+  assert.equal(diaryBranchStatus(dayFixture({ photoKey: null }) as never, ok), 'untraceable', '사진이 없어 이을 근거가 없다');
+  assert.equal(diaryBranchStatus(dayFixture() as never, ok), 'awaiting_link', '성공도 사진도 있는데 아직 안 붙었다 — 재조정 대상');
+});

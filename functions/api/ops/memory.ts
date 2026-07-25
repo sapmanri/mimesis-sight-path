@@ -10,7 +10,8 @@
 
 import {
   buildDayMemory, validateDayMemory, attachBranch, memoryKey, kstDate, MEMORY_VERSION,
-  type DayMemory, type CaptureLike,
+  diaryBranchStatus, DIARY_STATUS_KO,
+  type DayMemory, type CaptureLike, type DiaryBranchStatus,
 } from '../_memory-event.ts';
 import { TRIAL_R2_PREFIX } from '../_image-provider.ts';
 
@@ -133,6 +134,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       next.event.selectedPhoto ? '사진' : null,
       '그림',
     ].filter(Boolean);
+    // 431-M A안 — 「글 —」 하나를 다섯으로 가른다. **표시만 고치는 게 아니라** 그날의
+    // 발행 기록에서 파생한다(홈즈 지시). 왜 비었는지가 보여야 재조정 대상인지 알 수 있다.
+    let diaryStatus: DiaryBranchStatus = next.event.diaryText ? 'linked' : 'unused';
+    try {
+      const logRaw = await env.PLANET.get('publish_log');
+      const log: { scheduledFor: string | null; invokedAt: number; result: string }[] = logRaw ? JSON.parse(logRaw) : [];
+      diaryStatus = diaryBranchStatus(next, log.filter((r) => kstDate(r.invokedAt) === checked.date));
+    } catch { /* 로그를 못 읽으면 위 기본값 — 판정을 지어내지 않는다 */ }
     return json(200, {
       ok: true, date: checked.date, memoryEventId: next.memoryEventId,
       attached: { branch: 'sketchDiary', value: checked.sketch },
@@ -142,10 +151,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         selectedPhoto: next.event.selectedPhoto ?? null,
         sketchDiary: checked.sketch,
       },
+      diaryStatus,
+      diaryStatusKo: DIARY_STATUS_KO[diaryStatus],
       note: (replaced ? '이전 그림을 교체했다. ' : '') +
         (filled.length === 3
           ? '세 갈래가 모두 같은 사건을 가리킨다 — 하나의 기억, 세 표현.'
-          : `채워진 갈래: ${filled.join('·')}. ${next.event.diaryText ? '' : '글은 이 순간을 쓴 발행이 없어 비워 둔다.'}`),
+          : `채워진 갈래: ${filled.join('·')}. 글: ${DIARY_STATUS_KO[diaryStatus]}.`),
     });
   }
 

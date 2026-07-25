@@ -164,6 +164,76 @@ export function attachBranch(
   return { ...day, event: { ...day.event, [branch]: value } };
 }
 
+/* ── 431-M A안 (홈즈 판정 2026-07-25, 집행 07-26) ──────────────────
+   증상: `갈래: 글 — · 사진 ✓ · 그림 ✓` 가 반복. 홈즈 판정 — 고장이 아니라 계약이 그랬다.
+   "431-M 원칙은 '하나의 기억에서 세 갈래'였지만, 실제 구현은 더 약한 **사후 역추적**이었다.
+    '세 갈래 완성'이라는 이름과 실제 보장이 어긋나 있다."
+
+   원인은 **독립 선택기 두 개**. 기억은 하루 사건 하나의 `photoKey`를 고르고, autopost는
+   40장 후보에서 임의로 고른다 — 같은 사진일 보장이 없다.
+
+   A안: 발행 선택과 기억 선택이 **같은 사건을 공유한다.**
+     · DayMemory가 있으면 그 `photoKey`를 발행 사진으로 우선한다 (autopost 쪽)
+     · 발행이 성공하면 그 글을 **발행 시점에** 같은 사건의 글 갈래로 붙인다 (역추적이 아니라)
+     · 셋 다 같은 `memoryEventId`를 들고 다닌다 — 아래 함수가 그 id를 대조한다 */
+
+export type DiaryAttachResult = 'attached' | 'already' | 'event_changed' | 'no_memory';
+
+/**
+ * 발행된 글을 그 사건의 글 갈래로 붙인다. **멱등** — 이미 붙어 있으면 덮지 않는다.
+ *
+ * `memoryEventId`를 대조하는 것이 핵심이다. 발행 도중 하루가 다시 세워졌다면(다른 사건이
+ * 뽑혔다면) 붙이지 않는다 — 엉뚱한 사건에 남의 글을 매다는 것이 빈칸보다 나쁘다.
+ */
+export async function attachPublishedDiary(
+  env: { PLANET: KVNamespace },
+  date: string,
+  expectedEventId: string,
+  text: string,
+): Promise<DiaryAttachResult> {
+  const raw = await env.PLANET.get(memoryKey(date));
+  if (!raw) return 'no_memory';
+  const day = JSON.parse(raw) as DayMemory;
+  if (day.memoryEventId !== expectedEventId) return 'event_changed';
+  if (day.event.diaryText) return 'already';
+  let next = attachBranch(day, 'diaryText', text);
+  // 사진 갈래도 같은 사건의 photoKey로 함께 승격 — 셋이 같은 순간을 가리키게 한다
+  if (!next.event.selectedPhoto && next.photoKey) next = attachBranch(next, 'selectedPhoto', next.photoKey);
+  await env.PLANET.put(memoryKey(date), JSON.stringify(next));
+  return 'attached';
+}
+
+/**
+ * 글 갈래의 상태. `—` 하나로 뭉쳐 있던 것을 다섯으로 가른다 (홈즈 지시).
+ * ⚠ **표시만 고치는 게 아니다** — 전부 실제 상태에서 파생된다.
+ *
+ *  - `linked`         연결됨 — 글 갈래가 채워졌다
+ *  - `unused`         미사용 — 그날 발행 시도 자체가 없었다
+ *  - `publish_failed` 발행 실패 — 시도는 있었으나 성공이 없다
+ *  - `untraceable`    추적 불가 — 성공 발행은 있으나 이 사건에 사진이 없어 이을 근거가 없다
+ *  - `awaiting_link`  연결 대기 — 성공 발행도 사진도 있는데 아직 안 붙었다 (재조정 대상)
+ */
+export type DiaryBranchStatus = 'linked' | 'unused' | 'publish_failed' | 'untraceable' | 'awaiting_link';
+
+export function diaryBranchStatus(
+  day: Pick<DayMemory, 'photoKey'> & { event: Pick<MemoryEvent, 'diaryText'> },
+  logsForDate: readonly { result: string }[],
+): DiaryBranchStatus {
+  if (day.event.diaryText) return 'linked';
+  if (!logsForDate.length) return 'unused';
+  if (!logsForDate.some((r) => r.result === 'success')) return 'publish_failed';
+  if (!day.photoKey) return 'untraceable';
+  return 'awaiting_link';
+}
+
+export const DIARY_STATUS_KO: Record<DiaryBranchStatus, string> = {
+  linked: '연결됨',
+  unused: '미사용',
+  publish_failed: '발행 실패',
+  untraceable: '추적 불가',
+  awaiting_link: '연결 대기',
+};
+
 /** 저장 전 구조 검증. 실패한 기억은 쓰지 않는다. */
 export function validateDayMemory(x: unknown): string[] {
   const errs: string[] = [];

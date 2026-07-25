@@ -11,6 +11,7 @@ import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
 import { appendCaptureMeta, observationIdOf } from './_capture-meta';
+import { memoryKey, kstDate, attachPublishedDiary, type DayMemory } from './_memory-event';
 import { bookKey } from './_genome';
 
 // 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
@@ -283,9 +284,30 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     } catch { /* 메타 실패 시 기존 풀 유지 */ }
   }
   if (imgPool.length === 0) imgPool = IMAGE_POOL; // 폴백: 하드코딩 8장
-  const img = imgPool.length > 0 && Math.random() < 0.8
+  // 431-M A안 (홈즈 판정) — 발행 선택과 기억 선택이 **같은 사건을 공유한다.**
+  // 지금까지 선택기가 둘이었다: 기억은 하루 사건 하나의 photoKey를, autopost는 40장 중 임의.
+  // 같은 사진일 보장이 없어 「글 —」이 반복됐다. 이제 오늘의 기억이 고른 사진을 우선한다.
+  //
+  // ⚠ **글 갈래가 아직 빈 발행에만** 적용한다. 하루 3회 발행인데 기억은 하루 하나라,
+  //   무조건 우선하면 세 발행이 같은 사진을 쓴다. 그날 첫 성공 발행이 그 기억의 글·사진이 되고
+  //   나머지는 평소대로 간다. 실패는 전부 조용히 흘린다 — 기억 조회가 발행을 막으면 안 된다.
+  const todayKst = kstDate(invokedAtTop);
+  let memoryPhotoUrl: string | null = null;
+  let memoryEventIdForPost: string | null = null;
+  try {
+    const dayRaw = await env.PLANET.get(memoryKey(todayKst));
+    if (dayRaw) {
+      const day = JSON.parse(dayRaw) as DayMemory;
+      if (!day.event?.diaryText && day.photoKey && env.CAPTURES_PUBLIC_BASE) {
+        memoryEventIdForPost = day.memoryEventId ?? null;
+        memoryPhotoUrl = `${env.CAPTURES_PUBLIC_BASE.replace(/\/$/, '')}/${day.photoKey}`;
+      }
+    }
+  } catch { /* 기억 조회 실패가 발행을 막지 않는다 */ }
+
+  const img = memoryPhotoUrl ?? (imgPool.length > 0 && Math.random() < 0.8
     ? imgPool[Math.floor(Math.random() * imgPool.length)]
-    : null;
+    : null);
 
   // 피드 로드 (425-D 작가의 반복 방지 문맥 + 아래 prepend에 재사용)
   const feedRaw = await env.PLANET.get(FEED_KEY);
@@ -413,6 +435,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // 영수증은 **진짜 발행에 성공했을 때만**. 실패한 슬롯에 남기면 재시도·자동 보충이 영영 막힌다.
     if (slotIso && threads.ok) {
       await writeSlotReceipt(env, { slot: slotIso, at: Date.now(), textIndex }).catch(() => {});
+    }
+    // 431-M A안 — 발행이 곧 글 갈래다. 사후 역추적이 아니라 **발행 시점에** 같은 사건에 붙인다.
+    // 멱등하고, memoryEventId가 어긋나면(도중에 하루가 다시 세워졌으면) 붙이지 않는다.
+    if (threads.ok && memoryEventIdForPost) {
+      await attachPublishedDiary(env, todayKst, memoryEventIdForPost, text).catch(() => {});
     }
   }
 
