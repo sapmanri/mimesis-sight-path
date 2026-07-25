@@ -231,6 +231,7 @@ async function runGeneration(
   if (mode === 'page') {
     const refs: RefBytes[] = [];
     const missing: string[] = [];
+    const warnings: string[] = [];
     // 패널 바이블은 **선택된 한 종만** 싣는다 — 둘 다 실으면 격자와 여백섬 문법이 충돌한다.
     const wantSlot = panelMode === 'none' ? null : PANEL_BIBLE_SLOT[panelMode];
     let hasPanelRef = false;
@@ -251,8 +252,13 @@ async function runGeneration(
       obsNo = Number(await withTransientRetry('counter_get', () => env.PLANET.get(COUNTER_KEY)) ?? 0) + 1;
       await withTransientRetry('counter_put', () => env.PLANET.put(COUNTER_KEY, String(obsNo)));
     }
+    // 시트가 없어도 모드는 유지한다 — 문법은 문장만으로도 작동한다 (조용한 무효화 금지, 2026-07-25)
+    if (panelMode !== 'none' && !hasPanelRef) {
+      warnings.push(`${panelMode} 바이블 시트가 비어 있음 — 문장 규칙만으로 그린다 (슬롯 ${wantSlot}에 올리면 더 정확해진다)`);
+    }
     const prompt = buildPagePrompt(s, {
-      panelMode: hasPanelRef ? panelMode : 'none',
+      panelMode,
+      hasSheet: hasPanelRef,
       observationNo: obsNo,
       dateKst: kstDate(Date.now()).replace(/-/g, '.'),
     });
@@ -271,7 +277,7 @@ async function runGeneration(
     } catch { /* 메타 실패가 생성을 막지 않는다 */ }
     return {
       ok: true, mode: 'page', comicId, no: obsNo, key, model: art.model, provider,
-      warnings: missing.length ? [`lock_missing: ${missing.join(', ')}`] : [],
+      warnings: [...(missing.length ? [`lock_missing: ${missing.join(', ')}`] : []), ...warnings],
     };
   }
 

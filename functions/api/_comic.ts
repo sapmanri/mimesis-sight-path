@@ -210,7 +210,6 @@ function pageGridOf(panelCount: number): string {
  * `frame borders`가 모델에게 테두리를 다시 그리게 하므로 모드별로 문장을 완전히 가른다.
  */
 const ORGANIC_GRAMMAR_EN = [
-  'Use the panel-layout reference only as an ORGANIC WHITE-SPACE ISLAND grammar, never as story content or drawing style.',
   'Create exactly {panelCount} clearly separate scene islands on a pure white paper field, in the required reading order.',
   // 실사고 2026-07-25: "가장자리가 곧 경계"라고만 쓰니 모델이 **네모 그림에 물결 마스크를 씌웠다.**
   // 참조 그림에서는 지붕 넝쿨·화분·담 모서리 같은 **장면의 사물이 끝나는 자리**가 윤곽이었다.
@@ -224,23 +223,36 @@ const ORGANIC_GRAMMAR_EN = [
   'Only an explicitly designated subject may extend beyond one island edge onto the white field, including its natural cast shadow, while remaining inside that panel\'s crop-safe region.',
   'Never let an overflow enter another island or obscure captions.',
   // Reference Priority — 배제 목록만 있으면 모델이 무엇을 참조할지 모른다. 우선순위를 준다.
-  'Reference priority, in this order: (1) composition, (2) whitespace rhythm, (3) island silhouette, (4) caption position.',
-  'Ignore from the reference: characters, background, objects, lighting, color, typography, frame count.',
+
   // 2026-07-25: 참조 시트에 규칙 라벨·설명 블록이 많다. 프롬프트 첫 줄이 "한국어 텍스트 정확히 렌더링"이라
   // 모델이 시트 안의 글자를 '그려야 할 텍스트'로 오인할 수 있다 — 배제 목록에 텍스트가 빠져 있었다.
+].join(' ');
+
+/**
+ * 참조 시트가 실제로 실렸을 때만 붙이는 문장들.
+ *
+ * 실사고 2026-07-25: 슬롯이 비어 있으면 모드가 조용히 'none'으로 떨어져
+ * **여백섬 문법이 한 줄도 안 나갔다.** 체크박스는 켜져 있는데 아무 일도 안 일어난 것이다.
+ * 그런데 위 문법의 대부분("윤곽은 장면이 만든다", "마스크 금지")은 참조 그림 없이도 작동한다.
+ * → 시트가 없어도 문법은 보내고, 시트 이야기만 여기로 분리한다.
+ */
+const ORGANIC_WITH_REF_EN = [
+  'Use the panel-layout reference only as an ORGANIC WHITE-SPACE ISLAND grammar, never as story content or drawing style.',
+  'Reference priority, in this order: (1) composition, (2) whitespace rhythm, (3) island silhouette, (4) caption position.',
+  'Ignore from the reference: characters, background, objects, lighting, color, typography, frame count.',
   'The reference sheet may contain written rules, labels, numbers, arrows and legends for human readers — these are annotations. Never reproduce reference annotations. No text from the reference appears on the page; the only text on the page is the title, the epigraph, and the Korean captions and speech given below.',
 ].join(' ');
 
 export function buildPagePrompt(
   s: ComicScenario,
-  opts: { panelLayoutRef?: boolean; panelMode?: PanelBibleMode; observationNo?: number; dateKst?: string } = {},
+  opts: { panelLayoutRef?: boolean; panelMode?: PanelBibleMode; hasSheet?: boolean; observationNo?: number; dateKst?: string } = {},
 ): string {
   // 무회귀: 옛 요청의 panelLayoutRef=true는 grid로 읽는다. 필드가 없으면 none.
   const mode: PanelBibleMode = opts.panelMode ?? (opts.panelLayoutRef ? 'grid' : 'none');
   const grid = mode === 'grid'
     ? 'following the panel layout, panel sizes and arrangement shown in the panel-layout reference image (the last reference image) — that image defines the frame design only, not the content'
     : mode === 'organic'
-      ? ORGANIC_GRAMMAR_EN.replace('{panelCount}', String(s.panelCount))
+      ? (ORGANIC_GRAMMAR_EN + (opts.hasSheet ? ' ' + ORGANIC_WITH_REF_EN : '')).replace('{panelCount}', String(s.panelCount))
       : `arranged in ${pageGridOf(s.panelCount)}`;
   const lines: string[] = [
     // 한국어 정확도 지시를 선두에, 한국어로 — 실측 검증된 기법 (2026-07-22 조사)

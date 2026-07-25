@@ -819,9 +819,14 @@ test('패널 바이블 2종 — 격자/여백섬이 서로 다른 문법을 내�
   assert.ok(isPanelBibleSlot('ch05_panel') && isPanelBibleSlot('ch06_panel_organic'));
   assert.ok(!isPanelBibleSlot('ch00_master'), '캐릭터 바이블은 패널 바이블이 아니다');
 
-  // 여백섬 — 테두리 어휘가 사라지고 섬 문법이 실린다
+  // 여백섬 — 테두리 어휘가 사라지고 섬 문법이 실린다.
+  // 시트가 없어도 문법은 나간다 (2026-07-25 실사고: 슬롯이 비면 모드가 조용히 죽었다).
   const org = bpp(s, { panelMode: 'organic' });
-  assert.match(org, /ORGANIC WHITE-SPACE ISLAND grammar/);
+  const orgWithSheet = bpp(s, { panelMode: 'organic', hasSheet: true });
+  assert.match(orgWithSheet, /ORGANIC WHITE-SPACE ISLAND grammar/, '시트가 있을 때만 참조 문장');
+  assert.doesNotMatch(org, /ORGANIC WHITE-SPACE ISLAND grammar/, '시트 없으면 참조 이야기는 빠진다');
+  assert.match(org, /exactly 6 scene islands/, '그래도 섬 문법 본체는 나간다');
+  assert.match(org, /silhouette must be produced BY THE SCENE ITSELF/, '핵심 규칙은 시트 없이도 나간다');
   assert.match(org, /no rectangular frame, no drawn border, and no mask/);
   // 실사고 회귀: 네모에 물결 마스크를 씌우는 실패를 문장으로 막았는지
   assert.match(org, /silhouette must be produced BY THE SCENE ITSELF/, '내용이 윤곽을 만든다');
@@ -833,8 +838,8 @@ test('패널 바이블 2종 — 격자/여백섬이 서로 다른 문법을 내�
   assert.doesNotMatch(org, /borrow only its border style, gutters/, '격자용 문장이 새면 테두리가 되살아난다');
   assert.doesNotMatch(org, /Panel borders may look hand-ruled/);
   assert.match(org, /Caption below this island, on the white field/, '캡션은 섬 아래 흰 여백');
-  assert.match(org, /Never reproduce reference annotations/, '참조 시트의 주석이 만화로 새지 않게');
-  assert.match(org, /Reference priority, in this order/, '무엇을 베낄지도 알려준다 (배제 목록만으론 부족)');
+  assert.match(orgWithSheet, /Never reproduce reference annotations/, '참조 시트의 주석이 만화로 새지 않게');
+  assert.match(orgWithSheet, /Reference priority, in this order/, '무엇을 베낄지도 알려준다 (배제 목록만으론 부족)');
   assert.doesNotMatch(org, /Caption box/);
 
   // 격자 — 기존 문장 그대로
