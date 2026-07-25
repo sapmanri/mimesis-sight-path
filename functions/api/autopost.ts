@@ -231,8 +231,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const invokedAtTop = Date.now();
   const slotIso = slotOf(invokedAtTop);
   const forcePublish = new URL(request.url).searchParams.get('force') === '1';
+  // 실패 시 열린다(fail-open): 영수증을 못 읽으면 **발행한다.** 닫히면 슬롯이 통째로 빠지는데,
+  // 그게 바로 07-25에 21시간을 죽인 실패 모드다. 중복 한 번이 침묵 한 슬롯보다 낫다.
   if (slotIso && !forcePublish) {
-    const prior = await readSlotReceipt(env, slotIso);
+    const prior = await readSlotReceipt(env, slotIso).catch(() => null);
     if (prior) return respondSlotDuplicate(env, invokedAtTop, prior);
   }
 
