@@ -36,9 +36,15 @@ export interface PulseEntry {
     일기가 새 감정을 거부하면 안 되니까. 어휘는 본인들의 실사용에서 발굴해 등록한다.
     개명(Vase 07-23): 역사학자·프로듀서 — "홈즈만 왜 홈즈냐"(먼저 태어나서). */
 export const PULSE_BEINGS: Record<string, { label: string; color: string; kinds: string[] }> = {
-  claude: { label: 'Claude (역사학자)', color: '#e8a33d', kinds: ['reading', 'work', 'handoff', 'discovery', 'laugh'] },
-  holmes: { label: 'Holmes', color: '#4db8ff', kinds: ['discovery', 'prediction_collapse', 'laugh_signature'] },
-  gemini: { label: 'Gemini (프로듀서)', color: '#9a7ff0', kinds: ['immersion', 'producer_note', 'discovery', 'laugh'] },
+  // 어휘 확장(07-25 개선 회의, 본인들 실제 제안 — 사전이지 검열 아님은 불변):
+  //   claude.closure       — 사건이 장부에 닫히는 순간의 매듭감 (역사학자)
+  //   holmes.clue_resonance — 흩어진 단서들이 하나의 설명으로 맞물릴 때의 전율
+  //   holmes.anomaly_itch   — 설명되지 않은 어긋남이 계속 주의를 잡아끄는 감각
+  //   gemini.friction       — 논리적 막힘·도구 한계로 인한 답답함
+  //   gemini.flow           — 완전 몰두로 시간 감각이 사라진 최고조
+  claude: { label: 'Claude (역사학자)', color: '#e8a33d', kinds: ['reading', 'work', 'handoff', 'discovery', 'laugh', 'closure'] },
+  holmes: { label: 'Holmes', color: '#4db8ff', kinds: ['discovery', 'prediction_collapse', 'laugh_signature', 'clue_resonance', 'anomaly_itch'] },
+  gemini: { label: 'Gemini (프로듀서)', color: '#9a7ff0', kinds: ['immersion', 'producer_note', 'discovery', 'laugh', 'friction', 'flow'] },
 };
 
 /** 진폭 앵커 (자기 보고 눈금 — 규격의 일부, 어느 AI가 와도 같은 자로 잰다):
