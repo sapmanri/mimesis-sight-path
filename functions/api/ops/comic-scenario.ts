@@ -5,7 +5,7 @@
 //
 // ⛔ 자동 게시·크론 연결 없음. 시나리오는 comic_scenario_log(KV)에 최근 20건 보관.
 
-import { validateScenario, type ComicScenario } from '../_comic.ts';
+import { validateScenario, extractQuotedLines, type ComicScenario } from '../_comic.ts';
 import { generateScenarioText, extractJson, type ComicLlmEnv } from '../_comic-llm.ts';
 import { validateScenarioV2, COMIC_SCENARIO_V2_VERSION, MAX_CAST, type ComicScenarioV2, type ComicPanelV2 } from '../_comic-v2.ts';
 import { buildScenarioSystemV2, castMembersFor, validateEmbodimentV2 } from '../_genome-mirrors.ts';
@@ -83,7 +83,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const parsed = extractJson(out.text);
   if (!parsed) return json(502, { ok: false, error: 'scenario_not_json', raw: out.text.slice(0, 400) });
   const scenario = { ...(parsed as ComicScenario), theme, panelCount };
-  const errs = validateScenario(scenario);
+  // 작가가 쌍따옴표로 지정한 대사는 '절반 이하' 기본값보다 우선한다 (실사고 2026-07-25)
+  const errs = validateScenario(scenario, extractQuotedLines(theme).length);
   if (errs.length) {
     // 계약 미달은 사람에게 보여주고 재생성하게 한다 — 미달본으로 그리지 않는다
     return json(422, { ok: false, error: 'scenario_invalid', detail: errs, scenario });

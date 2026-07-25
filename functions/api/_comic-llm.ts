@@ -8,7 +8,7 @@
 // 파싱·검증은 호출자(comic-scenario)가 계약(_comic.validateScenario)으로 한다 —
 // 두뇌가 바뀌어도 검증은 같아야 하므로 어댑터 밖에 둔다.
 
-import { SCENARIO_SYSTEM } from './_comic.ts';
+import { SCENARIO_SYSTEM, extractQuotedLines } from './_comic.ts';
 
 export interface ComicLlmEnv {
   OPENAI_API_KEY?: string;
@@ -34,7 +34,13 @@ export function geminiKeyOf(env: { GEMINI_API_KEY?: string; GEMINIAPIKEY?: strin
 export interface ScenarioPrompts { system: string; user: string }
 
 export function userPrompt(theme: string, panelCount: number): string {
-  return `주제: ${theme}\npanelCount: ${panelCount}\n이 주제로 별이의 ${panelCount}컷 그림일기 시나리오를 JSON으로.`;
+  // 쌍따옴표 = 작가가 지정한 대사. 시스템 프롬프트에만 규칙을 두면 놓치므로
+  // 뽑아낸 문장을 유저 프롬프트에도 명시한다 (실사고 2026-07-25: "어두워졌다"가 캡션으로 나감).
+  const quoted = extractQuotedLines(theme);
+  const dialogueHint = quoted.length
+    ? `\n작가가 대사로 지정한 말 (반드시 해당 컷의 dialogue에 그대로, caption 금지):\n${quoted.map((q) => `- "${q}"`).join('\n')}`
+    : '';
+  return `주제: ${theme}\npanelCount: ${panelCount}${dialogueHint}\n이 주제로 별이의 ${panelCount}컷 그림일기 시나리오를 JSON으로.`;
 }
 
 async function viaGpt(env: ComicLlmEnv, theme: string, panelCount: number, prompts?: ScenarioPrompts):

@@ -36,8 +36,34 @@ export const PANEL_COUNT_MIN = 1;
 export const PANEL_COUNT_MAX = 12;
 export const SHOTS = ['wide', 'medium', 'close', 'back'] as const;
 
-/** 시나리오 구조 검증 — LLM 출력은 계약을 통과해야만 다음 단계로 간다. */
-export function validateScenario(x: unknown): string[] {
+/**
+ * 주제문에서 쌍따옴표로 묶인 조각을 뽑는다 — 작가가 "이건 대사다"라고 지정한 것들.
+ *
+ * 실사고 (2026-07-25, Vase): 주제에 `"어두워졌다"` 한 줄 남기고…` 라고 넣었더니
+ * 그 문장이 말풍선이 아니라 **캡션**으로 나왔다. 프롬프트에 "쌍따옴표=대사" 규칙이
+ * 아예 없었기 때문이다. 별이는 말이 적다는 게놈 때문에 모델이 기본값(caption)으로 보낸 것.
+ * → 작가가 명시한 대사는 게놈 기본값보다 우선한다.
+ *
+ * 곧은 따옴표와 굽은 따옴표(“ ”)를 모두 인정한다.
+ */
+export function extractQuotedLines(theme: string): string[] {
+  if (!theme) return [];
+  const out: string[] = [];
+  for (const m of theme.matchAll(/["“]([^"“”]{1,40})["”]/g)) {
+    const line = m[1].trim();
+    if (line) out.push(line);
+  }
+  return out;
+}
+
+/**
+ * 시나리오 구조 검증 — LLM 출력은 계약을 통과해야만 다음 단계로 간다.
+ *
+ * @param explicitDialogueCount 작가가 주제문에 쌍따옴표로 직접 지정한 대사 수.
+ *   "대사는 절반 이하" 규칙은 별이다움의 기본값이지, 작가의 명시 지시를 덮는 규칙이 아니다.
+ *   지정한 만큼은 통과시킨다.
+ */
+export function validateScenario(x: unknown, explicitDialogueCount = 0): string[] {
   const errs: string[] = [];
   if (typeof x !== 'object' || x === null) return ['not an object'];
   const s = x as Partial<ComicScenario>;
@@ -63,7 +89,8 @@ export function validateScenario(x: unknown): string[] {
     // 별이는 말이 적다 — 대사가 모든 컷에 있으면 별이답지 않다
   });
   const talky = s.panels.filter((p) => p.dialogue && p.dialogue.trim()).length;
-  if (talky > Math.ceil(s.panels.length / 2)) errs.push('too much dialogue: 별이는 말이 적다 (대사는 절반 이하)');
+  const allowed = Math.max(Math.ceil(s.panels.length / 2), explicitDialogueCount);
+  if (talky > allowed) errs.push('too much dialogue: 별이는 말이 적다 (대사는 절반 이하)');
   return errs;
 }
 
@@ -146,10 +173,11 @@ export function buildPagePrompt(
     // 실사고(07-22 밤): 희미한 채색 → 별이 머리 듬성듬성. 부정문 대신 긍정 서술로 못박는다 (교훈 2)
     `Coloring: confident, fully saturated flat fills — every colored shape is filled completely edge to edge. Hair is one solid dark shape, fully filled with even color.`,
     // 홈즈 제목 체계(07-22): 콘텐츠의 제목이 아니라 "오늘의 기록"처럼 — AI 만화 티를 지운다
-    `Page design: warm paper like a page from a child's picture diary. Top-left, very small: "별이의 그림일기" and "${opts.dateKst ?? ''}". Below it the title "${s.title}" written large. Under the title one small line: "${s.epigraph}".`,
-    opts.observationNo
-      ? `At the very bottom of the page, tiny and quiet: "Observation #${String(opts.observationNo).padStart(3, '0')} · BYEOLI".`
-      : '',
+    // 도장 제거 (Vase 판정 2026-07-25 — v2는 07-23에 이미 뺐는데 v1에 남아 있었다):
+    // 날짜·Observation # 는 페이지에 찍지 않는다. 번호는 테스트를 돌릴 때마다 올라가서
+    // 페이지에 박히면 의미 없는 숫자가 되고, 날짜도 이 그림에 아무 뜻을 더하지 않는다.
+    // 기록은 아카이브 메타의 몫이다.
+    `Page design: warm paper like a page from a child's picture diary. Top-left, very small: "별이의 그림일기". Below it the title "${s.title}" written large. Under the title one small line: "${s.epigraph}".`,
     // 손글씨 — 디지털 조판 티가 나던 실사고
     `Every piece of text on this page is hand-lettered in a five-year-old child's careful, slightly wobbly handwriting — warm, uneven, pencil-like. Never digital or typeset fonts. Panel borders may look hand-ruled.`,
     '',
@@ -180,6 +208,10 @@ export const SCENARIO_SYSTEM = `너는 '별이'의 하루를 1~12컷 그림일�
   action은 몸이 그렇게 될 수밖에 없는 구체 동사로 (crouching to look at..., picking up...).
 - caption/dialogue는 한국어 반말, 짧고 담담하게. "~요/~습니다" 금지.
 - dialogue는 전체 컷의 절반 이하, 대부분 null. caption도 모든 컷에 있을 필요 없다.
+- **주제문에 쌍따옴표로 묶인 말은 작가가 "이건 대사다"라고 지정한 것이다.**
+  그 말은 반드시 해당 컷의 dialogue에 그대로 넣는다. caption으로 옮기지 마라 —
+  옮기면 말풍선이 아니라 관찰문으로 그려져서 작가의 의도가 사라진다.
+  이때만은 "대사는 절반 이하" 기본값보다 작가의 지정이 우선한다.
 - 마지막 컷은 결론이 아니라 여운 — 별이는 정리하지 않는다.
 - **제목은 마지막에 짓는다**: 컷을 모두 구상한 뒤, 주제의 반복이 아니라 마지막 컷 이후에
   남는 기억의 이름으로 (예: 주제 "비 오는 아침" → title "두 개가 만나면").

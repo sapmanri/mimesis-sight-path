@@ -160,9 +160,13 @@ test('그림일기 제목 체계 — 헤더·epigraph·발치 서명·손글씨 
   const { buildPagePrompt: bpp } = await import('./_comic.ts');
   const p = bpp(scenario(), { observationNo: 12, dateKst: '2026.07.22' });
   assert.ok(p.includes('별이의 그림일기'), '헤더');
-  assert.ok(p.includes('2026.07.22'));
   assert.ok(p.includes('"빗소리를 데려온 날."'), 'epigraph 원문');
-  assert.match(p, /Observation #012 · BYEOLI/, '발치 서명 (아카이브 번호)');
+  // 도장 제거 (Vase 판정 2026-07-25): 날짜·Observation # 는 페이지에 찍지 않는다.
+  // 번호는 테스트를 돌릴 때마다 올라가 페이지에 박히면 의미 없는 숫자가 되고,
+  // 날짜도 이 그림에 뜻을 더하지 않는다 — 기록은 아카이브 메타의 몫.
+  assert.ok(!p.includes('2026.07.22'), '날짜 미표기');
+  assert.doesNotMatch(p, /Observation #/, '아카이브 번호 미표기');
+  assert.doesNotMatch(p, /BYEOLI"/, '발치 서명 미표기');
   assert.match(p, /hand-lettered .* wobbly handwriting/, '손글씨 지시');
   assert.ok(!p.includes('BYEOLI WEBTOON'), '기계적 헤더 제거');
   // epigraph 없는 시나리오는 계약 미달
@@ -744,4 +748,37 @@ test('비트 검증 — 병합·분리·소실을 잡는다 (Obs #008 실사고 
   assert.match(bp.system, /실제로 말한 화자/, 'keySpeaker는 호명이 아니라 발화자');
   assert.match(beatsToPromptBlock(beats), /발견은 하나씩 발굴된다/);
   assert.match(beatsToPromptBlock(beats), /준비된 결론처럼 선언하지 않는다/, 'Obs #008 실사고 ③');
+});
+
+test('쌍따옴표 = 작가가 지정한 대사 — 캡션으로 새지 않는다 (실사고 2026-07-25)', async () => {
+  const { extractQuotedLines, validateScenario } = await import('./_comic.ts');
+  const { userPrompt } = await import('./_comic-llm.ts');
+
+  // 곧은 따옴표·굽은 따옴표 둘 다 인정
+  assert.deepEqual(extractQuotedLines('그림자가 덮고, "어두워졌다" 한 줄 남기고 떠난다'), ['어두워졌다']);
+  assert.deepEqual(extractQuotedLines('“간다.” 하고 “차가운 냄새.”'), ['간다.', '차가운 냄새.']);
+  assert.deepEqual(extractQuotedLines('따옴표 없는 주제'), []);
+
+  // 유저 프롬프트에 지정 대사가 실려야 모델이 놓치지 않는다
+  const up = userPrompt('씨앗이 멈추고 "어두워졌다"', 6);
+  assert.match(up, /작가가 대사로 지정한 말/);
+  assert.match(up, /- "어두워졌다"/);
+  assert.doesNotMatch(userPrompt('조용한 아침', 4), /작가가 대사로 지정한 말/);
+
+  // 지정 대사는 '절반 이하' 기본값보다 우선한다
+  const mk = (n: number, talky: number) => ({
+    title: 't', epigraph: 'e', theme: 'x', panelCount: n,
+    panels: Array.from({ length: n }, (_, i) => ({
+      index: i + 1, location: 'yard', shot: 'wide', subject: 'the girl',
+      action: 'crouching to look at a seed', expression: 'quiet', ppaekong: null,
+      dialogue: i < talky ? '어두워졌다' : null, caption: null,
+    })),
+  });
+  // 4컷에 대사 3개 — 기본 규칙(절반=2)이면 반려
+  assert.ok(validateScenario(mk(4, 3)).some((e) => e.includes('말이 적다')), '기본값은 그대로 엄격');
+  // 작가가 3개를 지정했다면 통과
+  assert.deepEqual(validateScenario(mk(4, 3), 3).filter((e) => e.includes('말이 적다')), [],
+    '작가 지정은 기본값을 넘어선다');
+  // 지정한 것보다 더 많이 떠들면 여전히 반려
+  assert.ok(validateScenario(mk(4, 4), 3).some((e) => e.includes('말이 적다')), '지정 초과는 반려');
 });

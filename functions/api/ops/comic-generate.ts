@@ -8,7 +8,7 @@
 //
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
-import { validateScenario, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
+import { validateScenario, extractQuotedLines, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
 import { validateScenarioV2, planV2Refs, buildPagePromptV2, detectPlaces, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
@@ -84,7 +84,8 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const scenario = body.scenario;
   const scenario2 = body.scenario2;
   const errs = scenario2 ? validateScenarioV2(scenario2)
-    : scenario ? validateScenario(scenario) : ['scenario required'];
+    : scenario ? validateScenario(scenario, extractQuotedLines(scenario.theme ?? '').length)
+    : ['scenario required'];
   if (errs.length) return json(400, { ok: false, error: 'scenario_invalid', detail: errs });
 
   const { readable, writable } = new TransformStream();
