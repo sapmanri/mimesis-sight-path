@@ -700,37 +700,109 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     return new Blob(chunks.concat(cd, [end]), { type: 'application/zip' });
   }
 
-  function downloadInstatoon(key, title, panelCount) {
-    var rows = rowsOf(panelCount);
-    banner('인스타툰 ' + rows + '장으로 자르는 중… (1080×1350)');
+  // 칸 경계를 찾아 자른다 — 등분하면 칸 한가운데가 잘린다 (2026-07-25 실사고).
+  // 페이지 위쪽 제목·부제 영역 때문에 N등분선이 칸 경계와 어긋났고, 결과가 엉망이었다.
+  // 칸 사이·바깥은 종이색이므로, 종이색으로만 채워진 가로줄/세로줄이 곧 경계다.
+  function detectPanels(img) {
+    var cv = document.createElement('canvas');
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    var cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0);
+    var W = cv.width, H = cv.height;
+    var d = cx.getImageData(0, 0, W, H).data;
+    // 배경색은 좌상단 모서리에서 읽는다 (종이 여백)
+    var br = d[0], bg = d[1], bb = d[2];
+    function isBg(i) {
+      return Math.abs(d[i] - br) < 26 && Math.abs(d[i + 1] - bg) < 26 && Math.abs(d[i + 2] - bb) < 26;
+    }
+    // 가로줄 스캔 — 잉크 비율이 낮으면 거터
+    var stepX = Math.max(1, Math.floor(W / 400));
+    var rowInk = new Float32Array(H);
+    for (var y = 0; y < H; y++) {
+      var ink = 0, n = 0;
+      for (var x = 0; x < W; x += stepX) { n++; if (!isBg((y * W + x) * 4)) ink++; }
+      rowInk[y] = ink / Math.max(n, 1);
+    }
+    function bands(arr, len, minRun) {
+      var out = [], s0 = -1;
+      for (var i = 0; i < len; i++) {
+        if (arr[i] > 0.02) { if (s0 < 0) s0 = i; }
+        else if (s0 >= 0) { if (i - s0 >= minRun) out.push([s0, i]); s0 = -1; }
+      }
+      if (s0 >= 0 && len - s0 >= minRun) out.push([s0, len]);
+      return out;
+    }
+    var rowBands = bands(rowInk, H, Math.floor(H * 0.008));
+    if (!rowBands.length) return [];
+    // 실측(2026-07-25, 「그늘이 지나간 자리」 6컷)으로 확인된 페이지 구조:
+    //   제호 21px · 제목 72px · 부제 27px · [칸 323px · 캡션 27px] x 3행
+    // → 두꺼운 띠가 칸 행, 그 **바로 아래 얇은 띠가 그 행의 캡션**이다.
+    //   캡션은 칸 테두리 바깥에 있으므로 같이 안 자르면 글이 떨어져 나간다.
+    var maxH = 0;
+    rowBands.forEach(function (b) { maxH = Math.max(maxH, b[1] - b[0]); });
+    var thick = rowBands.filter(function (b) { return (b[1] - b[0]) >= maxH * 0.45; });
+    if (!thick.length) return [];
+    // 각 칸 행에 뒤따르는 캡션 띠를 붙여 한 덩어리로 만든다
+    var units = thick.map(function (tb) {
+      var end = tb[1];
+      for (var k = 0; k < rowBands.length; k++) {
+        var cb2 = rowBands[k];
+        if (cb2[0] >= tb[1] && (cb2[0] - tb[1]) < H * 0.03 && (cb2[1] - cb2[0]) < maxH * 0.45) {
+          end = cb2[1]; break;
+        }
+      }
+      return [tb[0], end];
+    });
+
+    var boxes = [];
+    units.forEach(function (rb) {
+      var y0 = rb[0], y1 = rb[1], stepY = Math.max(1, Math.floor((y1 - y0) / 200));
+      var colInk = new Float32Array(W);
+      for (var x2 = 0; x2 < W; x2++) {
+        var ink2 = 0, n2 = 0;
+        for (var y2 = y0; y2 < y1; y2 += stepY) { n2++; if (!isBg((y2 * W + x2) * 4)) ink2++; }
+        colInk[x2] = ink2 / Math.max(n2, 1);
+      }
+      var colBands = bands(colInk, W, Math.floor(W * 0.05));
+      if (!colBands.length) colBands = [[0, W]];
+      colBands.forEach(function (cb) { boxes.push({ x: cb[0], y: y0, w: cb[1] - cb[0], h: y1 - y0 }); });
+    });
+    return boxes;
+  }
+
+  function downloadInstatoon(key, title, panelCount, shape) {
+    var W = 1080, H = (shape === 'square') ? 1080 : 1350;   // 인스타 기본 두 규격
+    banner('칸 경계를 찾는 중…');
     var img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = function () {
-      var bandH = img.naturalHeight / rows, jobs = [];
-      for (var i = 0; i < rows; i++) {
-        (function (i) {
-          jobs.push(new Promise(function (resolve) {
-            var cv = document.createElement('canvas');
-            cv.width = IG_W; cv.height = IG_H;
-            var cx = cv.getContext('2d');
-            // 종이색 배경 — 비율이 안 맞아 남는 자리를 흰 여백이 아니라 종이로 채운다
-            cx.fillStyle = '#F4ECDC'; cx.fillRect(0, 0, IG_W, IG_H);
-            var sw = img.naturalWidth, sh = bandH;
-            var scale = Math.min(IG_W / sw, IG_H / sh);
-            var dw = sw * scale, dh = sh * scale;
-            cx.drawImage(img, 0, i * bandH, sw, sh, (IG_W - dw) / 2, (IG_H - dh) / 2, dw, dh);
-            cv.toBlob(function (b) {
-              b.arrayBuffer().then(function (ab) {
-                resolve({ name: safeName(title) + '_' + String(i + 1).padStart(2, '0') + '.png',
-                  data: new Uint8Array(ab) });
-              });
-            }, 'image/png');
-          }));
-        })(i);
+      var boxes = detectPanels(img);
+      // 정직하게 실패한다 — 못 찾았으면 엉뚱하게 자르느니 알린다 (등분 사고의 교훈)
+      if (!boxes.length) { banner('칸 경계를 못 찾았다 — 통짜로 받아서 직접 자르시오', 'err'); return; }
+      if (boxes.length !== panelCount) {
+        banner('경고: 칸 ' + panelCount + '개인데 ' + boxes.length + '개로 감지됨 — 결과를 확인하시오', 'err');
       }
+      var pad = Math.round(W * 0.04);
+      var jobs = boxes.map(function (b, i) {
+        return new Promise(function (resolve) {
+          var cv = document.createElement('canvas');
+          cv.width = W; cv.height = H;
+          var cx = cv.getContext('2d');
+          cx.fillStyle = '#F4ECDC'; cx.fillRect(0, 0, W, H);
+          var scale = Math.min((W - pad * 2) / b.w, (H - pad * 2) / b.h);
+          var dw = b.w * scale, dh = b.h * scale;
+          cx.drawImage(img, b.x, b.y, b.w, b.h, (W - dw) / 2, (H - dh) / 2, dw, dh);
+          cv.toBlob(function (blob) {
+            blob.arrayBuffer().then(function (ab) {
+              resolve({ name: safeName(title) + '_' + String(i + 1).padStart(2, '0') + '.png',
+                data: new Uint8Array(ab) });
+            });
+          }, 'image/png');
+        });
+      });
       Promise.all(jobs).then(function (files) {
-        downloadBlob(zipStore(files), safeName(title) + '_instatoon_' + rows + 'p.zip');
-        banner('인스타툰 ' + rows + '장 저장됨 (1080×1350)');
+        downloadBlob(zipStore(files), safeName(title) + '_instatoon_' + W + 'x' + H + '_' + files.length + 'p.zip');
+        banner('인스타툰 ' + files.length + '장 저장됨 (' + W + '×' + H + ', 한 장에 한 칸)');
       }).catch(function (e) { banner('분절 실패: ' + e, 'err'); });
     };
     img.onerror = function () { banner('이미지를 못 읽었다', 'err'); };
@@ -753,7 +825,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
           '<div class="row" style="margin-top:10px">' +
           '<button id="dlWhole">⬇ 통짜 1장</button>' +
-          '<button id="dlIg">⬇ 인스타툰 ' + rowsOf(s.panelCount) + '장 (1080×1350)</button>' +
+          '<button id="dlIgV">⬇ 인스타툰 세로 1080×1350</button>' +
+          '<button id="dlIgS">⬇ 인스타툰 정사각 1080×1080</button>' +
           '<button id="redraw" class="primary">🎲 전체 다시 그리기</button></div>' +
           '<div class="muted" style="margin-top:8px">검사 축: 같은 별이 · 머리 단색 면 · 빼콩이 유지 · 컷 수 ' +
           s.panelCount + ' · <b>한글 오탈자</b> (원샷 모드의 검사 항목 — 시나리오 문장과 대조)</div></div>';
@@ -762,8 +835,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         if (rb) rb.onclick = drawComic;
         var dw = $('dlWhole');
         if (dw) dw.onclick = function () { downloadWhole(r.key, s.title); };
-        var di = $('dlIg');
-        if (di) di.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount); };
+        var dv = $('dlIgV');
+        if (dv) dv.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount, 'portrait'); };
+        var ds = $('dlIgS');
+        if (ds) ds.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount, 'square'); };
         banner('페이지 완성 — 오탈자·별이 동일성 확인');
         renderArchive();
         return;
