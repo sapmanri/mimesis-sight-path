@@ -108,9 +108,37 @@ export async function appendPublishLog(
 const RECEIPT_TTL_S = 7 * 24 * 60 * 60;
 export const receiptKey = (slotIso: string) => `publish_receipt:${slotIso}`;
 
-/** 이 호출이 속한 예정 슬롯. null이면 비정시(수동) 호출 — 멱등 대상이 아니다. */
+/** 이 호출이 속한 예정 슬롯. null이면 비정시(수동) 호출 — 영수증 대상이 아니다. */
 export function slotOf(invokedAt: number): string | null {
   return nearestScheduledSlot(invokedAt);
+}
+
+/** 보충 허용 기간 — 지난 슬롯을 얼마나 거슬러 채울 수 있나. 하루 지난 글을 새로 올리지 않는다. */
+export const RECONCILE_WINDOW_MS = 13 * 60 * 60 * 1000;
+
+/**
+ * 호출자가 **의도한 슬롯**을 검증한다 (홈즈 판정 07-26).
+ *
+ * 늦은 보충을 현재 시각으로 부르면 `slotOf(now)`가 과거 누락 슬롯을 알 수 없다 —
+ * 18:50의 보충이 18:00 슬롯을 채우려면 호출자가 그 슬롯을 명시하고 서버가 검증해야 한다.
+ *
+ * 통과 조건: 허용된 08/18/22 KST 슬롯의 정확한 표기여야 하고, 미래가 아니어야 하며,
+ * 보충 허용 기간 안이어야 한다. 하나라도 어긋나면 null — 호출자가 아무 슬롯이나 찍지 못한다.
+ */
+export function validateSlotIso(iso: string, now: number): string | null {
+  const kstNow = new Date(now + KST_OFFSET_MS);
+  for (let dayBack = 0; dayBack <= 1; dayBack++) {
+    const base = new Date(kstNow);
+    base.setUTCDate(base.getUTCDate() - dayBack);
+    for (const h of SLOT_HOURS_KST) {
+      const slotUtc = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), h, 0, 0) - KST_OFFSET_MS;
+      if (kstIso(slotUtc) !== iso) continue;
+      if (slotUtc > now + 60 * 1000) return null;              // 미래 슬롯 금지
+      if (now - slotUtc > RECONCILE_WINDOW_MS) return null;    // 너무 오래된 슬롯 금지
+      return iso;
+    }
+  }
+  return null;
 }
 
 export interface SlotReceipt {

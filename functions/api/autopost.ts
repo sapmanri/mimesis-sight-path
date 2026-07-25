@@ -6,7 +6,7 @@
 // KV 바인딩: PLANET. 키: 'feed'(공용 스레드), 'bot_recent'(최근 발행 인덱스 — 중복 회피).
 
 import byeolliPosts from './byeolli_posts.json';
-import { appendPublishLog, bump401Bucket, slotOf, readSlotReceipt, writeSlotReceipt, type SlotReceipt } from './_publish-log';
+import { appendPublishLog, bump401Bucket, slotOf, validateSlotIso, readSlotReceipt, writeSlotReceipt, type SlotReceipt } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
@@ -230,8 +230,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // 외부 크론과 새 스케줄러 Worker를 병행 검증하려면 이게 먼저 있어야 한다(별이가 두 번 말하면 안 된다).
   // 비정시(수동) 호출은 slot이 null이라 기존과 동일하게 발행된다. ?force=1은 사람의 명시 우회.
   const invokedAtTop = Date.now();
-  const slotIso = slotOf(invokedAtTop);
-  const forcePublish = new URL(request.url).searchParams.get('force') === '1';
+  const reqUrl = new URL(request.url);
+  // 스케줄러 Worker는 **의도한 슬롯을 명시**한다 (홈즈 판정 07-26) — 그래야 18:50의 보충이
+  // 18:00 슬롯을 채우고, 같은 슬롯의 다음 호출도 그 영수증에 막힌다.
+  // 서버가 검증한다: 허용된 08/18/22 슬롯인가 · 미래가 아닌가 · 보충 허용 기간 안인가.
+  const wantSlot = reqUrl.searchParams.get('scheduledFor');
+  const slotIso = wantSlot ? validateSlotIso(wantSlot, invokedAtTop) : slotOf(invokedAtTop);
+  if (wantSlot && !slotIso) {
+    return new Response(JSON.stringify({ ok: false, error: 'bad_scheduled_for', got: wantSlot }), {
+      status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
+    });
+  }
+  const forcePublish = reqUrl.searchParams.get('force') === '1';
   // 실패 시 열린다(fail-open): 영수증을 못 읽으면 **발행한다.** 닫히면 슬롯이 통째로 빠지는데,
   // 그게 바로 07-25에 21시간을 죽인 실패 모드다. 중복 한 번이 침묵 한 슬롯보다 낫다.
   if (slotIso && !forcePublish) {

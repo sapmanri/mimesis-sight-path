@@ -106,3 +106,45 @@ test('누락 판정의 정본은 로그 존재가 아니라 성공 (홈즈 판�
   const dup: PublishLogRecord = { ...rec('2026-07-26T22:00:00+09:00'), result: 'slot_duplicate' };
   assert.deepEqual(computeMissedSlots([rec('2026-07-26T08:00:00+09:00'), rec('2026-07-26T18:00:00+09:00'), dup], now), ['2026-07-26T22:00:00+09:00']);
 });
+
+/* ── 명시적 scheduledFor 검증 (홈즈 판정 2026-07-26) ── */
+
+import { validateSlotIso, RECONCILE_WINDOW_MS } from './_publish-log.ts';
+
+test('명시 슬롯 — 허용 슬롯·과거·보충 기간 안일 때만 통과', () => {
+  const s18 = kstSlotUtc(2026, 7, 26, 18);
+  const now = s18 + 50 * 60 * 1000;   // 18:50 — ±40분 밖이라 slotOf로는 못 잡는 시각
+  assert.equal(slotOf(now), null, '전제: 이 시각은 레거시 휴리스틱으로 잡히지 않는다');
+  assert.equal(validateSlotIso('2026-07-26T18:00:00+09:00', now), '2026-07-26T18:00:00+09:00',
+    '18:50의 보충이 18:00 슬롯을 채울 수 있어야 한다');
+  assert.equal(validateSlotIso('2026-07-26T08:00:00+09:00', now), '2026-07-26T08:00:00+09:00', '같은 날 지난 슬롯도 보충 대상');
+});
+
+test('명시 슬롯 음성 — 미래·비허용 시각·기간 밖·쓰레기는 전부 거부', () => {
+  const s18 = kstSlotUtc(2026, 7, 26, 18);
+  const now = s18 + 10 * 60 * 1000;
+  assert.equal(validateSlotIso('2026-07-26T22:00:00+09:00', now), null, '미래 슬롯 금지');
+  assert.equal(validateSlotIso('2026-07-26T15:00:00+09:00', now), null, '허용 시각(8/18/22)이 아니면 거부');
+  assert.equal(validateSlotIso('2026-07-26T18:00:00+00:00', now), null, '표기가 다르면 거부 — 문자열이 곧 계약');
+  assert.equal(validateSlotIso('아무거나', now), null);
+  assert.equal(validateSlotIso('', now), null);
+  // 보충 허용 기간 밖
+  const late = s18 + RECONCILE_WINDOW_MS + 60 * 1000;
+  assert.equal(validateSlotIso('2026-07-26T18:00:00+09:00', late), null, '너무 오래된 슬롯은 되살리지 않는다');
+});
+
+test('스케줄러 Worker와 Pages가 같은 슬롯 문자열을 만든다 (계약 일치)', async () => {
+  const w = await import('../../workers/publish-scheduler/index.mjs');
+  const s22 = kstSlotUtc(2026, 7, 26, 22);
+  // Worker가 만든 표기를 Pages가 그대로 받아들여야 한다 — 어긋나면 보충이 통째로 죽는다
+  const iso = w.kstIso(s22);
+  assert.equal(iso, '2026-07-26T22:00:00+09:00');
+  assert.equal(validateSlotIso(iso, s22 + 5 * 60 * 1000), iso);
+  // recentSlots: 22:05에는 [22:00, 18:00] 순
+  const got = w.recentSlots(s22 + 5 * 60 * 1000, 2).map(w.kstIso);
+  assert.deepEqual(got, ['2026-07-26T22:00:00+09:00', '2026-07-26T18:00:00+09:00']);
+  // 08:05에는 전날 22:00으로 넘어간다 (날짜 경계)
+  const s8 = kstSlotUtc(2026, 7, 26, 8);
+  const got2 = w.recentSlots(s8 + 5 * 60 * 1000, 2).map(w.kstIso);
+  assert.deepEqual(got2, ['2026-07-26T08:00:00+09:00', '2026-07-25T22:00:00+09:00']);
+});
