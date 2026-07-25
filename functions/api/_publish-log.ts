@@ -84,7 +84,13 @@ export async function appendPublishLog(
   await env.PLANET.put(LOG_KEY, JSON.stringify(next));
 }
 
-/* ── 슬롯 멱등 영수증 (홈즈 처방 ③, 2026-07-26) ──────────────────
+/* ── 슬롯 영수증 (홈즈 처방 ③, 2026-07-26) ──────────────────
+   ⚠ **이것은 원자적 잠금이 아니다.** 홈즈 판정(07-26 00:44): 두 호출이 동시에 `read=null`을
+     보면 **둘 다 발행한다.** 이건 재시도·시간차 중복 방지 장치이지 동시 멱등이 아니다.
+     "멱등 완료"라고 부르지 마라. 병행 검증 때는 새 Worker를 정각이 아니라 +5분에 때려
+     먼저 온 경로의 영수증이 보이게 하고, 병행 기간은 한 슬롯 실측에 필요한 만큼만 짧게 둔다.
+     복수 발행자가 상시화되면 Durable Object나 D1 unique constraint 같은 원자적 조정자가 필요하다.
+
    자동발행이 21시간 죽었던 사고(07-25)의 근본 결함은 크론이 아니라 **전달 보장·멱등성 부재**였다.
    지금 autopost는 인증만 통과하면 무조건 발행한다 — 같은 슬롯을 두 번 때리면 별이가 두 번 말한다.
 
@@ -93,8 +99,11 @@ export async function appendPublishLog(
 
    슬롯 정의는 새로 만들지 않는다 — 이 파일의 `SLOT_HOURS_KST`·`nearestScheduledSlot`을
    그대로 쓴다(워치독 `threads-watchdog.sh`의 `SLOTS="8 18 22"`와 같은 값).
-   ⚠ 알려진 틈: ±40분 밖의 늦은 재시도는 슬롯이 null이라 멱등 대상이 아니다. 그 경우는
-     기존과 동일하게 발행된다 — 창을 넓히려면 슬롯 정의 한 곳만 고치면 된다. */
+   ⚠ ±40분 창은 **넓히지 마라** (홈즈 판정 07-26). 그 창은 외부 크론의 시각을 추정하는
+     레거시 휴리스틱일 뿐, 전달 보장의 식별자가 되어서는 안 된다. 늦은 보충은 창을 넓혀서가 아니라
+     새 Worker가 **의도한 `scheduledFor`를 명시**하고 Pages가 그것을 검증해서 처리한다
+     (그래야 18:50의 보충이 18:00 슬롯을 채우고, 다음 호출도 같은 영수증에 막힌다).
+     ±40분은 기존 외부 크론이 살아 있는 병행 기간에만 유지한다. */
 
 const RECEIPT_TTL_S = 7 * 24 * 60 * 60;
 export const receiptKey = (slotIso: string) => `publish_receipt:${slotIso}`;
@@ -135,7 +144,12 @@ export async function bump401Bucket(env: PublishLogEnv, now: number): Promise<vo
 
 /** 예정 슬롯 중 최근 24h에서 run 레코드가 없는(유예 경과) 슬롯을 missed로 추론 */
 export function computeMissedSlots(log: PublishLogRecord[], now: number): string[] {
-  const present = new Set(log.map((r) => r.scheduledFor).filter(Boolean) as string[]);
+  // 홈즈 판정 07-26: 정본은 "로그가 있나"가 아니라 **"성공했나"**다.
+  // threads_failed·key_missing·slot_duplicate 레코드가 남아 있어도 그 슬롯은 여전히 보충 대상이다
+  // (실패 로그를 '발행됨'으로 세면 누락이 조용히 사라진다 — 침묵이 버그다).
+  const present = new Set(
+    log.filter((r) => r.result === 'success').map((r) => r.scheduledFor).filter(Boolean) as string[],
+  );
   const missed: string[] = [];
   for (let dayBack = 0; dayBack <= 1; dayBack++) {
     const base = new Date(now + KST_OFFSET_MS);

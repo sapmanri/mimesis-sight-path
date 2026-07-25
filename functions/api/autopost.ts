@@ -225,7 +225,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     });
   }
 
-  // 슬롯 멱등 (홈즈 처방 ③) — 같은 예정 슬롯이 두 번 들어오면 두 번째는 발행하지 않는다.
+  // 슬롯 영수증 (홈즈 처방 ③) — 같은 예정 슬롯이 **시간차로** 두 번 들어오면 두 번째는 발행하지 않는다.
+  // ⚠ 동시 호출은 못 막는다(둘 다 read=null을 볼 수 있다). 원자적 잠금이 아니다 — `_publish-log.ts` 참조.
   // 외부 크론과 새 스케줄러 Worker를 병행 검증하려면 이게 먼저 있어야 한다(별이가 두 번 말하면 안 된다).
   // 비정시(수동) 호출은 slot이 null이라 기존과 동일하게 발행된다. ?force=1은 사람의 명시 우회.
   const invokedAtTop = Date.now();

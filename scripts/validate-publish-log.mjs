@@ -56,7 +56,8 @@ for (const f of ['httpStatus', 'threads', 'textIndex', 'imageKey', 'missedSlots'
   if (!opsApi.includes(f)) errors.push(`ops/publish-log.ts response missing: ${f}`);
 }
 
-// 6. 슬롯 멱등 배선 (홈즈 처방 ③, 2026-07-26) — 순서가 계약이다.
+// 6. 슬롯 영수증 배선 (홈즈 처방 ③, 2026-07-26) — 순서가 계약이다.
+//    ⚠ 시간차 중복만 막는다. 동시 호출은 못 막는다(원자적 잠금 아님) — `_publish-log.ts` 주석 참조.
 //    같은 슬롯이 두 번 들어오면 두 번째는 발행하면 안 된다. 외부 크론과 새 스케줄러 Worker를
 //    병행 검증하려면 이 멱등이 먼저 서 있어야 한다 — 없으면 별이가 한 슬롯에 두 번 말한다.
 //    런타임 검증은 정시(08/18/22 KST)에만 발동하므로, 배선 순서는 여기서 정적으로 잠근다.

@@ -92,3 +92,17 @@ test('깨진 영수증은 없는 것으로 읽는다 (음성 — 멱등이 발�
   kv.store.set(receiptKey(slot), '{깨진 JSON');
   assert.equal(await readSlotReceipt(kv.env, slot), null);
 });
+
+test('누락 판정의 정본은 로그 존재가 아니라 성공 (홈즈 판정 2026-07-26)', () => {
+  const now = kstSlotUtc(2026, 7, 26, 22) + 30 * 60 * 1000;
+  const failed = (slot: string): PublishLogRecord => ({ ...rec(slot), result: 'threads_failed', threads: { attempted: true, ok: false, errorCode: 'x', requestId: null } });
+  // 세 슬롯 모두 레코드가 있지만 22시는 실패 → 여전히 보충 대상이어야 한다
+  const log = [rec('2026-07-26T08:00:00+09:00'), rec('2026-07-26T18:00:00+09:00'), failed('2026-07-26T22:00:00+09:00')];
+  assert.deepEqual(computeMissedSlots(log, now), ['2026-07-26T22:00:00+09:00']);
+  // 성공 레코드로 바뀌면 누락 아님
+  const ok = [rec('2026-07-26T08:00:00+09:00'), rec('2026-07-26T18:00:00+09:00'), rec('2026-07-26T22:00:00+09:00')];
+  assert.deepEqual(computeMissedSlots(ok, now), []);
+  // slot_duplicate도 '발행됨'이 아니다 — 그 슬롯의 성공은 별도 레코드가 증명해야 한다
+  const dup: PublishLogRecord = { ...rec('2026-07-26T22:00:00+09:00'), result: 'slot_duplicate' };
+  assert.deepEqual(computeMissedSlots([rec('2026-07-26T08:00:00+09:00'), rec('2026-07-26T18:00:00+09:00'), dup], now), ['2026-07-26T22:00:00+09:00']);
+});
