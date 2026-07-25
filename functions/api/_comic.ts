@@ -98,9 +98,30 @@ export function validateScenario(x: unknown, explicitDialogueCount = 0): string[
 
 export const STYLE_LOCK_VERSION = 'style-lock-v1';
 /** sketch-reference에 이 이름들로 업로드하면 Comic Lab이 자동 장착한다. */
-export const STYLE_LOCK_NAMES = ['ch00_master', 'ch01_turnaround', 'ch02_expression', 'ch03_pose', 'ch04_hair', 'ch05_panel'] as const;
-/** 필수 5장 — ch05_panel(패널 레이아웃 참조)은 선택. 있으면 원샷 페이지가 그 레이아웃을 따른다. */
+export const STYLE_LOCK_NAMES = ['ch00_master', 'ch01_turnaround', 'ch02_expression', 'ch03_pose', 'ch04_hair', 'ch05_panel', 'ch06_panel_organic'] as const;
+/** 필수 5장 — 패널 바이블(ch05/ch06)은 선택. */
 export const STYLE_LOCK_REQUIRED = STYLE_LOCK_NAMES.slice(0, 5);
+
+/**
+ * 패널 바이블 2종 — 홈즈 설계 2026-07-25 (Vase 제안: "네모네모 말고 배경 덩어리, 가끔 밖으로 나오는 애도").
+ *
+ * 두 바이블은 **페이지의 공간 문법만** 소유한다. 컷 수는 scenario가, 캐릭터 외형은 Identity Lock이,
+ * 그림체는 Style Lock이 소유한다 (S-04의 Lock 3분리).
+ *
+ *  - grid    「격자 프레임」  네모 칸·외곽선·칸 아래 캡션. 대화·병렬 비교·순서가 분명해야 할 때.
+ *  - organic 「여백섬」      흰 종이 위 유기적 배경 덩어리. 테두리선 없음, 덩어리 가장자리가 곧 경계.
+ *                           승인된 한 주체만 그 경계 밖으로 나올 수 있다. 관찰·이동·흔적·침묵의 편.
+ *
+ * 상호 배타다. 물리 저장 키는 기존 자산을 잃지 않도록 `ch05_panel`을 그대로 두고 논리 이름만 grid로 맵핑.
+ */
+export type PanelBibleMode = 'none' | 'grid' | 'organic';
+export const PANEL_BIBLE_SLOT: Record<Exclude<PanelBibleMode, 'none'>, string> = {
+  grid: 'ch05_panel',
+  organic: 'ch06_panel_organic',
+};
+export function isPanelBibleSlot(slot: string): boolean {
+  return slot === PANEL_BIBLE_SLOT.grid || slot === PANEL_BIBLE_SLOT.organic;
+}
 
 /**
  * 컷별 참조 선택 — 어댑터 상한에 맞춰 결정론으로 고른다.
@@ -172,19 +193,41 @@ function pageGridOf(panelCount: number): string {
   return `${rows} rows of ${PAGE_COLUMNS} panels, the last row holding a single panel`;
 }
 
+/**
+ * 「여백섬」 문법 — 홈즈 설계 2026-07-25.
+ * grid의 공통 문장("borrow frame borders, gutters and rhythm")을 여기 쓰면 안 된다.
+ * `frame borders`가 모델에게 테두리를 다시 그리게 하므로 모드별로 문장을 완전히 가른다.
+ */
+const ORGANIC_GRAMMAR_EN = [
+  'Use the panel-layout reference only as an ORGANIC WHITE-SPACE ISLAND grammar, never as story content or drawing style.',
+  'Create exactly {panelCount} clearly separate scene islands on a pure white paper field, in the required reading order.',
+  'Each island is one panel: it has no rectangular frame and no drawn border; the irregular painted edge of the background itself is the panel boundary.',
+  'Fill each island with a coherent scene up to that soft, slightly worn edge.',
+  'Keep generous clean white space between all islands, with no touching or overlap.',
+  'Only an explicitly designated subject may extend beyond one island edge onto the white field, including its natural cast shadow, while remaining inside that panel\'s crop-safe region.',
+  'Never let an overflow enter another island or obscure captions.',
+  'The reference defines only island shape, spacing, boundary behavior and rhythm — never copy its characters, places, colors, style, or frame count.',
+].join(' ');
+
 export function buildPagePrompt(
   s: ComicScenario,
-  opts: { panelLayoutRef?: boolean; observationNo?: number; dateKst?: string } = {},
+  opts: { panelLayoutRef?: boolean; panelMode?: PanelBibleMode; observationNo?: number; dateKst?: string } = {},
 ): string {
-  const grid = opts.panelLayoutRef
+  // 무회귀: 옛 요청의 panelLayoutRef=true는 grid로 읽는다. 필드가 없으면 none.
+  const mode: PanelBibleMode = opts.panelMode ?? (opts.panelLayoutRef ? 'grid' : 'none');
+  const grid = mode === 'grid'
     ? 'following the panel layout, panel sizes and arrangement shown in the panel-layout reference image (the last reference image) — that image defines the frame design only, not the content'
-    : `arranged in ${pageGridOf(s.panelCount)}`;
+    : mode === 'organic'
+      ? ORGANIC_GRAMMAR_EN.replace('{panelCount}', String(s.panelCount))
+      : `arranged in ${pageGridOf(s.panelCount)}`;
   const lines: string[] = [
     // 한국어 정확도 지시를 선두에, 한국어로 — 실측 검증된 기법 (2026-07-22 조사)
     `한국어 텍스트 정확하게 렌더링, 글자 왜곡 없음. Render every Korean text below with perfect accuracy — no invented or distorted glyphs.`,
     `A single Korean webtoon page with exactly ${s.panelCount} panels, ${grid}.`,
     // 실사고: 레이아웃 참조가 6칸이면 4컷 지시를 이겼다 — 칸 수 절대 우선 명시
-    `The page must contain exactly ${s.panelCount} panels — count them. If any layout reference shows a different number of frames, borrow only its border style, gutters and rhythm; never copy its frame count.`,
+    mode === 'organic'
+      ? `The page must contain exactly ${s.panelCount} scene islands — count them. If the layout reference shows a different number of islands, borrow only its island silhouette language, spacing and rhythm; never copy its island count.`
+      : `The page must contain exactly ${s.panelCount} panels — count them. If any layout reference shows a different number of frames, borrow only its border style, gutters and rhythm; never copy its frame count.`,
     // 실사고: 마지막 컷에 별이가 둘 — 수 못박기 (9차의 교훈, 페이지판)
     `In every panel there is exactly one girl — never two girls — and at most one white cat.`,
     `Match the character design, hair, palette and line style of the reference sheets exactly — same girl, same white cat.`,
@@ -197,7 +240,10 @@ export function buildPagePrompt(
     // 기록은 아카이브 메타의 몫이다.
     `Page design: warm paper like a page from a child's picture diary. Top-left, very small: "별이의 그림일기". Below it the title "${s.title}" written large. Under the title one small line: "${s.epigraph}".`,
     // 손글씨 — 디지털 조판 티가 나던 실사고
-    `Every piece of text on this page is hand-lettered in a five-year-old child's careful, slightly wobbly handwriting — warm, uneven, pencil-like. Never digital or typeset fonts. Panel borders may look hand-ruled.`,
+    `Every piece of text on this page is hand-lettered in a five-year-old child's careful, slightly wobbly handwriting — warm, uneven, pencil-like. Never digital or typeset fonts.`
+      + (mode === 'organic'
+        ? ' There are no panel borders anywhere on this page — the painted edge of each island is the only boundary.'
+        : ' Panel borders may look hand-ruled.'),
     '',
   ];
   for (const p of s.panels) {
@@ -205,7 +251,13 @@ export function buildPagePrompt(
       + (p.ppaekong ? ` The white cat: ${p.ppaekong}.` : ' The white cat is not in this panel.')
       + ` Focus: ${p.subject}.`);
     if (p.dialogue) lines.push(`  Speech bubble (Korean, exact): "${p.dialogue}"`);
-    if (p.caption) lines.push(`  Caption box (Korean, exact): "${p.caption}"`);
+    if (p.caption) {
+      lines.push(mode === 'organic'
+        // 홈즈 계약: 캡션은 섬 안이 아니라 **섬 바로 아래 흰 여백**에, 섬 너비 안에서 정렬.
+        // 섬+캡션이 하나의 panel unit이라야 인스타툰 분절이 성립한다.
+        ? `  Caption below this island, on the white field, aligned within the island's width, like a quiet observation label (Korean, exact): "${p.caption}"`
+        : `  Caption box (Korean, exact): "${p.caption}"`);
+    }
   }
   lines.push('', 'No text other than the specified Korean lines and the header.');
   return lines.join('\n');

@@ -13,7 +13,7 @@
 //   ch05_panel     = Panel Bible (작품 공통, 기존 슬롯 그대로 공용)
 // 키는 기존과 같은 평평한 prefix — 슬롯 이름이 이름공간을 품는다. 마이그레이션 0.
 
-import { STYLE_LOCK_NAMES } from '../_comic.ts';
+import { STYLE_LOCK_NAMES, isPanelBibleSlot } from '../_comic.ts';
 
 interface Env { CAPTURES: R2Bucket }
 
@@ -41,7 +41,7 @@ export const LOCK_SLOTS_V2: readonly string[] = [
 
 /** 슬롯 → 그룹. UI와 생성 경로가 같은 분류를 쓴다 (판정 4의 A/B/C). */
 export function lockGroupOf(slot: string): string {
-  if (slot === 'ch05_panel') return 'panel';
+  if (isPanelBibleSlot(slot)) return 'panel';   // 패널 바이블 2종은 같은 그룹, 상호 배타 선택 (2026-07-25)
   if ((STYLE_LOCK_NAMES as readonly string[]).includes(slot)) return 'byeoli-bible';
   if ((COMIC_STYLE_SLOTS as readonly string[]).includes(slot)) return 'style';
   const m = slot.match(/^id_([a-z]+)_i[1-5]$/);

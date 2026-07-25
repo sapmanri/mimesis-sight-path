@@ -55,7 +55,7 @@ test('참조 선택 — 상시 3장 + 샷별 1장, 상한을 지킨다', () => {
     ['ch00_master', 'ch04_hair', 'ch03_pose', 'ch01_turnaround']);
   assert.equal(pickStyleRefs('wide', 5).length, 5, 'GPT 어댑터는 5장 전부');
   assert.equal(pickStyleRefs('wide', 2).length, 2);
-  assert.equal(STYLE_LOCK_NAMES.length, 6, '필수 5 + 선택 ch05_panel');
+  assert.equal(STYLE_LOCK_NAMES.length, 7, '필수 5 + 패널 바이블 2종(grid·organic)');
 });
 
 test('컷 프롬프트 — 한글·대사·캡션이 절대 들어가지 않는다 (글자는 조립 단계 몫)', () => {
@@ -277,13 +277,14 @@ test('Lock v2 슬롯 — 그룹 분류와 레거시 보존 (S-04 판정 4)', asy
   for (const s of STYLE_LOCK_NAMES) assert.ok(isLockSlot(s), `레거시 슬롯 보존: ${s}`);
   assert.equal(lockGroupOf('ch00_master'), 'byeoli-bible');
   assert.equal(lockGroupOf('ch05_panel'), 'panel', 'Panel Bible은 공용');
+  assert.equal(lockGroupOf('ch06_panel_organic'), 'panel', '여백섬 바이블도 같은 그룹 (상호 배타)');
   assert.equal(lockGroupOf('style_s3'), 'style');
   assert.equal(lockGroupOf('id_vase_i1'), 'identity:vase');
   assert.equal(lockGroupOf('id_sap_i3'), 'identity:sap', 'S-04A: Sap 슬롯 신설');
   assert.equal(lockGroupOf('id_holmes_i5'), 'identity:holmes');
   assert.ok(!isLockSlot('id_hacker_i1'), '미등록 Creator 슬롯 거부 (음성)');
   assert.ok(!isLockSlot('style_s6'), '슬롯 범위 밖 거부 (음성)');
-  assert.equal(LOCK_SLOTS_V2.length, 6 + 5 + 20 + 5 + 5, '레거시6 + 스타일5 + 정체성20 + 장소5 + 소품5');
+  assert.equal(LOCK_SLOTS_V2.length, 7 + 5 + 20 + 5 + 5, '레거시7(패널 바이블 2종 포함) + 스타일5 + 정체성20 + 장소5 + 소품5');
   assert.equal(lockGroupOf('pl_workshop_p2'), 'place:workshop', 'Place Bible 그룹');
   assert.ok(!isLockSlot('pl_bedroom_p1'), '미등록 장소 거부 (음성)');
   assert.equal(lockGroupOf('pr_sap_p1'), 'prop:sap', 'Prop Bible 그룹 (07-23 신설)');
@@ -804,4 +805,38 @@ test('격자는 항상 2단 — 컷 수는 행 수만 바꾼다 (인스타 4:5 �
   assert.match(bpp(mk(8)), /4 rows of 2 panels/, '8컷 = 4행 2단');
   assert.doesNotMatch(bpp(mk(8)), /2 rows of 4 panels/, '옛 가로 격자는 사라졌다');
   assert.match(bpp(mk(1)), /1 single panel filling the page/);
+});
+
+test('패널 바이블 2종 — 격자/여백섬이 서로 다른 문법을 내고, 옛 요청은 격자로 읽힌다', async () => {
+  const { buildPagePrompt: bpp, PANEL_BIBLE_SLOT, isPanelBibleSlot } = await import('./_comic.ts');
+  const s = scenario(6);
+
+  // 슬롯 계약
+  assert.equal(PANEL_BIBLE_SLOT.grid, 'ch05_panel', '기존 자산을 잃지 않도록 물리 키 유지');
+  assert.equal(PANEL_BIBLE_SLOT.organic, 'ch06_panel_organic');
+  assert.ok(isPanelBibleSlot('ch05_panel') && isPanelBibleSlot('ch06_panel_organic'));
+  assert.ok(!isPanelBibleSlot('ch00_master'), '캐릭터 바이블은 패널 바이블이 아니다');
+
+  // 여백섬 — 테두리 어휘가 사라지고 섬 문법이 실린다
+  const org = bpp(s, { panelMode: 'organic' });
+  assert.match(org, /ORGANIC WHITE-SPACE ISLAND grammar/);
+  assert.match(org, /no rectangular frame and no drawn border/);
+  assert.match(org, /exactly 6 scene islands/, '컷 수가 섬 수로 못박힌다');
+  assert.match(org, /There are no panel borders anywhere on this page/);
+  assert.doesNotMatch(org, /borrow only its border style, gutters/, '격자용 문장이 새면 테두리가 되살아난다');
+  assert.doesNotMatch(org, /Panel borders may look hand-ruled/);
+  assert.match(org, /Caption below this island, on the white field/, '캡션은 섬 아래 흰 여백');
+  assert.doesNotMatch(org, /Caption box/);
+
+  // 격자 — 기존 문장 그대로
+  const grid = bpp(s, { panelMode: 'grid' });
+  assert.match(grid, /following the panel layout, panel sizes and arrangement/);
+  assert.match(grid, /Caption box \(Korean, exact\)/);
+  assert.doesNotMatch(grid, /ISLAND grammar/);
+
+  // 무회귀 — 옛 boolean 요청은 격자로, 아무것도 없으면 기본 격자 배열
+  assert.equal(bpp(s, { panelLayoutRef: true }), grid, 'panelLayoutRef:true === grid');
+  const none = bpp(s);
+  assert.match(none, /arranged in 3 rows of 2 panels/, '바이블 미적용은 기본 격자');
+  assert.doesNotMatch(none, /ISLAND grammar/);
 });

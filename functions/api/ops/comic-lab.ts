@@ -253,7 +253,18 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       }
     } catch (e) { /* 깨진 드래프트는 무시 */ }
   }
-  function panelApplied() { return localStorage.getItem(PANEL_APPLY_KEY) === '1'; }
+  // 패널 바이블 2종 — 홈즈 설계(2026-07-25). 상호 배타 선택.
+  //   grid    「격자 프레임」 네모 칸·외곽선·칸 아래 캡션
+  //   organic 「여백섬」     흰 종이 위 유기적 덩어리, 테두리 없음, 승인된 한 주체만 경계 밖으로
+  // 옛 저장값('1' = 켬)은 grid로 읽어 무회귀를 지킨다.
+  var PANEL_MODE_KEY = 'comiclab.panelMode';
+  function panelMode() {
+    var m = localStorage.getItem(PANEL_MODE_KEY);
+    if (m === 'grid' || m === 'organic' || m === 'none') return m;
+    return localStorage.getItem(PANEL_APPLY_KEY) === '1' ? 'grid' : 'none';   // 레거시 승계
+  }
+  function setPanelMode(m) { localStorage.setItem(PANEL_MODE_KEY, m); }
+  function panelApplied() { return panelMode() !== 'none'; }
   function styleApplied() {
     try { return JSON.parse(localStorage.getItem(STYLE_APPLY_KEY) || '[]'); } catch (e) { return []; }
   }
@@ -266,7 +277,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     { g: 'identity:holmes',  label: '〰 Holmes Identity',         max: 5 },
     { g: 'prop:sap',         label: '🎒 Prop — 삽의 소품',        max: 5 },
     { g: 'place:workshop',   label: '🏠 Place — 작업실',          max: 5 },
-    { g: 'panel',            label: '▦ Panel Bible (공용)',       max: 1 },
+    { g: 'panel',            label: '▦ Panel Bible — 격자/여백섬', max: 2 },
   ];
   function checkLock() {
     api('/api/ops/comic-style-lock').then(function (r) {
@@ -276,7 +287,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       LOCK_GROUP_META.forEach(function (gm) {
         var mine = slots.filter(function (s) {
           return gm.g === 'byeoli-bible'
-            ? (s.group === 'byeoli-bible' && s.slot !== 'ch05_panel')
+            ? (s.group === 'byeoli-bible' && s.slot !== 'ch05_panel' && s.slot !== 'ch06_panel_organic')
             : s.group === gm.g;
         });
         if (!mine.length) return;
@@ -308,12 +319,15 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
             ap2.style.cssText = 'display:block;font-size:10px;cursor:pointer;margin-top:2px';
             var cbp = document.createElement('input');
             cbp.type = 'checkbox';
-            cbp.checked = panelApplied();
+            // 2026-07-25: 패널 바이블 2종 상호 배타 선택. 하나를 켜면 다른 하나는 꺼진다.
+            var myMode = (s.slot === 'ch06_panel_organic') ? 'organic' : 'grid';
+            cbp.checked = (panelMode() === myMode);
             cbp.onclick = function (ev) { ev.stopPropagation(); };
-            cbp.onchange = function () { localStorage.setItem(PANEL_APPLY_KEY, cbp.checked ? '1' : '0'); checkLock(); };
+            cbp.onchange = function () { setPanelMode(cbp.checked ? myMode : 'none'); checkLock(); };
             ap2.onclick = function (ev) { ev.stopPropagation(); };
             ap2.appendChild(cbp);
-            ap2.appendChild(document.createTextNode(' v2 적용(레이아웃만)'));
+            ap2.appendChild(document.createTextNode(
+              myMode === 'organic' ? ' 여백섬으로 그리기' : ' 격자 프레임으로 그리기'));
             cell.appendChild(ap2);
           }
           // 스타일 슬롯: 생성별 [적용] 토글 — 별이체와 관축해체가 같은 칸을 쓰므로 골라 쓴다
@@ -351,14 +365,18 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         });
         wrap.appendChild(grid);
       });
-      var required = slots.filter(function (x) { return x.group === 'byeoli-bible' && x.slot !== 'ch05_panel'; });
+      var required = slots.filter(function (x) { return x.group === 'byeoli-bible' && x.slot !== 'ch05_panel' && x.slot !== 'ch06_panel_organic'; });
       var reqLoaded = required.filter(function (x) { return x.loaded; }).length;
       var panelOn = slots.some(function (x) { return x.slot === 'ch05_panel' && x.loaded; });
       $('lockVer').textContent = '${STYLE_LOCK_VERSION}';
       $('lockStatus').innerHTML = (reqLoaded === required.length
         ? '<span class="ok">🔒 Byeoli ' + reqLoaded + '/5 장착</span>'
         : '<span class="warn">⚠ Byeoli ' + reqLoaded + '/5 — 빈 칸을 눌러 올릴 것</span>') +
-        ' · 패널 레이아웃 ' + (panelOn ? '<span class="ok">✓ (원샷이 이 레이아웃을 따른다)</span>' : '<span class="muted">— (없으면 기본 격자)</span>');
+        ' · 패널 문법 ' + (panelMode() === 'organic'
+          ? '<span class="ok">🌿 여백섬 (테두리 없음 · 경계 밖 돌출 허용)</span>'
+          : panelMode() === 'grid'
+            ? '<span class="ok">▦ 격자 프레임</span>'
+            : '<span class="muted">— 기본 격자 (바이블 미적용)</span>');
     });
   }
   // ── 출연자 선택 (S-04 2단) — Byeoli 단독이 기본, 그때는 기존 경로 그대로 ──
@@ -541,7 +559,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     if (!s) { banner('v2 시나리오가 없다', 'err'); return; }
     var probe = $('out');
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
-    generateCall({ scenario2: s, styleSlots: styleApplied(), panelRef: panelApplied() }).then(function (r) {
+    generateCall({ scenario2: s, styleSlots: styleApplied(), panelRef: panelApplied(), panelMode: panelMode() }).then(function (r) {
       if (r.error) {
         $('out').firstChild.innerHTML = '<div class="bad">실패: ' + esc(r.error) + '</div>' +
           '<div class="muted" style="margin-top:6px">시나리오는 아래 그대로 남아 있다 — 원인 해소 후 다시 누르면 된다.</div>';
@@ -815,7 +833,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     // 먼저 서버에 물어본다 — 페이지 모드(제미나이)면 한 방, 아니면 컷별
     var probe = $('out');
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
-    generateCall({ scenario: s }).then(function (r) {
+    generateCall({ scenario: s, panelMode: panelMode() }).then(function (r) {
       if (r.mode === 'page') {
         var pg = '<div class="panel" style="max-width:760px"><h2>「' + esc(s.title) + '」 <span class="muted">' +
           (r.no ? 'Observation #' + String(r.no).padStart(3, '0') + ' · ' : '') +

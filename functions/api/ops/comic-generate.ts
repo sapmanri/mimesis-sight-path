@@ -8,7 +8,7 @@
 //
 // ⛔ 자동 게시·크론 연결 없음. 산출물은 comic/strips/ 에만.
 
-import { validateScenario, extractQuotedLines, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
+import { validateScenario, extractQuotedLines, PANEL_BIBLE_SLOT, isPanelBibleSlot, type PanelBibleMode, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
 import { validateScenarioV2, planV2Refs, buildPagePromptV2, detectPlaces, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
@@ -79,7 +79,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
-  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[]; panelRef?: boolean };
+  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[]; panelRef?: boolean; panelMode?: PanelBibleMode };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
   const scenario = body.scenario;
   const scenario2 = body.scenario2;
@@ -96,7 +96,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     try {
       const result = scenario2
         ? await runGenerationV2(env, scenario2, Array.isArray(body.styleSlots) ? body.styleSlots : [], body.panelRef === true)
-        : await runGeneration(env, scenario as ComicScenario, body.panels);
+        : await runGeneration(env, scenario as ComicScenario, body.panels, body.panelMode ?? (body.panelRef === true ? 'grid' : 'none'));
       await writer.write(enc.encode(JSON.stringify(result) + '\n'));
     } catch (e) {
       await writer.write(enc.encode(JSON.stringify({ ok: false, error: `generate_crashed: ${String(e).slice(0, 200)}` }) + '\n'));
@@ -191,7 +191,7 @@ async function runGenerationV2(
 }
 
 async function runGeneration(
-  env: Env, s: ComicScenario, panelsWanted?: number[],
+  env: Env, s: ComicScenario, panelsWanted?: number[], panelMode: PanelBibleMode = 'none',
 ): Promise<Record<string, unknown>> {
   const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
   const cap = refCapFor(provider);
@@ -231,10 +231,13 @@ async function runGeneration(
   if (mode === 'page') {
     const refs: RefBytes[] = [];
     const missing: string[] = [];
+    // 패널 바이블은 **선택된 한 종만** 싣는다 — 둘 다 실으면 격자와 여백섬 문법이 충돌한다.
+    const wantSlot = panelMode === 'none' ? null : PANEL_BIBLE_SLOT[panelMode];
     let hasPanelRef = false;
-    for (const slot of STYLE_LOCK_NAMES) {      // ch05_panel이 배열 끝 — 마지막 참조로 실린다
+    for (const slot of STYLE_LOCK_NAMES) {      // 패널 바이블이 배열 끝 — 마지막 참조로 실린다
+      if (isPanelBibleSlot(slot) && slot !== wantSlot) continue;
       const r = await loadRef(slot);
-      if (r) { refs.push(r); if (slot === 'ch05_panel') hasPanelRef = true; }
+      if (r) { refs.push(r); if (slot === wantSlot) hasPanelRef = true; }
       else if ((STYLE_LOCK_REQUIRED as readonly string[]).includes(slot)) missing.push(slot);
     }
     if (!refs.length) return { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' };
@@ -249,7 +252,7 @@ async function runGeneration(
       await withTransientRetry('counter_put', () => env.PLANET.put(COUNTER_KEY, String(obsNo)));
     }
     const prompt = buildPagePrompt(s, {
-      panelLayoutRef: hasPanelRef,
+      panelMode: hasPanelRef ? panelMode : 'none',
       observationNo: obsNo,
       dateKst: kstDate(Date.now()).replace(/-/g, '.'),
     });
