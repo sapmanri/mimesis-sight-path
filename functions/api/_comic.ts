@@ -191,15 +191,48 @@ const SHOT_EN: Record<ComicPanel['shot'], string> = {
   back: 'seen from behind',
 };
 
+/**
+ * 「여백섬」 컷별 문법 — **한 컷이 한 삽화다.**
+ *
+ * 페이지 모드에서 세 번 실패한 이유가 여기서 사라진다. 원샷에서는 모델에게 "웹툰 페이지"를
+ * 요구했고, 모델이 아는 웹툰 페이지는 네모 칸이라 둥근 사각형 마스크가 나왔다. 컷별로 내려오면
+ * 요구가 **"흰 종이 위 삽화 한 장"**으로 바뀐다 — 참조 그림이 원래 그것이었다.
+ *
+ * 페이지판(`ORGANIC_GRAMMAR_EN`)의 핵심 계율은 그대로 가져온다: 윤곽은 장면이 만든다,
+ * 네모를 그리고 모서리를 깎지 마라. 대신 섬의 **개수·간격·배치**는 여기서 말하지 않는다 —
+ * 그건 이제 Layout Plan과 조립기의 몫이다(축이 갈렸다).
+ */
+const ORGANIC_PANEL_EN = [
+  'This is ONE single illustration on a bare white paper field — not a comic page, not a framed panel.',
+  'It has no rectangular frame, no drawn border, no mask, and no background fill reaching the image edge.',
+  'CRITICAL — the silhouette must be produced BY THE SCENE ITSELF: foliage, walls, roofs, furniture, plants, ground and objects reach their natural end and the painting simply stops there, dissolving into bare paper.',
+  'Never draw a rectangle and then round, wave or crop its corners. Never place a decorative outline, blob mask or soft-edged frame over a rectangular illustration. If the silhouette could be removed and still leave a complete rectangular picture underneath, it is wrong.',
+  'No straight horizon, floor line, wall edge or window frame may run uninterrupted from one side of the image to the other; let objects interrupt and terminate those lines before the edge.',
+  'The composition is built outward from its subject and thins toward the paper — denser at the centre, sparse and open where it meets the white.',
+  'Leave clean white paper around the painted mass; the drawing must not touch the image edges.',
+].join(' ');
+
 /** 컷 하나의 이미지 프롬프트. dialogue/caption은 절대 넣지 않는다 — 글자는 조립 단계의 몫. */
-export function buildPanelPrompt(p: ComicPanel): string {
-  return [
+export function buildPanelPrompt(p: ComicPanel, opts: { layoutMode?: PanelBibleMode; overflow?: { subject: string; edges: string[] } } = {}): string {
+  const organic = opts.layoutMode === 'organic';
+  const lines = [
     `Scene: ${p.location}. ${SHOT_EN[p.shot]}.`,
     `The girl (same child as in the reference sheets): ${p.action}. Expression: ${p.expression}.`,
     p.ppaekong ? `The white cat: ${p.ppaekong}.` : 'The white cat is not in this panel.',
     `Focus: ${p.subject}.`,
-    `Style: ${COMIC_STYLE_EN}.`,
-  ].join('\n');
+  ];
+  if (organic) {
+    lines.push(ORGANIC_PANEL_EN);
+    // 넘침은 승인된 대상만. Layout Plan이 그리기 **전에** 정해서 내려보낸다.
+    if (opts.overflow) {
+      lines.push(`One designated subject may break past the painted mass toward the ${opts.overflow.edges.join(' and ')}: ${opts.overflow.subject}. Nothing else extends outward.`);
+    }
+    // 격자용 문장이 여기 오면 모델이 테두리를 다시 그린다 — 모드별로 문장을 완전히 가른다
+    lines.push(`Style: ${COMIC_STYLE_EN.replace('one single comic panel, no panel borders, ', '')}.`);
+  } else {
+    lines.push(`Style: ${COMIC_STYLE_EN}.`);
+  }
+  return lines.join('\n');
 }
 
 /* ── 원샷 페이지 프롬프트 (제미나이 페이지 모드) ──────────────────

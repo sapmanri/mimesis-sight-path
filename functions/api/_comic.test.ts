@@ -1065,3 +1065,37 @@ test('pageContext planner — 시나리오를 다시 쓰지 말라고 못박고,
   assert.match(clause, /identical for every panel/);
   assert.ok(clause.includes('low brick wall') && clause.includes('#FAF7F2'));
 });
+
+test('컷별 여백섬 — 한 컷이 한 삽화. 페이지·격자 어휘가 새지 않는다', () => {
+  const p = panel(1, { shot: 'wide' });
+  const organic = buildPanelPrompt(p, { layoutMode: 'organic' });
+  const plain = buildPanelPrompt(p);
+
+  // 요구가 "웹툰 페이지"가 아니라 "삽화 한 장"으로 바뀌는 것이 이 경로의 전부다
+  assert.match(organic, /ONE single illustration/);
+  assert.match(organic, /not a comic page/);
+  // 페이지판에서 얻은 핵심 계율은 그대로 살아 있어야 한다
+  assert.match(organic, /BY THE SCENE ITSELF/);
+  assert.match(organic, /Never draw a rectangle and then round/);
+  // 격자용 문장이 새면 모델이 테두리를 다시 그린다 (모드별로 완전히 갈라야 한다)
+  assert.doesNotMatch(organic, /one single comic panel, no panel borders/);
+  assert.match(plain, /one single comic panel, no panel borders/, '기본 경로는 그대로 (무회귀)');
+  // 섬 개수·간격은 이제 여기서 말하지 않는다 — Layout Plan과 조립기의 몫
+  assert.doesNotMatch(organic, /islands/);
+  // 글자는 어느 경로에서도 그림에 들어가지 않는다
+  for (const s of [organic, plain]) {
+    assert.ok(!s.includes(p.caption!), '캡션이 컷 프롬프트에 새면 안 된다');
+    assert.doesNotMatch(s, /[가-힣]/);
+  }
+});
+
+test('넘침은 승인된 대상만 — 그리기 전에 정해져 프롬프트로 내려간다', () => {
+  const p = panel(3);
+  const withOverflow = buildPanelPrompt(p, {
+    layoutMode: 'organic', overflow: { subject: 'white cat tail', edges: ['right'] },
+  });
+  assert.match(withOverflow, /white cat tail/);
+  assert.match(withOverflow, /Nothing else extends outward/);
+  // 권한이 없으면 넘침 문장 자체가 없다 (아무나 넘치면 계약이 무너진다)
+  assert.doesNotMatch(buildPanelPrompt(p, { layoutMode: 'organic' }), /may break past/);
+});

@@ -10,7 +10,7 @@
 
 import { validateScenario, extractQuotedLines, splitScenarioErrors, PANEL_BIBLE_SLOT, isPanelBibleSlot, type PanelBibleMode, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
 import { judgeByPhilosophy, finalVerdict, formatJudgment, PHILOSOPHY_SLOT, type PhilosophyJudgment, type FinalVerdict } from '../_philosophy.ts';
-import { resolveRenderMode, planPageContext, validatePageContext, pageContextClause, type RenderMode, type RenderModeRequest, type PageContext } from '../_comic-layout.ts';
+import { resolveRenderMode, planPageContext, validatePageContext, pageContextClause, planLayout, validateLayoutPlan, type RenderMode, type RenderModeRequest, type PageContext } from '../_comic-layout.ts';
 import { validateScenarioV2, planV2Refs, buildPagePromptV2, detectPlaces, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
@@ -364,6 +364,11 @@ async function runGeneration(
     else pageCtx = got.context;
   }
 
+  // 자리표는 그리기 전에 만든다 (Layout → Generation 순서가 계약이다).
+  const plan = planLayout(s);
+  const planErrs = validateLayoutPlan(plan);
+  if (planErrs.length) panelWarnings.push(`layout_plan 계약 위반: ${planErrs.join(' / ')}`);
+
   const made: { index: number; key: string; model: string; provider: string }[] = [];
   const errors: string[] = [];
   for (const idx of want) {
@@ -376,7 +381,15 @@ async function runGeneration(
       else errors.push(`lock_missing:${slot} (컷 ${idx} — 바이블 없이 그리면 남의 그림체가 된다)`);
     }
     if (!refs.length) { errors.push(`panel_${idx}_skipped: Style Lock이 비어 있다`); continue; }
-    const prompt = pageCtx ? `${buildPanelPrompt(panel)}\n${pageContextClause(pageCtx)}` : buildPanelPrompt(panel);
+    // Layout Plan이 그리기 **전에** 자리와 넘침 권한을 정한다 — 섬 윤곽은 이웃을 알아야 정해진다.
+    const lp = plan.panels.find((x) => x.index === idx);
+    const base = buildPanelPrompt(panel, {
+      layoutMode: panelMode,
+      overflow: lp?.overflow.allowed && lp.overflow.subject
+        ? { subject: lp.overflow.subject, edges: lp.overflow.edges ?? ['right'] }
+        : undefined,
+    });
+    const prompt = pageCtx ? `${base}\n${pageContextClause(pageCtx)}` : base;
     const art = await generatePanelImage(env, prompt, refs);
     if ('error' in art) { errors.push(`panel_${idx}: ${art.error}`); continue; }
     const key = panelKey(comicId, idx);
@@ -402,5 +415,5 @@ async function runGeneration(
     ...panelWarnings,
     ...(philosophyRef ? ['philosophy_bible 그림 참조는 페이지 모드(제미나이)에서만 실린다 — 컷 모드는 참조 상한 때문에 제외. 문장·판정은 그대로 적용된다'] : []),
   ];
-  return { ok: errors.length === 0, mode: 'panels', renderMode: mode, layoutMode: panelMode, comicId, made, errors, warnings: [...warnings, ...modeNotes], pageContext: pageCtx, provider };
+  return { ok: errors.length === 0, mode: 'panels', renderMode: mode, layoutMode: panelMode, comicId, made, errors, warnings: [...warnings, ...modeNotes], pageContext: pageCtx, layoutPlan: plan, provider };
 }
