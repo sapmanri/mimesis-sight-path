@@ -148,11 +148,29 @@ export function buildPanelPrompt(p: ComicPanel): string {
    "한글은 그림으로 취급된다"는 flux의 규칙이었다 — 여기선 오탈자 검사로 대체된다.
    레이아웃은 CH05 PANEL BIBLE이 오기 전까지 기본 격자. */
 
-const PAGE_GRID: Record<number, string> = {
-  4: '2 rows of 2 panels',
-  6: '3 rows of 2 panels',
-  8: '2 rows of 4 panels',
-};
+/**
+ * 페이지 격자 — **항상 2단**이다. 컷 수만 행 수를 바꾼다.
+ *
+ * 2026-07-25 정정: 8컷만 `2 rows of 4 panels`였다. 그런데 실물(#015 4컷, #016 6컷,
+ * 「비 오는 아침」 4컷)은 전부 2단이고, 8컷만 4단이 되면 시각 언어가 어긋난다.
+ * 게다가 인스타툰 분절(1080×1350, 4:5 세로)은 한 슬라이드에 2컷이 들어갈 때 맞는데
+ * 4단짜리 행은 옆으로 길어 세로 슬라이드에 담기지 않는다.
+ * → 2단 고정. 행 수 = ceil(panelCount / 2). 분절 슬라이드 수도 이 행 수와 같다.
+ */
+export const PAGE_COLUMNS = 2;
+
+/** 컷 수 → 행 수. 분절 슬라이드 수이기도 하다 (한 슬라이드 = 한 행 = 2컷). */
+export function pageRowsOf(panelCount: number): number {
+  return Math.max(1, Math.ceil(panelCount / PAGE_COLUMNS));
+}
+
+function pageGridOf(panelCount: number): string {
+  const rows = pageRowsOf(panelCount);
+  if (panelCount === 1) return '1 single panel filling the page';
+  if (panelCount % PAGE_COLUMNS === 0) return `${rows} rows of ${PAGE_COLUMNS} panels`;
+  // 홀수 컷: 마지막 행만 1컷 (2단 유지)
+  return `${rows} rows of ${PAGE_COLUMNS} panels, the last row holding a single panel`;
+}
 
 export function buildPagePrompt(
   s: ComicScenario,
@@ -160,7 +178,7 @@ export function buildPagePrompt(
 ): string {
   const grid = opts.panelLayoutRef
     ? 'following the panel layout, panel sizes and arrangement shown in the panel-layout reference image (the last reference image) — that image defines the frame design only, not the content'
-    : `arranged in ${PAGE_GRID[s.panelCount] ?? `a balanced, rhythmically varied grid of ${s.panelCount} panels`}`;
+    : `arranged in ${pageGridOf(s.panelCount)}`;
   const lines: string[] = [
     // 한국어 정확도 지시를 선두에, 한국어로 — 실측 검증된 기법 (2026-07-22 조사)
     `한국어 텍스트 정확하게 렌더링, 글자 왜곡 없음. Render every Korean text below with perfect accuracy — no invented or distorted glyphs.`,

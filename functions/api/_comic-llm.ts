@@ -33,6 +33,21 @@ export function geminiKeyOf(env: { GEMINI_API_KEY?: string; GEMINIAPIKEY?: strin
 /** v2 경로(S-04)가 게놈 파생 프롬프트를 주입한다. 없으면 v1(별이 단독) 기본 — 무회귀. */
 export interface ScenarioPrompts { system: string; user: string }
 
+/**
+ * 자동 컷 수 휴리스틱 (홈즈 판정 2026-07-25) — 글자 수가 아니라 **불가분의 시각 비트 수**로 정한다.
+ * S-04·계약 어디에도 자동 선정 알고리즘이 없었고, 자동은 '대화로 만들기'에만 있었다.
+ * 주제 경로에도 열면서 기준을 여기 명문화한다.
+ */
+export const AUTO_PANEL_RULE = `panelCount는 네가 정한다. 다음 순서로 세어라.
+1. caption을 지워도 그림만으로 구별되는 상태 변화를 센다.
+2. 발견(첫 상태)과 마지막 흔적은 각각 독립된 컷으로 반드시 확보한다.
+3. 같은 구도·같은 상태가 연속되면 하나로 합친다.
+4. 변화가 갑작스러워 인과가 끊기면 징후 컷을 하나 보탠다.
+5. 그 수에 가장 가까운 컷 수를 택하되 **최소 컷을 우선**한다.
+기준: 변화가 하나면 4컷 / 기다림이나 중간 징후를 독자가 체감해야 하면 6컷 /
+변화가 둘 이상이거나 공간 이동·시선 추적이 있으면 8컷.
+사건 하나를 느리게 보이려고 컷을 늘리지 마라 — 그건 반복이 아니라 패딩이다.`;
+
 export function userPrompt(theme: string, panelCount: number): string {
   // 쌍따옴표 = 작가가 지정한 대사. 시스템 프롬프트에만 규칙을 두면 놓치므로
   // 뽑아낸 문장을 유저 프롬프트에도 명시한다 (실사고 2026-07-25: "어두워졌다"가 캡션으로 나감).
@@ -40,6 +55,11 @@ export function userPrompt(theme: string, panelCount: number): string {
   const dialogueHint = quoted.length
     ? `\n작가가 대사로 지정한 말 (반드시 해당 컷의 dialogue에 그대로, caption 금지):\n${quoted.map((q) => `- "${q}"`).join('\n')}`
     : '';
+  // panelCount 0 = 자동. 컷 수를 지시하지 않고 휴리스틱만 준다.
+  if (!panelCount) {
+    return `주제: ${theme}${dialogueHint}\n\n${AUTO_PANEL_RULE}\n\n`
+      + `이 주제로 별이의 그림일기 시나리오를 JSON으로. panelCount와 panels 길이는 반드시 같아야 한다.`;
+  }
   return `주제: ${theme}\npanelCount: ${panelCount}${dialogueHint}\n이 주제로 별이의 ${panelCount}컷 그림일기 시나리오를 JSON으로.`;
 }
 

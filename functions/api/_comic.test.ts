@@ -141,7 +141,8 @@ test('패널 레이아웃 참조가 있으면 원샷이 그 프레임을 따르�
   assert.match(withRef, /panel-layout reference image/);
   assert.match(withRef, /frame design only, not the content/);
   const five = { ...scenario(), panelCount: 5, panels: Array.from({ length: 5 }, (_, i) => panel(i + 1)) };
-  assert.match(bpp(five), /balanced, rhythmically varied grid of 5 panels/, '프리셋 밖 컷수는 일반 격자 서술');
+  // 2026-07-25: 격자는 항상 2단. 컷 수는 행 수만 바꾼다 (8컷도 2단 — 인스타 4:5 분절이 행 단위이므로)
+  assert.match(bpp(five), /3 rows of 2 panels, the last row holding a single panel/, '홀수 컷도 2단 유지');
   assert.equal(STYLE_LOCK_REQUIRED.length, 5);
   assert.ok(!STYLE_LOCK_REQUIRED.includes('ch05_panel'));
 });
@@ -781,4 +782,26 @@ test('쌍따옴표 = 작가가 지정한 대사 — 캡션으로 새지 않는�
     '작가 지정은 기본값을 넘어선다');
   // 지정한 것보다 더 많이 떠들면 여전히 반려
   assert.ok(validateScenario(mk(4, 4), 3).some((e) => e.includes('말이 적다')), '지정 초과는 반려');
+});
+
+test('격자는 항상 2단 — 컷 수는 행 수만 바꾼다 (인스타 4:5 분절 단위 = 행)', async () => {
+  const { pageRowsOf, PAGE_COLUMNS, buildPagePrompt: bpp } = await import('./_comic.ts');
+  assert.equal(PAGE_COLUMNS, 2);
+  assert.equal(pageRowsOf(4), 2);
+  assert.equal(pageRowsOf(6), 3);
+  assert.equal(pageRowsOf(8), 4, '8컷은 2행4단이 아니라 4행2단 — 세로 슬라이드에 담기려면');
+  assert.equal(pageRowsOf(5), 3);
+  assert.equal(pageRowsOf(1), 1);
+  assert.equal(pageRowsOf(12), 6);
+
+  const mk = (n: number) => ({
+    title: 't', epigraph: 'e', theme: 'x', panelCount: n,
+    panels: Array.from({ length: n }, (_, i) => ({
+      index: i + 1, location: 'yard', shot: 'wide' as const, subject: 's',
+      action: 'crouching', expression: 'quiet', ppaekong: null, dialogue: null, caption: null,
+    })),
+  });
+  assert.match(bpp(mk(8)), /4 rows of 2 panels/, '8컷 = 4행 2단');
+  assert.doesNotMatch(bpp(mk(8)), /2 rows of 4 panels/, '옛 가로 격자는 사라졌다');
+  assert.match(bpp(mk(1)), /1 single panel filling the page/);
 });

@@ -62,18 +62,21 @@ async function scenarioV2(env: Env, theme: string, panelCount: number, castIds: 
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  let body: { theme?: string; panelCount?: number; cast?: string[] };
+  let body: { theme?: string; panelCount?: number | 'auto'; cast?: string[] };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
   const theme = (body.theme ?? '').trim().slice(0, 200);
   if (!theme) return json(400, { ok: false, error: 'theme_required: 오늘 겪을 일 한 줄' });
-  const panelCount = Number(body.panelCount ?? 4);
-  if (!Number.isInteger(panelCount) || panelCount < 1 || panelCount > 12) {
-    return json(400, { ok: false, error: 'panelCount must be 1~12' });
+  // 'auto' = 컷 수를 LLM이 정한다 (홈즈 휴리스틱). 0을 센티널로 아래까지 흘린다.
+  const isAuto = body.panelCount === 'auto';
+  const panelCount = isAuto ? 0 : Number(body.panelCount ?? 4);
+  if (!isAuto && (!Number.isInteger(panelCount) || panelCount < 1 || panelCount > 12)) {
+    return json(400, { ok: false, error: 'panelCount must be 1~12 or "auto"' });
   }
 
   // cast 미지정 또는 Byeoli 단독 → 기존 v1 경로 그대로 (무회귀)
   const castIds = Array.isArray(body.cast) ? body.cast.filter((c) => typeof c === 'string') : [];
   if (castIds.length && !(castIds.length === 1 && castIds[0] === 'byeoli')) {
+    if (isAuto) return json(400, { ok: false, error: 'auto_not_supported_on_v2: v2(다중 출연) 경로는 컷 수를 지정해야 한다' });
     return scenarioV2(env, theme, panelCount, castIds);
   }
 
@@ -82,7 +85,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const parsed = extractJson(out.text);
   if (!parsed) return json(502, { ok: false, error: 'scenario_not_json', raw: out.text.slice(0, 400) });
-  const scenario = { ...(parsed as ComicScenario), theme, panelCount };
+  // 자동이면 LLM이 고른 panelCount를 그대로 존중한다 — 덮어쓰면 자동이 아니게 된다
+  const scenario = isAuto
+    ? { ...(parsed as ComicScenario), theme }
+    : { ...(parsed as ComicScenario), theme, panelCount };
   // 작가가 쌍따옴표로 지정한 대사는 '절반 이하' 기본값보다 우선한다 (실사고 2026-07-25)
   const errs = validateScenario(scenario, extractQuotedLines(theme).length);
   if (errs.length) {

@@ -106,6 +106,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     <input type="text" id="theme" placeholder="비 오는 출근길">
     <label>몇 컷?</label>
     <div class="row" id="cuts">
+      <button data-cut="auto">자동</button>
       <button data-cut="4" class="sel">4컷</button>
       <button data-cut="6">6컷</button>
       <button data-cut="8">8컷</button>
@@ -435,7 +436,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // ── 컷 수 선택 ──
   Array.prototype.forEach.call(document.querySelectorAll('#cuts button'), function (b) {
     b.onclick = function () {
-      state.cut = Number(b.getAttribute('data-cut'));
+      var cv = b.getAttribute('data-cut');
+      state.cut = (cv === 'auto') ? 'auto' : Number(cv);
       $('cutCustom').value = '';
       Array.prototype.forEach.call(document.querySelectorAll('#cuts button'), function (x) {
         x.className = x === b ? 'sel' : '';
@@ -634,6 +636,107 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       return r;
     }).catch(function (e) { failPanel(p, String(e)); return { errors: [String(e)] }; });
   }
+  // ── 다운로드: 통짜 1장 / 인스타툰 분절 (Vase 요구 2026-07-25) ──
+  // 분절 규격 1080x1350 (4:5, 인스타 세로 최대). 슬라이드 수 = 행 수 = ceil(컷수/2).
+  // 격자가 항상 2단이므로 한 슬라이드에 2컷이 들어간다 — 컷 수가 바뀌면 슬라이드 수도 따라 바뀐다.
+  var IG_W = 1080, IG_H = 1350;
+  function rowsOf(n) { return Math.max(1, Math.ceil(n / 2)); }
+  function safeName(s) { return String(s || 'byeoli').replace(/[\\\\/:*?"<>|\\s]+/g, '_').slice(0, 40); }
+
+  function fileUrl(key) { return '/api/ops/comic-file?key=' + encodeURIComponent(key); }
+
+  function downloadBlob(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  function downloadWhole(key, title) {
+    banner('통짜 내려받는 중…');
+    fetch(fileUrl(key)).then(function (r) { return r.blob(); }).then(function (b) {
+      downloadBlob(b, safeName(title) + '_page.png');
+      banner('통짜 저장됨');
+    }).catch(function (e) { banner('다운로드 실패: ' + e, 'err'); });
+  }
+
+  // store-only ZIP — PNG은 이미 압축돼 있어 무압축으로 묶어도 손해가 없다. 의존성 0.
+  function crc32(u8) {
+    var t = crc32.t;
+    if (!t) {
+      t = crc32.t = new Uint32Array(256);
+      for (var i = 0; i < 256; i++) {
+        var c = i;
+        for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[i] = c >>> 0;
+      }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var j = 0; j < u8.length; j++) crc = t[(crc ^ u8[j]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipStore(files) {
+    var enc = new TextEncoder(), chunks = [], central = [], off = 0;
+    function u16(n) { return [n & 255, (n >>> 8) & 255]; }
+    function u32(n) { return [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]; }
+    files.forEach(function (f) {
+      var nm = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+      var lh = [].concat([80, 75, 3, 4], u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(sz), u32(sz), u16(nm.length), u16(0));
+      chunks.push(new Uint8Array(lh), nm, f.data);
+      central.push({ nm: nm, crc: crc, sz: sz, off: off });
+      off += lh.length + nm.length + sz;
+    });
+    var cd = [], cdStart = off;
+    central.forEach(function (c) {
+      var h = [].concat([80, 75, 1, 2], u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(c.crc), u32(c.sz), u32(c.sz), u16(c.nm.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.off));
+      cd.push(new Uint8Array(h), c.nm);
+      off += h.length + c.nm.length;
+    });
+    var end = new Uint8Array([].concat([80, 75, 5, 6], u16(0), u16(0),
+      u16(files.length), u16(files.length), u32(off - cdStart), u32(cdStart), u16(0)));
+    return new Blob(chunks.concat(cd, [end]), { type: 'application/zip' });
+  }
+
+  function downloadInstatoon(key, title, panelCount) {
+    var rows = rowsOf(panelCount);
+    banner('인스타툰 ' + rows + '장으로 자르는 중… (1080×1350)');
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      var bandH = img.naturalHeight / rows, jobs = [];
+      for (var i = 0; i < rows; i++) {
+        (function (i) {
+          jobs.push(new Promise(function (resolve) {
+            var cv = document.createElement('canvas');
+            cv.width = IG_W; cv.height = IG_H;
+            var cx = cv.getContext('2d');
+            // 종이색 배경 — 비율이 안 맞아 남는 자리를 흰 여백이 아니라 종이로 채운다
+            cx.fillStyle = '#F4ECDC'; cx.fillRect(0, 0, IG_W, IG_H);
+            var sw = img.naturalWidth, sh = bandH;
+            var scale = Math.min(IG_W / sw, IG_H / sh);
+            var dw = sw * scale, dh = sh * scale;
+            cx.drawImage(img, 0, i * bandH, sw, sh, (IG_W - dw) / 2, (IG_H - dh) / 2, dw, dh);
+            cv.toBlob(function (b) {
+              b.arrayBuffer().then(function (ab) {
+                resolve({ name: safeName(title) + '_' + String(i + 1).padStart(2, '0') + '.png',
+                  data: new Uint8Array(ab) });
+              });
+            }, 'image/png');
+          }));
+        })(i);
+      }
+      Promise.all(jobs).then(function (files) {
+        downloadBlob(zipStore(files), safeName(title) + '_instatoon_' + rows + 'p.zip');
+        banner('인스타툰 ' + rows + '장 저장됨 (1080×1350)');
+      }).catch(function (e) { banner('분절 실패: ' + e, 'err'); });
+    };
+    img.onerror = function () { banner('이미지를 못 읽었다', 'err'); };
+    img.src = fileUrl(key) + '&v=' + Date.now();
+  }
+
   function drawComic() {
     var s = state.scenario;
     if (!s) { banner('시나리오가 없다', 'err'); return; }
@@ -648,12 +751,19 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           '<img style="width:100%;display:block;border-radius:4px" src="/api/ops/comic-file?key=' +
           encodeURIComponent(r.key) + '&v=' + Date.now() + '">' +
           (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
-          '<div class="row" style="margin-top:10px"><button id="redraw" class="primary">🎲 전체 다시 그리기</button></div>' +
+          '<div class="row" style="margin-top:10px">' +
+          '<button id="dlWhole">⬇ 통짜 1장</button>' +
+          '<button id="dlIg">⬇ 인스타툰 ' + rowsOf(s.panelCount) + '장 (1080×1350)</button>' +
+          '<button id="redraw" class="primary">🎲 전체 다시 그리기</button></div>' +
           '<div class="muted" style="margin-top:8px">검사 축: 같은 별이 · 머리 단색 면 · 빼콩이 유지 · 컷 수 ' +
           s.panelCount + ' · <b>한글 오탈자</b> (원샷 모드의 검사 항목 — 시나리오 문장과 대조)</div></div>';
         $('out').innerHTML = pg;
         var rb = $('redraw');
         if (rb) rb.onclick = drawComic;
+        var dw = $('dlWhole');
+        if (dw) dw.onclick = function () { downloadWhole(r.key, s.title); };
+        var di = $('dlIg');
+        if (di) di.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount); };
         banner('페이지 완성 — 오탈자·별이 동일성 확인');
         renderArchive();
         return;
