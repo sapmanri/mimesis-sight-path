@@ -973,3 +973,74 @@ test('하위 바이블 오류만으로는 생성을 막지 않는다 — 층 가
   assert.deepEqual(structural, ['panels[0].location required']);
   assert.equal(lowerBible.length, 2);
 });
+
+/* ── 여백섬 컷별 파이프라인 계약 (홈즈 판정 2026-07-26 01:06) ── */
+
+import {
+  resolveRenderMode, planLayout, validateLayoutPlan, validatePageContext,
+  LAYOUT_CANVAS, ORGANIC_AUTO_RENDER,
+} from './_comic-layout.ts';
+
+test('두 축 분리 — layoutMode(문법)와 renderMode(렌더)는 다른 축이다', () => {
+  // 격자 원샷은 실물이 잘 나온다 — 잘 되는 걸 없애지 않는다
+  assert.equal(resolveRenderMode('grid'), 'page');
+  assert.equal(resolveRenderMode('none'), 'page');
+  // 조립 경로가 서기 전까지 organic+auto는 page로 남는다 (없는 길로 자동 송출 금지)
+  assert.equal(resolveRenderMode('organic'), ORGANIC_AUTO_RENDER);
+  // 명시하면 개발·검증용으로 새 경로에 갈 수 있다 — 조용히 막지 않는다
+  assert.equal(resolveRenderMode('organic', 'panels'), 'panels');
+  assert.equal(resolveRenderMode('grid', 'panels'), 'panels');
+  assert.equal(resolveRenderMode('organic', 'page'), 'page');
+});
+
+test('자리표 — 겹치지 않고 캔버스 안에 있고 헤더를 침범하지 않는다', () => {
+  for (const n of [1, 4, 5, 6, 8]) {
+    const s = scenario(n as 4);
+    const plan = planLayout(s);
+    assert.deepEqual(validateLayoutPlan(plan), [], `${n}컷 자리표가 계약을 어긴다`);
+    assert.equal(plan.panels.length, n);
+    assert.deepEqual(plan.readingOrder, plan.panels.map((p) => p.index), '읽기 순서 = index 순서');
+    // 캡션이 있는 컷은 캡션 칸에 높이가 있어야 한다 (줄바꿈 검사 축)
+    for (const p of plan.panels) {
+      if (p.captionBox) assert.ok(p.captionBox.h > 0);
+      // 섬 안전영역이 캡션 자리를 침범하지 않는다 — 섬+캡션이 한 덩어리라야 분절이 성립
+      if (p.captionBox) assert.ok(p.islandSafeBox.y + p.islandSafeBox.h <= p.captionBox.y + 0.01);
+    }
+  }
+});
+
+test('자리표 — 넘침은 대상과 방향까지 가진다 (boolean 하나로는 부족)', () => {
+  const s = scenario(6);
+  const plan = planLayout(s, LAYOUT_CANVAS, { index: 3, subject: 'white cat tail', edges: ['right'] });
+  const p3 = plan.panels.find((p) => p.index === 3)!;
+  assert.equal(p3.overflow.allowed, true);
+  assert.equal(p3.overflow.subject, 'white cat tail');
+  assert.deepEqual(p3.overflow.edges, ['right']);
+  assert.ok(p3.zIndex > plan.panels.find((p) => p.index === 1)!.zIndex, '넘치는 컷이 위로');
+  // 음성: 대상 없는 허용은 계약 위반 (아무나 넘치면 계약이 무너진다)
+  const bad = { ...plan, panels: plan.panels.map((p) => p.index === 3 ? { ...p, overflow: { allowed: true } } : p) };
+  assert.ok(validateLayoutPlan(bad).some((e) => e.includes('requires a subject')));
+});
+
+test('자리표 음성 — 겹침·이탈·읽기순서 불일치를 잡는다', () => {
+  const plan = planLayout(scenario(4));
+  const overlap = { ...plan, panels: plan.panels.map((p, i) => i === 1 ? { ...p, cell: plan.panels[0].cell } : p) };
+  assert.ok(validateLayoutPlan(overlap).some((e) => e.includes('overlap')));
+  const escaped = { ...plan, panels: plan.panels.map((p, i) => i === 0 ? { ...p, cell: { ...p.cell, x: -10 } } : p) };
+  assert.ok(validateLayoutPlan(escaped).some((e) => e.includes('escapes canvas')));
+  const reordered = { ...plan, readingOrder: [...plan.readingOrder].reverse() };
+  assert.ok(validateLayoutPlan(reordered).some((e) => e.includes('readingOrder')));
+});
+
+test('Page Context — 영어 강제·팔레트 형식 (한글은 그림으로 취급된다)', () => {
+  const ok = {
+    version: 'page-context-v1', timeOfDay: 'late afternoon', weather: 'clear after rain',
+    lightDirection: 'low sun from the left', palette: ['#FAF7F2', '#A7ACCC'],
+    spatialAnchors: ['low brick wall'], continuityNotes: 'same wall visible in every panel',
+  };
+  assert.deepEqual(validatePageContext(ok), []);
+  assert.ok(validatePageContext({ ...ok, timeOfDay: '늦은 오후' }).some((e) => e.includes('English')));
+  assert.ok(validatePageContext({ ...ok, palette: ['red'] }).some((e) => e.includes('#rrggbb')));
+  assert.ok(validatePageContext({ ...ok, palette: [] }).some((e) => e.includes('non-empty')));
+  assert.ok(validatePageContext({ ...ok, version: 'x' }).some((e) => e.includes('page-context-v1')));
+});

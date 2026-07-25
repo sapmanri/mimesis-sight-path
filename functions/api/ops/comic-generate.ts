@@ -10,6 +10,7 @@
 
 import { validateScenario, extractQuotedLines, splitScenarioErrors, PANEL_BIBLE_SLOT, isPanelBibleSlot, type PanelBibleMode, buildPanelPrompt, buildPagePrompt, pickStyleRefs, STYLE_LOCK_NAMES, STYLE_LOCK_REQUIRED, type ComicScenario } from '../_comic.ts';
 import { judgeByPhilosophy, finalVerdict, formatJudgment, PHILOSOPHY_SLOT, type PhilosophyJudgment, type FinalVerdict } from '../_philosophy.ts';
+import { resolveRenderMode, type RenderMode, type RenderModeRequest } from '../_comic-layout.ts';
 import { validateScenarioV2, planV2Refs, buildPagePromptV2, detectPlaces, type ComicScenarioV2 } from '../_comic-v2.ts';
 import { kstDate } from '../_memory-event.ts';
 import { generatePanelImage, generatePageImage, refCapFor, type ComicImageEnv, type RefBytes } from '../_comic-image.ts';
@@ -80,7 +81,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
 
 export const onRequestPost: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
-  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[]; panelRef?: boolean; panelMode?: PanelBibleMode; philosophyRef?: boolean; philosophyOverride?: boolean };
+  let body: { scenario?: ComicScenario; panels?: number[]; scenario2?: ComicScenarioV2; styleSlots?: string[]; panelRef?: boolean; panelMode?: PanelBibleMode; philosophyRef?: boolean; philosophyOverride?: boolean; renderMode?: RenderModeRequest };
   try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
   const scenario = body.scenario;
   const scenario2 = body.scenario2;
@@ -119,7 +120,7 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     try {
       const result = scenario2
         ? await runGenerationV2(env, scenario2, Array.isArray(body.styleSlots) ? body.styleSlots : [], body.panelRef === true)
-        : await runGeneration(env, scenario as ComicScenario, body.panels, body.panelMode ?? (body.panelRef === true ? 'grid' : 'none'), body.philosophyRef === true);
+        : await runGeneration(env, scenario as ComicScenario, body.panels, body.panelMode ?? (body.panelRef === true ? 'grid' : 'none'), body.philosophyRef === true, body.renderMode ?? 'auto');
       // 판정문은 통과했을 때도 함께 간다 — 기계가 못 잡는 다섯 질문은 사람이 답해야 하므로.
       const withJudgment = judgment
         ? { ...result, philosophy: judgment, verdict, philosophyReport: formatJudgment(judgment, verdict), lowerBible }
@@ -219,14 +220,23 @@ async function runGenerationV2(
 
 async function runGeneration(
   env: Env, s: ComicScenario, panelsWanted?: number[], panelMode: PanelBibleMode = 'none',
-  philosophyRef = false,
+  philosophyRef = false, renderModeReq: RenderModeRequest = 'auto',
 ): Promise<Record<string, unknown>> {
   const provider = (env.COMIC_IMAGE_PROVIDER || 'gemini').toLowerCase();
   const cap = refCapFor(provider);
   const comicId = comicIdOf(s);
-  // 제미나이 = 원샷 페이지 (실증: 한 캔버스가 일관성을 이긴다 + 한글 텍스트 가능).
-  // gpt/flux = 컷별 모드 (한글은 폰트로 얹는 기존 구조).
-  const mode = provider === 'gemini' ? 'page' : 'panels';
+  // 두 축 분리 (홈즈 판정 2026-07-26): 레이아웃 문법(grid/organic/none)과 렌더 방식(page/panels)은
+  // 서로 다른 축이다. 그리고 **provider가 경로를 정하던 것이 버그였다** — provider는 각 경로
+  // 안의 어댑터일 뿐이다. 옛 줄: `provider === 'gemini' ? 'page' : 'panels'`.
+  //
+  // 무회귀: gpt/flux는 아직 컷별 이미지만 만들 수 있어(조립 미구현) 어댑터 능력으로 한 번 더 접는다.
+  // 이건 경로 결정이 아니라 **어댑터 한계 반영**이다 — 조용히 접지 않고 경고로 남긴다.
+  const wantMode = resolveRenderMode(panelMode, renderModeReq);
+  const adapterCanPage = provider === 'gemini';
+  const mode: RenderMode = wantMode === 'page' && !adapterCanPage ? 'panels' : wantMode;
+  const modeNotes = mode !== wantMode
+    ? [`renderMode ${wantMode}→${mode}: provider ${provider}는 원샷 페이지를 못 그린다 (어댑터 한계, 경로 판정 아님)`]
+    : [];
 
   const want = Array.isArray(panelsWanted) && panelsWanted.length
     ? panelsWanted.filter((n) => Number.isInteger(n) && n >= 1 && n <= s.panelCount)
@@ -311,8 +321,8 @@ async function runGeneration(
       ].slice(0, META_KEEP)));
     } catch { /* 메타 실패가 생성을 막지 않는다 */ }
     return {
-      ok: true, mode: 'page', comicId, no: obsNo, key, model: art.model, provider,
-      warnings: [...(missing.length ? [`lock_missing: ${missing.join(', ')}`] : []), ...warnings],
+      ok: true, mode: 'page', renderMode: mode, layoutMode: panelMode, comicId, no: obsNo, key, model: art.model, provider,
+      warnings: [...(missing.length ? [`lock_missing: ${missing.join(', ')}`] : []), ...warnings, ...modeNotes],
     };
   }
 
@@ -353,5 +363,5 @@ async function runGeneration(
   const warnings = philosophyRef
     ? ['philosophy_bible 그림 참조는 페이지 모드(제미나이)에서만 실린다 — 컷 모드는 참조 상한 때문에 제외. 문장·판정은 그대로 적용된다']
     : [];
-  return { ok: errors.length === 0, mode: 'panels', comicId, made, errors, warnings, provider };
+  return { ok: errors.length === 0, mode: 'panels', renderMode: mode, layoutMode: panelMode, comicId, made, errors, warnings: [...warnings, ...modeNotes], provider };
 }
