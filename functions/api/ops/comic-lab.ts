@@ -695,19 +695,61 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // "브라우저에서 보이는 결과가 정본이 되면 안 된다" — 같은 입력이 기기마다 달라지면
   // 나중에 서버 렌더러로 옮길 때 계약이 깨진다. 그래서 DPR을 1로 못박는다.
   //
-  // ⚠ 조판(캡션)은 **아직 막혀 있다.** 레포에 폰트 자산이 없다(woff/ttf 0개).
-  //   시스템 폰트로 조용히 대체하면 기기마다 다른 결과가 나오고, 홈즈 QC의
-  //   "폰트가 fallback 없이 실제 지정 폰트로 적재됐는가"를 통과한 척하게 된다.
-  //   그래서 폰트가 없으면 **캡션을 그리지 않고 경고를 낸다** (조용한 실패 금지).
-  var ASSEMBLY_FONT = null;   // 폰트 자산이 정해지면 { family, url }을 여기 넣는다
+  // 조판 폰트 — **Gaegu(개구)**. JIKJI SOFT, SIL OFL 1.1 (상업 이용·재배포·임베딩 허용).
+  // 왜 이것인가: 별이 페이지의 글자 규약은 "다섯 살 아이의 조심스럽고 살짝 삐뚤한 손글씨"다
+  // (buildPagePrompt의 hand-lettered 지시와 같은 목소리여야 한다). Gaegu는 구글폰트
+  // HANDWRITING 분류의 한글 손글씨체로 그 결에 맞고, OFL이라 배포에 걸림이 없다.
+  // 자산은 레포에 동봉한다(외부 CDN 미의존 = 결정론). woff2 284KB, 라이선스 전문 동봉.
+  //
+  // ⚠ Gaegu는 KS X 1001 계열이라 한글 음절 11,172자를 다 담지 않는다(실측 2,593 코드포인트).
+  //   별이 문장 풀 113편·4,971자에는 누락이 0이지만, **미래 문장은 보장할 수 없다.**
+  //   빠진 글자는 두부(.notdef)로 조용히 그려진다 — 그게 이 프로젝트가 반복해 당한 침묵 실패다.
+  //   그래서 커버리지 표를 함께 싣고 **그리기 전에 검사**한다.
+  var ASSEMBLY_FONT = { family: 'Gaegu', url: '/fonts/Gaegu-Regular.woff2', coverage: '/fonts/Gaegu-coverage.json' };
+  var fontCoverage = null;   // [[start,end],...]
 
   function loadAssemblyFont() {
     if (!ASSEMBLY_FONT) return Promise.resolve(null);
     var ff = new FontFace(ASSEMBLY_FONT.family, 'url(' + ASSEMBLY_FONT.url + ')');
     return ff.load().then(function (f) {
       document.fonts.add(f);
-      return document.fonts.ready.then(function () { return ASSEMBLY_FONT.family; });
+      return document.fonts.ready;
+    }).then(function () {
+      return fetch(ASSEMBLY_FONT.coverage).then(function (r) { return r.json(); })
+        .then(function (j) { fontCoverage = j.ranges; return ASSEMBLY_FONT.family; })
+        // 커버리지 표가 없으면 검사를 못 한다 → 폰트를 쓰지 않는다.
+        // 검사 없이 그리면 두부를 못 잡는다. 못 잡을 바엔 안 그린다.
+        .catch(function () { return null; });
     }).catch(function () { return null; });
+  }
+
+  /** 이 폰트로 그릴 수 없는 글자들. 빈 배열이면 안전하다. */
+  function uncoveredChars(text) {
+    if (!fontCoverage) return [];
+    var out = [];
+    for (var i = 0; i < text.length; i++) {
+      var c = text.codePointAt(i);
+      if (c === 32 || c === 10) continue;
+      var ok = false;
+      for (var j = 0; j < fontCoverage.length; j++) {
+        if (c >= fontCoverage[j][0] && c <= fontCoverage[j][1]) { ok = true; break; }
+      }
+      if (!ok && out.indexOf(text[i]) < 0) out.push(text[i]);
+    }
+    return out;
+  }
+
+  /** 캡션 박스 폭에 맞춰 줄바꿈. 한국어는 어절 단위로 끊는다. */
+  function wrapLines(cx, text, maxW) {
+    var words = String(text).split(/\s+/).filter(Boolean);
+    var lines = [], cur = '';
+    words.forEach(function (w) {
+      var t = cur ? cur + ' ' + w : w;
+      if (cx.measureText(t).width <= maxW || !cur) cur = t;
+      else { lines.push(cur); cur = w; }
+    });
+    if (cur) lines.push(cur);
+    return lines;
   }
 
   /** 이미지를 박스 안에 비율 유지로 앉힌다 (contain). 잘리지 않는다. */
@@ -721,7 +763,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
    * plan + 컷 이미지들 → 한 장. 같은 입력이면 같은 결과다(DPR 고정, 랜덤 없음).
    * images: { index → HTMLImageElement }
    */
-  function assemblePage(plan, images, fontFamily) {
+  function assemblePage(plan, images, fontFamily, texts) {
     var warn = [];
     var cv = document.createElement('canvas');
     cv.width = plan.canvas.width; cv.height = plan.canvas.height;   // DPR 1 고정
@@ -742,12 +784,43 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       cx.drawImage(img, r.x, r.y, r.w, r.h);
     });
 
-    // 조판 — 폰트가 없으면 그리지 않는다. 시스템 폰트로 때우지 않는다.
+    // ── 조판 — 폰트가 없으면 그리지 않는다. 시스템 폰트로 때우지 않는다.
     var captions = plan.panels.filter(function (p) { return p.captionBox; });
     if (captions.length && !fontFamily) {
-      warn.push('캡션 ' + captions.length + '개를 그리지 않았다 — 조판 폰트가 없다. '
-        + '시스템 폰트로 대체하면 기기마다 결과가 달라져 계약이 깨진다(홈즈 QC). 폰트 자산을 정해야 한다.');
+      warn.push('캡션 ' + captions.length + '개를 그리지 않았다 — 조판 폰트가 적재되지 않았다. '
+        + '시스템 폰트로 대체하면 기기마다 결과가 달라져 계약이 깨진다(홈즈 QC).');
+      return { canvas: cv, warnings: warn };
     }
+    captions.forEach(function (p) {
+      var box = p.captionBox;
+      var text = (texts && texts[p.index]) || '';
+      if (!text) return;
+      // QC — 이 폰트로 못 그리는 글자가 있으면 **그리지 않는다.** 두부로 나가는 것보다 낫다.
+      var bad = uncoveredChars(text);
+      if (bad.length) {
+        warn.push(p.index + '컷 캡션을 그리지 않았다 — Gaegu에 없는 글자: ' + bad.join(' ')
+          + ' (두부로 나가느니 비운다. 문장을 고치거나 폰트를 바꿔야 한다)');
+        return;
+      }
+      var size = 44;
+      cx.fillStyle = '#111111';
+      cx.textAlign = 'center';
+      cx.textBaseline = 'top';
+      var lines, lh;
+      // QC — 줄바꿈 후 captionBox 폭·높이를 넘지 않아야 한다. 넘으면 한 단계 줄여 다시 잰다.
+      for (;;) {
+        cx.font = size + 'px "' + fontFamily + '"';
+        lines = wrapLines(cx, text, box.w);
+        lh = Math.round(size * 1.45);
+        if (lines.length * lh <= box.h || size <= 24) break;
+        size -= 2;
+      }
+      if (lines.length * lh > box.h) {
+        warn.push(p.index + '컷 캡션이 캡션 칸을 넘는다 (' + lines.length + '줄) — 문장이 길다');
+      }
+      var y = box.y + Math.max(0, (box.h - lines.length * lh) / 2);
+      lines.forEach(function (ln, i) { cx.fillText(ln, box.x + box.w / 2, y + i * lh); });
+    });
     return { canvas: cv, warnings: warn };
   }
 
