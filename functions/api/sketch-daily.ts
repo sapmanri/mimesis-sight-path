@@ -37,7 +37,12 @@ const DAILY_MODEL = '@cf/black-forest-labs/flux-2-dev';
 // 인내심 있는 클라이언트(재시도 경로, 120초)로 부르면 flux-2-dev는 정상 생성된다.
 const DAILY_STEPS = 12;
 /** 확정 레시피의 캐릭터 참조 — 포즈 시트 2장 (07-21 심야 판정) */
-const DAILY_REFS = ['sketch-trials/reference/byeoli_poses.png', 'sketch-trials/reference/ppaekong_poses.png'];
+/**
+ * ⚠ 폐지 예정 — **화면에서 배정한 역할이 정본이다** (실사고 2026-07-26).
+ * 이 하드코딩 목록은 역할이 KV에 하나도 없을 때만 쓰는 최후 폴백이다.
+ * 폴백을 탔다는 사실은 결과에 경고로 남긴다 — 조용히 다른 걸 싣지 않는다.
+ */
+const DAILY_REFS_FALLBACK = ['sketch-trials/reference/byeoli_poses.png', 'sketch-trials/reference/ppaekong_poses.png'];
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
@@ -199,7 +204,13 @@ async function generateDaily(
     ? await translateSubjects(env, [day.event.targetLabel])
     : { subjects: [] as string[], notes: [] as string[] };
   errors.push(...subjTr.notes);
-  const refKeys = orderCharacterRefs(DAILY_REFS);
+  // 참조는 화면이 정한다 — 크론이 자기 목록을 따로 들고 있으면 화면과 밤이 어긋난다.
+  const roles = await readRefRoles(env);
+  const assigned = refsWithRole(roles, 'character');
+  if (!assigned.length) {
+    errors.push('ref_roles_empty: 화면에서 배정된 캐릭터 참조가 없어 폴백 목록을 썼다 — 실험실 ②에서 역할을 지정하라');
+  }
+  const refKeys = orderCharacterRefs(assigned.length ? assigned : DAILY_REFS_FALLBACK);
   const refs: { name: string; bytes: ArrayBuffer; contentType: string }[] = [];
   for (const key of refKeys) {
     const obj = await env.CAPTURES.get(key);

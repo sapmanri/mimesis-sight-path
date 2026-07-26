@@ -98,6 +98,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   <div class="panel">
     <h2>② 참조 그림 <span class="muted">(역할을 줘야만 들어간다 · 캐릭터 2장이면 별이→빼콩이 순서로 서버가 이름 정렬 · 총 4장)</span></h2>
     <div id="refs" class="refgrid"><span class="muted">불러오는 중…</span></div>
+    <div id="nightlyRefs" class="muted" style="margin-top:8px;padding:6px 8px;border:1px solid #2b352a;border-radius:4px"></div>
     <div style="margin-top:10px">
       <label>파일 (고르면 이름이 자동으로 채워진다)</label>
       <input type="file" id="refFile" accept="image/png,image/jpeg,image/webp">
@@ -160,7 +161,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var state = { refs: [], roles: {}, subjects: [], day: null, srcOf: {} };
-  try { state.roles = JSON.parse(localStorage.getItem('lab_roles') || '{}'); } catch (e) {}
+  // 역할은 서버에서 읽는다 (loadRefs). localStorage 잔재는 신뢰하지 않는다.
   try { state.subjects = JSON.parse(localStorage.getItem('lab_subjects') || '[]'); } catch (e) {}
 
   function banner(msg, kind) {
@@ -342,7 +343,30 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   });
 
   // ── ② 참조 ──
-  function saveRoles() { localStorage.setItem('lab_roles', JSON.stringify(state.roles)); }
+  // 역할은 **서버가 정본**이다 (07-26 실사고: localStorage에만 있어서 23:30 크론이
+  // 화면을 못 보고 자기 목록을 하드코딩해 들고 있었다 — 진실이 둘이었다).
+  function saveRoles() {
+    return fetch('/api/ops/sketch-reference', {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ roles: state.roles }),
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j.ok) { banner('역할 저장 실패: ' + (j.error || '?') + ' ' + (j.detail || []).join(' / '), 'err'); return; }
+      state.nightly = { character: j.nightlyCharacterRefs || [], style: j.nightlyStyleRefs || [] };
+      renderNightly();
+    }).catch(function (e) { banner('역할 저장 실패: ' + e, 'err'); });
+  }
+  // 밤 23:30에 **실제로** 실릴 목록을 화면에 박아 둔다. 화면과 밤이 같은 답이어야 한다.
+  function renderNightly() {
+    var el = $('nightlyRefs');
+    if (!el) return;
+    var c = (state.nightly && state.nightly.character) || [];
+    var st = (state.nightly && state.nightly.style) || [];
+    el.innerHTML = c.length
+      ? '🌙 23:30 크론이 실을 참조 — 캐릭터 ' + c.length + '장' +
+        (st.length ? ' · 스타일 ' + st.length + '장' : '') + '<br>' +
+        c.concat(st).map(function (k) { return esc(k.split('/').pop()); }).join(' · ')
+      : '<span class="bad">🌙 23:30 크론에 배정된 캐릭터 참조가 없다 — 폴백 목록으로 그려진다. 위에서 역할을 지정하라.</span>';
+  }
   function renderRefs() {
     var box = $('refs');
     if (!state.refs.length) { box.innerHTML = '<span class="muted">등록된 참조 없음</span>'; return; }
@@ -354,7 +378,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       card.innerHTML =
         '<img src="' + esc(r.preview) + '" loading="lazy">' +
         '<div class="nm">' + esc(r.key.split('/').pop()) + ' · ' + Math.round(r.size / 1024) + 'KB</div>' +
-        '<select><option value="off">제외</option><option value="char">캐릭터</option>' +
+        '<select><option value="off">제외</option><option value="character">캐릭터</option>' +
         '<option value="style">스타일</option></select>' +
         '<button class="del danger">삭제</button>';
       var sel = card.querySelector('select');
@@ -375,7 +399,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   function loadRefs() {
     api('/api/ops/sketch-reference').then(function (r) {
       state.refs = r.references || [];
+      state.roles = r.roles || {};          // 서버가 정본
+      state.nightly = { character: r.nightlyCharacterRefs || [], style: r.nightlyStyleRefs || [] };
       renderRefs();
+      renderNightly();
     });
   }
   // 파일명 → 슬러그 자동 제안 (byeoli v2.png → byeoli_v2). 이름 칸이 안 보여 빈 채로

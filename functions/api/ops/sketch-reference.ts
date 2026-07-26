@@ -10,7 +10,30 @@
 
 import { TRIAL_R2_PREFIX } from '../_image-provider.ts';
 
-interface Env { CAPTURES: R2Bucket }
+interface Env { CAPTURES: R2Bucket; PLANET: KVNamespace }
+
+/* ── 역할 배정을 서버로 (실사고 2026-07-26) ──────────────────────
+   역할(캐릭터/스타일/제외)이 **브라우저 localStorage에만** 있었다. 그래서 23:30 크론은
+   그걸 볼 수 없어 자기 목록(DAILY_REFS 2장)을 하드코딩해 들고 있었다 — 화면이 보여주는
+   배정과 밤에 실제로 실리는 것이 **서로 다른 진실**이었다.
+
+   Vase 지적: "니가 어디 숨겨뒀다가 잘못 나오는 게 있을까 봐. 내가 볼 수 없는 이미지가
+   있으면 안 된다." 맞다. 화면에서 정한 것이 곧 밤에 실리는 것이어야 한다.
+   → 역할을 KV에 둔다. UI도 크론도 여기만 본다. */
+export const REF_ROLES_KEY = 'sketch_ref_roles';
+export type RefRole = 'character' | 'style' | 'off';
+export const REF_ROLES: readonly RefRole[] = ['character', 'style', 'off'];
+
+export async function readRefRoles(env: { PLANET: KVNamespace }): Promise<Record<string, RefRole>> {
+  const raw = await env.PLANET.get(REF_ROLES_KEY).catch(() => null);
+  if (!raw) return {};
+  try { return JSON.parse(raw) as Record<string, RefRole>; } catch { return {}; }
+}
+
+/** 역할이 배정된 참조만, 순서대로. 크론과 UI가 같은 답을 얻는다. */
+export function refsWithRole(roles: Record<string, RefRole>, want: RefRole): string[] {
+  return Object.keys(roles).filter((k) => roles[k] === want).sort();
+}
 
 export const REFERENCE_PREFIX = `${TRIAL_R2_PREFIX}reference/`;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -31,9 +54,14 @@ export function referenceKeyFor(name: string | null, contentType: string): strin
 /** GET — 등록된 기준 그림 목록. 참조 키를 그대로 시험 요청에 넣으면 된다. */
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const listed = await env.CAPTURES.list({ prefix: REFERENCE_PREFIX, limit: 50 });
+  const roles = await readRefRoles(env);
   return json(200, {
     ok: true,
     prefix: REFERENCE_PREFIX,
+    roles,
+    // 23:30 크론이 **실제로** 실을 목록. 화면이 이걸 그대로 보여줘야 한다.
+    nightlyCharacterRefs: refsWithRole(roles, 'character'),
+    nightlyStyleRefs: refsWithRole(roles, 'style'),
     references: listed.objects.map((o) => ({
       key: o.key,
       size: o.size,
@@ -74,4 +102,36 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   }
   await env.CAPTURES.delete(key);
   return json(200, { ok: true, deleted: key });
+};
+
+/**
+ * PUT — 역할 배정. 화면에서 고른 것이 곧 밤에 실리는 것이 되도록 **서버에 쓴다.**
+ * body: { roles: { "<r2 key>": "character"|"style"|"off", ... } }
+ *
+ * 존재하지 않는 키는 거부한다 — 없는 그림에 역할을 주면 화면은 배정됐다고 보이는데
+ * 크론은 아무것도 못 싣는다(또 다른 두 진실).
+ */
+export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
+  let body: { roles?: Record<string, string> };
+  try { body = (await request.json()) as typeof body; } catch { return json(400, { ok: false, error: 'bad_json' }); }
+  const roles = body.roles;
+  if (!roles || typeof roles !== 'object') return json(400, { ok: false, error: 'roles_required' });
+
+  const listed = await env.CAPTURES.list({ prefix: REFERENCE_PREFIX, limit: 50 });
+  const exist = new Set(listed.objects.map((o) => o.key));
+  const clean: Record<string, RefRole> = {};
+  const rejected: string[] = [];
+  for (const [k, v] of Object.entries(roles)) {
+    if (!exist.has(k)) { rejected.push(`missing: ${k}`); continue; }
+    if (!(REF_ROLES as readonly string[]).includes(v)) { rejected.push(`bad_role: ${k}=${v}`); continue; }
+    clean[k] = v as RefRole;
+  }
+  if (rejected.length) return json(422, { ok: false, error: 'roles_invalid', detail: rejected });
+
+  await env.PLANET.put(REF_ROLES_KEY, JSON.stringify(clean));
+  return json(200, {
+    ok: true, roles: clean,
+    nightlyCharacterRefs: refsWithRole(clean, 'character'),
+    nightlyStyleRefs: refsWithRole(clean, 'style'),
+  });
 };
