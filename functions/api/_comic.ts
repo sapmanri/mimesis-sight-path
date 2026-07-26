@@ -251,7 +251,14 @@ export function buildPanelPrompt(p: ComicPanel, opts: { layoutMode?: PanelBibleM
  */
 export const PAGE_COLUMNS = 2;
 
-/** 컷 수 → 행 수. 분절 슬라이드 수이기도 하다 (한 슬라이드 = 한 행 = 2컷). */
+/**
+ * 컷 수 → **페이지 격자의 행 수**.
+ *
+ * ⚠ 이건 슬라이드 수가 아니다 (Vase 판정 2026-07-26). 초판 주석은 "분절 슬라이드 수이기도
+ *   하다 — 한 슬라이드 = 한 행 = 2컷"이었는데 틀렸다. 2단 격자의 한 행은 가로로 길어
+ *   세로 4:5에 안 맞는다. **인스타툰은 한 장에 한 칸이고 슬라이드 수 = 컷 수다.**
+ *   페이지 격자의 행과 분절 슬라이드는 서로 다른 축이다 — 한 이름에 두 축을 싣지 않는다.
+ */
 export function pageRowsOf(panelCount: number): number {
   return Math.max(1, Math.ceil(panelCount / PAGE_COLUMNS));
 }

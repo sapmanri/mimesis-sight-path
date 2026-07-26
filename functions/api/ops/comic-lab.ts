@@ -681,10 +681,17 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     }).catch(function (e) { failPanel(p, String(e)); return { errors: [String(e)] }; });
   }
   // ── 다운로드: 통짜 1장 / 인스타툰 분절 (Vase 요구 2026-07-25) ──
-  // 분절 규격 1080x1350 (4:5, 인스타 세로 최대). 슬라이드 수 = 행 수 = ceil(컷수/2).
-  // 격자가 항상 2단이므로 한 슬라이드에 2컷이 들어간다 — 컷 수가 바뀌면 슬라이드 수도 따라 바뀐다.
+  // 분절 규격 1080x1350 (4:5, 인스타 세로 최대). **슬라이드 수 = 컷 수. 한 장에 한 칸.**
+  //
+  // ⚠ 규격 정정 (Vase 판정 2026-07-26): 초판 문서는 "슬라이드 수 = 행 수 = ceil(컷수/2)",
+  //   즉 한 슬라이드에 2컷이었다. **말이 안 된다** — 2단 격자의 한 행은 가로로 길어서
+  //   세로 4:5에 넣으면 화면 절반이 빈다. 실측으로 확인했다(#015 4컷).
+  //   코드는 `739ffc4`(칸 경계 감지)부터 이미 **칸 단위**로 자르고 있었고, 문서만 옛 규격에
+  //   남아 있었다. 그 문구를 믿고 행 단위로 다시 만든 판이 실제로 나왔다 — 문서가 코드보다
+  //   뒤처지면 그 문서를 읽는 쪽이 틀린 걸 만든다. 여기서 문구를 코드에 맞춘다.
   var IG_W = 1080, IG_H = 1350;
-  function rowsOf(n) { return Math.max(1, Math.ceil(n / 2)); }
+  /** 분절 슬라이드 수 = 컷 수. (행 수는 페이지 격자의 축이지 슬라이드의 축이 아니다.) */
+  function igSlidesOf(n) { return Math.max(1, n); }
   function safeName(s) { return String(s || 'byeoli').replace(/[\\\\/:*?"<>|\\s]+/g, '_').slice(0, 40); }
 
   function fileUrl(key) { return '/api/ops/comic-file?key=' + encodeURIComponent(key); }
@@ -958,7 +965,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       var boxes = detectPanels(img);
       // 정직하게 실패한다 — 못 찾았으면 엉뚱하게 자르느니 알린다 (등분 사고의 교훈)
       if (!boxes.length) { banner('칸 경계를 못 찾았다 — 통짜로 받아서 직접 자르시오', 'err'); return; }
-      if (boxes.length !== panelCount) {
+      var wantSlides = igSlidesOf(panelCount);   // 한 장에 한 칸
+      if (boxes.length !== wantSlides) {
         banner('경고: 칸 ' + panelCount + '개인데 ' + boxes.length + '개로 감지됨 — 결과를 확인하시오', 'err');
       }
       var pad = Math.round(W * 0.04);

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateScenario, pickStyleRefs, buildPanelPrompt, STYLE_LOCK_NAMES,
-  splitScenarioErrors, SCENARIO_SYSTEM,
+  splitScenarioErrors, SCENARIO_SYSTEM, pageRowsOf,
   type ComicScenario, type ComicPanel,
 } from './_comic.ts';
 import {
@@ -1098,4 +1098,26 @@ test('넘침은 승인된 대상만 — 그리기 전에 정해져 프롬프트�
   assert.match(withOverflow, /Nothing else extends outward/);
   // 권한이 없으면 넘침 문장 자체가 없다 (아무나 넘치면 계약이 무너진다)
   assert.doesNotMatch(buildPanelPrompt(p, { layoutMode: 'organic' }), /may break past/);
+});
+
+test('인스타툰 분절 — 한 장에 한 칸. 행 수와는 다른 축이다 (규격 정정 2026-07-26)', () => {
+  // 페이지 격자의 행 수는 그대로 (2단 격자) — 이 축은 살아 있다
+  assert.equal(pageRowsOf(4), 2);
+  assert.equal(pageRowsOf(6), 3);
+  assert.equal(pageRowsOf(8), 4);
+  // 슬라이드 수는 **컷 수**다. 옛 규격(= 행 수)과 같아지면 안 된다.
+  for (const n of [4, 6, 8]) {
+    assert.notEqual(n, pageRowsOf(n),
+      `${n}컷: 슬라이드 수(${n})와 행 수(${pageRowsOf(n)})는 서로 다른 축이다`);
+  }
+});
+
+test('Lab 분절 코드가 칸 단위인지 — 옛 규격 문구가 남아 있으면 실패', async () => {
+  const src = await import('node:fs').then((fs) => fs.readFileSync('functions/api/ops/comic-lab.ts', 'utf8'));
+  assert.ok(src.includes('igSlidesOf'), '슬라이드 수 함수가 있어야 한다');
+  assert.ok(src.includes('한 장에 한 칸'), '규격이 코드에 명시돼야 한다');
+  // 옛 규격이 되살아나면 잡는다 (문서가 코드보다 뒤처져 만든 실사고 재발 방지)
+  assert.ok(!/슬라이드 수 = 행 수/.test(src.replace(/⚠[\s\S]*?여기서 문구를 코드에 맞춘다\./, '')),
+    '옛 규격 "슬라이드 수 = 행 수"가 주석 밖에 남아 있다');
+  assert.ok(!/function rowsOf\(/.test(src), 'rowsOf 사망 코드가 되살아났다');
 });
