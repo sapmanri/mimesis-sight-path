@@ -268,9 +268,14 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // 최상위 계약 시트 — 칸은 있지만 **기본 제외**다. 시트가 다섯 약속의 삽화·한글 라벨로 가득해서
   // 참조로 실으면 모델이 그걸 그리려 든다(annotation 사고 계열). 철학은 문장과 판정으로 먼저 흐르고,
   // 이 체크박스는 "그림 참조로도 써 보겠다"는 Vase의 명시 선택일 때만 켜진다.
-  var PHILO_APPLY_KEY = 'comic_philosophy_apply';
-  function philosophyApplied() { return localStorage.getItem(PHILO_APPLY_KEY) === '1'; }
-  function setPhilosophyApplied(on) { localStorage.setItem(PHILO_APPLY_KEY, on ? '1' : '0'); }
+  // 렌더 경로 — 원샷 페이지 vs 컷별 생성→조립. 레이아웃 문법과는 다른 축이다.
+  // 제미나이는 기본이 원샷이라, 컷별 조립 경로로 가려면 명시해야 한다.
+  var RENDER_MODE_KEY = 'comic_render_mode';
+  function renderModeNow() { return localStorage.getItem(RENDER_MODE_KEY) === 'panels' ? 'panels' : 'auto'; }
+  function setRenderMode(m) { localStorage.setItem(RENDER_MODE_KEY, m); }
+  // 그림 참조 토글은 폐지됐다(07-26). 옛 저장값이 남아 있어도 무시한다 —
+  // 켜져 있던 사람의 브라우저가 계속 참조를 보내면 안 된다.
+  function philosophyApplied() { return false; }
   function styleApplied() {
     try { return JSON.parse(localStorage.getItem(STYLE_APPLY_KEY) || '[]'); } catch (e) { return []; }
   }
@@ -308,8 +313,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
             return mine.some(function (s) { return s.slot === sl && s.loaded; });
           }).length + '장 (기본 제외 — 켠 것만 그리기에 들어간다)' : '') +
           (gm.g === 'philosophy'
-            ? ' · 시나리오·판정에는 항상 적용 (문장으로) · 그림 참조는 ' +
-              (philosophyApplied() ? '켜짐' : '기본 제외')
+            ? ' · 시나리오·판정에 항상 적용 (문장으로) · 그림 참조 없음'
             : '');
         wrap.appendChild(head);
         var grid = document.createElement('div');
@@ -341,21 +345,25 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
             ap2.appendChild(document.createTextNode(
               myMode === 'organic' ? ' 여백섬으로 그리기' : ' 격자 프레임으로 그리기'));
             cell.appendChild(ap2);
+            // 여백섬은 원샷으로 세 번 실패했다(전부 둥근 사각형 마스크). 실패 지점은 프롬프트가
+            // 아니라 생성 단위였다 — 한 캔버스에 N칸을 시키면 모델이 아는 "웹툰 페이지"가 나온다.
+            // 컷별로 내려가면 요구가 "흰 종이 위 삽화 한 장"이 되고, 조립은 우리가 한다.
+            if (myMode === 'organic') {
+              var apr = document.createElement('label');
+              apr.style.cssText = 'display:block;font-size:10px;cursor:pointer;margin-top:2px;color:#A7B49A';
+              var cbr = document.createElement('input');
+              cbr.type = 'checkbox';
+              cbr.checked = (renderModeNow() === 'panels');
+              cbr.onclick = function (ev) { ev.stopPropagation(); };
+              cbr.onchange = function () { setRenderMode(cbr.checked ? 'panels' : 'auto'); checkLock(); };
+              apr.onclick = function (ev) { ev.stopPropagation(); };
+              apr.appendChild(cbr);
+              apr.appendChild(document.createTextNode(' 컷별로 그려 조립'));
+              cell.appendChild(apr);
+            }
           }
-          // 최상위 계약 슬롯: 그림 참조로 실을지만 정하는 토글. 꺼도 철학은 문장·판정으로 계속 간다.
-          if (gm.g === 'philosophy' && s.loaded) {
-            var apf = document.createElement('label');
-            apf.style.cssText = 'display:block;font-size:10px;cursor:pointer;margin-top:2px';
-            var cbf = document.createElement('input');
-            cbf.type = 'checkbox';
-            cbf.checked = philosophyApplied();
-            cbf.onclick = function (ev) { ev.stopPropagation(); };
-            cbf.onchange = function () { setPhilosophyApplied(cbf.checked); checkLock(); };
-            apf.onclick = function (ev) { ev.stopPropagation(); };
-            apf.appendChild(cbf);
-            apf.appendChild(document.createTextNode(' 그림 참조로도 싣기'));
-            cell.appendChild(apf);
-          }
+          // 최상위 계약 슬롯: 칸만 둔다. **그림 참조 토글은 폐지**(07-26 실사고 —
+          // 켜고 돌렸더니 별이·빼콩이가 다른 캐릭터가 됐다). 철학은 문장·판정으로만 간다.
           // 스타일 슬롯: 생성별 [적용] 토글 — 별이체와 관축해체가 같은 칸을 쓰므로 골라 쓴다
           if (gm.g === 'style' && s.loaded) {
             var ap = document.createElement('label');
@@ -674,7 +682,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   function genPanel(idx) {
     var s = state.scenario;
     var p = s.panels.filter(function (x) { return x.index === idx; })[0];
-    return generateCall({ scenario: s, panels: [idx] }).then(function (r) {
+    return generateCall({ scenario: s, panels: [idx], panelMode: panelMode(), renderMode: 'panels' }).then(function (r) {
       if (r.made && r.made.length) fillPanel(p, r.made[0].key);
       else failPanel(p, (r.errors && r.errors[0]) || r.error || '?');
       return r;
@@ -1031,7 +1039,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     // 먼저 서버에 물어본다 — 페이지 모드(제미나이)면 한 방, 아니면 컷별
     var probe = $('out');
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
-    generateCall({ scenario: s, panelMode: panelMode(), philosophyRef: philosophyApplied() }).then(function (r) {
+    generateCall({ scenario: s, panelMode: panelMode(), philosophyRef: philosophyApplied(), renderMode: renderModeNow() }).then(function (r) {
       if (r.mode === 'page') {
         var pg = '<div class="panel" style="max-width:760px"><h2>「' + esc(s.title) + '」 <span class="muted">' +
           (r.no ? 'Observation #' + String(r.no).padStart(3, '0') + ' · ' : '') +

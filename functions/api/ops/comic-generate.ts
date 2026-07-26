@@ -307,12 +307,18 @@ async function runGeneration(
       if (r) { refs.push(r); if (slot === wantSlot) hasPanelRef = true; }
       else if ((STYLE_LOCK_REQUIRED as readonly string[]).includes(slot)) missing.push(slot);
     }
-    // 최상위 계약 시트 — 칸의 [적용]을 켰을 때만. 기본 제외이므로 여기 오는 일은 드물다.
-    // 페이지 모드(제미나이)에서만 싣는다: 컷 모드는 참조 상한이 4~5장이라 정체성 시트를 밀어낸다.
+    // ⛔ 철학 시트는 **이미지 참조로 싣지 않는다** (실사고 2026-07-26).
+    //
+    // 어젯밤 내가 "칸을 켜면 그림 참조로도 실린다"는 선택지를 만들었다. Vase가 켜고 한 번
+    // 돌리자 **별이가 다른 아이가 되고 빼콩이가 주황 고양이가 됐다.** 참조 목록 맨 앞에
+    // 문서 시트가 오면 Identity Lock(ch00~ch04)이 밀려난다 — 시트는 다섯 약속의 삽화와
+    // 한글 라벨이 가득한 **문서**지 캐릭터 참조가 아니다.
+    //
+    // 홈즈 판정이 애초에 그랬다: 이 바이블은 **생성용이 아니라 판정용**이다.
+    // 철학은 문장(PHILOSOPHY_PREAMBLE)과 판정(judgeByPhilosophy)으로 흐른다.
+    // 칸(업로드·교체·비우기)은 그대로 둔다 — Vase가 요구한 건 칸이지 참조가 아니었다.
     if (philosophyRef) {
-      const pr = await loadRef(PHILOSOPHY_SLOT);
-      if (pr) refs.unshift(pr);   // 최상위 계약이 맨 앞
-      else warnings.push('philosophy_bible 칸이 비어 있음 — 그림 참조 없이 문장·판정으로만 적용된다');
+      warnings.push('philosophy_bible 그림 참조는 폐지됐다 — 캐릭터 락을 밀어내 별이·빼콩이가 망가진다(07-26 실사고). 철학은 문장·판정으로만 적용된다');
     }
     if (!refs.length) return { ok: false, error: 'style_lock_empty: 바이블 없이 그리면 남의 그림체가 된다' };
     // 관찰 번호 — 500편이 쌓이면 하나의 아카이브가 된다 (홈즈). 재그리기는 같은 번호 유지.
