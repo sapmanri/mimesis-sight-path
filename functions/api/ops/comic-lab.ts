@@ -770,7 +770,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
    * plan + 컷 이미지들 → 한 장. 같은 입력이면 같은 결과다(DPR 고정, 랜덤 없음).
    * images: { index → HTMLImageElement }
    */
-  function assemblePage(plan, images, fontFamily, texts) {
+  function assemblePage(plan, images, fontFamily, texts, head) {
     var warn = [];
     var cv = document.createElement('canvas');
     cv.width = plan.canvas.width; cv.height = plan.canvas.height;   // DPR 1 고정
@@ -793,11 +793,40 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 
     // ── 조판 — 폰트가 없으면 그리지 않는다. 시스템 폰트로 때우지 않는다.
     var captions = plan.panels.filter(function (p) { return p.captionBox; });
-    if (captions.length && !fontFamily) {
-      warn.push('캡션 ' + captions.length + '개를 그리지 않았다 — 조판 폰트가 적재되지 않았다. '
-        + '시스템 폰트로 대체하면 기기마다 결과가 달라져 계약이 깨진다(홈즈 QC).');
+    if (!fontFamily) {
+      // 시스템 폰트로 때우지 않는다 — 기기마다 결과가 달라지면 계약이 깨진다(홈즈 QC).
+      if (captions.length) warn.push('캡션 ' + captions.length + '개를 그리지 않았다 — 조판 폰트가 적재되지 않았다');
+      if (head) warn.push('머리말(제목·에피그래프)을 그리지 않았다 — 조판 폰트가 적재되지 않았다');
       return { canvas: cv, warnings: warn };
     }
+    // ── 머리말 — 조립본은 제목을 우리가 조판한다.
+    // 원샷 경로는 모델이 제목을 그려주지만 컷별 경로엔 그릴 사람이 없다. headerBox를
+    // 예약만 하고 비워두면 페이지 위쪽에 빈 띠가 남는다. 폰트가 없으면 그리지 않는다(경고).
+    if (head && plan.headerBox) {
+      var hb = plan.headerBox;
+      var badH = uncoveredChars(head.title + ' ' + (head.epigraph || ''));
+      if (badH.length) {
+        warn.push('머리말을 그리지 않았다 — Gaegu에 없는 글자: ' + badH.join(' '));
+      } else {
+        cx.fillStyle = '#111111'; cx.textAlign = 'center'; cx.textBaseline = 'top';
+        // 제호는 작게 왼쪽 위, 제목은 크게 가운데, 에피그래프는 그 아래 한 줄
+        cx.textAlign = 'left'; cx.font = '34px "' + fontFamily + '"';
+        cx.fillText('별이의 그림일기', hb.x, hb.y);
+        cx.textAlign = 'center';
+        var ts = 108;
+        for (;;) {
+          cx.font = ts + 'px "' + fontFamily + '"';
+          if (cx.measureText(head.title).width <= hb.w || ts <= 48) break;
+          ts -= 4;
+        }
+        cx.fillText(head.title, hb.x + hb.w / 2, hb.y + 66);
+        if (head.epigraph) {
+          cx.font = '40px "' + fontFamily + '"';
+          cx.fillText(head.epigraph, hb.x + hb.w / 2, hb.y + 66 + ts + 18);
+        }
+      }
+    }
+
     captions.forEach(function (p) {
       var box = p.captionBox;
       var text = (texts && texts[p.index]) || '';
@@ -1107,7 +1136,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       var images = {}, texts = {};
       all.slice(1).forEach(function (x) { images[x.index] = x.img; });
       s.panels.forEach(function (p) { if (p.caption) texts[p.index] = p.caption; });
-      var out = assemblePage(state.layoutPlan, images, fontFamily, texts);
+      var out = assemblePage(state.layoutPlan, images, fontFamily, texts, { title: s.title, epigraph: s.epigraph });
       return new Promise(function (res) {
         out.canvas.toBlob(function (blob) { res({ blob: blob, warnings: out.warnings, font: fontFamily }); }, 'image/png');
       });
