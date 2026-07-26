@@ -1,6 +1,7 @@
 import { OBJECT_REGISTRY, type ObjectDrive, type ObjectRegistryEntry } from '../../src/objects/objectRegistry';
 import {
   AUTHORITY_SCHEMA_VERSION,
+  type AuthorityLiveEvent,
   AUTHORITY_NAME,
   BYEOLI_DAY_MS,
   type AuthorityEnvelope,
@@ -144,6 +145,33 @@ function chooseAction(entry: ObjectRegistryEntry, rng: () => number): ObjectDriv
   return 'observe';
 }
 
+/** 공책 상한 — 유실 없이 Core가 따라올 만큼. 오래된 것부터 밀린다(append-only 링). */
+const OUTBOX_MAX = 400;
+
+/**
+ * 사건 공책에 한 줄 적는다 (Vase 승인 2026-07-26).
+ * `liveEvent`(최신 1건 슬롯)로는 폴링 사이 사건이 유실되므로, 순서대로 남긴다.
+ * ⚠ 시간 모델·이동·선택·persist 주기는 건드리지 않는다 — 기존 persist에 얹혀 저장될 뿐이다.
+ */
+function pushOutbox(
+  persisted: AuthorityPersistence,
+  ev: AuthorityLiveEvent,
+  duration: number | null,
+): void {
+  const box = persisted.eventOutbox ?? (persisted.eventOutbox = []);
+  box.push({
+    eventId: ev.id,
+    authoritySequence: persisted.sequence + 1,
+    occurredAt: ev.occurredAt,
+    kind: ev.kind,
+    action: ev.action,
+    targetId: ev.targetId,
+    targetType: ev.targetType,
+    actionDuration: duration,
+  });
+  if (box.length > OUTBOX_MAX) box.splice(0, box.length - OUTBOX_MAX);
+}
+
 function nextLiveEvent(
   persisted: AuthorityPersistence,
   kind: AuthorityLiveEvent['kind'],
@@ -207,6 +235,7 @@ function maybeEncounter(persisted: AuthorityPersistence, now: number): void {
 
   if (rng() < 0.22) {
     state.liveEvent = nextLiveEvent(persisted, 'pass', null, nearest, entry, now);
+    pushOutbox(persisted, state.liveEvent, null);   // 지나친 것도 만난 것이다
     return;
   }
 
@@ -226,6 +255,7 @@ function maybeEncounter(persisted: AuthorityPersistence, now: number): void {
   const makeDiary = telemetry.memories % 4 === 0;
   if (makeDiary) telemetry.diary += 1;
   state.liveEvent = nextLiveEvent(persisted, makeDiary ? 'diary' : 'act', action, nearest, entry, now);
+  pushOutbox(persisted, state.liveEvent, duration);
 }
 
 export function createGenesis(now: number): AuthorityPersistence {
@@ -288,6 +318,7 @@ export function createGenesis(now: number): AuthorityPersistence {
     archiveMode: 'live',
     state,
     recentEventIds: [],
+    eventOutbox: [],
   };
 }
 

@@ -67,6 +67,26 @@ export class ByeoliAuthority extends DurableObject<Env> {
       return json(toEnvelope(this.persisted));
     }
 
+    // 사건 공책 읽기 — **읽기 전용**. Core가 cursor 이후 사건을 빠짐없이 가져간다.
+    // (Vase 승인 2026-07-26 · 홈즈 설계: sequence 폴링은 사건 유실로 반려됐다)
+    if (url.pathname === '/events') {
+      const box = this.persisted.eventOutbox ?? [];
+      const cursor = Number(url.searchParams.get('cursor') ?? 0) || 0;
+      const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 100) || 100));
+      const events = box.filter((e) => e.authoritySequence > cursor).slice(0, limit);
+      const next = events.length ? events[events.length - 1].authoritySequence : cursor;
+      return json({
+        ok: true,
+        authorityId: AUTHORITY_NAME,
+        instanceEpoch: this.persisted.instanceEpoch,
+        cursor, nextCursor: next, events,
+        // 링이 밀려 사건을 놓쳤는지 Core가 스스로 알 수 있어야 한다 — 침묵 금지.
+        oldestAvailable: box.length ? box[0].authoritySequence : null,
+        dropped: box.length && cursor > 0 && cursor < box[0].authoritySequence - 1,
+        ringSize: box.length,
+      });
+    }
+
     if (url.pathname === '/health') {
       const health: AuthorityHealth = {
         ok: true,
