@@ -19,6 +19,11 @@ import {
 import { buildImagePrompt, CHARACTER_IDENTITY_CHECKS, SKETCH_RULES, SKETCH_VERSION } from './_daily-sketch.ts';
 import { selectProvider, trialKey, type ImageProviderEnv } from './_image-provider.ts';
 import { translateScene, translateSubjects, hashPrompt, orderCharacterRefs, type TrialRecord } from './ops/sketch-trial.ts';
+// ⚠ 2026-07-27: 이 한 줄이 없어서 **매일 밤 그림일기가 죽었다.**
+//   d856916이 208~209줄에 readRefRoles·refsWithRole 호출만 넣고 import를 빠뜨렸다.
+//   하루를 접은 뒤 이 지점에서 ReferenceError → Cloudflare 1101. reco를 못 남기고 죽으니
+//   다음 호출이 「사람이 접은 하루」로 오인해 물러났고, 크래시가 정중한 건너뜀으로 위장됐다.
+import { readRefRoles, refsWithRole } from './ops/sketch-reference.ts';
 
 interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
