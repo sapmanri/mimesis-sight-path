@@ -147,6 +147,20 @@ export interface SlotReceipt {
   textIndex: number | null;
 }
 
+/**
+ * 이 슬롯이 **실제로 발행됐는가**를 발행 로그에서 확인한다.
+ *
+ * ⚠ 실사고 2026-07-26 08:05 — 별이가 한 슬롯 아침에 두 번 말했다.
+ *   보충(`reconcileMissedSlots`)이 07-25 22:00 슬롯을 "누락"으로 보고 채웠는데,
+ *   그 슬롯은 누락된 적이 없다. **영수증 장부가 그때 아직 없었을 뿐이다**(00:40 배포).
+ *   → **영수증 부재 ≠ 누락.** 장부가 없던 시절과, 영수증 쓰기가 실패한 경우(쓰기는
+ *     `.catch`로 삼킨다)까지 같은 구멍이다. 그래서 보충 전에 **더 오래된 증인**인
+ *     publish_log를 함께 본다. 둘 중 하나라도 "발행됨"이면 보충하지 않는다.
+ */
+export function hasSuccessfulRun(log: readonly PublishLogRecord[], slotIso: string): boolean {
+  return log.some((r) => r.scheduledFor === slotIso && r.result === 'success');
+}
+
 export async function readSlotReceipt(env: PublishLogEnv, slot: string): Promise<SlotReceipt | null> {
   const raw = await env.PLANET.get(receiptKey(slot));
   if (!raw) return null;

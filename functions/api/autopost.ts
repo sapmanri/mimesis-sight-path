@@ -6,7 +6,7 @@
 // KV 바인딩: PLANET. 키: 'feed'(공용 스레드), 'bot_recent'(최근 발행 인덱스 — 중복 회피).
 
 import byeolliPosts from './byeolli_posts.json';
-import { appendPublishLog, bump401Bucket, slotOf, validateSlotIso, readSlotReceipt, writeSlotReceipt, type SlotReceipt } from './_publish-log';
+import { appendPublishLog, bump401Bucket, slotOf, validateSlotIso, readSlotReceipt, writeSlotReceipt, hasSuccessfulRun, type SlotReceipt } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
@@ -248,6 +248,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (slotIso && !forcePublish) {
     const prior = await readSlotReceipt(env, slotIso).catch(() => null);
     if (prior) return respondSlotDuplicate(env, invokedAtTop, prior);
+    // 보충 호출(scheduledFor 명시)은 **두 번째 증인**을 본다 — 발행 로그.
+    // 영수증 부재를 곧바로 "누락"으로 읽으면, 장부가 없던 시절의 슬롯과 영수증 쓰기가
+    // 실패한 슬롯까지 다시 발행한다. 실사고 07-26 08:05이 정확히 그것이었다.
+    if (wantSlot) {
+      const already = await env.PLANET.get('publish_log')
+        .then((raw) => hasSuccessfulRun(raw ? JSON.parse(raw) : [], slotIso))
+        .catch(() => false);
+      if (already) {
+        return respondSlotDuplicate(env, invokedAtTop, { slot: slotIso, at: 0, textIndex: null });
+      }
+    }
   }
 
   // 최근 발행 인덱스 로드 → 그걸 뺀 후보에서 랜덤

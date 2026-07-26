@@ -42,7 +42,7 @@ test('24시간 밖 슬롯은 missed로 잡지 않는다', () => {
 
 /* ── 슬롯 멱등 영수증 (홈즈 처방 ③, 2026-07-26) ── */
 
-import { slotOf, receiptKey, readSlotReceipt, writeSlotReceipt } from './_publish-log.ts';
+import { slotOf, receiptKey, readSlotReceipt, writeSlotReceipt, hasSuccessfulRun } from './_publish-log.ts';
 
 /** KV 스텁 — put/get만. expirationTtl이 실제로 넘어오는지도 본다. */
 function kvStub() {
@@ -147,4 +147,17 @@ test('스케줄러 Worker와 Pages가 같은 슬롯 문자열을 만든다 (계�
   const s8 = kstSlotUtc(2026, 7, 26, 8);
   const got2 = w.recentSlots(s8 + 5 * 60 * 1000, 2).map(w.kstIso);
   assert.deepEqual(got2, ['2026-07-26T08:00:00+09:00', '2026-07-25T22:00:00+09:00']);
+});
+
+test('보충의 두 번째 증인 — 영수증 부재를 곧바로 누락으로 읽지 않는다 (실사고 07-26 08:05)', () => {
+  const slot = '2026-07-25T22:00:00+09:00';
+  // 장부가 없던 시절의 슬롯: 영수증은 없지만 발행 로그에는 성공이 남아 있다
+  const log = [rec(slot)];
+  assert.equal(hasSuccessfulRun(log, slot), true, '발행 로그가 두 번째 증인이 되어야 한다');
+  // 실패 기록만 있으면 여전히 보충 대상
+  const failed: PublishLogRecord[] = [{ ...rec(slot), result: 'threads_failed', threads: { attempted: true, ok: false, errorCode: 'x', requestId: null } }];
+  assert.equal(hasSuccessfulRun(failed, slot), false);
+  // 다른 슬롯의 성공은 이 슬롯을 증명하지 않는다
+  assert.equal(hasSuccessfulRun([rec('2026-07-26T08:00:00+09:00')], slot), false);
+  assert.equal(hasSuccessfulRun([], slot), false, '아무 기록도 없으면 보충 대상이 맞다');
 });
