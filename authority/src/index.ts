@@ -114,13 +114,16 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: JSON_HEADERS });
 
     const route = url.pathname;
-    if (route !== '/api/byeoli/state' && route !== '/api/byeoli/health') {
+    // /events — 사건 공책 읽기 (Vase 승인 2026-07-26). 읽기 전용, 커서 기반.
+    if (route !== '/api/byeoli/state' && route !== '/api/byeoli/health' && route !== '/api/byeoli/events') {
       return json({ error: 'not_found' }, 404);
     }
 
     // 단 하나의 고정 이름만 사용한다. 사용자·탭·viewer별 DO 생성 금지.
     const stub = env.BYEOLI_AUTHORITY.getByName(AUTHORITY_NAME);
-    const internalPath = route.endsWith('/health') ? '/health' : '/state';
+    const internalPath = route.endsWith('/health') ? '/health'
+      : route.endsWith('/events') ? `/events${url.search}`     // cursor·limit을 그대로 넘긴다
+      : '/state';
     const internalRequest = new Request(`https://byeoli-authority.internal${internalPath}`, {
       method: 'GET',
       headers: request.headers,
