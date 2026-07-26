@@ -1036,6 +1036,11 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   function drawComic() {
     var s = state.scenario;
     if (!s) { banner('시나리오가 없다', 'err'); return; }
+    // 실사고 2026-07-26: [컷별로 그려 조립]을 켰는데 이 함수가 **시나리오 전체**를 한 번에
+    // 보냈다. 서버는 컷 모드에서 한 번에 2컷까지만 받으므로 max_2_per_call로 튕겼다.
+    // 원샷 경로에서만 "서버에 물어보는" 프로브가 의미가 있다 — 컷별로 갈 걸 이미 알고 있으면
+    // 물어볼 이유가 없다. 바로 컷별 생성으로 내려간다.
+    if (renderModeNow() === 'panels') { drawPanels(); return; }
     // 먼저 서버에 물어본다 — 페이지 모드(제미나이)면 한 방, 아니면 컷별
     var probe = $('out');
     probe.innerHTML = '<div class="panel"><span class="spin">◐</span> 페이지를 그리는 중… (제미나이 원샷 — 1~2분)</div>' + probe.innerHTML;
