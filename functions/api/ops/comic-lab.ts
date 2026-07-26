@@ -1049,16 +1049,95 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       '앞머리 유지 · 빼콩이 유지 · 컷 수 일치 · (글자는 그림에 없어야 정상 — 캡션·대사는 아래 폰트가 담당)</div></div>';
     $('out').innerHTML = strip + $('out').innerHTML;
     var done = 0;
+    state.panelKeys = {};       // 컷 index → R2 키 (조립·manifest가 쓴다)
+    state.layoutPlan = null;    // 서버가 그리기 전에 정한 자리표
+    state.pageContext = null;
     // 순차 생성 — 진행이 보이고, 실패해도 다음 컷은 계속
     var chain = Promise.resolve();
     s.panels.forEach(function (p) {
       chain = chain.then(function () {
-        return genPanel(p.index).then(function () {
+        return genPanel(p.index).then(function (r) {
           done++;
+          if (r && r.made && r.made.length) state.panelKeys[String(p.index)] = r.made[0].key;
+          if (r && r.comicId) state.comicId = r.comicId;
+          if (r && r.layoutPlan) state.layoutPlan = r.layoutPlan;
+          if (r && r.pageContext) state.pageContext = r.pageContext;
           var st = $('stripStatus');
           if (st) st.textContent = done + '/' + s.panelCount + (done === s.panelCount ? ' — 완성. 이상한 컷은 [이 컷 다시]' : '');
         });
       });
+    });
+    chain.then(function () {
+      var st = $('stripStatus');
+      if (!st) return;
+      // 조립은 컷이 다 나온 뒤에만. 빈 자리가 있는 채로 한 장을 만들면 그 페이지가 거짓말을 한다.
+      var have = Object.keys(state.panelKeys).length;
+      if (have !== s.panelCount) {
+        st.textContent += ' · 조립 불가 (' + have + '/' + s.panelCount + ' — 빠진 컷을 먼저 채운다)';
+        return;
+      }
+      if (!state.layoutPlan) { st.textContent += ' · 조립 불가 (자리표 없음)'; return; }
+      var b = document.createElement('button');
+      b.className = 'primary'; b.id = 'assemble'; b.style.marginTop = '10px';
+      b.textContent = '📄 한 장으로 조립';
+      st.parentNode.insertBefore(b, st.nextSibling);
+      b.onclick = function () { assembleAndSave(b); };
+    });
+  }
+
+  /**
+   * 컷 이미지들 → 한 장 → R2. 홈즈 조건: 완성 bitmap과 manifest를 함께 저장한다.
+   * 조립본은 원샷 페이지와 **같은 키**로 들어가므로 목록·통짜·분절이 그대로 동작한다.
+   */
+  function assembleAndSave(btn) {
+    var s = state.scenario;
+    btn.disabled = true; btn.innerHTML = '<span class="spin">◐</span> 조립 중…';
+    var keys = state.panelKeys;
+    var loads = s.panels.map(function (p) {
+      return new Promise(function (res, rej) {
+        var im = new Image();
+        im.crossOrigin = 'anonymous';
+        im.onload = function () { res({ index: p.index, img: im }); };
+        im.onerror = function () { rej(new Error(p.index + '컷 이미지를 못 읽었다')); };
+        im.src = fileUrl(keys[String(p.index)]) + '&v=' + Date.now();
+      });
+    });
+    Promise.all([loadAssemblyFont()].concat(loads)).then(function (all) {
+      var fontFamily = all[0];
+      var images = {}, texts = {};
+      all.slice(1).forEach(function (x) { images[x.index] = x.img; });
+      s.panels.forEach(function (p) { if (p.caption) texts[p.index] = p.caption; });
+      var out = assemblePage(state.layoutPlan, images, fontFamily, texts);
+      return new Promise(function (res) {
+        out.canvas.toBlob(function (blob) { res({ blob: blob, warnings: out.warnings, font: fontFamily }); }, 'image/png');
+      });
+    }).then(function (r) {
+      var fd = new FormData();
+      fd.append('page', r.blob, 'page.png');
+      fd.append('manifest', JSON.stringify({
+        version: 'assembly-v1',
+        comicId: state.comicId,
+        layoutPlan: state.layoutPlan,
+        pageContext: state.pageContext || null,
+        panelKeys: state.panelKeys,
+        font: r.font,
+        warnings: r.warnings,
+        assembledAt: Date.now(),
+      }));
+      return fetch('/api/ops/comic-assemble', { method: 'POST', body: fd })
+        .then(function (x) { return x.json(); })
+        .then(function (j) { return { j: j, warnings: r.warnings }; });
+    }).then(function (o) {
+      btn.disabled = false; btn.textContent = '📄 한 장으로 조립';
+      if (!o.j.ok) { banner('조립 저장 실패: ' + (o.j.error || '?') + ' ' + (o.j.detail || []).join(' / '), 'err'); return; }
+      // 경고는 숨기지 않는다 — 빈 자리·못 그린 캡션·넘친 문장은 사람이 알아야 한다
+      banner('조립 저장됨 — ' + o.j.panels + '컷 · ' + Math.round(o.j.bytes / 1024) + 'KB'
+        + (o.j.font ? ' · 조판 ' + o.j.font : ' · 캡션 미조판(폰트 없음)')
+        + (o.warnings.length ? ' · 경고 ' + o.warnings.length + '건' : ''), o.warnings.length ? 'err' : 'info');
+      if (o.warnings.length) o.warnings.forEach(function (w) { console.warn('[assemble]', w); });
+    }).catch(function (e) {
+      btn.disabled = false; btn.textContent = '📄 한 장으로 조립';
+      banner('조립 실패: ' + e, 'err');
     });
   }
   // 컷별 재생성 — 위임 리스너
