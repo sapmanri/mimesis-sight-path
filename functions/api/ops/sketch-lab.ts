@@ -530,7 +530,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     var t = ev.target;
     var key = t && t.getAttribute ? t.getAttribute('data-attach') : null;
     if (!key) return;
-    var date = $('date').value;
+    // 실사고 2026-07-26: 어젯밤 23:30에 나온 그림을 아침에 붙이려 하면 날짜 선택기가
+    // **오늘**이라 no_memory로 튕겼다("눌러도 안 된다"). 그림은 자기가 만들어진 날의
+    // 기억에 붙어야 한다 — 정본은 선택기가 아니라 **그림 자신의 createdAt**이다.
+    var date = t.getAttribute('data-date') || $('date').value;
     if (!confirm('이 그림을 ' + date + ' 기억의 그림 갈래(sketchDiary)로 붙인다.\\n하루의 그림은 한 장 — 이미 있으면 교체된다.')) return;
     t.disabled = true;
     api('/api/ops/memory', {
@@ -556,10 +559,16 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     var cards = '';
     records.forEach(function (r) {
       if (!r.r2Key) return;
+      // 그림이 만들어진 KST 날짜 — 붙일 때 이 날짜의 기억으로 간다(선택기 값이 아니라).
+      var d = r.createdAt ? new Date(r.createdAt + 9 * 3600 * 1000).toISOString().slice(0, 10) : '';
+      var today = kstToday();
       cards += '<div class="refcard">' +
         '<img src="/api/ops/sketch-image?key=' + encodeURIComponent(r.r2Key) + '" loading="lazy">' +
-        '<div class="nm">seed ' + esc(r.seed ?? '—') + '</div>' +
-        '<button class="del" data-attach="' + esc(r.r2Key) + '">📌 붙이기</button></div>';
+        '<div class="nm">seed ' + esc(r.seed ?? '—') +
+        (d ? ' <span class="muted">· ' + esc(d.slice(5)) + (d !== today ? ' (지난날)' : '') + '</span>' : '') +
+        '</div>' +
+        '<button class="del" data-attach="' + esc(r.r2Key) + '"' +
+        (d ? ' data-date="' + esc(d) + '"' : '') + '>📌 붙이기</button></div>';
     });
     if (!cards) return;
     // 판정기 추천 표시는 위 '🌙 별이가 그린 그림' 패널로 이사함 (07-23)
