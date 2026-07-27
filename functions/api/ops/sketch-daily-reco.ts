@@ -10,6 +10,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return new Response(JSON.stringify({ ok: false, error: 'bad_date' }), { status: 400, headers: JSON_HEADERS });
   }
-  const raw = await env.PLANET.get(`sketch_daily_reco:${date}`);
-  return new Response(raw ?? JSON.stringify({ ok: true, empty: true, date }), { status: 200, headers: JSON_HEADERS });
+  const [raw, runRaw] = await Promise.all([
+    env.PLANET.get(`sketch_daily_reco:${date}`),
+    env.PLANET.get(`sketch_daily_run:${date}`),
+  ]);
+  const run = runRaw ? JSON.parse(runRaw) : null;
+  if (!raw) {
+    return new Response(JSON.stringify({ ok: true, empty: true, date, run }), { status: 200, headers: JSON_HEADERS });
+  }
+  const reco = JSON.parse(raw);
+  return new Response(JSON.stringify({ ...reco, run }), { status: 200, headers: JSON_HEADERS });
 };

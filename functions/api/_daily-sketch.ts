@@ -306,9 +306,22 @@ export interface RefRoles {
   styles?: number;
 }
 
+/**
+ * 야간 3장은 seed만 다른 복제 후보가 아니다. 같은 기억을 서로 다른 몸의 반응으로 그린다.
+ * 포즈 시트가 있어도 행동을 지정하지 않으면 모델은 외형 보존이 쉬운 정면 정지 자세로 수렴한다
+ * (2026-07-27 실사고: 개구리 기억 3장 모두 멀뚱히 서 있음).
+ *
+ * 금지문 대신 결과 자세를 긍정형으로 지정한다. 인덱스는 결정론 seed의 장 번호와 같다.
+ */
+export const NIGHTLY_POSE_VARIANTS = [
+  'Deep squat beside the remembered event: both knees are sharply bent, her hips are lowered near her heels, her torso leans forward, and one hand touches the ground.',
+  'Moving response pose: the girl takes an asymmetrical step toward the remembered event, with bent elbows and arms reacting to it.',
+  'Close interaction pose: the girl kneels or squats at the event’s level and reaches one hand toward it, with her shoulders turned.',
+] as const;
+
 export function buildImagePrompt(
   memory: MemoryEvent, genome: GenomeContext | null, sceneEn: string | null,
-  subjects: string[] = [], refs: RefRoles | number = 0,
+  subjects: string[] = [], refs: RefRoles | number = 0, poseVariant: string | null = null,
 ): string {
   const roles: RefRoles = typeof refs === 'number' ? { characters: refs, styles: 0 } : refs;
   const nChar = roles.characters ?? 0;
@@ -323,6 +336,7 @@ export function buildImagePrompt(
     // 성실히 그려 넣는다(3차: 제본과 책상이 찍혔다). 물건이 아니라 표면만 말한다.
     'A simple hand-drawn sketch. Flat illustration drawn from memory.',
     `Scene: ${scene}`,
+    poseVariant ? `Girl's action: ${poseVariant}` : '',
     // 9차: subjectClause → pinnedSubjectClause. 캐릭터 수는 항상 못박고, 예산은 소품에만.
     pinnedSubjectClause(subjects, d.maxSubjects),
     focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
@@ -332,9 +346,9 @@ export function buildImagePrompt(
     // 포즈 시트 시대(2026-07-20 밤): 참조가 자세까지 베끼던 문제를 시트+지시로 푼다.
     // 캐릭터 2장이면 별이=image 0, 빼콩이=image 1 (sketch-trial이 이름으로 정렬해 보장).
     nChar >= 2
-      ? `Images 0 and 1 are character reference sheets — image 0 is the girl, image 1 is the white cat. Keep their exact appearance: same hair shape, same face, same body proportions, same clothes for the girl; all-white fur for the cat. The sheets show many poses — choose whichever pose fits the scene, do not copy any single panel or the sheet layout.`
+      ? `Images 0 and 1 are character reference sheets — image 0 is the girl, image 1 is the white cat. Keep their exact appearance: same hair shape, same face, same body proportions, same clothes for the girl; all-white fur for the cat. Use the sheets as a pose vocabulary and adapt the closest matching bent limbs, torso angle, and direction of gaze to the girl's action above; do not copy any single panel or the sheet layout. Render one continuous scene.`
       : nChar === 1
-        ? `Image 0 is a character reference for the same girl and the same cat — same hair shape, same face, same body proportions, same clothes. If it shows multiple poses, choose the pose that fits the scene — do not copy the sheet layout.`
+        ? `Image 0 is a character reference for the same girl and the same cat — same hair shape, same face, same body proportions, same clothes. Use its poses as a vocabulary: choose the pose that fits the scene and adapt its limbs, torso angle, and gaze to the girl's action above. Render one continuous scene.`
         : '',
     // 스타일 참조가 여러 장이면 **범위로 지칭하고 섞으라고** 말한다.
     // 한 장만 가리키면 그 그림 하나를 베끼게 되고, 결국 남의 그림체와 비슷해진다.

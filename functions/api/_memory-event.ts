@@ -59,6 +59,12 @@ export interface DayMemory {
   sourceCaptureIds: string[];
   date: string;                 // KST YYYY-MM-DD
   builtAt: number;
+  /** 하루를 접은 주체. 없는 옛 데이터는 legacy-unknown이며 human으로 추정하지 않는다. */
+  foldedBy?: 'human' | 'nightly-auto';
+  /** 접기가 완료된 시각. 옛 데이터에는 없을 수 있다. */
+  foldedAt?: number;
+  /** nightly-auto가 접은 경우 선행 run 영수증과 잇는 id. */
+  foldRunId?: string | null;
   /** 그날 서버에 남은 관찰 조각 수 */
   momentCount: number;
   /** 고른 순간 + 그 순간의 관찰들 */
@@ -251,5 +257,12 @@ export function validateDayMemory(x: unknown): string[] {
     errs.push('memoryEventId must be <ISO>:<slug>');
   }
   if (!Array.isArray(d.sourceCaptureIds)) errs.push('sourceCaptureIds must be an array');
+  if (d.foldedBy !== undefined && d.foldedBy !== 'human' && d.foldedBy !== 'nightly-auto') {
+    errs.push('foldedBy must be human|nightly-auto');
+  }
+  if (d.foldedAt !== undefined && (!Number.isFinite(d.foldedAt) || (d.foldedAt as number) <= 0)) {
+    errs.push('foldedAt must be a positive timestamp');
+  }
+  if (d.foldedBy === 'nightly-auto' && !d.foldRunId) errs.push('nightly-auto requires foldRunId');
   return errs;
 }

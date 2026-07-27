@@ -171,6 +171,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       detail: `${date}에 서버에 남은 관찰이 없다. 빈 기억을 지어내지 않는다.`,
     });
   }
+  day = { ...day, foldedBy: 'human', foldedAt: Date.now(), foldRunId: null };
 
   // 재빌드 가드(2026-07-22 자정): 새 DayMemory의 갈래는 전부 null이라, 채택 후
   // 무심코 다시 세우면 붙여둔 그림·글이 소리 없이 사라진다. 같은 사건이면 갈래를

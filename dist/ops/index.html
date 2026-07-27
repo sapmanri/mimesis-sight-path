@@ -65,6 +65,8 @@
   /* 일정·Threads */
   .slots{display:flex; gap:18px; margin-bottom:12px}
   .slot .t{color:var(--dim); margin-right:6px}
+  /* 정상 차단 표시 — 실패가 아니라 '막아냈다'는 기록이라 조용하게 */
+  .slot .dup{color:var(--dim); font-size:11px; margin-left:4px; cursor:help}
   .journal{display:flex; flex-direction:column; gap:10px}
   .journal .run .when{color:var(--sage)}
   .journal .run .what{margin-left:14px}
@@ -946,8 +948,24 @@ async function pollPublishLog(){
 
   const todayKey = kstDayKey(Date.now());
   const missed = new Set(log.missedSlots ?? []);
+  // 슬롯 배지는 "이 시간대가 **실제로 나갔는가**"를 답해야 한다. 마지막 시도가 뭐였는지가 아니다.
+  //
+  // ⚠ 2026-07-26 18:0x 실사고: `runs`는 최신순이라 첫 항목만 담으면 **가장 최근 시도**가 잡힌다.
+  //   보충이 정상 차단되면(`slot_duplicate`) 그게 최신이 되어, 제대로 동작한 슬롯이 ⚠로 떴다.
+  //   같은 날 08:00은 보충이 실제로 한 번 더 발행해버렸는데(진짜 이중 발행) 최신이 success라 ✅였다.
+  //   즉 배지가 정확히 거꾸로였다 — 고장난 쪽이 초록, 멀쩡한 쪽이 경고.
+  //   cd72786이 일지 줄을 고쳤을 때 이 배지도 같이 봤어야 했다(§2 교훈: 계약을 늘리면 읽는 화면도).
   const runsBySlot = new Map();
-  for (const r of log.runs ?? []) if (r.scheduledFor && !runsBySlot.has(r.scheduledFor)) runsBySlot.set(r.scheduledFor, r);
+  for (const r of log.runs ?? []) {
+    if (!r.scheduledFor) continue;
+    const cur = runsBySlot.get(r.scheduledFor);
+    // 성공이 하나라도 있으면 그것이 그 슬롯의 답이다. 없을 때만 다른 결과로 채운다.
+    if (!cur || (cur.result !== 'success' && r.result === 'success')) runsBySlot.set(r.scheduledFor, r);
+  }
+  // 정상 차단이 있었는지는 따로 센다 — 실패가 아니라 **막아냈다**는 기록이라 배지를 흐리지 않는다.
+  const blockedBySlot = new Map();
+  for (const r of log.runs ?? []) if (r.scheduledFor && r.result === 'slot_duplicate')
+    blockedBySlot.set(r.scheduledFor, (blockedBySlot.get(r.scheduledFor) ?? 0) + 1);
 
   /* 슬롯 요약 줄 — 오늘의 08/18/22 */
   const slotRow = $('slotRow'); slotRow.textContent = '';
@@ -960,7 +978,14 @@ async function pollPublishLog(){
   for (const { h, iso } of slotIsos) {
     const run = runsBySlot.get(iso);
     let mark, cls = '';
-    if (run) { mark = run.result === 'success' ? '✅' : '⚠️'; if (run.result !== 'success') cls = 'fail'; }
+    const blocked = blockedBySlot.get(iso) ?? 0;
+    if (run) {
+      if (run.result === 'success') mark = '✅';
+      else if (run.result === 'slot_duplicate') { mark = '⏭'; }   // 나간 적 없는데 차단만 있었다 — 실패 아님
+      else { mark = '⚠️'; cls = 'fail'; }
+      // 나갔고 + 뒤이은 보충을 막아냈다면 그 사실을 조용히 덧붙인다(경고 아님).
+      if (run.result === 'success' && blocked) mark += `<span class="dup" title="보충 ${blocked}회 정상 차단">⏭${blocked}</span>`;
+    }
     else if (missed.has(iso)) { mark = '⛔ 기록 없음'; cls = 'missed'; }
     else { mark = '예정'; if (nextLabel === null && nowD.getUTCHours() < h) nextLabel = `${String(h).padStart(2,'0')}:00`; }
     const el = document.createElement('span'); el.className = `slot ${cls}`;

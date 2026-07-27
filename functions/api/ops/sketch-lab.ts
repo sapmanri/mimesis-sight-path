@@ -270,14 +270,32 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       if (!r || r.error) { el.innerHTML = ''; return; }
       var head = '<div class="panel"><h2>🌙 별이가 그린 그림 <span class="muted">' + esc(date) +
         ' · 매일 23:30 자동 3장 — 채택은 사람(조건 ⑤)</span></h2>';
+      var run = r.run || null;
+      var stale = run && (run.status === 'folding' || run.status === 'generating') &&
+        Date.now() - Number(run.updatedAt || 0) > 20 * 60 * 1000;
+      if (r.failed || (run && run.status === 'failed')) {
+        var fail = r.errorMessage || (run && run.errorMessage) || r.errorCode || '원인 미기록';
+        el.innerHTML = head + '<div class="bad"><b>야간 자동생성 실패</b> — ' + esc(fail) +
+          '<br><span class="muted">단계 ' + esc(r.stage || (run && run.stage) || 'unknown') +
+          ' · run ' + esc(r.runId || (run && run.runId) || '—') + '</span></div></div>';
+        return;
+      }
+      if (stale) {
+        el.innerHTML = head + '<div class="bad"><b>생성 중단</b> — 마지막 기록 뒤 20분 넘게 진행이 없다.' +
+          '<br><span class="muted">단계 ' + esc(run.stage || 'unknown') + ' · run ' + esc(run.runId || '—') + '</span></div></div>';
+        return;
+      }
       if (r.empty) {
-        el.innerHTML = head + '<div class="muted">이 날짜의 자동 생성 기록이 없다 — 크론(23:30 KST)이 아직 안 돌았거나 ' +
-          '<b>미등록</b>이다 (인계서 431-AUTO의 남은 손일). 그동안은 아래 ④로 수동 생성.</div></div>';
+        var afterNightly = Date.now() > new Date(date + 'T23:30:00+09:00').getTime();
+        el.innerHTML = head + '<div class="' + (afterNightly ? 'bad' : 'muted') + '">' +
+          (afterNightly ? '<b>자동 실행 기록 없음</b> — 23:30이 지났지만 run/reco 영수증이 없다.'
+            : '아직 자동 실행 전 — 매일 23:30 KST에 시작한다.') + '</div></div>';
         return;
       }
       if (r.skipped) {
         var why = r.skipped === 'human_day' ? '사람이 먼저 하루를 접어서 자동은 물러났다 (조건 ② — 수동 생성분은 아래 최근 생성에)'
           : r.skipped === 'no_observations' ? '관찰이 없어 하루를 접지 않았다 (조건 ③ — 빈 기억을 지어내지 않는다)'
+          : r.skipped === 'ownership_unknown' ? '옛 하루의 접은 주체를 증명할 수 없어 자동이 덮지 않았다 — 수동 확인 필요'
           : r.skipped;
         el.innerHTML = head + '<div class="muted">이 날은 자동 생성 없음 — ' + esc(why) + '</div></div>';
         return;

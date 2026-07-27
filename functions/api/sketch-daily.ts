@@ -16,7 +16,9 @@
 import {
   buildDayMemory, validateDayMemory, memoryKey, kstDate, type DayMemory, type CaptureLike,
 } from './_memory-event.ts';
-import { buildImagePrompt, CHARACTER_IDENTITY_CHECKS, SKETCH_RULES, SKETCH_VERSION } from './_daily-sketch.ts';
+import {
+  buildImagePrompt, CHARACTER_IDENTITY_CHECKS, NIGHTLY_POSE_VARIANTS, SKETCH_RULES, SKETCH_VERSION,
+} from './_daily-sketch.ts';
 import { selectProvider, trialKey, type ImageProviderEnv } from './_image-provider.ts';
 import { translateScene, translateSubjects, hashPrompt, orderCharacterRefs, type TrialRecord } from './ops/sketch-trial.ts';
 // ⚠ 2026-07-27: 이 한 줄이 없어서 **매일 밤 그림일기가 죽었다.**
@@ -36,6 +38,30 @@ interface Env extends ImageProviderEnv {
 const META_KEY = 'sketch_trial_meta';
 const META_KEEP = 60;
 const RECO_KEY = (date: string) => `sketch_daily_reco:${date}`;
+const RUN_KEY = (date: string) => `sketch_daily_run:${date}`;
+type RunStatus = 'folding' | 'generating' | 'done' | 'skipped' | 'failed';
+interface DailyRun {
+  runId: string;
+  date: string;
+  owner: 'nightly-auto';
+  status: RunStatus;
+  stage: string;
+  startedAt: number;
+  updatedAt: number;
+  errorCode?: string;
+  errorName?: string;
+  errorMessage?: string;
+}
+interface RunTrace { stage: string; runId: string }
+
+export function foldedDayDecision(
+  day: Pick<DayMemory, 'foldedBy'>,
+  hasAutoRun: boolean,
+): 'resume' | 'human_day' | 'ownership_unknown' {
+  if (day.foldedBy === 'nightly-auto' || hasAutoRun) return 'resume';
+  if (day.foldedBy === 'human') return 'human_day';
+  return 'ownership_unknown';
+}
 const DAILY_MODEL = '@cf/black-forest-labs/flux-2-dev';
 // steps 12 = 품질 판정값 (07-21 심야, "하고하고 또 해서" 결정) — 품질값은 상수다.
 // 07-24 실증: 실패 원인은 스텝이 아니라 30초 클라이언트가 생성 도중 끊은 것.
@@ -110,6 +136,49 @@ async function judgeCandidates(
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const trace: RunTrace = { stage: 'request', runId: '' };
+  const url = new URL(context.request.url);
+  const rawDate = url.searchParams.get('date');
+  const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : kstDate(Date.now());
+  try {
+    return await handleDaily(context, trace);
+  } catch (error) {
+    const e = error instanceof Error ? error : new Error(String(error));
+    const now = Date.now();
+    let previous: DailyRun | null = null;
+    try {
+      const raw = await context.env.PLANET.get(RUN_KEY(date));
+      previous = raw ? JSON.parse(raw) as DailyRun : null;
+    } catch { /* 실패 영수증 쓰기를 계속 시도한다 */ }
+    const runId = trace.runId || previous?.runId || `${date}-${now.toString(36)}`;
+    const failed: DailyRun = {
+      runId, date, owner: 'nightly-auto', status: 'failed', stage: trace.stage,
+      startedAt: previous?.startedAt ?? now, updatedAt: now,
+      errorCode: 'unhandled_exception', errorName: e.name.slice(0, 80), errorMessage: e.message.slice(0, 300),
+    };
+    try {
+      await Promise.all([
+        context.env.PLANET.put(RUN_KEY(date), JSON.stringify(failed)),
+        context.env.PLANET.put(RECO_KEY(date), JSON.stringify({
+          date, at: now, status: 'failed', failed: true, stage: trace.stage,
+          errorCode: 'unhandled_exception', errorName: failed.errorName,
+          errorMessage: failed.errorMessage, runId,
+        })),
+      ]);
+    } catch (receiptError) {
+      console.error(`sketch-daily receipt_write_failed date=${date} runId=${runId}`, receiptError);
+    }
+    console.error(`sketch-daily failed date=${date} runId=${runId} stage=${trace.stage}`, e);
+    return json(500, {
+      ok: false, failed: true, date, runId, stage: trace.stage,
+      errorCode: 'unhandled_exception', errorName: failed.errorName, errorMessage: failed.errorMessage,
+    });
+  }
+};
+
+async function handleDaily(
+  context: Parameters<PagesFunction<Env>>[0], trace: RunTrace,
+): Promise<Response> {
   const { request, env } = context;
   // 날짜 오버라이드 — 이미 접힌 날짜의 생성 재시도 전용. 과거 하루를 새로 접지는 않는다.
   const url = new URL(request.url);
@@ -117,6 +186,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const resetParam = url.searchParams.get('reset') === '1';
   if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return json(400, { ok: false, error: 'bad_date' });
   const date = dateParam ?? kstDate(Date.now());
+  trace.stage = 'authenticate';
 
   // 인증: 크론(PUBLISH_KEY)이 정문. 재시도(?date=)에 한해 PULSE_KEY 보조 허용 —
   // (07-24: 검증·완주를 기록자가 직접 할 수 있어야 한다. 48시간 실사고의 구조적 수리.
@@ -125,6 +195,30 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const pubOk = request.headers.get('X-Publish-Key') === env.PUBLISH_KEY;
   const pulseRetryOk = !!dateParam && !!env.PULSE_KEY && request.headers.get('X-Pulse-Key') === env.PULSE_KEY;
   if (!pubOk && !pulseRetryOk) return json(403, { ok: false, error: 'forbidden' });
+
+  // 스케줄러가 모든 재시도를 소진했을 때 남기는 최종 영수증. 같은 인증 경로를 써서
+  // Worker에 PLANET 바인딩이라는 두 번째 진실을 만들지 않는다.
+  if (request.headers.get('X-Scheduler-Receipt') === 'failed') {
+    const now = Date.now();
+    const priorRaw = await env.PLANET.get(RUN_KEY(date));
+    const prior = priorRaw ? JSON.parse(priorRaw) as DailyRun : null;
+    const runId = prior?.runId ?? `${date}-${now.toString(36)}`;
+    const failed: DailyRun = {
+      runId, date, owner: 'nightly-auto', status: 'failed', stage: 'scheduler_exhausted',
+      startedAt: prior?.startedAt ?? now, updatedAt: now,
+      errorCode: 'max_calls_exhausted', errorName: 'SchedulerExhausted',
+      errorMessage: 'scheduler exhausted MAX_CALLS without done or a valid terminal skip',
+    };
+    await Promise.all([
+      env.PLANET.put(RUN_KEY(date), JSON.stringify(failed)),
+      env.PLANET.put(RECO_KEY(date), JSON.stringify({
+        date, at: now, status: 'failed', failed: true, stage: failed.stage,
+        errorCode: failed.errorCode, errorName: failed.errorName,
+        errorMessage: failed.errorMessage, runId,
+      })),
+    ]);
+    return json(200, { ok: true, receipt: 'failed', runId });
+  }
 
   // 건너뛰어도 기록은 남긴다 — 아침 실험실이 "왜 없는지"를 말할 수 있게 (침묵이 버그다).
   // 이미 생성 기록이 있으면 덮지 않는다.
@@ -135,7 +229,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   };
 
   // ② 사람 우선 — 이미 접힌 하루가 있으면 자동은 물러난다
-  const storedRaw = await env.PLANET.get(memoryKey(date));
+  trace.stage = 'read_memory';
+  const [storedRaw, runRaw] = await Promise.all([
+    env.PLANET.get(memoryKey(date)),
+    env.PLANET.get(RUN_KEY(date)),
+  ]);
+  let run = runRaw ? JSON.parse(runRaw) as DailyRun : null;
+  trace.runId = run?.runId ?? '';
   let day: DayMemory;
   if (storedRaw) {
     // 실사고(07-23 첫 실전): 크론이 하루를 접었는데 AI가 3연속 실패(AiError 3040/5030).
@@ -143,7 +243,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // 접힌 하루를 재사용해 생성만 재시도한다 (하루는 다시 접지 않는다).
     const recoRaw = await env.PLANET.get(RECO_KEY(date));
     const prevReco = recoRaw ? JSON.parse(recoRaw) as { picks?: unknown[]; errors?: unknown[]; skipped?: string } : null;
-    const resumable = (!!prevReco && !prevReco.skipped
+    day = JSON.parse(storedRaw) as DayMemory;
+    const ownership = foldedDayDecision(
+      day,
+      !!run && run.owner === 'nightly-auto' && run.date === date,
+    );
+    const ownedByAuto = ownership === 'resume';
+    const resumable = ownedByAuto || (!!prevReco && !prevReco.skipped
       && Array.isArray(prevReco.picks) && prevReco.picks.length < 3)
       // 실사고(07-24, 매일 밤 반복된 교착): 크론이 하루를 접은 직후 30초에 살해당하면
       // memoryKey는 있는데 reco엔 자정의 no_observations 잔해만 남는다. 하루가 접혔다는
@@ -152,10 +258,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       || prevReco?.skipped === 'no_observations'
       || (resetParam && pulseRetryOk);   // 리셋: 시험분 폐기 후 정규 품질로 재생성 (재시도 경로 전용)
     if (!resumable) {
-      await recordSkip('human_day');
-      return json(200, { ok: true, skipped: 'human_day', detail: `${date}의 하루가 이미 서 있다 — 사람 우선(조건 ②)` });
+      const skipped = ownership;
+      await recordSkip(skipped);
+      return json(200, {
+        ok: true, skipped,
+        detail: skipped === 'human_day'
+          ? `${date}의 하루를 사람이 접었다 — 사람 우선(조건 ②)`
+          : `${date}의 옛 하루는 접은 주체를 증명할 수 없어 자동이 덮지 않는다`,
+      });
     }
-    day = JSON.parse(storedRaw) as DayMemory;
   } else {
     if (dateParam) {
       return json(400, { ok: false, error: `not_folded: ${date} — 날짜 지정은 접힌 하루의 재시도 전용 (과거 하루를 새로 접지 않는다)` });
@@ -168,23 +279,53 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       await recordSkip('no_observations');
       return json(200, { ok: true, skipped: 'no_observations', detail: `${date}에 관찰이 없다 — 빈 기억을 지어내지 않는다(조건 ③)` });
     }
-    const errs = validateDayMemory(built);
+    const now = Date.now();
+    const runId = `${date}-${now.toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+    trace.runId = runId;
+    run = {
+      runId, date, owner: 'nightly-auto', status: 'folding', stage: 'before_memory',
+      startedAt: now, updatedAt: now,
+    };
+    // KV 다중 키 트랜잭션은 없으므로 원자성을 주장하지 않는다. memory보다 이 영수증을
+    // 먼저 써 어느 지점에서 죽어도 다음 호출이 nightly-auto 소유임을 증명하게 한다.
+    trace.stage = 'before_memory';
+    await env.PLANET.put(RUN_KEY(date), JSON.stringify(run));
+    const folded: DayMemory = {
+      ...built, foldedBy: 'nightly-auto', foldedAt: Date.now(), foldRunId: runId,
+    };
+    const errs = validateDayMemory(folded);
     if (errs.length) return json(500, { ok: false, error: 'invalid_memory', detail: errs });
-    await env.PLANET.put(memoryKey(date), JSON.stringify(built));
-    day = built;
+    trace.stage = 'write_memory';
+    await env.PLANET.put(memoryKey(date), JSON.stringify(folded));
+    day = folded;
+    run = { ...run, status: 'generating', stage: 'prepare_refs', updatedAt: Date.now() };
+    trace.stage = 'prepare_refs';
+    await env.PLANET.put(RUN_KEY(date), JSON.stringify(run));
   }
 
   // 실측 확정(07-24): 응답 이후의 백그라운드 실행(waitUntil)은 이 환경에서 기록을 남기지
   // 못한다 (202 후 무변화 2회 실증). 결론: 30초 안에 동기로 끝내고, 한 장 끝날 때마다
   // 즉시 기록한다 — 도중에 끊겨도 부분 결과가 남는다.
+  trace.stage = 'generate';
   const summary = await generateDaily(env, date, day, context, resetParam && pulseRetryOk);
+  const now = Date.now();
+  const currentRunRaw = await env.PLANET.get(RUN_KEY(date));
+  const currentRun = currentRunRaw ? JSON.parse(currentRunRaw) as DailyRun : run;
+  if (currentRun) {
+    await env.PLANET.put(RUN_KEY(date), JSON.stringify({
+      ...currentRun,
+      status: summary.done ? 'done' : 'generating',
+      stage: summary.done ? 'complete' : 'generate_next',
+      updatedAt: now,
+    }));
+  }
   return json(summary.made > 0 || summary.done ? 200 : 502, {
     ok: summary.made > 0 || summary.done, date, memoryEventId: day.memoryEventId,
     generatedNow: summary.made, totalImages: summary.total, done: summary.done,
     trialId: summary.trialId, errors: summary.errors,
     next: summary.done ? '3장 완성 — 아침에 📌 → 🕊' : '아직 부족 — 같은 호출을 다시 (한 호출 = 한 장)',
   });
-};
+}
 
 async function generateDaily(
   env: Env, date: string, day: DayMemory, context: Parameters<PagesFunction<Env>>[0], reset = false,
@@ -221,7 +362,11 @@ async function generateDaily(
     const obj = await env.CAPTURES.get(key);
     if (obj) refs.push({ name: key.split('/').pop() ?? 'ref', bytes: await obj.arrayBuffer(), contentType: obj.httpMetadata?.contentType ?? 'image/png' });
   }
-  const prompt = buildImagePrompt(day.event, null, sceneEn, subjTr.subjects, { characters: refs.length, styles: 0 });
+  const prompt = buildImagePrompt(
+    day.event, null, sceneEn, subjTr.subjects,
+    { characters: refs.length, styles: 0 },
+    NIGHTLY_POSE_VARIANTS[n % NIGHTLY_POSE_VARIANTS.length],
+  );
   const promptHash = hashPrompt(prompt);
   // trialId는 첫 호출 것을 계승 — 번역이 매번 조금 달라도 같은 하루의 한 시도로 묶는다
   const trialId = prev?.trialId && !prev.skipped

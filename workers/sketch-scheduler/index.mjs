@@ -17,6 +17,13 @@ const MAX_CALLS = 8;           // 3장 + 실패 여유 (밤 완주기와 같은 
 const PER_CALL_MS = 150_000;   // 인내 클라이언트 계약 (--max-time 150과 동일)
 const BETWEEN_MS = 3_000;
 
+export function terminalResult(status, body) {
+  if (!(status >= 200 && status < 300) || !body || body.failed === true) return null;
+  if (body.done === true) return 'done';
+  if (body.skipped === 'human_day' || body.skipped === 'no_observations') return body.skipped;
+  return null;
+}
+
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(run(env));
@@ -25,6 +32,7 @@ export default {
 
 async function run(env) {
   const log = [];
+  let terminal = false;
   for (let call = 1; call <= MAX_CALLS; call++) {
     let body = null, status = 0;
     try {
@@ -40,10 +48,35 @@ async function run(env) {
       await sleep(BETWEEN_MS);
       continue;                                   // 일시 오류는 다음 콜이 이어받는다 (멱등)
     }
-    log.push(`#${call} ${status} done=${body?.done} total=${body?.totalImages} skipped=${body?.skipped ?? '-'}`);
-    if (body?.done === true) break;               // 3장 완주
-    if (body?.skipped) break;                     // no_observations 등 — 정당한 종료 (빈 기억을 지어내지 않는다)
+    log.push(`#${call} ${status} done=${body?.done} total=${body?.totalImages} skipped=${body?.skipped ?? '-'} failed=${body?.failed ?? false}`);
+    const terminalResultKind = terminalResult(status, body);
+    if (terminalResultKind === 'done') {
+      terminal = true;
+      break;                                      // 3장 완주
+    }
+    // 증명된 사람 접기와 관찰 없음만 정당한 종료다. ownership_unknown은 사고/수동 확인 대상.
+    if (terminalResultKind === 'human_day' || terminalResultKind === 'no_observations') {
+      terminal = true;
+      break;
+    }
+    // 5xx·비JSON·failed·ownership_unknown·partial은 상한까지 재시도한다.
     await sleep(BETWEEN_MS);
+  }
+  if (!terminal) {
+    try {
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'X-Publish-Key': env.PUBLISH_KEY,
+          'X-Scheduler-Receipt': 'failed',
+        },
+        signal: AbortSignal.timeout(PER_CALL_MS),
+      });
+      const body = await res.json().catch(() => null);
+      log.push(`receipt ${res.status} saved=${body?.receipt === 'failed'}`);
+    } catch (e) {
+      log.push(`receipt_error: ${String(e && e.message || e).slice(0, 120)}`);
+    }
   }
   console.log(`sketch-scheduler: ${log.join(' | ')}`);   // wrangler tail로 관측 가능
 }
