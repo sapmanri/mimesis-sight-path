@@ -219,6 +219,77 @@ export async function attachPublishedDiary(
  *  - `untraceable`    추적 불가 — 성공 발행은 있으나 이 사건에 사진이 없어 이을 근거가 없다
  *  - `awaiting_link`  연결 대기 — 성공 발행도 사진도 있는데 아직 안 붙었다 (재조정 대상)
  */
+/* ── 431-M A안 보정 (Vase 판정 2026-07-28 00:0x, 실측 근거) ─────────────
+   위 A안은 "발행 시점에 붙인다"였다. 판단은 맞았는데 **전제가 틀렸다.**
+   발행은 08·18·22시고 하루는 23:30에 접힌다 — 실측 4일 전부:
+
+     07-24 기억 00:21(다음날) · 07-25 23:38 · 07-26 23:50 · 07-27 23:43
+
+   발행이 기억보다 먼저인 날이 하루도 없다. 그래서 autopost의 attachPublishedDiary는
+   **한 번도 불리지 못했다.** `갈래: 글 —`이 매일 뜬 이유가 이것이다.
+
+   근본은 이렇다 — **하루의 사건은 하루가 끝나야 정해진다.** 08시에 발행하면서 그날의
+   사건을 알 수는 없다. 구조적으로 불가능한 것을 요구하고 있었다.
+
+   보정: 발행 **시점에 글을 남겨두고**, 접을 때 **사진으로 대조해** 붙인다.
+   홈즈가 사후 역추적을 물린 이유(엉뚱한 사진에 남의 글)는 그 대조가 막는다.
+   ⚠ 운영 로그(_publish-log)는 원문을 담지 않는다(Layer 1). 그래서 키를 따로 둔다. */
+
+export const pendingDiaryKey = (date: string) => `diary_pending:${date}`;
+
+export interface PendingDiary {
+  at: number;
+  /** 그 발행에 실제로 실린 사진의 R2 키. 이것이 대조 근거다 */
+  imageKey: string | null;
+  text: string;
+}
+
+/** 하루에 남길 발행 기록 수. 슬롯이 셋이니 넉넉하다. */
+const PENDING_KEEP = 6;
+
+export async function stashPendingDiary(
+  env: { PLANET: KVNamespace }, date: string, entry: PendingDiary,
+): Promise<void> {
+  const raw = await env.PLANET.get(pendingDiaryKey(date)).catch(() => null);
+  let prev: PendingDiary[] = [];
+  if (raw) { try { prev = JSON.parse(raw) as PendingDiary[]; } catch { prev = []; } }
+  const next = [...(Array.isArray(prev) ? prev : []), entry].slice(-PENDING_KEEP);
+  await env.PLANET.put(pendingDiaryKey(date), JSON.stringify(next));
+}
+
+export async function readPendingDiaries(
+  env: { PLANET: KVNamespace }, date: string,
+): Promise<PendingDiary[]> {
+  const raw = await env.PLANET.get(pendingDiaryKey(date)).catch(() => null);
+  if (!raw) return [];
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
+}
+
+export type DiaryLinkResult = 'linked' | 'already' | 'no_photo' | 'no_pending' | 'photo_mismatch';
+
+/**
+ * 접을 때 그날 발행된 글을 사건에 붙인다. **사진이 같은 것만.**
+ *
+ * ⚠ 사진이 어긋나면 붙이지 않는다 — 빈칸이 엉뚱한 연결보다 낫다. 이게 홈즈가 사후
+ *   역추적을 물렸던 바로 그 위험이고, 여기서는 그 대조로 막는다.
+ * 순수 함수다 — 쓰기는 부르는 쪽(접는 자리)이 한 번에 한다.
+ */
+export function linkPendingDiary(
+  day: DayMemory, pending: readonly PendingDiary[],
+): { day: DayMemory; result: DiaryLinkResult } {
+  if (day.event.diaryText) return { day, result: 'already' };
+  if (!day.photoKey) return { day, result: 'no_photo' };
+  if (!pending.length) return { day, result: 'no_pending' };
+
+  // 같은 사진으로 나간 발행 중 **마지막 것**. 하루에 여러 번 나갔으면 그날을 가장 늦게 말한 글이다.
+  const match = [...pending].reverse().find((p) => p.imageKey && p.imageKey === day.photoKey && p.text?.trim());
+  if (!match) return { day, result: 'photo_mismatch' };
+
+  let next = attachBranch(day, 'diaryText', match.text);
+  if (!next.event.selectedPhoto) next = attachBranch(next, 'selectedPhoto', day.photoKey);
+  return { day: next, result: 'linked' };
+}
+
 export type DiaryBranchStatus = 'linked' | 'unused' | 'publish_failed' | 'untraceable' | 'awaiting_link';
 
 export function diaryBranchStatus(

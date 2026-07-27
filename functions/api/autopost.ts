@@ -11,7 +11,7 @@ import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
 import { appendCaptureMeta, observationIdOf } from './_capture-meta';
-import { memoryKey, kstDate, attachPublishedDiary, type DayMemory } from './_memory-event';
+import { memoryKey, kstDate, attachPublishedDiary, stashPendingDiary, type DayMemory } from './_memory-event';
 import { bookKey } from './_genome';
 
 // 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
@@ -451,6 +451,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // 멱등하고, memoryEventId가 어긋나면(도중에 하루가 다시 세워졌으면) 붙이지 않는다.
     if (threads.ok && memoryEventIdForPost) {
       await attachPublishedDiary(env, todayKst, memoryEventIdForPost, text).catch(() => {});
+    }
+    // ⚠ 그런데 발행(08·18·22시)은 **거의 항상 하루가 접히기(23:30) 전**이라 위 문은 닫혀 있다.
+    //   실측 4일 전부 기억이 발행보다 늦었다. 그래서 글을 여기 남겨두고, 접을 때
+    //   linkPendingDiary가 사진을 대조해 붙인다. (원문은 운영 로그가 아니라 이 키에만 둔다)
+    if (threads.ok) {
+      await stashPendingDiary(env, todayKst, {
+        at: Date.now(),
+        imageKey: img ? (img.match(/captures\/[^?#]+/)?.[0] ?? null) : null,
+        text,
+      }).catch(() => {});
     }
   }
 

@@ -566,3 +566,61 @@ test('글 갈래 상태 다섯 — 표시가 아니라 실제 상태에서 파�
   assert.equal(diaryBranchStatus(dayFixture({ photoKey: null }) as never, ok), 'untraceable', '사진이 없어 이을 근거가 없다');
   assert.equal(diaryBranchStatus(dayFixture() as never, ok), 'awaiting_link', '성공도 사진도 있는데 아직 안 붙었다 — 재조정 대상');
 });
+
+/* ── 431-M A안 보정 — 접을 때 사진으로 대조해 글을 붙인다 (2026-07-28) ────────
+   실측: 발행(08·18·22시)이 하루 접기(23:30)보다 항상 먼저라 발행 시점 붙이기는
+   한 번도 성립하지 않았다. 아래 시험이 그 자리를 지킨다. */
+import { linkPendingDiary as _link, pendingDiaryKey } from './_memory-event.ts';
+
+const dayFor = (photoKey: string | null, diaryText?: string) => ({
+  version: '431M-v1', memoryEventId: 'ev1', sourceCaptureIds: [], date: '2026-07-27',
+  builtAt: 1, momentCount: 3, photoKey, density: 'normal',
+  event: { lines: ['ㄱ'], targetLabel: '낙엽', momentAt: 1, ...(diaryText ? { diaryText } : {}) },
+}) as never;
+
+test('발행된 글을 붙인다 — 사진이 같을 때만', async () => {
+  const p = [
+    { at: 1, imageKey: 'captures/walk/other.jpg', text: '아침 글' },
+    { at: 2, imageKey: 'captures/walk/A.jpg', text: '낮 글' },
+    { at: 3, imageKey: 'captures/walk/A.jpg', text: '밤 글' },
+  ];
+  const r = _link(dayFor('captures/walk/A.jpg'), p);
+  assert.equal(r.result, 'linked');
+  assert.equal(r.day.event.diaryText, '밤 글', '같은 사진으로 나간 것 중 마지막 글');
+  assert.equal(r.day.event.selectedPhoto, 'captures/walk/A.jpg', '사진 갈래도 같이 승격된다');
+});
+
+test('⚠ 사진이 어긋나면 붙이지 않는다 — 빈칸이 엉뚱한 연결보다 낫다', async () => {
+  const r = _link(dayFor('captures/walk/A.jpg'), [{ at: 1, imageKey: 'captures/walk/B.jpg', text: '남의 글' }]);
+  assert.equal(r.result, 'photo_mismatch');
+  assert.equal(r.day.event.diaryText, undefined,
+    '홈즈가 사후 역추적을 물렸던 위험이 정확히 이것 — 대조로 막는다');
+});
+
+test('이미 붙어 있으면 덮지 않는다 · 근거가 없으면 사유를 남긴다', async () => {
+  assert.equal(_link(dayFor('captures/walk/A.jpg', '이미 있음'), [{ at: 1, imageKey: 'captures/walk/A.jpg', text: '새 글' }]).result, 'already');
+  assert.equal(_link(dayFor(null), [{ at: 1, imageKey: 'captures/walk/A.jpg', text: 'ㄱ' }]).result, 'no_photo');
+  assert.equal(_link(dayFor('captures/walk/A.jpg'), []).result, 'no_pending');
+  assert.equal(_link(dayFor('captures/walk/A.jpg'), [{ at: 1, imageKey: 'captures/walk/A.jpg', text: '   ' }]).result,
+    'photo_mismatch', '빈 글은 글이 아니다');
+});
+
+test('발행 기록을 쌓고 읽는다 — 운영 로그와 키가 다르다', async () => {
+  const { stashPendingDiary, readPendingDiaries } = await import('./_memory-event.ts');
+  const store = new Map<string, string>();
+  const env = {
+    PLANET: {
+      get: async (k: string) => store.get(k) ?? null,
+      put: async (k: string, v: string) => { store.set(k, v); },
+    },
+  } as never;
+
+  await stashPendingDiary(env, '2026-07-27', { at: 1, imageKey: 'captures/a.jpg', text: '첫 글' });
+  await stashPendingDiary(env, '2026-07-27', { at: 2, imageKey: 'captures/b.jpg', text: '둘째 글' });
+
+  assert.deepEqual((await readPendingDiaries(env, '2026-07-27')).map((x) => x.text), ['첫 글', '둘째 글']);
+  assert.ok(store.has(pendingDiaryKey('2026-07-27')));
+  assert.ok(!store.has('publish_log'),
+    '⚠ 운영 로그는 원문을 담지 않는다(Layer 1) — 그래서 키를 나눴다');
+  assert.deepEqual(await readPendingDiaries(env, '2026-07-26'), [], '없는 날은 빈 배열');
+});

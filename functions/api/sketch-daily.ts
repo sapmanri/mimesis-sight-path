@@ -14,7 +14,9 @@
 // 아침의 채택·발행은 실험실의 기존 UI(최근 생성 → 📌 → 🕊)를 그대로 쓴다.
 
 import {
-  buildDayMemory, validateDayMemory, memoryKey, kstDate, type DayMemory, type CaptureLike,
+  buildDayMemory, validateDayMemory, memoryKey, kstDate,
+  linkPendingDiary, readPendingDiaries,
+  type DayMemory, type CaptureLike,
 } from './_memory-event.ts';
 import {
   buildImagePrompt, CHARACTER_IDENTITY_CHECKS, NIGHTLY_POSE_VARIANTS, SKETCH_RULES, SKETCH_VERSION,
@@ -52,7 +54,7 @@ interface DailyRun {
   errorName?: string;
   errorMessage?: string;
 }
-interface RunTrace { stage: string; runId: string }
+interface RunTrace { stage: string; runId: string; diaryLink?: string }
 
 export function foldedDayDecision(
   day: Pick<DayMemory, 'foldedBy'>,
@@ -290,9 +292,14 @@ async function handleDaily(
     // 먼저 써 어느 지점에서 죽어도 다음 호출이 nightly-auto 소유임을 증명하게 한다.
     trace.stage = 'before_memory';
     await env.PLANET.put(RUN_KEY(date), JSON.stringify(run));
-    const folded: DayMemory = {
+    let folded: DayMemory = {
       ...built, foldedBy: 'nightly-auto', foldedAt: Date.now(), foldRunId: runId,
     };
+    // 431-M A안 보정 — 그날 발행된 글을 **사진으로 대조해** 붙인다. 발행은 접히기 전에
+    // 끝나므로 발행 시점에는 붙일 수 없었다(실측 4일 전부). 사진이 어긋나면 안 붙인다.
+    const linked = linkPendingDiary(folded, await readPendingDiaries(env, date).catch(() => []));
+    folded = linked.day;
+    trace.diaryLink = linked.result;
     const errs = validateDayMemory(folded);
     if (errs.length) return json(500, { ok: false, error: 'invalid_memory', detail: errs });
     trace.stage = 'write_memory';
