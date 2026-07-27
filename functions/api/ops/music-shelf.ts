@@ -20,6 +20,30 @@ const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body, null, 2), { status, headers: JSON_HEADERS });
 
+const HINTS: Record<string, string> = {
+  token_invalid_client:
+    'client_id/secret 쌍을 구글이 거부했다. 아래 shape를 보라 — hasWhitespace가 true면 붙여넣을 때 공백·줄바꿈이 섞인 것이고(가장 흔하다), '
+    + 'prefixOk/suffixOk가 false면 ID와 secret이 서로 바뀌었거나 잘린 것이다. 콘솔에서 secret을 새로 발급해 다시 넣는 게 제일 빠르다.',
+  token_invalid_grant:
+    'refresh token이 죽었다. 동의 화면이 "테스트" 상태였거나, 계정에서 액세스를 취소했거나, 값이 잘못 저장됐다. 다시 승인해야 한다.',
+  oauth_not_configured: '시크릿 세 개 중 빠진 게 있다.',
+};
+
+/** ⚠ **값을 절대 돌려주지 않는다.** 길이와 참/거짓만 준다.
+    비밀을 화면에 찍지 않고도 "공백이 섞였다 / 잘렸다 / 서로 바뀌었다"를 잡아낼 수 있다. */
+function shape(v: string | undefined, want: { prefix?: string; suffix?: string; len?: number }) {
+  if (!v) return { present: false };
+  return {
+    present: true,
+    length: v.length,
+    expectedLength: want.len ?? null,
+    // 앞뒤 공백만이 아니라 **가운데 공백**까지 본다 — Playground를 막았던 게 정확히 그거였다
+    hasWhitespace: /\s/.test(v),
+    prefixOk: want.prefix ? v.startsWith(want.prefix) : null,
+    suffixOk: want.suffix ? v.endsWith(want.suffix) : null,
+  };
+}
+
 export const onRequestGet: PagesFunction<PlaylistEnv> = async ({ request, env }) => {
   const url = new URL(request.url);
 
@@ -32,9 +56,14 @@ export const onRequestGet: PagesFunction<PlaylistEnv> = async ({ request, env })
   if (!token) {
     return json(200, {
       ok: false, step: 'token', error: authError,
-      hint: authError === 'token_invalid_grant'
-        ? '토큰이 죽었다. 동의 화면이 "테스트" 상태였거나, 계정에서 액세스를 취소했거나, 값이 잘못 저장됐다. 다시 승인해야 한다.'
-        : null,
+      hint: HINTS[authError ?? ''] ?? null,
+      // ⚠ 값은 절대 찍지 않는다. **모양만** 잰다 — 붙여넣기 사고는 거의 다 모양에서 드러난다
+      //   (공백이 섞였다 / 잘렸다 / ID와 secret이 서로 바뀌었다)
+      shape: {
+        clientId: shape(env.YOUTUBE_OAUTH_CLIENT_ID, { suffix: '.apps.googleusercontent.com' }),
+        clientSecret: shape(env.YOUTUBE_OAUTH_CLIENT_SECRET, { prefix: 'GOCSPX-', len: 35 }),
+        refreshToken: shape(env.YOUTUBE_OAUTH_REFRESH_TOKEN, { prefix: '1//' }),
+      },
     });
   }
 
