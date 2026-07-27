@@ -24,6 +24,13 @@ const HINTS: Record<string, string> = {
   token_invalid_client:
     'client_id/secret 쌍을 구글이 거부했다. 아래 shape를 보라 — hasWhitespace가 true면 붙여넣을 때 공백·줄바꿈이 섞인 것이고(가장 흔하다), '
     + 'prefixOk/suffixOk가 false면 ID와 secret이 서로 바뀌었거나 잘린 것이다. 콘솔에서 secret을 새로 발급해 다시 넣는 게 제일 빠르다.',
+  // 2026-07-27 실사고: 겉보기엔 성공한 승인이 남의 클라이언트로 발급됐다.
+  // OAuth Playground는 새로고침하면 'Use your own OAuth credentials' 체크가 말없이 풀리고,
+  // 그 상태로도 승인·토큰 발급이 **정상적으로 끝난다**. 그래서 실패를 성공으로 착각한다.
+  token_unauthorized_client:
+    'client_id/secret은 맞다. refresh token이 **다른 클라이언트**로 발급된 것이다. '
+    + 'OAuth Playground에서 받았다면 ⚙의 "Use your own OAuth credentials" 체크가 풀린 채로 받았을 가능성이 크다. '
+    + '다시 받되, Authorize 직후 Request/Response 창의 client_id가 우리 것인지 눈으로 확인할 것.',
   token_invalid_grant:
     'refresh token이 죽었다. 동의 화면이 "테스트" 상태였거나, 계정에서 액세스를 취소했거나, 값이 잘못 저장됐다. 다시 승인해야 한다.',
   oauth_not_configured: '시크릿 세 개 중 빠진 게 있다.',
