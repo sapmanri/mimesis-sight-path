@@ -141,6 +141,34 @@ test('유닛을 정직하게 센다 — 담기가 확인보다 훨씬 비싸다'
   assert.equal(r.cost, 50 + 3 * 50, '재생목록 50 + 곡마다 50 (하루 한도 10,000)');
 });
 
+test('어느 채널에 묶였는지 확인한다', async () => {
+  const { getMyChannel } = await import('./_shelf-playlist.ts');
+  const seen: string[] = [];
+  const env = {
+    _fetch: async (u: string, i: unknown) => {
+      seen.push(`${(i as { method: string }).method} ${u}`);
+      return { ok: true, status: 200, json: async () => ({ items: [{ id: 'UC_x', snippet: { title: 'vase Lim' } }] }) };
+    },
+  };
+  assert.deepEqual(await getMyChannel(env as never, 'at'), { id: 'UC_x', title: 'vase Lim', error: null });
+  assert.ok(seen[0].startsWith('GET '), '읽기다 — 본문을 보내지 않는다');
+
+  const none = { _fetch: async () => ({ ok: true, status: 200, json: async () => ({ items: [] }) }) };
+  assert.equal((await getMyChannel(none as never, 'at')).error, 'no_channel',
+    '채널이 없으면 없다고 한다 — 빈 이름으로 넘어가지 않는다');
+});
+
+test('⚠ 삭제는 204에 본문이 없다 — json()을 부르면 성공한 자리에서 터진다', async () => {
+  const { deletePlaylist } = await import('./_shelf-playlist.ts');
+  const env = {
+    _fetch: async () => ({
+      ok: true, status: 204,
+      json: async () => { throw new Error('Unexpected end of JSON input'); },
+    }),
+  };
+  assert.deepEqual(await deletePlaylist(env as never, 'at', 'PL_x'), { ok: true, error: null });
+});
+
 test('access token을 헤더로 들고 간다', async () => {
   const { createPlaylist } = await import('./_shelf-playlist.ts');
   const seen: unknown[] = [];

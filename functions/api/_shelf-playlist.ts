@@ -70,16 +70,19 @@ export async function getAccessToken(env: PlaylistEnv): Promise<{ token: string 
 
 // ── 담기 ─────────────────────────────────────────────────────────────────────
 
-async function post(
-  env: PlaylistEnv, token: string, path: string, body: unknown,
+async function call(
+  env: PlaylistEnv, token: string, method: string, path: string, body?: unknown,
 ): Promise<{ data: Record<string, unknown> | null; error: string | null }> {
   const doFetch = env._fetch ?? ((u: string, i: unknown) => fetch(u, i as RequestInit));
   try {
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    if (body !== undefined) headers['content-type'] = 'application/json';
     const res = await doFetch(`${API}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
+      method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+    // ⚠ delete는 204를 주고 **본문이 없다**. 무조건 json()을 부르면 성공한 자리에서 터진다.
+    if (res.status === 204) return { data: {}, error: null };
+
     const j = (await res.json()) as Record<string, unknown> & { error?: { errors?: Array<{ reason?: string }> } };
     if (!res.ok) {
       // 구글은 왜 막혔는지를 reason으로 준다 — 상태 코드보다 이게 훨씬 쓸모 있다
@@ -90,6 +93,30 @@ async function post(
   } catch (e) {
     return { data: null, error: `failed: ${(e as Error).message}` };
   }
+}
+
+const post = (env: PlaylistEnv, token: string, path: string, body: unknown) =>
+  call(env, token, 'POST', path, body);
+
+/** 이 승인이 **어느 채널에 묶였는지** 확인한다. 읽기 1유닛.
+    ⚠ 브랜드 계정이 여럿이면 승인할 때 고른 것에 묶인다 — 눈으로 확인하지 않으면
+      엉뚱한 채널에 재생목록이 쌓이는 걸 한참 뒤에나 안다. */
+export async function getMyChannel(
+  env: PlaylistEnv, token: string,
+): Promise<{ id: string | null; title: string | null; error: string | null }> {
+  const { data, error } = await call(env, token, 'GET', '/channels?part=snippet&mine=true');
+  if (error) return { id: null, title: null, error };
+  const items = (data?.items as Array<{ id?: string; snippet?: { title?: string } }>) ?? [];
+  if (!items.length) return { id: null, title: null, error: 'no_channel' };
+  return { id: items[0].id ?? null, title: items[0].snippet?.title ?? null, error: null };
+}
+
+/** 시험용으로 만든 재생목록을 치운다 (50유닛). 확인하면서 쓰레기를 남기지 않기 위해. */
+export async function deletePlaylist(
+  env: PlaylistEnv, token: string, id: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await call(env, token, 'DELETE', `/playlists?id=${encodeURIComponent(id)}`);
+  return { ok: !error, error };
 }
 
 export type Privacy = 'private' | 'unlisted' | 'public';
