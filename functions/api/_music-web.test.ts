@@ -216,6 +216,65 @@ test('전체 — 검색어부터 저장소 항목까지', async () => {
   for (const e of r.entries) assert.deepEqual(validateSong(e), [], `${e.title} 저장소 검증 통과`);
 });
 
+/** 진짜 SSE 응답 모양. `event:` 줄과 빈 줄까지 섞어 흘린다. */
+function sseBody(events: unknown[]) {
+  const text = events.map((e) => `event: ${(e as { type: string }).type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+  const chunks = text.match(/[\s\S]{1,17}/g) ?? [];   // 줄 중간에서 끊기게 잘게 쪼갠다
+  let i = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(c) {
+      if (i >= chunks.length) { c.close(); return; }
+      c.enqueue(new TextEncoder().encode(chunks[i++]));
+    },
+  });
+}
+
+test('⚠ 도구가 붙은 호출은 스트리밍으로 보낸다 — 안 그러면 524로 죽는다', async () => {
+  const { investigate } = await import('./_music-web.ts');
+
+  const url = 'https://pitchfork.example/review/1';
+  const sent: Array<Record<string, unknown>> = [];
+  const env = {
+    ANTHROPIC_API_KEY: 'k',
+    _fetch: async (_u: string, init: unknown) => {
+      sent.push(JSON.parse((init as { body: string }).body));
+      return {
+        ok: true, status: 200,
+        json: async () => { throw new Error('스트림인데 json()을 불렀다'); },
+        body: sseBody([
+          { type: 'content_block_start', index: 0, content_block: { type: 'server_tool_use', name: 'web_search', input: {} } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"query":"quiet ' } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: 'folk songs"}' } },
+          { type: 'content_block_stop', index: 0 },
+          { type: 'content_block_start', index: 1, content_block: { type: 'web_fetch_tool_result', content: { type: 'web_fetch_result', url } } },
+          { type: 'content_block_stop', index: 1 },
+          { type: 'content_block_start', index: 2, content_block: { type: 'text', text: '' } },
+          { type: 'content_block_delta', index: 2, delta: { type: 'text_delta', text: '{"picks":[{"title":"곡","artist":"A",' } },
+          { type: 'content_block_delta', index: 2, delta: { type: 'text_delta', text: '"verdict":"chosen","role":"center","fromLine":1,' } },
+          { type: 'content_block_delta', index: 2, delta: { type: 'text_delta', text: `"because":"오늘과 닮았다","sources":["${url}"]}]}` } },
+          { type: 'content_block_stop', index: 2 },
+          { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+        ]),
+      };
+    },
+  };
+
+  const r = await investigate(env as never, intent, [{ query: 'q', fromLine: 0 }]);
+
+  assert.equal(sent[0].stream, true, '⚠ 도구 호출에는 stream:true가 붙어야 한다');
+  assert.deepEqual(r.transcript.fetched, [url], '조각난 스트림에서 도구 기록이 복원된다');
+  assert.deepEqual(r.transcript.queriesRun, ['quiet folk songs'], '조각난 JSON 입력이 합쳐진다');
+  assert.deepEqual(r.picks.map((p) => p.title), ['곡'], '조각난 본문이 합쳐져 JSON으로 읽힌다');
+  assert.equal(r.error, null);
+});
+
+test('검색어 호출은 짧으니 스트리밍하지 않는다', async () => {
+  const { planQueries } = await import('./_music-web.ts');
+  const fake = fakeClaude([QUERY_OK]);
+  await planQueries(fake.env as never, intent);
+  assert.ok(!(fake.bodies[0] as { stream?: boolean }).stream, '짧은 호출까지 스트리밍할 이유는 없다');
+});
+
 test('조사 프롬프트가 오늘의 재료와 규칙을 실제로 들고 간다', async () => {
   const { buildInvestigatePrompt } = await import('./_music-web.ts');
   const p = buildInvestigatePrompt(intent, [{ query: 'quiet folk songs about an empty chair', fromLine: 0 }]);

@@ -142,7 +142,68 @@ export function extractJson<T = unknown>(text: string): T | null {
 
 interface ClaudeResult { content: unknown[]; stopReason: string | null; error: string | null }
 
-async function callClaude(env: MusicWebEnv, body: Record<string, unknown>): Promise<ClaudeResult> {
+interface SseEvent {
+  type?: string;
+  index?: number;
+  content_block?: Record<string, unknown>;
+  delta?: { type?: string; text?: string; thinking?: string; partial_json?: string; stop_reason?: string };
+}
+
+/**
+ * 스트림을 읽어 완성된 content 블록으로 되돌린다.
+ *
+ * ⚠ **이 함수가 생긴 이유가 실사고다 (2026-07-27).** 웹 검색·읽기가 붙은 호출을
+ *   스트리밍 없이 보냈다가 145초 만에 `524`(시간 초과)로 죽었다. 검색어 6개는 이미
+ *   만들어진 뒤였는데 그 일이 통째로 버려졌다. 도구가 붙은 호출은 몇 분이 걸릴 수
+ *   있고, 스트리밍은 그동안 연결을 살아 있게 한다.
+ */
+async function readSse(body: ReadableStream<Uint8Array>): Promise<{ content: unknown[]; stopReason: string | null }> {
+  const reader = body.getReader();
+  const dec = new TextDecoder();
+  const blocks: Array<Record<string, unknown>> = [];
+  const partialJson: Record<number, string> = {};
+  let buf = '';
+  let stopReason: string | null = null;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+
+    let nl: number;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith('data:')) continue;          // event: 줄과 빈 줄은 버린다
+      const payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+
+      let ev: SseEvent;
+      try { ev = JSON.parse(payload) as SseEvent; } catch { continue; }
+      const i = ev.index ?? 0;
+
+      if (ev.type === 'content_block_start') {
+        blocks[i] = { ...(ev.content_block ?? {}) };
+        partialJson[i] = '';
+      } else if (ev.type === 'content_block_delta' && blocks[i]) {
+        const d = ev.delta ?? {};
+        if (d.type === 'text_delta') blocks[i].text = `${blocks[i].text ?? ''}${d.text ?? ''}`;
+        else if (d.type === 'thinking_delta') blocks[i].thinking = `${blocks[i].thinking ?? ''}${d.thinking ?? ''}`;
+        else if (d.type === 'input_json_delta') partialJson[i] += d.partial_json ?? '';
+      } else if (ev.type === 'content_block_stop' && blocks[i] && partialJson[i]) {
+        // 도구 입력은 조각난 JSON으로 온다 — 다 모인 뒤에 한 번 파싱한다
+        try { blocks[i].input = JSON.parse(partialJson[i]); } catch { /* 못 읽으면 그대로 둔다 */ }
+      } else if (ev.type === 'message_delta' && ev.delta?.stop_reason) {
+        stopReason = ev.delta.stop_reason;
+      }
+    }
+  }
+  return { content: blocks.filter(Boolean), stopReason };
+}
+
+async function callClaude(
+  env: MusicWebEnv, body: Record<string, unknown>, stream = false,
+): Promise<ClaudeResult> {
   const doFetch = env._fetch ?? ((u: string, i: unknown) => fetch(u, i as RequestInit));
   try {
     const res = await doFetch(API, {
@@ -152,9 +213,15 @@ async function callClaude(env: MusicWebEnv, body: Record<string, unknown>): Prom
         'x-api-key': env.ANTHROPIC_API_KEY as string,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(stream ? { ...body, stream: true } : body),
     });
     if (!res.ok) return { content: [], stopReason: null, error: `claude_${res.status}` };
+
+    // 스트림이 실제로 오면 읽고, 아니면(시험의 가짜 등) 평소대로 본문을 읽는다
+    const rs = (res as { body?: ReadableStream<Uint8Array> }).body;
+    if (stream && rs && typeof rs.getReader === 'function') {
+      return { ...(await readSse(rs)), error: null };
+    }
     const j = (await res.json()) as { content?: unknown[]; stop_reason?: string };
     return { content: j.content ?? [], stopReason: j.stop_reason ?? null, error: null };
   } catch (e) {
@@ -170,11 +237,12 @@ async function runWithTools(
   const msgs = [...messages];
   const transcript = readTranscript([]);
   for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
+    // ⚠ 도구가 붙은 호출은 반드시 스트리밍이다. 안 그러면 524로 죽는다 (2026-07-27 실사고)
     const r = await callClaude(env, {
       model: MUSIC_MODEL, max_tokens: MAX_TOKENS,
       thinking: { type: 'adaptive' },
       tools, messages: msgs,
-    });
+    }, true);
     if (r.error) return { transcript, error: r.error };
     readTranscript(r.content, transcript);
     if (r.stopReason !== 'pause_turn') return { transcript, error: null };
