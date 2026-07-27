@@ -60,7 +60,7 @@ test('공식 음원(- Topic)을 알아본다', async () => {
 
   const official = matchOne(Q, { id: 'a', title: 'Hurt', channel: 'Johnny Cash - Topic', durationSec: 218 });
   const random = matchOne(Q, { id: 'b', title: 'Hurt', channel: 'music uploads 2011', durationSec: 218 });
-  assert.ok(official.reasons.includes('official_audio'));
+  assert.ok(official.reasons.includes('official_channel'));
   assert.ok(official.score > random.score, '공식 음원이 더 높다');
 });
 

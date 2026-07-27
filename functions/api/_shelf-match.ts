@@ -78,6 +78,26 @@ const contains = (hay: string, needle: string) =>
 /** YouTube의 자동 생성 음원 채널. 유통사가 배급한 **공식 음원**이라는 가장 강한 신호다. */
 export const isTopicChannel = (channel?: string) => /\s-\s*topic$/i.test(String(channel || '').trim());
 
+/** 공식으로 볼 수 있는 채널인가.
+ *
+ * ⚠ 실측(2026-07-27, Johnny Cash 'Hurt' 라이브 호출)에서 드러난 구멍:
+ *   `- Topic`만 공식으로 쳤더니 **JohnnyCashVEVO가 50점**으로, 정체불명 재업로드
+ *   (The Match Me Podcast 60, machineelf 60)보다 **낮게** 나왔다.
+ *   재업로드가 우연히 길이만 맞아 duration_tight 가산점을 받았기 때문이다.
+ *   그날은 공식 아티스트 채널이 64점으로 이겨서 결과가 맞았지만 **운이었다.**
+ *
+ * 공식으로 치는 세 가지:
+ *   · `<가수> - Topic`  자동 생성 음원(Art Track)
+ *   · `<가수>VEVO`      유통사 공식 채널
+ *   · 채널명 == 가수명   공식 아티스트 채널(OAC) */
+export function isOfficialChannel(channel: string | undefined, artist: string): boolean {
+  const ch = String(channel || '').trim();
+  if (!ch) return false;
+  if (isTopicChannel(ch)) return true;
+  if (/vevo$/i.test(ch.replace(/\s+/g, ''))) return true;
+  return norm(ch) === norm(artist) && !!norm(artist);
+}
+
 export function matchOne(q: ShelfQuery, c: ShelfCandidate): MatchResult {
   const want = q.want || 'studio';
   const raw = `${c.title} ${c.channel || ''}`;
@@ -115,10 +135,13 @@ export function matchOne(q: ShelfQuery, c: ShelfCandidate): MatchResult {
   if (ch === qa || na === qa) { score += 40; reasons.push('artist_exact'); }
   else if (contains(ch, qa) || contains(nt, qa)) { score += 26; reasons.push('artist_contains'); }
 
-  if (c.officialHint || isTopicChannel(c.channel)) { score += 20; reasons.push('official_audio'); }
+  // 공식 표시를 길이 우연보다 무겁게 둔다 — 안 그러면 재업로드가 공식을 이긴다(위 실측)
+  if (c.officialHint || isOfficialChannel(c.channel, q.artist)) { score += 26; reasons.push('official_channel'); }
   if (q.album && contains(norm(c.title), norm(q.album))) { score += 8; reasons.push('album_hint'); }
+  // ⚠ 기대 길이는 웹에서 읽은 값이라 틀릴 수 있다(실측에서 218 vs 실제 229로 어긋났다).
+  //   가산점을 크게 주면 **틀린 기대에 우연히 맞은 재업로드**가 공식을 이긴다. 작게 준다.
   if (q.durationSec && c.durationSec && Math.abs(c.durationSec - q.durationSec) <= 3) {
-    score += 10; reasons.push('duration_tight');
+    score += 4; reasons.push('duration_tight');
   }
   if (live && want === 'live') { score += 10; reasons.push('live_wanted'); }
 
