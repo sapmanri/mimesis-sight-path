@@ -201,6 +201,21 @@ test('재생목록을 건너뛰고 조사만 할 수 있다', async () => {
   assert.equal(r.archive!.saved, 3);
   assert.ok(!w.calls.some((c) => c.includes('/playlists?')), '재생목록을 만들지 않는다');
   assert.ok(r.notes.includes('playlist_skipped'));
+  // ⚠ 실사고 2026-07-28: skipPlaylist가 스레드 문장보다 **앞에서** 반환해
+  //   dry 실행에서 threadText가 늘 null이었다. 문장은 재생목록이 없어도 만들 수 있다.
+  assert.ok(r.threadText, 'dry 실행에서도 스레드 문장은 나와야 한다');
+  assert.ok(r.threadText.includes('중심곡 — A'));
+  assert.ok(!r.threadText.includes('http'), '재생목록이 없으니 주소는 없다');
+});
+
+test('⚠ 읽은 글이 한 곳뿐이면 신호를 남긴다 — 발견이 얕았다는 뜻', async () => {
+  const { runMusicNight } = await import('./_music-night.ts');
+  const w = fakeWorld();
+  const { kv } = fakeKV({ [`memory:${DATE}`]: JSON.stringify(dayMemory(LINES)) });
+  const r = await runMusicNight(envWith(kv, w) as never, { ...OPTS, skipPlaylist: true });
+
+  assert.ok(r.notes.some((n) => n.startsWith('single_source_domain')),
+    '한 도메인만 읽었으면 막지는 않되 남긴다');
 });
 
 test('스레드 문장 — 중심곡이 없으면 만들지 않는다', async () => {

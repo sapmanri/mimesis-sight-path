@@ -133,10 +133,25 @@ export async function runMusicNight(
     return { ...r, step: 'archive', error: `archive_failed: ${(e as Error).message}` };
   }
 
-  // ⑥ 재생목록 — 서가에서 확인된 곡만, 중심곡을 맨 앞에
-  if (opts.skipPlaylist) return { ...r, step: 'done', notes: [...r.notes, 'playlist_skipped'] };
+  // ⚠ 읽은 글이 한 곳에서만 나왔나 — 발견이 얕았다는 신호. 막지는 않고 남긴다.
+  //   (2026-07-28 첫 실물 실행: 읽은 2건이 둘 다 나무위키였고, 둘째 곡은 그 글 안의
+  //    판본 목록에서 골랐다. 검색어는 좋았는데 읽기가 한 곳에 머물렀다.)
+  const domains = new Set(r.read.map((u) => { try { return new URL(u).hostname; } catch { return u; } }));
+  if (r.read.length && domains.size === 1) r.notes.push(`single_source_domain: ${[...domains][0]}`);
 
+  // ⑥ 스레드 문장 — **재생목록보다 먼저 만든다.** 재생목록이 없어도 문장은 만들 수 있다.
+  //   ⚠ 예전엔 skipPlaylist가 이 앞에서 반환해버려 dry 실행에서 늘 null이 나왔다 (내 버그).
   const center = centerOf(entries, opts.date);
+  const cm = center?.chosen.find((c) => c.date === opts.date);
+  const centerFor = center && cm ? { title: center.title, artist: center.artist, because: cm.because } : null;
+  if (!centerFor && entries.some((e) => e.verdict === 'chosen')) r.notes.push('no_center');
+
+  if (opts.skipPlaylist) {
+    return { ...r, step: 'done', threadText: buildThreadText(centerFor, null),
+      notes: [...r.notes, 'playlist_skipped'] };
+  }
+
+  // ⑦ 재생목록 — 서가에서 확인된 곡만, 중심곡을 맨 앞에
   const ordered = [...r.onShelf].sort((a, b) =>
     (b.videoId === center?.shelf?.id ? 1 : 0) - (a.videoId === center?.shelf?.id ? 1 : 0));
   const tracks: PlaylistTrack[] = ordered.map((t) => ({ videoId: t.videoId, title: t.title, artist: t.artist }));
@@ -149,13 +164,7 @@ export async function runMusicNight(
   if (pl.error) return { ...r, step: 'playlist', error: pl.error };
   r.playlistUrl = pl.url;
 
-  // ⑦ 스레드 문장 — 만들기만 한다
-  const cm = center?.chosen.find((c) => c.date === opts.date);
-  r.threadText = buildThreadText(
-    center && cm ? { title: center.title, artist: center.artist, because: cm.because } : null,
-    pl.url,
-  );
-  return { ...r, step: 'done' };
+  return { ...r, step: 'done', threadText: buildThreadText(centerFor, pl.url) };
 }
 
 /** 재생목록 설명 — 그날 무엇을 보고 찾았는지. 나중에 목록만 봐도 그날이 읽히게. */
