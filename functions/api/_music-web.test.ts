@@ -286,3 +286,11 @@ test('조사 프롬프트가 오늘의 재료와 규칙을 실제로 들고 간�
     '⚠ 코드가 막는 것을 프롬프트에도 적는다 — 안 그러면 왜 떨어졌는지 별이가 모른다');
   assert.ok(p.includes('picks를 빈 배열'), '못 고르면 안 고를 수 있어야 한다');
 });
+
+test('⚠ 앨범이 아니라 곡을 고르라고 말한다 (2026-07-28 실물에서 드러남)', async () => {
+  const { buildInvestigatePrompt } = await import('./_music-web.ts');
+  const p = buildInvestigatePrompt(intent, [{ query: 'q', fromLine: 0 }]);
+  assert.ok(p.includes('앨범이 아니라 곡 하나를 골라라'),
+    '리뷰는 앨범을 다루니 그대로 두면 앨범 제목이 올라온다 — 서가는 곡을 찾는다');
+  assert.ok(p.includes('서로 다른 사이트를 최소 두 곳'), '한 곳만 깊게 파지 않게');
+});
