@@ -56,18 +56,32 @@ const emptyReceipt = (date: string, pack: string): NightReceipt => ({
   playlistUrl: null, threadText: null, notes: [],
 });
 
-/** 스레드 문장 — 중심곡 하나와 별이의 이유. 짧게.
-    ⚠ 가사도 리뷰 원문도 아니다. `because`는 별이가 오늘의 관찰에 걸어 쓴 말이다. */
+/** 우리 쪽 어휘 — **별이의 입에서 나오면 안 되는 말들.**
+ *
+ * ⚠ 2026-07-28 실물에서 드러났다. 스레드에 이런 문장이 나갈 뻔했다:
+ *   「검색으로 찾아 실제로 펼쳐 읽은 글에서… 찾던 검색어에 이 글이 걸렸고,
+ *     오늘 피할 것들과도 부딪히지 않았다」
+ *   읽는 사람은 검색 단계도, 피하기 목록도 모른다. 이건 별이의 말이 아니라
+ *   **우리에게 하는 해명**이다. `_music-curate.ts`의 raw_focus_word와 같은 종류의 실수다. */
+const MACHINERY = /검색어|검색으로|검색해|출처|피할 것|판정|후보에|저장소|읽은 글에서/;
+
+/** 스레드 문장 — 중심곡 하나와 **별이의 해석**.
+ *
+ * ⚠ `byeoliSummary`를 쓴다. `because`가 아니다.
+ *   `because`는 왜 골랐는지를 **우리에게** 설명하는 자리라 조사 과정이 들어간다.
+ *   사람이 읽는 건 별이가 그 음악을 어떻게 들었는지다. */
 export function buildThreadText(
-  center: { title: string; artist: string; because: string } | null, playlistUrl: string | null,
+  center: { title: string; artist: string; line: string } | null, playlistUrl: string | null,
 ): string | null {
-  if (!center) return null;
+  if (!center?.line?.trim()) return null;
   return [
     `${center.title} — ${center.artist}`,
-    center.because,
+    center.line.trim(),
     playlistUrl,
   ].filter(Boolean).join('\n\n');
 }
+
+export const hasMachinery = (s: string | null | undefined) => MACHINERY.test(String(s ?? ''));
 
 /** 판정이 chosen이고 role이 center인 항목을 찾는다 (하루에 하나뿐) */
 const centerOf = (es: SongEntry[], date: string) =>
@@ -143,8 +157,13 @@ export async function runMusicNight(
   //   ⚠ 예전엔 skipPlaylist가 이 앞에서 반환해버려 dry 실행에서 늘 null이 나왔다 (내 버그).
   const center = centerOf(entries, opts.date);
   const cm = center?.chosen.find((c) => c.date === opts.date);
-  const centerFor = center && cm ? { title: center.title, artist: center.artist, because: cm.because } : null;
+  // 별이의 해석이 먼저. 없으면 because로 물러서되, 그건 우리 어휘가 섞이기 쉬운 자리다.
+  const line = center?.read?.byeoliSummary?.trim() || cm?.because || '';
+  const centerFor = center && line ? { title: center.title, artist: center.artist, line } : null;
   if (!centerFor && entries.some((e) => e.verdict === 'chosen')) r.notes.push('no_center');
+  if (!center?.read?.byeoliSummary?.trim() && centerFor) r.notes.push('thread_fell_back_to_because');
+  // ⚠ 우리 어휘가 섞였으면 사람이 보기 전에 표시한다 — 조용히 내보내지 않는다
+  if (centerFor && hasMachinery(line)) r.notes.push('thread_line_has_machinery');
 
   if (opts.skipPlaylist) {
     return { ...r, step: 'done', threadText: buildThreadText(centerFor, null),

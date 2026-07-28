@@ -36,7 +36,8 @@ const fetchRes = (url: string) =>
 const PICKS = (n = 2) => ({
   picks: [
     { title: '중심곡', artist: 'A', verdict: 'chosen', role: 'center', fromLine: 1,
-      because: '빼콩이를 만나지 못한 오늘과 닮았다', sources: [URL_READ], themes: ['기다림'] },
+      because: '검색으로 찾아 읽은 글에서 확인했다', sources: [URL_READ], themes: ['기다림'],
+      byeoliSummary: '기다림을 아직 끝나지 않은 시간처럼 말한다' },
     ...(n > 1 ? [{ title: '주변곡', artist: 'B', verdict: 'chosen', role: 'around', fromLine: 0,
       because: '나무 의자와 닮았다', sources: [URL_READ] }] : []),
     { title: '밝은곡', artist: 'C', verdict: 'rejected', fromLine: 2,
@@ -150,7 +151,10 @@ test('전체 — 기억부터 재생목록·스레드 문장까지', async () =>
 
   // 스레드는 문장만 만든다
   assert.ok(r.threadText!.includes('중심곡 — A'));
-  assert.ok(r.threadText!.includes('빼콩이를 만나지 못한 오늘과 닮았다'));
+  assert.ok(r.threadText!.includes('기다림을 아직 끝나지 않은 시간처럼 말한다'),
+    '⚠ 스레드에는 byeoliSummary(별이의 말)가 나간다');
+  assert.ok(!r.threadText!.includes('검색으로'),
+    '⚠ because(우리에게 하는 해명)는 스레드에 나가지 않는다');
   assert.ok(r.threadText!.includes('PL_today'));
   assert.ok(!w.calls.some((c) => c.includes('threads')), '⚠ 여기서 스레드에 올리지 않는다 — 발행 주체는 하나여야 한다');
 });
@@ -205,6 +209,7 @@ test('재생목록을 건너뛰고 조사만 할 수 있다', async () => {
   //   dry 실행에서 threadText가 늘 null이었다. 문장은 재생목록이 없어도 만들 수 있다.
   assert.ok(r.threadText, 'dry 실행에서도 스레드 문장은 나와야 한다');
   assert.ok(r.threadText.includes('중심곡 — A'));
+  assert.ok(!r.notes.includes('thread_line_has_machinery'));
   assert.ok(!r.threadText.includes('http'), '재생목록이 없으니 주소는 없다');
 });
 
@@ -221,8 +226,27 @@ test('⚠ 읽은 글이 한 곳뿐이면 신호를 남긴다 — 발견이 얕�
 test('스레드 문장 — 중심곡이 없으면 만들지 않는다', async () => {
   const { buildThreadText } = await import('./_music-night.ts');
   assert.equal(buildThreadText(null, 'https://x'), null, '지어내지 않는다');
+  assert.equal(buildThreadText({ title: 'X', artist: 'A', line: '   ' }, null), null, '빈 말은 문장이 아니다');
   assert.equal(
-    buildThreadText({ title: 'Hurt', artist: 'Johnny Cash', because: '기다림과 닮았다' }, 'https://x'),
+    buildThreadText({ title: 'Hurt', artist: 'Johnny Cash', line: '기다림과 닮았다' }, 'https://x'),
     'Hurt — Johnny Cash\n\n기다림과 닮았다\n\nhttps://x',
   );
+});
+
+test('⚠ 우리 어휘가 섞이면 표시한다 — 조용히 내보내지 않는다', async () => {
+  const { hasMachinery, runMusicNight } = await import('./_music-night.ts');
+
+  assert.ok(hasMachinery('찾던 검색어에 이 글이 걸렸고, 오늘 피할 것들과도 부딪히지 않았다'),
+    '2026-07-28에 실제로 나올 뻔한 문장');
+  assert.ok(!hasMachinery('밟으면 푹 들어가는 낙엽처럼, 그 아래 쌓인 두께를 듣게 되는 소리'),
+    '별이의 말은 통과');
+
+  // byeoliSummary가 없으면 because로 물러서고, 그 사실과 오염을 둘 다 남긴다
+  const w = fakeWorld({ picks: { picks: [{ title: 'X', artist: 'A', verdict: 'chosen', role: 'center',
+    fromLine: 1, because: '검색어에 걸린 글에서 읽었다', sources: [URL_READ] }] } });
+  const { kv } = fakeKV({ [`memory:${DATE}`]: JSON.stringify(dayMemory(LINES)) });
+  const r = await runMusicNight(envWith(kv, w) as never, { ...OPTS, skipPlaylist: true });
+
+  assert.ok(r.notes.includes('thread_fell_back_to_because'));
+  assert.ok(r.notes.includes('thread_line_has_machinery'));
 });
