@@ -142,3 +142,28 @@ test('검색어 프롬프트에 오늘의 재료가 실제로 들어간다', asy
   assert.ok(p.includes('누군가 앉았던 빈 의자'), '중심 장면');
   assert.ok(p.includes('[0]') && p.includes('[2]'), '줄 번호를 대게 한다');
 });
+
+test('⚠ 같은 곡의 다른 판본을 둘 고르지 않는다 (2026-07-28 실물에서 드러남)', async () => {
+  const { validateJudgement } = await import('./_music-curate.ts');
+  const mk = (title: string, artist: string, role: string) => ({
+    title, artist, verdict: 'chosen', role, fromLine: 0, because: '이유', sources: [FETCHED[0]] });
+
+  // 첫 실행에서 실제로 난 일: Autumn Leaves 두 판본. 둘째 이유가
+  // 「같은 글의 판본 목록에 올라 있었고」였다 — 찾은 게 아니라 목록을 베낀 것.
+  const { ok, rejected } = validateJudgement({
+    picks: [
+      mk('Autumn Leaves (Les feuilles mortes)', 'Roger Williams', 'center'),
+      mk('Autumn Leaves', 'Bill Evans', 'around'),
+      mk('전혀 다른 곡', 'C', 'around'),
+    ],
+  } as never, intent, FETCHED);
+
+  assert.deepEqual(ok.map((p) => p.artist), ['Roger Williams', 'C'], '다른 곡은 남는다');
+  assert.match(rejected[0].why, /same_song_twice/, '가수가 달라도 같은 곡이면 거부');
+
+  // 탈락시킨 곡은 이 규칙에 걸리지 않는다 — 저장은 해야 하니까
+  const r2 = validateJudgement({
+    picks: [mk('X', 'A', 'center'), { ...mk('X', 'B', 'around'), verdict: 'rejected' }],
+  } as never, intent, FETCHED);
+  assert.equal(r2.ok.length, 2, '탈락 판정은 중복 규칙 밖이다');
+});

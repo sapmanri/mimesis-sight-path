@@ -15,7 +15,7 @@
 
 import type { SearchIntent } from './_music-intent.ts';
 import type { Role, SongEntry } from './_song-archive.ts';
-import { songKey } from './_song-archive.ts';
+import { normalizeName, songKey } from './_song-archive.ts';
 
 export const MAX_QUERIES = 6;
 const MIN_QUERY_WORDS = 4;
@@ -138,6 +138,7 @@ export function validateJudgement(
   const ok: Judgement['picks'] = [];
   const rejected: Array<{ title: string; why: string }> = [];
   let centers = 0;
+  const chosenTitles = new Set<string>();
 
   for (const p of j?.picks ?? []) {
     const why: string[] = [];
@@ -157,6 +158,17 @@ export function validateJudgement(
     if (p?.byeoliSummary && p.byeoliSummary.length > MAX_SUMMARY) why.push('summary_too_long');
 
     if (p?.verdict === 'chosen' && p.role === 'center') centers++;
+
+    /* ⚠ 같은 곡의 다른 판본을 둘 고르지 않는다 (2026-07-28 실물 실행에서 드러남).
+       첫 실행에서 고른 두 곡이 Autumn Leaves(Roger Williams)와 Autumn Leaves(Bill Evans)였다.
+       둘째 곡의 이유가 「**같은 글의 판본 목록에** 1959년 빌 에반스가 올라 있었고」였다 —
+       찾은 게 아니라 한 문서의 목록을 베낀 것이다. 하루의 묶음은 서로 다른 곡이어야 한다.
+       ⚠ 가수가 아니라 **곡 이름**으로 본다. 판본이 갈리는 자리가 거기다. */
+    if (p?.verdict === 'chosen' && p?.title) {
+      const t = normalizeName(p.title);
+      if (t && chosenTitles.has(t)) why.push(`same_song_twice: ${p.title}`);
+      else if (t) chosenTitles.add(t);
+    }
 
     if (why.length) rejected.push({ title: p?.title || '(제목 없음)', why: why.join(', ') });
     else ok.push(p);
