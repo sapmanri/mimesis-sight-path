@@ -578,31 +578,37 @@ const dayFor = (photoKey: string | null, diaryText?: string) => ({
   event: { lines: ['ㄱ'], targetLabel: '낙엽', momentAt: 1, ...(diaryText ? { diaryText } : {}) },
 }) as never;
 
-test('발행된 글을 붙인다 — 사진이 같을 때만', async () => {
+test('사진이 같으면 그 글을 붙인다 — 같은 사진이 여럿이면 마지막 것', async () => {
   const p = [
     { at: 1, imageKey: 'captures/walk/other.jpg', text: '아침 글' },
     { at: 2, imageKey: 'captures/walk/A.jpg', text: '낮 글' },
     { at: 3, imageKey: 'captures/walk/A.jpg', text: '밤 글' },
   ];
   const r = _link(dayFor('captures/walk/A.jpg'), p);
-  assert.equal(r.result, 'linked');
-  assert.equal(r.day.event.diaryText, '밤 글', '같은 사진으로 나간 것 중 마지막 글');
-  assert.equal(r.day.event.selectedPhoto, 'captures/walk/A.jpg', '사진 갈래도 같이 승격된다');
+  assert.equal(r.result, 'linked', '사진까지 맞으면 그게 제일 좋다');
+  assert.equal(r.day.event.diaryText, '밤 글');
+  assert.equal(r.day.event.selectedPhoto, 'captures/walk/A.jpg');
 });
 
-test('⚠ 사진이 어긋나면 붙이지 않는다 — 빈칸이 엉뚱한 연결보다 낫다', async () => {
-  const r = _link(dayFor('captures/walk/A.jpg'), [{ at: 1, imageKey: 'captures/walk/B.jpg', text: '남의 글' }]);
-  assert.equal(r.result, 'photo_mismatch');
-  assert.equal(r.day.event.diaryText, undefined,
-    '홈즈가 사후 역추적을 물렸던 위험이 정확히 이것 — 대조로 막는다');
+test('⚠ 사진이 달라도 그날의 글이면 붙인다 (Vase 판정 C, 2026-07-28)', async () => {
+  // 실측: autopost는 그날 기억이 없으면 전체 풀에서 무작위로 뽑는다.
+  //   07-28 08:06 발행이 쓴 사진이 07-22 것이었다. 사진 대조를 유지하면 영영 빈칸이다.
+  //   발행 글과 그날 사건은 애초에 같은 순간에서 나올 수 없다 —
+  //   글은 08·18·22시에 쓰이고 사건은 하루가 끝나야 정해진다.
+  const r = _link(dayFor('captures/walk/A.jpg'), [{ at: 1, imageKey: 'captures/walk/B.jpg', text: '그날의 글' }]);
+  assert.equal(r.result, 'linked_by_date', '무엇으로 이었는지는 삼키지 않는다');
+  assert.equal(r.day.event.diaryText, '그날의 글');
+
+  const noPhoto = _link(dayFor(null), [{ at: 1, imageKey: null, text: '사진 없는 날의 글' }]);
+  assert.equal(noPhoto.result, 'linked_by_date', '그날 사진이 없어도 글은 그날의 것이다');
+  assert.equal(noPhoto.day.event.selectedPhoto, undefined, '없는 사진을 승격하지 않는다');
 });
 
-test('이미 붙어 있으면 덮지 않는다 · 근거가 없으면 사유를 남긴다', async () => {
+test('이미 붙어 있으면 덮지 않는다 · 붙일 글이 없으면 사유를 남긴다', async () => {
   assert.equal(_link(dayFor('captures/walk/A.jpg', '이미 있음'), [{ at: 1, imageKey: 'captures/walk/A.jpg', text: '새 글' }]).result, 'already');
-  assert.equal(_link(dayFor(null), [{ at: 1, imageKey: 'captures/walk/A.jpg', text: 'ㄱ' }]).result, 'no_photo');
   assert.equal(_link(dayFor('captures/walk/A.jpg'), []).result, 'no_pending');
   assert.equal(_link(dayFor('captures/walk/A.jpg'), [{ at: 1, imageKey: 'captures/walk/A.jpg', text: '   ' }]).result,
-    'photo_mismatch', '빈 글은 글이 아니다');
+    'no_pending', '빈 글은 글이 아니다');
 });
 
 test('발행 기록을 쌓고 읽는다 — 운영 로그와 키가 다르다', async () => {

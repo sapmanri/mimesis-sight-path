@@ -265,29 +265,44 @@ export async function readPendingDiaries(
   try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
 }
 
-export type DiaryLinkResult = 'linked' | 'already' | 'no_photo' | 'no_pending' | 'photo_mismatch';
+export type DiaryLinkResult = 'linked' | 'linked_by_date' | 'already' | 'no_pending';
 
 /**
- * 접을 때 그날 발행된 글을 사건에 붙인다. **사진이 같은 것만.**
+ * 접을 때 그날 발행된 글을 사건에 붙인다.
  *
- * ⚠ 사진이 어긋나면 붙이지 않는다 — 빈칸이 엉뚱한 연결보다 낫다. 이게 홈즈가 사후
- *   역추적을 물렸던 바로 그 위험이고, 여기서는 그 대조로 막는다.
- * 순수 함수다 — 쓰기는 부르는 쪽(접는 자리)이 한 번에 한다.
+ * ── 왜 사진 대조를 포기했나 (Vase 판정 C, 2026-07-28) ──────────────────
+ * 처음엔 **사진이 같은 것만** 붙였다. 「엉뚱한 사진에 남의 글」을 막으려는 것이었고
+ * 판단 자체는 옳았다. 그런데 실측하니 붙는 날이 하루도 없었다:
+ *
+ *   07-28 08:06 발행이 쓴 사진 = captures/walk/1784729115741.jpg → **07-22 것**
+ *
+ * autopost는 그날 기억이 없으면(=발행 시각엔 늘 없다) 전체 사진 풀에서 무작위로 뽑는다.
+ * 그날 사건의 사진과 겹칠 일이 사실상 없다. 대조를 유지하면 계약은 아름답고 결과는 영영 빈칸이다.
+ *
+ * 더 근본적으로는 — **발행 글과 그날 사건은 같은 순간에서 나올 수가 없다.**
+ * 글은 게놈이 08·18·22시에 쓰고, 사건은 하루가 끝나야 정해진다.
+ * 그래서 「글 갈래」의 뜻을 바꾼다: *그 순간의 글*이 아니라 **그날의 글**이다.
+ *
+ * 사진이 같으면 여전히 그게 낫다 — `linked`로 구분해 남긴다. 아니면 `linked_by_date`.
+ * 무엇으로 이었는지를 삼키지 않는다.
  */
 export function linkPendingDiary(
   day: DayMemory, pending: readonly PendingDiary[],
 ): { day: DayMemory; result: DiaryLinkResult } {
   if (day.event.diaryText) return { day, result: 'already' };
-  if (!day.photoKey) return { day, result: 'no_photo' };
-  if (!pending.length) return { day, result: 'no_pending' };
 
-  // 같은 사진으로 나간 발행 중 **마지막 것**. 하루에 여러 번 나갔으면 그날을 가장 늦게 말한 글이다.
-  const match = [...pending].reverse().find((p) => p.imageKey && p.imageKey === day.photoKey && p.text?.trim());
-  if (!match) return { day, result: 'photo_mismatch' };
+  const usable = pending.filter((p) => p?.text?.trim());
+  if (!usable.length) return { day, result: 'no_pending' };
 
-  let next = attachBranch(day, 'diaryText', match.text);
-  if (!next.event.selectedPhoto) next = attachBranch(next, 'selectedPhoto', day.photoKey);
-  return { day: next, result: 'linked' };
+  // 같은 사진으로 나간 것이 있으면 그게 낫다 (여러 번이면 마지막 것 — 그날을 가장 늦게 말한 글)
+  const exact = day.photoKey
+    ? [...usable].reverse().find((p) => p.imageKey && p.imageKey === day.photoKey)
+    : undefined;
+  const pick = exact ?? usable[usable.length - 1];
+
+  let next = attachBranch(day, 'diaryText', pick.text);
+  if (!next.event.selectedPhoto && day.photoKey) next = attachBranch(next, 'selectedPhoto', day.photoKey);
+  return { day: next, result: exact ? 'linked' : 'linked_by_date' };
 }
 
 export type DiaryBranchStatus = 'linked' | 'unused' | 'publish_failed' | 'untraceable' | 'awaiting_link';
