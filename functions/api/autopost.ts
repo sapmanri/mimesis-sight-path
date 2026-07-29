@@ -11,7 +11,8 @@ import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
 import { appendCaptureMeta, observationIdOf } from './_capture-meta';
-import { memoryKey, kstDate, attachPublishedDiary, stashPendingDiary, type DayMemory } from './_memory-event';
+import { memoryKey, kstDate, attachPublishedDiary, stashPendingDiary, buildDayMemory, pendingDiaryKey,
+  type DayMemory, type CaptureLike } from './_memory-event';
 import { bookKey } from './_genome';
 
 // 422-OPS/425: ops publish-now가 같은 발행 파이프(dispatchToThreads)를 재사용한다.
@@ -312,6 +313,29 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       if (!day.event?.diaryText && day.photoKey && env.CAPTURES_PUBLIC_BASE) {
         memoryEventIdForPost = day.memoryEventId ?? null;
         memoryPhotoUrl = `${env.CAPTURES_PUBLIC_BASE.replace(/\/$/, '')}/${day.photoKey}`;
+      }
+    } else if (env.CAPTURES_PUBLIC_BASE) {
+      /* ⚠ 실사고 2026-07-29: 위 갈래가 **한 번도 발동한 적이 없다.**
+         `memory:{오늘}`은 23:30에 접힐 때 만들어지는데 발행은 08·18·22시다. 그래서
+         A안(발행과 기억이 같은 사건을 공유한다)이 코드에는 있는데 실행된 적이 없었고,
+         글 갈래는 늘 사진이 아니라 날짜로 붙었다(`linked_by_date`).
+
+         고침: 기억이 아직 없으면 **지금 캡처로 오늘의 사건을 미리 세워 본다.**
+         buildDayMemory는 순수 함수라 KV 쓰기가 없다 — 접기는 23:30에 그대로 다시 한다.
+         뒤에 캡처가 더 쌓이면 사건이 달라질 수 있지만, 40장 임의 추첨보다는 훨씬 자주 맞는다. */
+      const pendRaw = await env.PLANET.get(pendingDiaryKey(todayKst));
+      const pend = pendRaw ? JSON.parse(pendRaw) as { imageKey?: string | null }[] : [];
+      // ⚠ 하루 3회 발행인데 사건은 하루 하나다. **그날 첫 사진 발행에만** 적용한다 —
+      //   무조건 우선하면 세 발행이 같은 사진으로 나간다 (원 주석의 경고 그대로).
+      if (!(Array.isArray(pend) && pend.some((p) => p?.imageKey))) {
+        const cmRaw = await env.PLANET.get('capture_meta');
+        const all = cmRaw ? JSON.parse(cmRaw) as CaptureLike[] : [];
+        const todays = all.filter((c) => typeof c?.capturedAt === 'number' && kstDate(c.capturedAt) === todayKst);
+        const provisional = todays.length ? buildDayMemory(todays, todayKst) : null;
+        if (provisional?.photoKey) {
+          memoryEventIdForPost = provisional.memoryEventId ?? null;
+          memoryPhotoUrl = `${env.CAPTURES_PUBLIC_BASE.replace(/\/$/, '')}/${provisional.photoKey}`;
+        }
       }
     }
   } catch { /* 기억 조회 실패가 발행을 막지 않는다 */ }
