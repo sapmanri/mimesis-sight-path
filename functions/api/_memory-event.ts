@@ -286,6 +286,24 @@ export type DiaryLinkResult = 'linked' | 'linked_by_date' | 'already' | 'no_pend
  * 사진이 같으면 여전히 그게 낫다 — `linked`로 구분해 남긴다. 아니면 `linked_by_date`.
  * 무엇으로 이었는지를 삼키지 않는다.
  */
+/**
+ * 이 발행이 **그날의 기억 사진**을 들고 나가야 하는가.
+ *
+ * ⚠ 하루 3회 발행인데 사건은 하루 하나다. 셋 다 같은 사진으로 나가면 안 되므로
+ *   **하루에 한 번만** 들려 보낸다. 그런데 「이미 아무 사진이나 붙은 발행이 있으면 넘긴다」로
+ *   판정하면 안 된다 — 아침 발행이 **임의로 고른 남의 날 사진**을 붙였을 때 그날 나머지가
+ *   전부 막힌다 (2026-07-30 실측: 08:05가 어제 사진을 붙여 하루가 통째로 닫혔다).
+ *   **그 사진이 이미 나갔는가**만 본다. 그러면 저녁 발행이 대신 들고 갈 수 있다.
+ */
+export function shouldCarryMemoryPhoto(
+  photoKey: string | null | undefined,
+  pending: readonly { imageKey?: string | null }[] | null | undefined,
+): boolean {
+  if (!photoKey) return false;
+  if (!Array.isArray(pending)) return true;
+  return !pending.some((p) => p?.imageKey === photoKey);
+}
+
 export function linkPendingDiary(
   day: DayMemory, pending: readonly PendingDiary[],
 ): { day: DayMemory; result: DiaryLinkResult } {

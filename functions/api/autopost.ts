@@ -11,7 +11,7 @@ import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
 import { appendCaptureMeta, observationIdOf } from './_capture-meta';
-import { memoryKey, kstDate, attachPublishedDiary, stashPendingDiary, buildDayMemory, pendingDiaryKey,
+import { memoryKey, kstDate, attachPublishedDiary, stashPendingDiary, buildDayMemory, pendingDiaryKey, shouldCarryMemoryPhoto,
   type DayMemory, type CaptureLike } from './_memory-event';
 import { bookKey } from './_genome';
 
@@ -323,19 +323,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
          고침: 기억이 아직 없으면 **지금 캡처로 오늘의 사건을 미리 세워 본다.**
          buildDayMemory는 순수 함수라 KV 쓰기가 없다 — 접기는 23:30에 그대로 다시 한다.
          뒤에 캡처가 더 쌓이면 사건이 달라질 수 있지만, 40장 임의 추첨보다는 훨씬 자주 맞는다. */
+      const cmRaw = await env.PLANET.get('capture_meta');
+      const all = cmRaw ? JSON.parse(cmRaw) as CaptureLike[] : [];
+      const todays = all.filter((c) => typeof c?.capturedAt === 'number' && kstDate(c.capturedAt) === todayKst);
+      const provisional = todays.length ? buildDayMemory(todays, todayKst) : null;
+      // ⚠ 하루 3회 발행인데 사건은 하루 하나다. **그 사진이 아직 안 나갔을 때만** 들려 보낸다.
+      //   「아무 사진이나 이미 붙었으면 넘긴다」로 하면 아침이 남의 날 사진을 붙였을 때
+      //   그날이 통째로 막힌다 (2026-07-30 실측).
       const pendRaw = await env.PLANET.get(pendingDiaryKey(todayKst));
       const pend = pendRaw ? JSON.parse(pendRaw) as { imageKey?: string | null }[] : [];
-      // ⚠ 하루 3회 발행인데 사건은 하루 하나다. **그날 첫 사진 발행에만** 적용한다 —
-      //   무조건 우선하면 세 발행이 같은 사진으로 나간다 (원 주석의 경고 그대로).
-      if (!(Array.isArray(pend) && pend.some((p) => p?.imageKey))) {
-        const cmRaw = await env.PLANET.get('capture_meta');
-        const all = cmRaw ? JSON.parse(cmRaw) as CaptureLike[] : [];
-        const todays = all.filter((c) => typeof c?.capturedAt === 'number' && kstDate(c.capturedAt) === todayKst);
-        const provisional = todays.length ? buildDayMemory(todays, todayKst) : null;
-        if (provisional?.photoKey) {
-          memoryEventIdForPost = provisional.memoryEventId ?? null;
-          memoryPhotoUrl = `${env.CAPTURES_PUBLIC_BASE.replace(/\/$/, '')}/${provisional.photoKey}`;
-        }
+      if (shouldCarryMemoryPhoto(provisional?.photoKey, pend)) {
+        memoryEventIdForPost = provisional!.memoryEventId ?? null;
+        memoryPhotoUrl = `${env.CAPTURES_PUBLIC_BASE.replace(/\/$/, '')}/${provisional!.photoKey}`;
       }
     }
   } catch { /* 기억 조회 실패가 발행을 막지 않는다 */ }

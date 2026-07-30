@@ -5,7 +5,7 @@
 //   사진은 항상 40장 임의 추첨으로 떨어졌고, 글 갈래는 사진이 아니라 날짜로 붙었다.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDayMemory, kstDate, type CaptureLike } from './_memory-event';
+import { buildDayMemory, kstDate, shouldCarryMemoryPhoto, type CaptureLike } from './_memory-event';
 
 const at = (h: number, m = 0) => Date.parse(`2026-07-29T${String(h - 9).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`);
 // ⚠ diaryLines가 없는 캡처는 capturesToEntries가 **통째로 버린다.** 그래서 사건이 안 선다.
@@ -48,4 +48,23 @@ test('diaryLines가 없으면 사건이 서지 않는다 — 이 조건을 잊�
   const noLines: CaptureLike[] = [{ captureId: 'n', r2Key: 'captures/walk/n.jpg', capturedAt: at(10), targetLabel: 'x' }];
   assert.equal(buildDayMemory(noLines, '2026-07-29'), null,
     '⚠ capture_meta에 diaryLines가 안 들어오는 날이 오면 발행 사진이 다시 임의 추첨이 된다');
+});
+
+/* 가드 — 하루에 한 번만 기억 사진을 들려 보낸다. ⚠ 그런데 「아무 사진이나」로 세면 안 된다. */
+test('아침이 남의 날 사진을 붙였어도 저녁이 기억 사진을 들고 갈 수 있다', () => {
+  const today = 'captures/walk/today.jpg';
+  // 2026-07-30 실측: 08:05가 어제 사진을 붙였다. 옛 가드는 여기서 하루를 통째로 막았다.
+  assert.equal(shouldCarryMemoryPhoto(today, [{ imageKey: 'captures/walk/yesterday.jpg' }]), true,
+    '⚠ 남의 날 사진이 붙어 있어도 오늘 사진은 아직 안 나갔다');
+  assert.equal(shouldCarryMemoryPhoto(today, [{ imageKey: today }]), false,
+    '이미 나갔으면 두 번 보내지 않는다 — 세 발행이 같은 사진이 되면 안 된다');
+  assert.equal(shouldCarryMemoryPhoto(today, [{ imageKey: null }, { imageKey: today }]), false,
+    '사진 없이 나간 발행이 섞여 있어도 판정은 그 사진 하나로만');
+});
+
+test('가드는 없는 것에 대고 참을 내지 않는다', () => {
+  assert.equal(shouldCarryMemoryPhoto(null, []), false, '⚠ photoKey가 없으면 들려 보낼 것도 없다');
+  assert.equal(shouldCarryMemoryPhoto(undefined, []), false);
+  assert.equal(shouldCarryMemoryPhoto('captures/walk/a.jpg', null), true, '대기 목록이 없으면 아직 안 나간 것');
+  assert.equal(shouldCarryMemoryPhoto('captures/walk/a.jpg', []), true);
 });
