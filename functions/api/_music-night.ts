@@ -50,6 +50,22 @@ export interface NightReceipt {
   notes: string[];
 }
 
+/** 밤 결과를 남기는 자리. 발행은 **다른 날에** 일어날 수 있으므로 반드시 저장한다.
+ *  ⚠ 2026-07-30 이전에는 저장하지 않았다. 그래서 돌려도 결과가 응답에만 있었고,
+ *    발행을 붙일 방법이 없었다 — 파이프라인이 여기서 끊겨 있었다. */
+export const nightKey = (date: string) => `music_night:${date}`;
+/** 60일. 지난 밤을 다시 올릴 일은 없고, KV를 원고처럼 오래 들고 있을 이유도 없다 */
+const NIGHT_TTL = 60 * 24 * 3600;
+
+export async function saveNight(env: NightEnv, r: NightReceipt): Promise<void> {
+  await env.PLANET.put(nightKey(r.date), JSON.stringify(r), { expirationTtl: NIGHT_TTL });
+}
+export async function readNight(env: NightEnv, date: string): Promise<NightReceipt | null> {
+  const raw = await env.PLANET.get(nightKey(date));
+  if (!raw) return null;
+  try { return JSON.parse(raw) as NightReceipt; } catch { return null; }
+}
+
 const emptyReceipt = (date: string, pack: string): NightReceipt => ({
   date, pack, rest: null, step: 'memory', error: null,
   queries: [], read: [], onShelf: [], notOnShelf: [], archive: null,
