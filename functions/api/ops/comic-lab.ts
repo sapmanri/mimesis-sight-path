@@ -1017,7 +1017,15 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
    *   고칠 때마다 임계값을 짐작으로 만졌다. 감지가 보이지 않으면 조정이 도박이 된다.
    *   자르기 전에 무엇을 잡았는지 보이면, 다음부터는 어디를 고칠지 눈으로 정한다.
    */
-  function previewPanels(key, panelCount, hostId) {
+  /**
+   * 감지한 칸 경계를 이미지 위에 그려 **화면 전체 겹창**으로 보여준다.
+   *
+   * ⚠ 2026-07-30 신설. 그동안 「아래 칸이 잘린다」를 결과물을 보고서야 알았고, 고칠 때마다
+   *   임계값을 짐작으로 만졌다. 감지가 보이지 않으면 조정이 도박이 된다.
+   * ⚠ 첫 판은 카드 안에 그렸는데 카드 폭이 150px이라 **너무 작아 아무것도 안 보였다.**
+   *   보여주려고 만든 것이 안 보이면 없는 것과 같다 — 겹창으로 바꿨다.
+   */
+  function previewPanels(key, panelCount) {
     banner('칸 경계를 찾는 중…');
     var img = new Image();
     img.crossOrigin = 'anonymous';
@@ -1027,29 +1035,32 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       cv.width = img.naturalWidth; cv.height = img.naturalHeight;
       var cx = cv.getContext('2d');
       cx.drawImage(img, 0, 0);
-      var lw = Math.max(2, Math.round(cv.width / 400));
+      var lw = Math.max(3, Math.round(cv.width / 260));
       boxes.forEach(function (b, i) {
         cx.strokeStyle = '#e2483d'; cx.lineWidth = lw;
         cx.strokeRect(b.x + lw / 2, b.y + lw / 2, b.w - lw, b.h - lw);
-        cx.fillStyle = '#e2483d';
-        cx.font = 'bold ' + Math.round(cv.width / 22) + 'px sans-serif';
-        cx.fillText(String(i + 1), b.x + lw * 2, b.y + Math.round(cv.width / 20));
+        var fs = Math.round(cv.width / 26);
+        cx.fillStyle = '#e2483d'; cx.fillRect(b.x, b.y, fs * 1.4, fs * 1.3);
+        cx.fillStyle = '#fff'; cx.font = 'bold ' + fs + 'px sans-serif';
+        cx.fillText(String(i + 1), b.x + fs * 0.4, b.y + fs);
       });
-      var host = $(hostId || 'cropPreview');
-      if (host) {
-        host.innerHTML = '<div class="muted" style="margin:8px 0 4px">붉은 칸이 잘릴 자리다. '
-          + '칸 ' + panelCount + '개 → <b>' + boxes.length + '개 감지</b>'
-          + (boxes.length === panelCount ? '' : ' ⚠ 어긋난다')
-          + ' · 캡션이 안 들어왔으면 아래가 잘린다.</div>'
-          + '<img src="' + cv.toDataURL('image/png') + '" style="max-width:100%">';
-      } else {
-        // 자리가 없으면 새 탭으로 — 보여주는 것이 목적이지 자리가 목적이 아니다
-        var w = window.open('');
-        if (w) w.document.write('<img src="' + cv.toDataURL('image/png') + '" style="max-width:100%">');
-      }
-      banner(boxes.length === panelCount
-        ? '경계 ' + boxes.length + '개 — 컷 수와 맞소'
-        : '경계 ' + boxes.length + '개 — 컷 ' + panelCount + '개와 어긋나오', boxes.length === panelCount ? '' : 'err');
+      var ok = boxes.length === panelCount;
+      var prev = document.getElementById('cropOverlay');
+      if (prev) prev.remove();
+      var ov = document.createElement('div');
+      ov.id = 'cropOverlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);'
+        + 'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px';
+      ov.innerHTML = '<div style="color:' + (ok ? '#A7B49A' : '#e2483d') + ';font-size:14px;text-align:center">'
+        + '붉은 칸이 <b>잘릴 자리</b>다 · 칸 ' + panelCount + '개 → <b>' + boxes.length + '개 감지</b>'
+        + (ok ? '' : ' ⚠ 어긋난다')
+        + '<div style="color:#9aa;font-size:12px;margin-top:4px">캡션이 붉은 칸 밖에 있으면 그 글이 잘린다 · 아무 데나 눌러 닫기</div></div>'
+        + '<img src="' + cv.toDataURL('image/png') + '" style="max-width:96vw;max-height:82vh;'
+        + 'object-fit:contain;background:#fff;border-radius:4px">';
+      ov.onclick = function () { ov.remove(); };
+      document.body.appendChild(ov);
+      banner(ok ? '경계 ' + boxes.length + '개 — 컷 수와 맞소'
+                : '경계 ' + boxes.length + '개 — 컷 ' + panelCount + '개와 어긋나오', ok ? '' : 'err');
     };
     img.onerror = function () { banner('이미지를 못 읽었다', 'err'); };
     img.src = fileUrl(key) + '&v=' + Date.now();
@@ -1122,14 +1133,14 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           '<button id="redraw" class="primary">🎲 전체 다시 그리기</button></div>' +
           '<div class="muted" style="margin-top:8px">검사 축: 같은 별이 · 머리 단색 면 · 빼콩이 유지 · 컷 수 ' +
           s.panelCount + ' · <b>한글 오탈자</b> (원샷 모드의 검사 항목 — 시나리오 문장과 대조)</div>' +
-          '<div id="cropPreview"></div></div>';
+          '</div>';
         $('out').innerHTML = pg;
         var rb = $('redraw');
         if (rb) rb.onclick = drawComic;
         var dw = $('dlWhole');
         if (dw) dw.onclick = function () { downloadWhole(r.key, s.title); };
         var cc = $('cropCheck');
-        if (cc) cc.onclick = function () { previewPanels(r.key, s.panelCount, 'cropPreview'); };
+        if (cc) cc.onclick = function () { previewPanels(r.key, s.panelCount); };
         var dv = $('dlIgV');
         if (dv) dv.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount, 'portrait'); };
         var ds = $('dlIgS');
@@ -1323,18 +1334,18 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           //   panelCount를 다 들고 있으므로 같은 도구를 그대로 붙인다. 기능이 최신 것에만
           //   붙어 있으면 쌓인 것들이 죽은 자산이 된다.
           '<div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">' +
-          '<button data-crop="' + esc(c.pageKey) + '" data-n="' + c.panelCount + '" data-host="cp_' + esc(c.comicId) + '" style="font-size:10px">🔍 경계</button>' +
+          '<button data-crop="' + esc(c.pageKey) + '" data-n="' + c.panelCount + '" style="font-size:10px">🔍 경계</button>' +
           '<button data-whole="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" style="font-size:10px">⬇ 통짜</button>' +
           '<button data-ig="portrait" data-k="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" data-n="' + c.panelCount + '" style="font-size:10px">⬇ 4:5</button>' +
           '<button data-ig="square" data-k="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" data-n="' + c.panelCount + '" style="font-size:10px">⬇ 1:1</button>' +
-          '</div><div id="cp_' + esc(c.comicId) + '"></div>' +
+          '</div>' +
           '</div></div>';
       });
       html += '</div></div>';
       $('archive').innerHTML = html;
       $('archive').querySelectorAll('[data-crop]').forEach(function (b) {
         b.onclick = function () {
-          previewPanels(b.getAttribute('data-crop'), Number(b.getAttribute('data-n')), b.getAttribute('data-host'));
+          previewPanels(b.getAttribute('data-crop'), Number(b.getAttribute('data-n')));
         };
       });
       $('archive').querySelectorAll('[data-whole]').forEach(function (b) {
