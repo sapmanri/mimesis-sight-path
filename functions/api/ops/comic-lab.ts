@@ -1017,7 +1017,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
    *   고칠 때마다 임계값을 짐작으로 만졌다. 감지가 보이지 않으면 조정이 도박이 된다.
    *   자르기 전에 무엇을 잡았는지 보이면, 다음부터는 어디를 고칠지 눈으로 정한다.
    */
-  function previewPanels(key, panelCount) {
+  function previewPanels(key, panelCount, hostId) {
     banner('칸 경계를 찾는 중…');
     var img = new Image();
     img.crossOrigin = 'anonymous';
@@ -1035,13 +1035,17 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         cx.font = 'bold ' + Math.round(cv.width / 22) + 'px sans-serif';
         cx.fillText(String(i + 1), b.x + lw * 2, b.y + Math.round(cv.width / 20));
       });
-      var host = $('cropPreview');
+      var host = $(hostId || 'cropPreview');
       if (host) {
         host.innerHTML = '<div class="muted" style="margin:8px 0 4px">붉은 칸이 잘릴 자리다. '
           + '칸 ' + panelCount + '개 → <b>' + boxes.length + '개 감지</b>'
           + (boxes.length === panelCount ? '' : ' ⚠ 어긋난다')
           + ' · 캡션이 안 들어왔으면 아래가 잘린다.</div>'
           + '<img src="' + cv.toDataURL('image/png') + '" style="max-width:100%">';
+      } else {
+        // 자리가 없으면 새 탭으로 — 보여주는 것이 목적이지 자리가 목적이 아니다
+        var w = window.open('');
+        if (w) w.document.write('<img src="' + cv.toDataURL('image/png') + '" style="max-width:100%">');
       }
       banner(boxes.length === panelCount
         ? '경계 ' + boxes.length + '개 — 컷 수와 맞소'
@@ -1125,7 +1129,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         var dw = $('dlWhole');
         if (dw) dw.onclick = function () { downloadWhole(r.key, s.title); };
         var cc = $('cropCheck');
-        if (cc) cc.onclick = function () { previewPanels(r.key, s.panelCount); };
+        if (cc) cc.onclick = function () { previewPanels(r.key, s.panelCount, 'cropPreview'); };
         var dv = $('dlIgV');
         if (dv) dv.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount, 'portrait'); };
         var ds = $('dlIgS');
@@ -1314,10 +1318,34 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           '<b>' + esc(c.title) + '</b>' +
           '<div class="muted">' + d.getFullYear() + '.' + pad(d.getMonth() + 1) + '.' + pad(d.getDate()) +
           ' · ' + c.panelCount + '컷 <button data-del="' + esc(c.comicId) + '" style="float:right;font-size:10px">🗑</button></div>' +
+          // ⚠ 2026-07-30: 그동안 **방금 그린 것만** 분절·통짜 내려받기가 됐다. 지나간 작품은
+          //   그림을 눌러 「다른 이름으로 저장」밖에 못 했다. 아카이브 항목도 pageKey·title·
+          //   panelCount를 다 들고 있으므로 같은 도구를 그대로 붙인다. 기능이 최신 것에만
+          //   붙어 있으면 쌓인 것들이 죽은 자산이 된다.
+          '<div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">' +
+          '<button data-crop="' + esc(c.pageKey) + '" data-n="' + c.panelCount + '" data-host="cp_' + esc(c.comicId) + '" style="font-size:10px">🔍 경계</button>' +
+          '<button data-whole="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" style="font-size:10px">⬇ 통짜</button>' +
+          '<button data-ig="portrait" data-k="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" data-n="' + c.panelCount + '" style="font-size:10px">⬇ 4:5</button>' +
+          '<button data-ig="square" data-k="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" data-n="' + c.panelCount + '" style="font-size:10px">⬇ 1:1</button>' +
+          '</div><div id="cp_' + esc(c.comicId) + '"></div>' +
           '</div></div>';
       });
       html += '</div></div>';
       $('archive').innerHTML = html;
+      $('archive').querySelectorAll('[data-crop]').forEach(function (b) {
+        b.onclick = function () {
+          previewPanels(b.getAttribute('data-crop'), Number(b.getAttribute('data-n')), b.getAttribute('data-host'));
+        };
+      });
+      $('archive').querySelectorAll('[data-whole]').forEach(function (b) {
+        b.onclick = function () { downloadWhole(b.getAttribute('data-whole'), b.getAttribute('data-t')); };
+      });
+      $('archive').querySelectorAll('[data-ig]').forEach(function (b) {
+        b.onclick = function () {
+          downloadInstatoon(b.getAttribute('data-k'), b.getAttribute('data-t'),
+            Number(b.getAttribute('data-n')), b.getAttribute('data-ig'));
+        };
+      });
       $('archive').querySelectorAll('[data-del]').forEach(function (b) {
         b.onclick = function () {
           if (!confirm('이 작품을 삭제할까? 관찰 번호는 재사용되지 않는다.')) return;
