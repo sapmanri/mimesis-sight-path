@@ -926,7 +926,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   // 칸 경계를 찾아 자른다 — 등분하면 칸 한가운데가 잘린다 (2026-07-25 실사고).
   // 페이지 위쪽 제목·부제 영역 때문에 N등분선이 칸 경계와 어긋났고, 결과가 엉망이었다.
   // 칸 사이·바깥은 종이색이므로, 종이색으로만 채워진 가로줄/세로줄이 곧 경계다.
-  function detectPanels(img) {
+  function detectPanels(img, panelCount) {
     var cv = document.createElement('canvas');
     cv.width = img.naturalWidth; cv.height = img.naturalHeight;
     var cx = cv.getContext('2d', { willReadFrequently: true });
@@ -961,19 +961,29 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     //   제호 21px · 제목 72px · 부제 27px · [칸 323px · 캡션 27px] x 3행
     // → 두꺼운 띠가 칸 행, 그 **바로 아래 얇은 띠가 그 행의 캡션**이다.
     //   캡션은 칸 테두리 바깥에 있으므로 같이 안 자르면 글이 떨어져 나간다.
-    var maxH = 0;
-    rowBands.forEach(function (b) { maxH = Math.max(maxH, b[1] - b[0]); });
-    var thick = rowBands.filter(function (b) { return (b[1] - b[0]) >= maxH * 0.45; });
+    // ── 칸 행 고르기 ─────────────────────────────────────────────
+    // 옛 규칙: 「가장 두꺼운 띠의 45% 이상」. 아래 행이 조금 짧으면 통째로 빠졌다.
+    // ⚠ 우리는 **컷 수를 이미 알고 있다.** 마법 비율 대신 기대 행 수로 고른다 —
+    //   높이 내림차순 상위 N개. 실측 구조(제호 21 · 제목 72 · 부제 27 · 칸 323)에서
+    //   칸 행은 제목보다 네 배 이상 두꺼워 안전하게 갈린다.
+    var wantRows = Math.max(1, Math.ceil((panelCount || rowBands.length * 2) / 2));
+    var byH = rowBands.slice().sort(function (a, b) { return (b[1] - b[0]) - (a[1] - a[0]); });
+    var thick = byH.slice(0, Math.min(wantRows, byH.length))
+      .sort(function (a, b) { return a[0] - b[0]; });
     if (!thick.length) return [];
-    // 각 칸 행에 뒤따르는 캡션 띠를 붙여 한 덩어리로 만든다
-    var units = thick.map(function (tb) {
+
+    // ── 캡션 붙이기 ──────────────────────────────────────────────
+    // ⚠ 실사고 2026-07-30: 옛 코드는 뒤따르는 얇은 띠를 **하나만**(break) 붙였다.
+    //   캡션이 두 줄이면 띠가 둘로 갈라지므로 **둘째 줄이 잘려 나갔다.**
+    //   그리고 간격 제한(H*0.03)이 있어 여백이 조금만 넓어도 캡션을 통째로 놓쳤다.
+    // 새 규칙: 이 칸 행 다음부터 **다음 칸 행 시작 전까지**의 띠를 전부 삼킨다.
+    //   그 사이에 있는 것은 그 칸의 것뿐이다 — 간격을 재지 않아도 소속이 정해진다.
+    var units = thick.map(function (tb, ti) {
+      var nextTop = (ti + 1 < thick.length) ? thick[ti + 1][0] : H;
       var end = tb[1];
-      for (var k = 0; k < rowBands.length; k++) {
-        var cb2 = rowBands[k];
-        if (cb2[0] >= tb[1] && (cb2[0] - tb[1]) < H * 0.03 && (cb2[1] - cb2[0]) < maxH * 0.45) {
-          end = cb2[1]; break;
-        }
-      }
+      rowBands.forEach(function (cb2) {
+        if (cb2[0] >= tb[1] && cb2[1] <= nextTop) end = Math.max(end, cb2[1]);
+      });
       return [tb[0], end];
     });
 
@@ -988,9 +998,57 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       }
       var colBands = bands(colInk, W, Math.floor(W * 0.05));
       if (!colBands.length) colBands = [[0, W]];
-      colBands.forEach(function (cb) { boxes.push({ x: cb[0], y: y0, w: cb[1] - cb[0], h: y1 - y0 }); });
+      // ⚠ 감지 경계는 **잉크가 끝나는 자리**다. 테두리 선이 배경과 대비가 낮으면 마지막
+      //   한두 줄이 배경으로 읽혀 선이 깎인다. 사방으로 조금 넓혀 잡는다(페이지 안으로 제한).
+      var m = Math.max(2, Math.round(H * 0.004));
+      colBands.forEach(function (cb) {
+        var bx = Math.max(0, cb[0] - m), by = Math.max(0, y0 - m);
+        boxes.push({ x: bx, y: by,
+          w: Math.min(W, cb[1] + m) - bx, h: Math.min(H, y1 + m) - by });
+      });
     });
     return boxes;
+  }
+
+  /**
+   * 감지한 칸 경계를 이미지 위에 그려 보여준다.
+   *
+   * ⚠ 2026-07-30 신설. 그동안 「아래 칸이 잘린다」를 **결과물을 보고서야** 알았고,
+   *   고칠 때마다 임계값을 짐작으로 만졌다. 감지가 보이지 않으면 조정이 도박이 된다.
+   *   자르기 전에 무엇을 잡았는지 보이면, 다음부터는 어디를 고칠지 눈으로 정한다.
+   */
+  function previewPanels(key, panelCount) {
+    banner('칸 경계를 찾는 중…');
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      var boxes = detectPanels(img, panelCount);
+      var cv = document.createElement('canvas');
+      cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+      var cx = cv.getContext('2d');
+      cx.drawImage(img, 0, 0);
+      var lw = Math.max(2, Math.round(cv.width / 400));
+      boxes.forEach(function (b, i) {
+        cx.strokeStyle = '#e2483d'; cx.lineWidth = lw;
+        cx.strokeRect(b.x + lw / 2, b.y + lw / 2, b.w - lw, b.h - lw);
+        cx.fillStyle = '#e2483d';
+        cx.font = 'bold ' + Math.round(cv.width / 22) + 'px sans-serif';
+        cx.fillText(String(i + 1), b.x + lw * 2, b.y + Math.round(cv.width / 20));
+      });
+      var host = $('cropPreview');
+      if (host) {
+        host.innerHTML = '<div class="muted" style="margin:8px 0 4px">붉은 칸이 잘릴 자리다. '
+          + '칸 ' + panelCount + '개 → <b>' + boxes.length + '개 감지</b>'
+          + (boxes.length === panelCount ? '' : ' ⚠ 어긋난다')
+          + ' · 캡션이 안 들어왔으면 아래가 잘린다.</div>'
+          + '<img src="' + cv.toDataURL('image/png') + '" style="max-width:100%">';
+      }
+      banner(boxes.length === panelCount
+        ? '경계 ' + boxes.length + '개 — 컷 수와 맞소'
+        : '경계 ' + boxes.length + '개 — 컷 ' + panelCount + '개와 어긋나오', boxes.length === panelCount ? '' : 'err');
+    };
+    img.onerror = function () { banner('이미지를 못 읽었다', 'err'); };
+    img.src = fileUrl(key) + '&v=' + Date.now();
   }
 
   function downloadInstatoon(key, title, panelCount, shape) {
@@ -999,12 +1057,12 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     var img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = function () {
-      var boxes = detectPanels(img);
+      var boxes = detectPanels(img, panelCount);
       // 정직하게 실패한다 — 못 찾았으면 엉뚱하게 자르느니 알린다 (등분 사고의 교훈)
       if (!boxes.length) { banner('칸 경계를 못 찾았다 — 통짜로 받아서 직접 자르시오', 'err'); return; }
       var wantSlides = igSlidesOf(panelCount);   // 한 장에 한 칸
       if (boxes.length !== wantSlides) {
-        banner('경고: 칸 ' + panelCount + '개인데 ' + boxes.length + '개로 감지됨 — 결과를 확인하시오', 'err');
+        banner('경고: 칸 ' + panelCount + '개인데 ' + boxes.length + '개로 감지됨 — 아래 칸이나 캡션이 빠졌을 수 있소. 통짜로도 받아 대조하시오', 'err');
       }
       var pad = Math.round(W * 0.04);
       var jobs = boxes.map(function (b, i) {
@@ -1054,16 +1112,20 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           (r.warnings && r.warnings.length ? '<div class="warn" style="font-size:11px;margin-top:6px">' + esc(r.warnings.join(' · ')) + '</div>' : '') +
           '<div class="row" style="margin-top:10px">' +
           '<button id="dlWhole">⬇ 통짜 1장</button>' +
+          '<button id="cropCheck">🔍 경계 보기</button>' +
           '<button id="dlIgV">⬇ 인스타툰 세로 1080×1350</button>' +
           '<button id="dlIgS">⬇ 인스타툰 정사각 1080×1080</button>' +
           '<button id="redraw" class="primary">🎲 전체 다시 그리기</button></div>' +
           '<div class="muted" style="margin-top:8px">검사 축: 같은 별이 · 머리 단색 면 · 빼콩이 유지 · 컷 수 ' +
-          s.panelCount + ' · <b>한글 오탈자</b> (원샷 모드의 검사 항목 — 시나리오 문장과 대조)</div></div>';
+          s.panelCount + ' · <b>한글 오탈자</b> (원샷 모드의 검사 항목 — 시나리오 문장과 대조)</div>' +
+          '<div id="cropPreview"></div></div>';
         $('out').innerHTML = pg;
         var rb = $('redraw');
         if (rb) rb.onclick = drawComic;
         var dw = $('dlWhole');
         if (dw) dw.onclick = function () { downloadWhole(r.key, s.title); };
+        var cc = $('cropCheck');
+        if (cc) cc.onclick = function () { previewPanels(r.key, s.panelCount); };
         var dv = $('dlIgV');
         if (dv) dv.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount, 'portrait'); };
         var ds = $('dlIgS');
