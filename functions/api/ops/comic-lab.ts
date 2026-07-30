@@ -984,6 +984,19 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       rowBands.forEach(function (cb2) {
         if (cb2[0] >= tb[1] && cb2[1] <= nextTop) end = Math.max(end, cb2[1]);
       });
+      // ⚠ 실사고 2026-07-30(둘째 판): 캡션 **글자**는 들어왔는데 캡션 상자의 **아래
+      //   테두리 선**이 매번 잘렸다. 원인은 rowBands 자체다 — 띠로 인정받으려면
+      //   minRun(H*0.008 ≈ 12px)을 넘어야 하는데 테두리는 2~4px짜리 실선이라
+      //   **애초에 띠 목록에 오르지 못한다.** 그러니 위의 「다 삼킨다」도 삼킬 게 없었다.
+      //   → 띠 목록에 기대지 말고 **잉크가 있는 마지막 줄까지 직접 내려가며 찾는다.**
+      //   흰 틈이 gapLimit보다 길어지면 멈춘다 — 그 자리가 진짜 거터다.
+      //   범위는 [end, nextTop)이라 다음 칸 행을 절대 침범하지 않는다.
+      var gapLimit = Math.max(4, Math.round(H * 0.012));
+      var white = 0;
+      for (var yy = end; yy < nextTop; yy++) {
+        if (rowInk[yy] > 0.02) { end = yy + 1; white = 0; }
+        else if (++white > gapLimit) break;
+      }
       return [tb[0], end];
     });
 
