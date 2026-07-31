@@ -79,3 +79,36 @@ test('나갈 수 있는 밤은 막지 않는다', () => {
   // 재생목록이 없어도 문장이 있으면 나간다 — dry 로 돌린 밤도 올릴 수 있어야 한다
   assert.equal(blockedWhy(receipt({ playlistUrl: null })), null);
 });
+
+/* ── 재생목록을 나중에 붙일 때 문장이 살아남는가 ────────────────
+   music-playlist 는 저장된 밤에 재생목록 주소를 넣어 threadText 를 **다시 만든다**.
+   여기서 별이의 말이 깨지면, 링크는 붙었는데 글이 망가진 채로 나간다. */
+import { buildThreadText } from './_music-night.ts';
+
+/** ops/music-playlist 의 재구성과 같은 규칙 */
+function relink(threadText: string, url: string): string | null {
+  const [head = '', ...rest] = threadText.split('\n\n');
+  const [title = '', artist = ''] = head.split(' — ');
+  return buildThreadText(title && rest.length ? { title, artist, line: rest.join('\n\n') } : null, url);
+}
+
+test('재생목록을 나중에 붙여도 별이의 말이 그대로 남는다', () => {
+  const line = '12현 기타 한 대가 짧은 한 마디를 붙잡고 양쪽으로 조금씩 늘려간다. 눈 얹힌 가지를 올려다보던 시간이 이 곡의 길이와 비슷했다.';
+  const before = `Ancient Calendars — Brad Barr\n\n${line}`;
+  const after = relink(before, 'https://www.youtube.com/playlist?list=PL1');
+  assert.ok(after, '문장이 사라지면 안 된다');
+  assert.ok(after!.includes(line), '⚠ 별이의 말이 한 글자도 안 바뀌어야 한다');
+  assert.ok(after!.startsWith('Ancient Calendars — Brad Barr'), '제목 줄이 그대로');
+  assert.ok(after!.endsWith('https://www.youtube.com/playlist?list=PL1'), '주소는 맨 끝에');
+});
+
+test('말이 여러 문단이어도 안 잘린다', () => {
+  const before = 'A — B\n\n첫 문단.\n\n둘째 문단.';
+  const after = relink(before, 'https://x/p');
+  assert.ok(after!.includes('첫 문단.') && after!.includes('둘째 문단.'), '⚠ 문단이 하나만 남으면 안 된다');
+});
+
+test('모양이 어긋난 밤은 다시 만들지 않는다 — 원문을 지키는 쪽', () => {
+  // 제목 줄이 없으면 재구성이 null 을 돌려주고, 부르는 쪽은 원래 문장을 그대로 둔다
+  assert.equal(relink('제목도 구분자도 없는 한 덩어리', 'https://x/p'), null);
+});
