@@ -6,8 +6,8 @@
   "main": "index.mjs",
   "compatibility_date": "2026-07-01",
   "triggers": {
-    // 23:30 KST = 14:30 UTC — cron-job.org와 같은 시각 (실패 메일로 실측된 스케줄)
-    "crons": ["30 14 * * *"]
+    // 23:30 KST 본진 · 00:40/01:40 KST 심야 재시도(전날 완주 자가 회복 — index.mjs missionFor)
+    "crons": ["30 14 * * *", "40 15 * * *", "40 16 * * *"]
   },
   "observability": { "enabled": true }
 }

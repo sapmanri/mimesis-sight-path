@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { foldedDayDecision } from './sketch-daily.ts';
 import { buildImagePrompt, NIGHTLY_POSE_VARIANTS, type MemoryEvent } from './_daily-sketch.ts';
-import { terminalResult } from '../../workers/sketch-scheduler/index.mjs';
+import { terminalResult, missionFor, kstDateStr } from '../../workers/sketch-scheduler/index.mjs';
 
 test('nightly provenance 또는 선행 run 영수증이면 reco가 없어도 재개한다', () => {
   assert.equal(foldedDayDecision({ foldedBy: 'nightly-auto' }, false), 'resume');
@@ -40,4 +40,23 @@ test('야간 3장은 같은 기억을 서로 다른 능동 포즈로 그린다',
     assert.match(prompt, /Use the sheets as a pose vocabulary/);
     assert.match(prompt, /Girl's action:/);
   }
+});
+
+// ⚠ 실사고 2026-07-31: 심야 재시도 크론이 date 없이 부르면 「새 하루를 접어버린다」.
+// missionFor가 그 안전핀이다 — 본진(14:30 UTC)만 date 생략, 심야는 반드시 전날 명시.
+test('스케줄러 임무: 본진은 오늘, 심야 재시도는 전날을 명시한다', () => {
+  // 2026-07-31 14:30 UTC = 23:30 KST 본진
+  const main = missionFor(Date.UTC(2026, 6, 31, 14, 30));
+  assert.equal(main.kind, 'main');
+  assert.equal(main.dateParam, '');
+  // 2026-07-31 15:40 UTC = 08-01 00:40 KST → 전날(07-31) 재시도
+  const retry1 = missionFor(Date.UTC(2026, 6, 31, 15, 40));
+  assert.equal(retry1.kind, 'retry');
+  assert.equal(retry1.dateParam, '?date=2026-07-31');
+  // 2026-07-31 16:40 UTC = 08-01 01:40 KST → 역시 전날(07-31)
+  const retry2 = missionFor(Date.UTC(2026, 6, 31, 16, 40));
+  assert.equal(retry2.dateParam, '?date=2026-07-31');
+  // 음성: 심야 재시도가 새 날짜(08-01)를 접겠다고 나서면 안 된다
+  assert.notEqual(retry1.dateParam, '?date=2026-08-01');
+  assert.equal(kstDateStr(Date.UTC(2026, 6, 31, 15, 0)), '2026-08-01'); // 참고: KST로는 이미 새 날
 });

@@ -92,37 +92,55 @@ export const workersAiProvider: ImageProvider = {
   available: (env) => Boolean(env.AI),
   async generate(env, req) {
     if (!env.AI) return { error: 'ai_binding_missing' };
-    let input: Record<string, unknown>;
-    if (usesMultipart(req.model)) {
-      // flux-2 계열은 FormData를 직렬화해 넘긴다 (docs의 공식 호출 형태).
-      const form = new FormData();
-      form.append('prompt', req.plan.prompt);
-      for (const [k, v] of Object.entries(req.params)) form.append(k, String(v));
-      if (req.seed !== undefined) form.append('seed', String(req.seed));
-      (req.references ?? []).slice(0, MAX_REFERENCE_IMAGES).forEach((r, i) => {
-        form.append(referenceField(i), new Blob([r.bytes], { type: r.contentType }), `${r.name}-${i}`);
-      });
-      const formResponse = new Response(form);
-      input = {
-        multipart: {
-          body: formResponse.body,
-          contentType: formResponse.headers.get('content-type') ?? 'multipart/form-data',
-        },
-      };
-    } else {
-      input = { prompt: req.plan.prompt, ...req.params };
+    // ⚠ 실사고 2026-07-31 밤: Workers AI가 간헐적으로 「AiError: 3043: Internal server
+    //   error」를 뱉는다 — 나쁜 구간에선 연속으로 온다. 야간 완주기 8콜이 160초 안에
+    //   전부 이 오류에 박혀 하루가 통째로 비었다(콜 사이 3초·콜 안 재시도 0).
+    //   일시 오류는 여기서 백오프로 흡수한다. multipart body는 스트림이라 한 번
+    //   소모되면 끝 — 시도마다 입력을 새로 만든다.
+    const TRANSIENT = /3043|internal server error|capacity|inference upstream|timed? ?out/i;
+    const buildInput = (): Record<string, unknown> => {
+      if (usesMultipart(req.model)) {
+        // flux-2 계열은 FormData를 직렬화해 넘긴다 (docs의 공식 호출 형태).
+        const form = new FormData();
+        form.append('prompt', req.plan.prompt);
+        for (const [k, v] of Object.entries(req.params)) form.append(k, String(v));
+        if (req.seed !== undefined) form.append('seed', String(req.seed));
+        (req.references ?? []).slice(0, MAX_REFERENCE_IMAGES).forEach((r, i) => {
+          form.append(referenceField(i), new Blob([r.bytes], { type: r.contentType }), `${r.name}-${i}`);
+        });
+        const formResponse = new Response(form);
+        return {
+          multipart: {
+            body: formResponse.body,
+            contentType: formResponse.headers.get('content-type') ?? 'multipart/form-data',
+          },
+        };
+      }
+      const input: Record<string, unknown> = { prompt: req.plan.prompt, ...req.params };
       if (req.seed !== undefined) input.seed = req.seed;
+      return input;
+    };
+    let lastError = 'ai_run_failed: unknown';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const out = await env.AI.run(req.model, buildInput());
+        const bytes = await coerceImageBytes(out);
+        if (!bytes) return { error: 'unexpected_model_output' };
+        return {
+          providerId: 'workers-ai', model: req.model, params: req.params,
+          seed: req.seed ?? null, bytes, contentType: 'image/png',
+          createdAt: Date.now(), note: 'trial only — not a production path',
+        };
+      } catch (e) {
+        lastError = `ai_run_failed: ${String(e).slice(0, 160)}${attempt > 1 ? ` (attempt ${attempt})` : ''}`;
+        if (attempt < 3 && TRANSIENT.test(String(e))) {
+          await new Promise((r) => setTimeout(r, attempt === 1 ? 4_000 : 12_000));
+          continue;
+        }
+        return { error: lastError };
+      }
     }
-    try {
-      const out = await env.AI.run(req.model, input);
-      const bytes = await coerceImageBytes(out);
-      if (!bytes) return { error: 'unexpected_model_output' };
-      return {
-        providerId: 'workers-ai', model: req.model, params: req.params,
-        seed: req.seed ?? null, bytes, contentType: 'image/png',
-        createdAt: Date.now(), note: 'trial only — not a production path',
-      };
-    } catch (e) { return { error: `ai_run_failed: ${String(e).slice(0, 160)}` }; }
+    return { error: lastError };
   },
 };
 
