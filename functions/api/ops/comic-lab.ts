@@ -924,8 +924,18 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
   }
 
   // 칸 경계를 찾아 자른다 — 등분하면 칸 한가운데가 잘린다 (2026-07-25 실사고).
-  // 페이지 위쪽 제목·부제 영역 때문에 N등분선이 칸 경계와 어긋났고, 결과가 엉망이었다.
   // 칸 사이·바깥은 종이색이므로, 종이색으로만 채워진 가로줄/세로줄이 곧 경계다.
+  //
+  // ⚠ 실사고 2026-07-31 「발자국이 마르는 동안」: 셋째 판(행 우선 스캔)이 무너졌다.
+  //   ① 페이지 위가 **좌우 비대칭 2단**(왼쪽 제목+큰칸+작은칸 / 오른쪽 칸+칸)이라
+  //      가로줄 스캔으로는 구역 전체가 한 덩어리 띠 — 제목이 1번 칸에 삼켜지고
+  //      기둥이 통째로 칸 하나가 됐다. 행 우선은 「페이지 = 행 목록」일 때만 맞는다.
+  //   ② 「컷 수만큼 두꺼운 띠 상위 N개」가 맨 아래 캡션 줄을 칸으로 승격시켰다.
+  //   ③ 다른 판(「바람을 보내준 사람」)에선 잉크 비율 판정이 **제목 글자 하나하나**를
+  //      칸으로 잡았다 (글자 사이 공백이 세로 거터로 읽힘).
+  // → 넷째 판: **재귀 X-Y 분할.** 행으로 자르고, 각 조각을 열로 자르고, 다시 행으로 —
+  //   더 못 자를 때까지. 비대칭 다단이 자연히 갈린다. 컷 수는 이제 감지에 안 쓴다
+  //   (검증 배너의 대조용으로만 남는다).
   function detectPanels(img, panelCount) {
     var cv = document.createElement('canvas');
     cv.width = img.naturalWidth; cv.height = img.naturalHeight;
@@ -938,88 +948,83 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     function isBg(i) {
       return Math.abs(d[i] - br) < 26 && Math.abs(d[i + 1] - bg) < 26 && Math.abs(d[i + 2] - bb) < 26;
     }
-    // 가로줄 스캔 — 잉크 비율이 낮으면 거터
-    var stepX = Math.max(1, Math.floor(W / 400));
-    var rowInk = new Float32Array(H);
-    for (var y = 0; y < H; y++) {
-      var ink = 0, n = 0;
-      for (var x = 0; x < W; x += stepX) { n++; if (!isBg((y * W + x) * 4)) ink++; }
-      rowInk[y] = ink / Math.max(n, 1);
-    }
-    function bands(arr, len, minRun) {
-      var out = [], s0 = -1;
-      for (var i = 0; i < len; i++) {
-        if (arr[i] > 0.02) { if (s0 < 0) s0 = i; }
-        else if (s0 >= 0) { if (i - s0 >= minRun) out.push([s0, i]); s0 = -1; }
+    // 거터 판정은 잉크 **비율**이 아니라 **최장 연속 잉크 길이**로 한다.
+    // 비율(>0.02)은 두 번 사고를 냈다 — 얇은 테두리 선(2~4px)은 비율로는 종이나
+    // 다름없어 경계선이 깎였고(07-30), 넓은 칸을 가로지르는 흐린 줄은 비율이 낮아
+    // 칸 한가운데가 거터로 읽혔다. 테두리 선은 「짧지만 연속된」 잉크다 — 연속 길이
+    // RUN을 넘는 잉크가 하나라도 있으면 그 줄은 거터가 아니다.
+    var RUN = 3;
+    function rowIsGutter(y, x0, x1) {
+      var run = 0;
+      for (var x = x0; x < x1; x++) {
+        if (!isBg((y * W + x) * 4)) { if (++run > RUN) return false; }
+        else run = 0;
       }
-      if (s0 >= 0 && len - s0 >= minRun) out.push([s0, len]);
+      return true;
+    }
+    function colIsGutter(x, y0, y1) {
+      var run = 0;
+      for (var y = y0; y < y1; y++) {
+        if (!isBg((y * W + x) * 4)) { if (++run > RUN) return false; }
+        else run = 0;
+      }
+      return true;
+    }
+    // 잉크 구간 목록 — MINGAP보다 좁은 흰 틈은 무시하고 이어붙인다 (본문 속 잔틈 보호)
+    var MINGAP = Math.max(3, Math.round(Math.min(W, H) * 0.004));
+    function lineSegs(from, to, gutterFn) {
+      var runs = [], s0 = -1, i;
+      for (i = from; i < to; i++) {
+        if (!gutterFn(i)) { if (s0 < 0) s0 = i; }
+        else if (s0 >= 0) { runs.push([s0, i]); s0 = -1; }
+      }
+      if (s0 >= 0) runs.push([s0, to]);
+      var out = [];
+      runs.forEach(function (r) {
+        if (out.length && r[0] - out[out.length - 1][1] < MINGAP) out[out.length - 1][1] = r[1];
+        else out.push([r[0], r[1]]);
+      });
       return out;
     }
-    var rowBands = bands(rowInk, H, Math.floor(H * 0.008));
-    if (!rowBands.length) return [];
-    // 실측(2026-07-25, 「그늘이 지나간 자리」 6컷)으로 확인된 페이지 구조:
-    //   제호 21px · 제목 72px · 부제 27px · [칸 323px · 캡션 27px] x 3행
-    // → 두꺼운 띠가 칸 행, 그 **바로 아래 얇은 띠가 그 행의 캡션**이다.
-    //   캡션은 칸 테두리 바깥에 있으므로 같이 안 자르면 글이 떨어져 나간다.
-    // ── 칸 행 고르기 ─────────────────────────────────────────────
-    // 옛 규칙: 「가장 두꺼운 띠의 45% 이상」. 아래 행이 조금 짧으면 통째로 빠졌다.
-    // ⚠ 우리는 **컷 수를 이미 알고 있다.** 마법 비율 대신 기대 행 수로 고른다 —
-    //   높이 내림차순 상위 N개. 실측 구조(제호 21 · 제목 72 · 부제 27 · 칸 323)에서
-    //   칸 행은 제목보다 네 배 이상 두꺼워 안전하게 갈린다.
-    var wantRows = Math.max(1, Math.ceil((panelCount || rowBands.length * 2) / 2));
-    var byH = rowBands.slice().sort(function (a, b) { return (b[1] - b[0]) - (a[1] - a[0]); });
-    var thick = byH.slice(0, Math.min(wantRows, byH.length))
-      .sort(function (a, b) { return a[0] - b[0]; });
-    if (!thick.length) return [];
-
-    // ── 캡션 붙이기 ──────────────────────────────────────────────
-    // ⚠ 실사고 2026-07-30: 옛 코드는 뒤따르는 얇은 띠를 **하나만**(break) 붙였다.
-    //   캡션이 두 줄이면 띠가 둘로 갈라지므로 **둘째 줄이 잘려 나갔다.**
-    //   그리고 간격 제한(H*0.03)이 있어 여백이 조금만 넓어도 캡션을 통째로 놓쳤다.
-    // 새 규칙: 이 칸 행 다음부터 **다음 칸 행 시작 전까지**의 띠를 전부 삼킨다.
-    //   그 사이에 있는 것은 그 칸의 것뿐이다 — 간격을 재지 않아도 소속이 정해진다.
-    var units = thick.map(function (tb, ti) {
-      var nextTop = (ti + 1 < thick.length) ? thick[ti + 1][0] : H;
-      var end = tb[1];
-      rowBands.forEach(function (cb2) {
-        if (cb2[0] >= tb[1] && cb2[1] <= nextTop) end = Math.max(end, cb2[1]);
-      });
-      // ⚠ 실사고 2026-07-30(둘째 판): 캡션 **글자**는 들어왔는데 캡션 상자의 **아래
-      //   테두리 선**이 매번 잘렸다. 원인은 rowBands 자체다 — 띠로 인정받으려면
-      //   minRun(H*0.008 ≈ 12px)을 넘어야 하는데 테두리는 2~4px짜리 실선이라
-      //   **애초에 띠 목록에 오르지 못한다.** 그러니 위의 「다 삼킨다」도 삼킬 게 없었다.
-      //   → 띠 목록에 기대지 말고 **잉크가 있는 마지막 줄까지 직접 내려가며 찾는다.**
-      //   흰 틈이 gapLimit보다 길어지면 멈춘다 — 그 자리가 진짜 거터다.
-      //   범위는 [end, nextTop)이라 다음 칸 행을 절대 침범하지 않는다.
-      var gapLimit = Math.max(4, Math.round(H * 0.012));
-      var white = 0;
-      for (var yy = end; yy < nextTop; yy++) {
-        if (rowInk[yy] > 0.02) { end = yy + 1; white = 0; }
-        else if (++white > gapLimit) break;
-      }
-      return [tb[0], end];
-    });
-
     var boxes = [];
-    units.forEach(function (rb) {
-      var y0 = rb[0], y1 = rb[1], stepY = Math.max(1, Math.floor((y1 - y0) / 200));
-      var colInk = new Float32Array(W);
-      for (var x2 = 0; x2 < W; x2++) {
-        var ink2 = 0, n2 = 0;
-        for (var y2 = y0; y2 < y1; y2 += stepY) { n2++; if (!isBg((y2 * W + x2) * 4)) ink2++; }
-        colInk[x2] = ink2 / Math.max(n2, 1);
-      }
-      var colBands = bands(colInk, W, Math.floor(W * 0.05));
-      if (!colBands.length) colBands = [[0, W]];
-      // ⚠ 감지 경계는 **잉크가 끝나는 자리**다. 테두리 선이 배경과 대비가 낮으면 마지막
-      //   한두 줄이 배경으로 읽혀 선이 깎인다. 사방으로 조금 넓혀 잡는다(페이지 안으로 제한).
-      var m = Math.max(2, Math.round(H * 0.004));
-      colBands.forEach(function (cb) {
-        var bx = Math.max(0, cb[0] - m), by = Math.max(0, y0 - m);
-        boxes.push({ x: bx, y: by,
-          w: Math.min(W, cb[1] + m) - bx, h: Math.min(H, y1 + m) - by });
+    // ⚠ 감지 경계는 **잉크가 끝나는 자리**다. 테두리 선이 배경과 대비가 낮으면 마지막
+    //   한두 줄이 배경으로 읽혀 선이 깎인다. 사방으로 조금 넓혀 잡는다(페이지 안으로 제한).
+    var m = Math.max(2, Math.round(H * 0.004));
+    function emit(x0, y0, x1, y1) {
+      var bx = Math.max(0, x0 - m), by = Math.max(0, y0 - m);
+      boxes.push({ x: bx, y: by, w: Math.min(W, x1 + m) - bx, h: Math.min(H, y1 + m) - by });
+    }
+    function cut(x0, y0, x1, y1, depth) {
+      var rows = lineSegs(y0, y1, function (y) { return rowIsGutter(y, x0, x1); });
+      if (!rows.length) return;
+      // 띠 분류: 이 영역에서 가장 두꺼운 띠 대비 35% 미만(그리고 절대 하한 미만)이면
+      // 글줄이다. 칸 **뒤**의 글줄은 그 칸의 캡션 — 한 단위로 붙인다(07-30 확립).
+      // 칸 **앞**의 글줄(제호·제목·부제)은 어느 칸의 것도 아니다 — 버린다.
+      // 캡션이 칸 위에 오는 판형은 이 판에 없다 (buildPagePrompt 페이지 구조 참조).
+      var maxH = 0;
+      rows.forEach(function (r) { maxH = Math.max(maxH, r[1] - r[0]); });
+      var THICK = Math.max(maxH * 0.35, Math.min(W, H) * 0.03);
+      var units = [], cur = null;
+      rows.forEach(function (r) {
+        if (r[1] - r[0] >= THICK) { cur = [r[0], r[1]]; units.push(cur); }
+        else if (cur) cur[1] = r[1];
       });
-    });
+      if (!units.length) return;
+      var single = units.length === 1;
+      units.forEach(function (u) {
+        var cols = lineSegs(x0, x1, function (x) { return colIsGutter(x, u[0], u[1]); });
+        if (!cols.length) cols = [[x0, x1]];
+        // 이번 판에서 아무것도 못 갈랐고 여백 다듬기조차 없었다면 여기가 잎(칸)이다.
+        var progress = !single || cols.length > 1 ||
+          u[0] > y0 + MINGAP || u[1] < y1 - MINGAP ||
+          cols[0][0] > x0 + MINGAP || cols[cols.length - 1][1] < x1 - MINGAP;
+        cols.forEach(function (c) {
+          if (progress && depth < 8) cut(c[0], u[0], c[1], u[1], depth + 1);
+          else emit(c[0], u[0], c[1], u[1]);
+        });
+      });
+    }
+    cut(0, 0, W, H, 0);
     return boxes;
   }
 
