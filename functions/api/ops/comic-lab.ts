@@ -986,17 +986,44 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       });
       return out;
     }
-    var boxes = [];
-    // ⚠ 감지 경계는 **잉크가 끝나는 자리**다. 테두리 선이 배경과 대비가 낮으면 마지막
-    //   한두 줄이 배경으로 읽혀 선이 깎인다. 사방으로 조금 넓혀 잡는다(페이지 안으로 제한).
+    // ── 액자 벗기기 ─────────────────────────────────────────────
+    // ⚠ 실사고 2026-07-31(둘째): 페이지 전체를 닫힌 테두리(액자)로 두른 판이 나왔다.
+    //   연속 잉크 판정에서 액자 선은 모든 줄을 「거터 아님」으로 만들어 — 페이지가
+    //   통째로 칸 1개가 됐다. 네 변이 전부 잉크 선인지 재고, 맞으면 안쪽 좌표를 돌려준다.
+    //   ⚠ 칸 자체의 테두리도 같은 모양이므로 무턱대고 벗기면 그림 내부가 쪼개진다.
+    //   그래서 벗기는 건 **탐색**이다 — 안이 여럿으로 갈릴 때만 채택한다(cut 참조).
+    function rowInkRatio(y, x0, x1) {
+      var ink = 0;
+      for (var x = x0; x < x1; x++) if (!isBg((y * W + x) * 4)) ink++;
+      return ink / Math.max(1, x1 - x0);
+    }
+    function colInkRatio(x, y0, y1) {
+      var ink = 0;
+      for (var y = y0; y < y1; y++) if (!isBg((y * W + x) * 4)) ink++;
+      return ink / Math.max(1, y1 - y0);
+    }
+    function peelFrame(x0, y0, x1, y1) {
+      var K = Math.max(6, Math.round(Math.min(W, H) * 0.02)); // 액자 두께 상한
+      var t = y0, b = y1, l = x0, r = x1;
+      while (t < y0 + K && rowInkRatio(t, x0, x1) > 0.8) t++;
+      while (b > y1 - K && rowInkRatio(b - 1, x0, x1) > 0.8) b--;
+      while (l < x0 + K && colInkRatio(l, y0, y1) > 0.8) l++;
+      while (r > x1 - K && colInkRatio(r - 1, y0, y1) > 0.8) r--;
+      // 네 변 모두 최소 한 줄씩 벗겨졌어야 닫힌 액자다
+      if (t > y0 && b < y1 && l > x0 && r < x1 && t < b && l < r) return [l, t, r, b];
+      return null;
+    }
     var m = Math.max(2, Math.round(H * 0.004));
-    function emit(x0, y0, x1, y1) {
+    function toBox(x0, y0, x1, y1) {
+      // ⚠ 감지 경계는 **잉크가 끝나는 자리**다. 테두리 선이 배경과 대비가 낮으면 마지막
+      //   한두 줄이 배경으로 읽혀 선이 깎인다. 사방으로 조금 넓혀 잡는다(페이지 안으로 제한).
       var bx = Math.max(0, x0 - m), by = Math.max(0, y0 - m);
-      boxes.push({ x: bx, y: by, w: Math.min(W, x1 + m) - bx, h: Math.min(H, y1 + m) - by });
+      return { x: bx, y: by, w: Math.min(W, x1 + m) - bx, h: Math.min(H, y1 + m) - by };
     }
     function cut(x0, y0, x1, y1, depth) {
+      var out = [];
       var rows = lineSegs(y0, y1, function (y) { return rowIsGutter(y, x0, x1); });
-      if (!rows.length) return;
+      if (!rows.length) return out;
       // 띠 분류: 이 영역에서 가장 두꺼운 띠 대비 35% 미만(그리고 절대 하한 미만)이면
       // 글줄이다. 칸 **뒤**의 글줄은 그 칸의 캡션 — 한 단위로 붙인다(07-30 확립).
       // 칸 **앞**의 글줄(제호·제목·부제)은 어느 칸의 것도 아니다 — 버린다.
@@ -1009,23 +1036,36 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         if (r[1] - r[0] >= THICK) { cur = [r[0], r[1]]; units.push(cur); }
         else if (cur) cur[1] = r[1];
       });
-      if (!units.length) return;
+      if (!units.length) return out;
       var single = units.length === 1;
       units.forEach(function (u) {
         var cols = lineSegs(x0, x1, function (x) { return colIsGutter(x, u[0], u[1]); });
         if (!cols.length) cols = [[x0, x1]];
-        // 이번 판에서 아무것도 못 갈랐고 여백 다듬기조차 없었다면 여기가 잎(칸)이다.
+        // 이번 판에서 아무것도 못 갈랐고 여백 다듬기조차 없었다면 잎(칸) 후보다.
         var progress = !single || cols.length > 1 ||
           u[0] > y0 + MINGAP || u[1] < y1 - MINGAP ||
           cols[0][0] > x0 + MINGAP || cols[cols.length - 1][1] < x1 - MINGAP;
         cols.forEach(function (c) {
-          if (progress && depth < 8) cut(c[0], u[0], c[1], u[1], depth + 1);
-          else emit(c[0], u[0], c[1], u[1]);
+          if (progress && depth < 8) {
+            var sub = cut(c[0], u[0], c[1], u[1], depth + 1);
+            for (var i = 0; i < sub.length; i++) out.push(sub[i]);
+            return;
+          }
+          // 잎 후보 — 액자일 수 있다. 벗겨서 안이 **여럿으로 갈릴 때만** 그쪽을 쓴다.
+          // 하나로 남으면 액자가 아니라 칸 테두리다 — 원래 상자를 유지한다.
+          if (depth < 8) {
+            var inner = peelFrame(c[0], u[0], c[1], u[1]);
+            if (inner) {
+              var got = cut(inner[0], inner[1], inner[2], inner[3], depth + 1);
+              if (got.length > 1) { for (var j = 0; j < got.length; j++) out.push(got[j]); return; }
+            }
+          }
+          out.push(toBox(c[0], u[0], c[1], u[1]));
         });
       });
+      return out;
     }
-    cut(0, 0, W, H, 0);
-    return boxes;
+    return cut(0, 0, W, H, 0);
   }
 
   /**
