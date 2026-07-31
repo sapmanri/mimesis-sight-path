@@ -1003,14 +1003,32 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       return ink / Math.max(1, y1 - y0);
     }
     function peelFrame(x0, y0, x1, y1) {
-      var K = Math.max(6, Math.round(Math.min(W, H) * 0.02)); // 액자 두께 상한
-      var t = y0, b = y1, l = x0, r = x1;
-      while (t < y0 + K && rowInkRatio(t, x0, x1) > 0.8) t++;
-      while (b > y1 - K && rowInkRatio(b - 1, x0, x1) > 0.8) b--;
-      while (l < x0 + K && colInkRatio(l, y0, y1) > 0.8) l++;
-      while (r > x1 - K && colInkRatio(r - 1, y0, y1) > 0.8) r--;
-      // 네 변 모두 최소 한 줄씩 벗겨졌어야 닫힌 액자다
-      if (t > y0 && b < y1 && l > x0 && r < x1 && t < b && l < r) return [l, t, r, b];
+      // ⚠ 실측(07-31, #030 액자판): 영역 경계가 액자 선보다 1~2px 바깥일 수 있다
+      //   (선 가장자리의 잔잉크가 경계를 넓힌다). 「가장자리 첫 줄부터 선」을 요구하면
+      //   그 1px 때문에 즉사한다 — 가장자리에서 K픽셀 **안을 탐색**해 선 무리를 찾는다.
+      //   선 무리는 가장자리 6px 안에서 시작해야 하고(멀면 내용물이다), 무리가 끝난
+      //   다음 줄은 종이여야 한다(잉크가 이어지면 그림 가장자리다 — 액자 아님).
+      var K = Math.max(8, Math.round(Math.min(W, H) * 0.02)); // 액자 두께 상한
+      function edgeLine(ratioAt, limit) {
+        var s = -1, e = -1;
+        for (var k = 0; k < limit; k++) {
+          var r = ratioAt(k);
+          if (r > 0.8) { if (s < 0) s = k; e = k; }
+          else if (s >= 0) break;
+        }
+        if (s < 0 || s > 6) return -1;
+        if (ratioAt(e + 2) > 0.3) return -1;
+        return e + 1; // 이만큼 벗긴다
+      }
+      var pt = edgeLine(function (k) { return rowInkRatio(y0 + k, x0, x1); }, Math.min(K, y1 - y0));
+      var pb = edgeLine(function (k) { return rowInkRatio(y1 - 1 - k, x0, x1); }, Math.min(K, y1 - y0));
+      var pl = edgeLine(function (k) { return colInkRatio(x0 + k, y0, y1); }, Math.min(K, x1 - x0));
+      var pr = edgeLine(function (k) { return colInkRatio(x1 - 1 - k, y0, y1); }, Math.min(K, x1 - x0));
+      // 네 변 모두 선이 있어야 닫힌 액자다
+      if (pt > 0 && pb > 0 && pl > 0 && pr > 0) {
+        var t = y0 + pt, b = y1 - pb, l = x0 + pl, r = x1 - pr;
+        if (t < b && l < r) return [l, t, r, b];
+      }
       return null;
     }
     var m = Math.max(2, Math.round(H * 0.004));
