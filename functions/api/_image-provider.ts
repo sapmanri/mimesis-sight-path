@@ -70,7 +70,20 @@ export const WORKERS_AI_CANDIDATES = {
   // flux-2 계열은 multipart FormData를 {multipart:{body,contentType}}로 감싼다.
   'flux-1-schnell': { model: '@cf/black-forest-labs/flux-1-schnell', supportsReference: false, multipart: false },
   'flux-2-dev': { model: '@cf/black-forest-labs/flux-2-dev', supportsReference: true, multipart: true },
+  // 2026-08-06 카탈로그 실측: FLUX.2 [klein] 신모델 등장(4b·9b, 생성+편집 통합) —
+  // 같은 시기 flux-2-dev가 무응답으로 매달리기 시작(그림일기 무발행 사고 2일차 원인).
+  // 우선 후보로만 등록한다 — 야간 모델 교체는 그림체 판정(사람) 통과 후에만.
+  'flux-2-klein-4b': { model: '@cf/black-forest-labs/flux-2-klein-4b', supportsReference: true, multipart: true },
+  'flux-2-klein-9b': { model: '@cf/black-forest-labs/flux-2-klein-9b', supportsReference: true, multipart: true },
 } as const;
+
+/* 모델별 steps 상한 — schnell이 steps>8에 5006으로 즉사하는 실측(2026-08-06).
+   klein은 증류판이라 낮은 steps가 정상 — 규격 문서가 상한을 안 밝혀 보수적으로 8. */
+const STEPS_CAP: Record<string, number> = {
+  '@cf/black-forest-labs/flux-1-schnell': 8,
+  '@cf/black-forest-labs/flux-2-klein-4b': 8,
+  '@cf/black-forest-labs/flux-2-klein-9b': 8,
+};
 
 /** 참조는 input_image_0 ... input_image_3 (최대 4장, 512×512). 프롬프트에서 인덱스로 지칭 가능. */
 export const MAX_REFERENCE_IMAGES = 4;
@@ -98,12 +111,16 @@ export const workersAiProvider: ImageProvider = {
     //   일시 오류는 여기서 백오프로 흡수한다. multipart body는 스트림이라 한 번
     //   소모되면 끝 — 시도마다 입력을 새로 만든다.
     const TRANSIENT = /3043|internal server error|capacity|inference upstream|timed? ?out/i;
+    // 모델별 steps 상한 준수 — 넘겨 보내 5006으로 죽느니 여기서 조용히 맞춘다 (기록은 note에).
+    const cap = STEPS_CAP[req.model];
+    const params: Record<string, unknown> = { ...req.params };
+    if (cap && typeof params.steps === 'number' && params.steps > cap) params.steps = cap;
     const buildInput = (): Record<string, unknown> => {
       if (usesMultipart(req.model)) {
         // flux-2 계열은 FormData를 직렬화해 넘긴다 (docs의 공식 호출 형태).
         const form = new FormData();
         form.append('prompt', req.plan.prompt);
-        for (const [k, v] of Object.entries(req.params)) form.append(k, String(v));
+        for (const [k, v] of Object.entries(params)) form.append(k, String(v));
         if (req.seed !== undefined) form.append('seed', String(req.seed));
         (req.references ?? []).slice(0, MAX_REFERENCE_IMAGES).forEach((r, i) => {
           form.append(referenceField(i), new Blob([r.bytes], { type: r.contentType }), `${r.name}-${i}`);
@@ -116,18 +133,27 @@ export const workersAiProvider: ImageProvider = {
           },
         };
       }
-      const input: Record<string, unknown> = { prompt: req.plan.prompt, ...req.params };
+      const input: Record<string, unknown> = { prompt: req.plan.prompt, ...params };
       if (req.seed !== undefined) input.seed = req.seed;
       return input;
     };
+    /* 무응답 방어 — flux-2-dev가 오류도 없이 영원히 매달리는 실사고(2026-08-05~06):
+       실험실 스피너 10분+, 야간 크론 침묵 실패. 오류는 시끄럽게, 대기는 유한하게. */
+    const AI_CALL_TIMEOUT_MS = 100_000;
+    const runWithTimeout = (): Promise<unknown> => Promise.race([
+      env.AI.run(req.model, buildInput()),
+      new Promise((_, rej) => setTimeout(
+        () => rej(new Error(`ai_run_timeout_${AI_CALL_TIMEOUT_MS / 1000}s — 모델 무응답(매달림 방지)`)),
+        AI_CALL_TIMEOUT_MS)),
+    ]);
     let lastError = 'ai_run_failed: unknown';
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const out = await env.AI.run(req.model, buildInput());
+        const out = await runWithTimeout();
         const bytes = await coerceImageBytes(out);
         if (!bytes) return { error: 'unexpected_model_output' };
         return {
-          providerId: 'workers-ai', model: req.model, params: req.params,
+          providerId: 'workers-ai', model: req.model, params,
           seed: req.seed ?? null, bytes, contentType: 'image/png',
           createdAt: Date.now(), note: 'trial only — not a production path',
         };
