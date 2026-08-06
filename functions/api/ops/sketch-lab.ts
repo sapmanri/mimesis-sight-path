@@ -504,7 +504,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       count: Math.max(1, Math.min(6, Number($('count').value) || 1)),
       seed: Number($('seed').value),
       steps: Math.max(1, Math.min(20, Number($('steps').value) || 4)),
-      referenceKeys: chosenRefs('char'),
+      // ⚠ 역할 셀렉트의 실제 값은 'character'다 — 'char'로 찾던 한 단어 버그로
+      //   수동 시험의 참조가 언제나 0장이었다 (2026-08-06 실사고. 크론 경로는 무관해서
+      //   밤 그림만 참조가 실렸고, "참조를 무시한다"는 착시를 만들었다).
+      referenceKeys: chosenRefs('character'),
       styleKeys: chosenRefs('style'),
       subjects: state.subjects.slice(),
     };
