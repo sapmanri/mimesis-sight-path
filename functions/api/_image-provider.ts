@@ -14,10 +14,11 @@
 //   - 결과는 별도 R2 test prefix에만 저장한다 (운영 captures/ 와 섞지 않는다)
 
 import type { MemoryEvent } from './_daily-sketch.ts';
+import { viaGeminiImage } from './_comic-image.ts';
 
 export const TRIAL_R2_PREFIX = 'sketch-trials/';   // 운영 captures/ 와 절대 겹치지 않게
 
-export type ImageProviderId = 'workers-ai' | 'external-api' | 'manual';
+export type ImageProviderId = 'workers-ai' | 'gemini' | 'external-api' | 'manual';
 
 /** 무엇을 그릴지까지 확정된 계획. provider는 이걸 그림으로만 바꾼다. */
 export interface DailySketchPlan {
@@ -51,6 +52,10 @@ export interface SketchArtifact {
 export interface ImageProviderEnv {
   AI?: { run(model: string, input: Record<string, unknown>): Promise<unknown> };
   IMAGE_API_KEY?: string;
+  // gemini 붓 (2026-08-06, flux 라인 전멸 후 이식) — 코믹랩 어댑터와 같은 키를 쓴다
+  GEMINI_API_KEY?: string;
+  GEMINIAPIKEY?: string;
+  COMIC_IMAGE_MODEL?: string;
 }
 
 export interface ImageProvider {
@@ -196,6 +201,33 @@ export const externalApiProvider: ImageProvider = {
   async generate() { return { error: 'not_implemented — B는 A 판정 이후에 비교한다' }; },
 };
 
+/* ═══ 후보 — Gemini (2026-08-06 이식) ═══════════════════════════════
+   flux 라인 전멸(2-dev 무응답 사망·schnell 미달·klein 쓰레기 판정) 후,
+   코믹랩에서 검증된 어댑터(_comic-image.viaGeminiImage)를 같은 키·같은 재시도
+   규율 그대로 잇는다. 파이프는 여전히 CF 안 — 물감 가게만 밖이다.
+   ⚠ seed 재현성(같은 날 = 같은 그림, 규칙 ④)은 gemini가 보장하지 않는다 —
+     야간 승격 판정 때 이 트레이드오프를 사람이 안고 결정할 것. */
+export const geminiProvider: ImageProvider = {
+  id: 'gemini',
+  available: (env) => Boolean(env.GEMINI_API_KEY || env.GEMINIAPIKEY),
+  async generate(env, req) {
+    const pin = /^gemini[-.]/.test(req.model) ? req.model : undefined;
+    const out = await viaGeminiImage(
+      { ...env, COMIC_IMAGE_MODEL: pin ?? env.COMIC_IMAGE_MODEL },
+      req.plan.prompt,
+      (req.references ?? []).slice(0, MAX_REFERENCE_IMAGES)
+        .map((r) => ({ name: r.name, bytes: r.bytes, contentType: r.contentType })),
+      '1:1',
+    );
+    if ('error' in out) return { error: out.error };
+    return {
+      providerId: 'gemini', model: out.model, params: req.params,
+      seed: req.seed ?? null, bytes: out.bytes, contentType: 'image/png',
+      createdAt: Date.now(), note: 'trial only — gemini는 seed 비보장(재현성 규칙 ④ 약화)',
+    };
+  },
+};
+
 /* ═══ 후보 3 — manual ════════════════════════════════════════════
    만리서재 기준 컷과 같은 경로: 스펙은 코드가 만들고 촬영은 사람이 한다.
    프롬프트만 돌려주므로 바인딩 없이도 항상 동작한다 — 파일럿의 기본 폴백. */
@@ -214,6 +246,7 @@ export const manualProvider: ImageProvider = {
 
 export const PROVIDERS: Record<ImageProviderId, ImageProvider> = {
   'workers-ai': workersAiProvider,
+  gemini: geminiProvider,
   'external-api': externalApiProvider,
   manual: manualProvider,
 };

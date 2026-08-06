@@ -68,6 +68,7 @@ export interface TrialScene {
 
 /** 모델이 참조 입력을 지원하는지 — 등록된 후보표가 유일한 근거. 모르면 지원 안 함으로 본다. */
 export function supportsReference(model: string): boolean {
+  if (/^gemini[-.]/.test(model)) return true;   // gemini 붓은 참조(최대 4장)를 받는다 — 코믹랩 실증
   return Object.values(WORKERS_AI_CANDIDATES).some((c) => c.model === model && c.supportsReference);
 }
 
@@ -198,7 +199,10 @@ export function validateTrialInput(body: unknown): { ok: true; value: {
   if (shots > MAX_PER_CALL) {
     return { ok: false, error: `too_many: models×(scenes||count) ≤ ${MAX_PER_CALL} (사용량 한도 존중)` };
   }
-  const providerId = (b.provider as ImageProviderId) ?? 'workers-ai';
+  // 모델명이 곧 노선이다 — 실험실 UI를 안 고치고도 gemini 모델을 고르면 gemini 붓으로 간다.
+  // 혼합 열차는 없다: 전부 gemini일 때만 gemini 노선 (한 호출 = 한 프로바이더).
+  const inferredProvider: ImageProviderId = models.every((m) => /^gemini[-.]/.test(m)) ? 'gemini' : 'workers-ai';
+  const providerId = (b.provider as ImageProviderId) ?? inferredProvider;
   const subjects = Array.isArray(b.subjects) ? b.subjects.filter((x): x is string => typeof x === 'string' && !!x) : [];
   const styleKeys = Array.isArray(b.styleKeys) ? b.styleKeys.filter((k): k is string => typeof k === 'string') : [];
   // 다중 장면 — "다른 장면에서도 같은 아이인가"를 한 번에 본다
@@ -223,7 +227,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     ok: true,
     sketchVersion: SKETCH_VERSION,
     rules: SKETCH_RULES,
-    candidates: WORKERS_AI_CANDIDATES,
+    candidates: {
+      ...WORKERS_AI_CANDIDATES,
+      // gemini 붓 (2026-08-06) — 모델명이 gemini로 시작하면 POST가 프로바이더를 알아서 태운다
+      'gemini-3-pro-image': { model: 'gemini-3-pro-image-preview', supportsReference: true, multipart: false },
+      'gemini-2.5-flash-image': { model: 'gemini-2.5-flash-image', supportsReference: true, multipart: false },
+    },
     prefix: TRIAL_R2_PREFIX,
     aiBinding: Boolean(env.AI),
     judgingCriteria: [

@@ -115,7 +115,7 @@ export function geminiImageSizeFor(env: ComicImageEnv, model: string): string | 
   return model.startsWith('gemini-3-pro-image') ? '2K' : undefined;
 }
 
-async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes[], ratio: string):
+export async function viaGeminiImage(env: ComicImageEnv, prompt: string, refs: RefBytes[], ratio: string):
   Promise<{ bytes: ArrayBuffer; model: string } | { error: string }> {
   const key = env.GEMINI_API_KEY || env.GEMINIAPIKEY;
   if (!key) return { error: 'gemini_key_missing: GEMINI_API_KEY(또는 GEMINIAPIKEY) 시크릿 필요' };
