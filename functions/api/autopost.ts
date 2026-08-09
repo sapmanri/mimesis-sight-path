@@ -6,7 +6,7 @@
 // KV 바인딩: PLANET. 키: 'feed'(공용 스레드), 'bot_recent'(최근 발행 인덱스 — 중복 회피).
 
 import byeolliPosts from './byeolli_posts.json';
-import { appendPublishLog, bump401Bucket, slotOf, validateSlotIso, readSlotReceipt, writeSlotReceipt, hasSuccessfulRun, type SlotReceipt } from './_publish-log';
+import { appendPublishLog, bump401Bucket, slotOf, validateSlotIso, readSlotReceipt, writeSlotReceipt, hasSuccessfulRun, nearestScheduledSlot, type SlotReceipt } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
 import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
@@ -195,6 +195,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
 async function respondSlotDuplicate(env: Env, invokedAt: number, prior: SlotReceipt): Promise<Response> {
   await appendPublishLog(env, {
     invokedAt,
+    // ⚠ 어느 슬롯이 중복이었는지는 **영수증의 슬롯**이 진실이다. 부른 시각으로 추정하면
+    //   보충 호출(어제 슬롯 대상)이 오늘 슬롯의 「이미 나갔다」로 둔갑한다 — 08-09 실사고.
+    scheduledFor: prior.slot,
     result: 'slot_duplicate',
     httpStatus: 200,
     textIndex: prior.textIndex,
@@ -210,8 +213,11 @@ async function respondSlotDuplicate(env: Env, invokedAt: number, prior: SlotRece
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.PUBLISH_KEY) {
     // 503 key_missing — 매 실행 기록 (422-OPS-A §3-2)
+    // 인증 전이라 의도한 슬롯을 모른다. 여기만 시각 추정을 유지한다.
+    const tKeyMissing = Date.now();
     await appendPublishLog(env, {
-      invokedAt: Date.now(), result: 'key_missing', httpStatus: 503,
+      invokedAt: tKeyMissing, scheduledFor: nearestScheduledSlot(tKeyMissing),
+      result: 'key_missing', httpStatus: 503,
       textIndex: null, imageKey: null,
       threads: { attempted: false, ok: false, errorCode: null, requestId: null },
     }).catch(() => {});
@@ -460,6 +466,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!draft) {
     await appendPublishLog(env, {
       invokedAt: Date.now(),
+      // 이 실행이 채우려던 슬롯 그대로 적는다(수동이면 null). 로그를 남기는 시각이 아니라.
+      scheduledFor: slotIso,
       result: threads.ok ? 'success' : 'threads_failed',
       httpStatus: 200,
       textIndex,

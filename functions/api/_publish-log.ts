@@ -50,7 +50,7 @@ function toImageKey(img: string | null): string | null {
 }
 
 /** invokedAt에 가장 가까운 예정 슬롯(KST)을 ±40분 안에서 찾는다. 없으면 null(수동 호출 등) */
-function nearestScheduledSlot(invokedAt: number): string | null {
+export function nearestScheduledSlot(invokedAt: number): string | null {
   const kst = new Date(invokedAt + KST_OFFSET_MS);
   const y = kst.getUTCFullYear(), mo = kst.getUTCMonth(), d = kst.getUTCDate();
   let best: number | null = null;
@@ -71,11 +71,16 @@ function kstIso(utcMs: number): string {
 /** 정상 크론 / 503 결과 1건 기록 (최신순, 최대 LOG_KEEP) */
 export async function appendPublishLog(
   env: PublishLogEnv,
-  rec: Omit<PublishLogRecord, 'runId' | 'scheduledFor'>,
+  rec: Omit<PublishLogRecord, 'runId'>,
 ): Promise<void> {
+  /* scheduledFor는 **호출자가 안다. 여기서 시각으로 추정하지 않는다.**
+     08-09 실사고: 스케줄러의 보충 호출(어제 22:00 대상)이 08:05에 들어왔는데,
+     여기서 invokedAt으로 슬롯을 재계산해 「오늘 08:00 slot_duplicate」로 적혔다.
+     같은 순간 진짜 08:00 발행은 메타 일시 장애로 실패했고 — 장부에는
+     「08:00은 이미 나갔다」와 「08:00 발행 실패」가 동시에 남아 콘솔이 모순을 보였다.
+     장부가 거짓말하면 사람이 크론을 의심한다. 진실은 호출자만 안다. */
   const record: PublishLogRecord = {
     runId: `pub_${rec.invokedAt}`,
-    scheduledFor: nearestScheduledSlot(rec.invokedAt),
     ...rec,
   };
   const raw = await env.PLANET.get(LOG_KEY);

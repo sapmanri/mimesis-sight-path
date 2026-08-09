@@ -92,6 +92,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   await appendPublishLog(env, {
     invokedAt: now,
+    scheduledFor: null,  // 수동 발행 — 예정 슬롯이 없다(08-09 사고)
     result: threads.ok ? 'success' : 'threads_failed',
     httpStatus: 200,
     textIndex,

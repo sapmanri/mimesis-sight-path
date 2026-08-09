@@ -80,6 +80,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // ⑥ 감사 기록 — 운영 로그 + 그림 발행 전용 로그(하루 1장 판정의 근거)
   await appendPublishLog(env, {
     invokedAt: now,
+    scheduledFor: null,  // 수동 발행 — 예정 슬롯이 없다. 시각으로 추정해 적지 않는다(08-09 사고)
     result: threads.ok ? 'success' : 'threads_failed',
     httpStatus: 200,
     textIndex: null,
