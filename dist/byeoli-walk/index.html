@@ -1017,6 +1017,25 @@ const PPAE_CONFIG={
   terseChance:0.4,               // 가끔 동물처럼 — 단문("킁킁.")이 나올 확률
 };
 
+/* One Core, Many Worlds — 정본은 /api/ppaekkong/state.
+   세계별 일기는 분리하지만, 무엇을 보고 어떤 경계로 증거를 남기는지는 같은 Core를 읽는다. */
+const ppaekkongCore={
+  state:null, evidence:[], LS:'mimesis.ppae.genome.evidence.v1',
+  async load(){
+    try{ const r=await fetch('/api/ppaekkong/state',{cache:'no-store'}); if(r.ok) this.state=await r.json(); }catch(e){}
+    try{ this.evidence=JSON.parse(localStorage.getItem(this.LS)||'[]'); }catch(e){ this.evidence=[]; }
+  },
+  observe(entry){
+    if(!entry) return;
+    this.evidence.unshift({ at:entry.createdAt, trigger:entry.action,
+      targetType:entry.targetType||null, emotion:entry.emotion||null,
+      eventId:entry.eventId||null, coreVersion:this.state?.version||'fallback-427' });
+    this.evidence=this.evidence.slice(0,200);
+    try{ localStorage.setItem(this.LS,JSON.stringify(this.evidence)); }catch(e){}
+  },
+};
+ppaekkongCore.load();
+
 /* 빼콩 일기 — 별이 archive와 완전 분리. localStorage 별도 키(백업 blob 제외). */
 const ppaeDiary={
   archive:[], LS:'mimesis.ppae.diary.v1', KEEP:60,
@@ -1107,6 +1126,7 @@ const PpaeBrain={
     }
     this._bumpGap(now);
     ppaeDiary.push(entry);
+    ppaekkongCore.observe(entry);
     return entry;
   },
   selfEncounter(prop){
@@ -1754,6 +1774,7 @@ const Recovery={
         this.data.baseRevision=r.data.revision; this.save();
         this.conflict=false; this.conflictRevision=null;
         this.lastResult={ ok:true, at:Date.now() };
+        this._lastOkAt=Date.now(); this._failStreak=0;
         this.updateBadge(); return { ok:true, revision:r.data.revision };
       }
       if(r.status===409 && r.data && r.data.error==='backup_conflict'){
@@ -1767,6 +1788,12 @@ const Recovery={
         this.updateBadge(); return { ok:false, code:'backup_conflict', revision:this.conflictRevision };
       }
       this.lastResult={ ok:false, at:Date.now(), code:(r.data && r.data.error) || ('http_'+r.status) };
+      /* 일시 장애(전파 끊김·429)는 1분 뒤 한 번 조용히 다시 시도한다 — 다음 자동(5분)까지
+         「실패」 배지를 걸어두는 게 「요즘 에러 자주 뜬다」 인상의 절반이었다 (08-10). */
+      this._failStreak=(this._failStreak|0)+1;
+      if(this._failStreak===1 && !this._retryT){
+        this._retryT=setTimeout(()=>{ this._retryT=null; this.autoBackup(); }, 60*1000);
+      }
       this.updateBadge(); return { ok:false, code:this.lastResult.code };
     } finally { this._busy=false; }
   },
@@ -1796,7 +1823,15 @@ const Recovery={
   startAuto(){
     if(this._timer) return;
     this._timer=setInterval(()=>this.autoBackup(), 5*60*1000);
-    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) this.autoBackup(); });
+    /* 화면을 끌 때마다 쏘면 서버 제한(10회/10분)에 걸린다 — 산책 틀어놓고 폰을 껐다 켰다
+       하는 게 이 앱의 정상 사용이라, 그게 곧 「마지막 백업 실패」 배지가 됐다
+       (관전자 실보고 2026-08-10, @steady_jeju · 229시간 산책자). 3분 안에 시도했으면 쉰다. */
+    document.addEventListener('visibilitychange', ()=>{
+      if(!document.hidden) return;
+      const last=(this.lastResult&&this.lastResult.at)||0;
+      if(Date.now()-last<3*60*1000) return;
+      this.autoBackup();
+    });
   },
 
   /* ---- 조용한 배지 (산책 방해 금지) ---- */
@@ -1805,11 +1840,17 @@ const Recovery={
     el.classList.remove('warn');
     if(!this.data){ el.textContent=''; return; }
     if(this.conflict){ el.classList.add('warn'); el.textContent='다른 기기의 기록과 충돌'; return; }
+    /* 한 번 삐끗(전파·제한)은 경고하지 않는다 — 직전 성공 시각을 그대로 보여주고
+       1분 재시도가 조용히 메꾼다. 두 번 연속 실패부터가 진짜 「실패」다 (08-10). */
+    if(this.lastResult && !this.lastResult.ok && (this._failStreak|0)>=2){
+      el.classList.add('warn');
+      el.textContent='마지막 백업 '+fmtAgoMin(this.lastResult.at)+' 실패'; return;
+    }
+    if(this._lastOkAt){ el.textContent='백업됨 · '+fmtAgoMin(this._lastOkAt); return; }
     if(this.lastResult && !this.lastResult.ok){
       el.classList.add('warn');
       el.textContent='마지막 백업 '+fmtAgoMin(this.lastResult.at)+' 실패'; return;
     }
-    if(this.lastResult && this.lastResult.ok){ el.textContent='백업됨 · '+fmtAgoMin(this.lastResult.at); return; }
     el.textContent='';
   },
 
@@ -7906,7 +7947,11 @@ try{ AlbumUi.init(); }catch(e){ /* 앨범 UI 실패가 산책을 막지 않는�
 // QA 훅 (421-A 실기기 점검용): 촬영·열기만 노출, 데이터 접근 표면 아님
 window.__album={ shoot:()=>AlbumCapture.onRecordDone(), open:()=>AlbumUi.openOverlay() };
 // 427 QA 훅: 빼콩 브레인 경계면 — AI 교체 시에도 이 시그니처가 유지되는지의 시금석
-window.__ppae={ observe:(ctx)=>PpaeBrain.observe(ctx), config:PPAE_CONFIG, archive:()=>ppaeDiary.archive.slice(0,10) };
+window.__ppae={
+  observe:(ctx)=>PpaeBrain.observe(ctx), config:PPAE_CONFIG,
+  archive:()=>ppaeDiary.archive.slice(0,10),
+  core:()=>ppaekkongCore.state, evidence:()=>ppaekkongCore.evidence.slice(0,20),
+};
 // 429-A QA 훅: 폴백 계약을 실기기에서 직접 검증한다 (__writer.fail(true) → 이후 일기가 Rule로 나오는지)
 window.__writer={ fail:(v)=>{ ByeoliWriter._forceFail=!!v; return ByeoliWriter._forceFail; },
   entries:()=>archive.slice(0,10), slot:()=>resolveDiarySlot(sky.phase) };
