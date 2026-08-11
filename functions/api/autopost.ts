@@ -8,7 +8,7 @@
 import byeolliPosts from './byeolli_posts.json';
 import { appendPublishLog, bump401Bucket, slotOf, validateSlotIso, readSlotReceipt, writeSlotReceipt, hasSuccessfulRun, nearestScheduledSlot, type SlotReceipt } from './_publish-log';
 import { writeByeoliPost } from './_byeoli-writer';
-import { provenance, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
+import { provenance, buildGenomeContext, GENOME_VERSION, GENERATION_SOURCES, type GenomeProvenance } from './_genome-identity';
 import { resolvePostText, slotForPhase } from './_genome-fallback';
 import { appendCaptureMeta, observationIdOf } from './_capture-meta';
 import { memoryKey, kstDate, attachPublishedDiary, stashPendingDiary, buildDayMemory, pendingDiaryKey, shouldCarryMemoryPhoto,
@@ -332,7 +332,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       const cmRaw = await env.PLANET.get('capture_meta');
       const all = cmRaw ? JSON.parse(cmRaw) as CaptureLike[] : [];
       const todays = all.filter((c) => typeof c?.capturedAt === 'number' && kstDate(c.capturedAt) === todayKst);
-      const provisional = todays.length ? buildDayMemory(todays, todayKst) : null;
+      // 431 게놈 배선을 발행 쪽에도 (Vase 판정 2026-08-11: "당연히 별이가 직접 골라야지").
+      // 순간 고르기에 별이의 Selection 가산점 — sketch-daily의 접기와 같은 눈으로 고른다.
+      const provisional = todays.length
+        ? buildDayMemory(todays, todayKst, buildGenomeContext('byeoli', null).context?.selection ?? [])
+        : null;
       // ⚠ 하루 3회 발행인데 사건은 하루 하나다. **그 사진이 아직 안 나갔을 때만** 들려 보낸다.
       //   「아무 사진이나 이미 붙었으면 넘긴다」로 하면 아침이 남의 날 사진을 붙였을 때
       //   그날이 통째로 막힌다 (2026-07-30 실측).
