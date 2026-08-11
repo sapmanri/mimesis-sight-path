@@ -14,6 +14,8 @@ import {
   type DayMemory, type CaptureLike, type DiaryBranchStatus,
 } from '../_memory-event.ts';
 import { TRIAL_R2_PREFIX } from '../_image-provider.ts';
+// 431 게놈 배선 (08-11): 하루 세우기도 별이의 Selection으로 순간을 고른다 (sketch-daily와 동일)
+import { buildGenomeContext } from '../_genome-identity.ts';
 
 interface Env {
   PLANET: KVNamespace;
@@ -68,7 +70,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const stored: DayMemory | null = storedRaw ? JSON.parse(storedRaw) : null;
 
   const captures = await loadCaptures(env);
-  const preview = stored ? null : buildDayMemory(captures, date);
+  const preview = stored ? null : buildDayMemory(captures, date,
+    buildGenomeContext('byeoli', null).context?.selection ?? []);
 
   return json(200, {
     ok: true,
@@ -164,7 +167,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return json(400, { error: 'bad_date: YYYY-MM-DD (KST)' });
 
   const captures = await loadCaptures(env);
-  let day = buildDayMemory(captures, date);
+  let day = buildDayMemory(captures, date,
+    buildGenomeContext('byeoli', null).context?.selection ?? []);
   if (!day) {
     return json(404, {
       error: 'no_observations',

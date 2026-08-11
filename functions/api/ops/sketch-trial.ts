@@ -18,6 +18,7 @@ import {
 } from '../_image-provider.ts';
 import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, glossaryLine, type MemoryEvent } from '../_daily-sketch.ts';
 import { memoryKey, type DayMemory } from '../_memory-event.ts';
+import { buildGenomeContext } from '../_genome-identity.ts';
 
 interface Env extends ImageProviderEnv {
   PLANET: KVNamespace;
@@ -280,7 +281,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sceneEn = (typeof (body as Record<string, unknown>).sceneEn === 'string'
     ? (body as Record<string, string>).sceneEn
     : await translateScene(env, memory.lines).catch(() => null));
-  const promptKo = buildSketchPrompt(memory, null);   // 사람이 검토할 원본
+  // 431 게놈 배선 (08-11): 실험실도 본진(sketch-daily)과 같은 눈으로 그려야 비교가 성립한다
+  const trialGenome = buildGenomeContext('byeoli', null).context;
+  const promptKo = buildSketchPrompt(memory, trialGenome);   // 사람이 검토할 원본
   // 기준 그림을 **실제로 읽는다.** 키만 믿으면 없는 파일을 넘기고도 candidate로 기록돼
   // 결과가 거짓말을 한다(4차 사고: .png로 요청했는데 저장된 건 .jpg였다).
   const refErrors: string[] = [];
@@ -313,7 +316,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const mem = { ...memory, targetLabel: sc.targetLabel ?? memory.targetLabel, lines: sc.lines ?? memory.lines };
     return {
       label: sc.label ?? null,
-      prompt: buildImagePrompt(mem, null, sc.sceneEn ?? sceneEn, sc.subjects ?? subjects, { characters: nChar, styles: nStyle }),
+      prompt: buildImagePrompt(mem, trialGenome, sc.sceneEn ?? sceneEn, sc.subjects ?? subjects, { characters: nChar, styles: nStyle }),
     };
   });
   const prompt = shotPlans[0].prompt;

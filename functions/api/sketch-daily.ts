@@ -22,6 +22,9 @@ import {
   buildImagePrompt, CHARACTER_IDENTITY_CHECKS, NIGHTLY_POSE_VARIANTS, SKETCH_RULES, SKETCH_VERSION,
 } from './_daily-sketch.ts';
 import { selectProvider, trialKey, type ImageProviderEnv } from './_image-provider.ts';
+// 431 게놈 배선 (08-11): buildSketchPrompt/buildImagePrompt는 처음부터 게놈 인자를 받게
+// 설계됐는데 호출부가 전부 null이었다 — 별이가 그리는데 별이 눈으로 고르질 않았다.
+import { buildGenomeContext } from './_genome-identity.ts';
 import { translateScene, translateSubjects, hashPrompt, orderCharacterRefs, type TrialRecord } from './ops/sketch-trial.ts';
 // ⚠ 2026-07-27: 이 한 줄이 없어서 **매일 밤 그림일기가 죽었다.**
 //   d856916이 208~209줄에 readRefRoles·refsWithRole 호출만 넣고 import를 빠뜨렸다.
@@ -276,7 +279,9 @@ async function handleDaily(
     // ③ 하루 접기 — 관찰이 없으면 접지 않는다
     const capturesRaw = await env.PLANET.get('capture_meta');
     const captures: CaptureLike[] = capturesRaw ? JSON.parse(capturesRaw) : [];
-    const built = buildDayMemory(captures, date);
+    // 순간 고르기에 별이의 Selection 가산점이 이제야 흐른다 (라이브 별이 상태만 — 관찰자 로그 아님)
+    const foldGenome = buildGenomeContext('byeoli', null).context;
+    const built = buildDayMemory(captures, date, foldGenome?.selection ?? []);
     if (!built) {
       await recordSkip('no_observations');
       return json(200, { ok: true, skipped: 'no_observations', detail: `${date}에 관찰이 없다 — 빈 기억을 지어내지 않는다(조건 ③)` });
@@ -369,8 +374,9 @@ async function generateDaily(
     const obj = await env.CAPTURES.get(key);
     if (obj) refs.push({ name: key.split('/').pop() ?? 'ref', bytes: await obj.arrayBuffer(), contentType: obj.httpMetadata?.contentType ?? 'image/png' });
   }
+  const drawGenome = buildGenomeContext('byeoli', null).context;
   const prompt = buildImagePrompt(
-    day.event, null, sceneEn, subjTr.subjects,
+    day.event, drawGenome, sceneEn, subjTr.subjects,
     { characters: refs.length, styles: 0 },
     NIGHTLY_POSE_VARIANTS[n % NIGHTLY_POSE_VARIANTS.length],
   );
