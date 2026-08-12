@@ -67,7 +67,10 @@ export async function runToonRead(env: MusicWebEnv): Promise<ToonReadReceipt> {
   const { transcript, error } = await runWithTools(
     env,
     [{ role: 'user', content: buildToonPrompt() }],
-    [{ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 2 }],
+    // allowed_domains 명시 (08-12 밤 실측: 없으면 fetch: url_not_allowed — 검색 결과에서 온
+    // 주소가 아닌 직접 지정 주소는 허용 목록이 있어야 열린다)
+    [{ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 2,
+       allowed_domains: ['threads.com', 'www.threads.com'] }],
     { model: TOON_MODEL, maxTokens: MAX_TOKENS },
   );
   if (error) return { posts: [], read: transcript.fetched, toolErrors: transcript.toolErrors, error };
