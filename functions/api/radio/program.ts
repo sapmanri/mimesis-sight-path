@@ -3,9 +3,25 @@
 // POST /api/radio/program  (키 인증): 구운 토막 등록 — 자리는 서버가 정한다 (시간축 연속성)
 
 import {
-  PROGRAM_KEY, placeSegment, lastEndOf, pruneProgram,
+  PROGRAM_KEY, DAYS_KEY, DAY_KEY, kstDayOf, placeSegment, lastEndOf, pruneProgram,
   type ProgramSegment, type SegmentKind,
 } from '../_station.ts';
+
+/** 날짜별 보관소 이중 기록 — upsert(id+startAt 일치 시 갱신, 아니면 추가) */
+async function archiveWrite(env: { PLANET: KVNamespace }, seg: ProgramSegment): Promise<void> {
+  const day = kstDayOf(seg.startAt);
+  const [dayRaw, daysRaw] = await Promise.all([env.PLANET.get(DAY_KEY(day)), env.PLANET.get(DAYS_KEY)]);
+  const daySegs: ProgramSegment[] = dayRaw ? JSON.parse(dayRaw) : [];
+  const i = daySegs.findIndex((s) => s.id === seg.id && s.startAt === seg.startAt);
+  if (i >= 0) daySegs[i] = seg; else daySegs.push(seg);
+  daySegs.sort((a, b) => a.startAt - b.startAt);
+  const days: string[] = daysRaw ? JSON.parse(daysRaw) : [];
+  if (!days.includes(day)) days.push(day);
+  await Promise.all([
+    env.PLANET.put(DAY_KEY(day), JSON.stringify(daySegs)),
+    env.PLANET.put(DAYS_KEY, JSON.stringify(days.sort())),
+  ]);
+}
 
 interface Env { PLANET: KVNamespace; PULSE_KEY?: string }
 
@@ -63,6 +79,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (typeof body.voiceNote === 'string') existing.voiceNote = body.voiceNote.slice(0, 60);
     if (typeof body.dj === 'string' && body.dj) existing.dj = body.dj.slice(0, 20);
     await env.PLANET.put(PROGRAM_KEY, JSON.stringify(segments));
+    await archiveWrite(env, existing);
     return json(200, { ok: true, id: existing.id, merged: true, startAt: existing.startAt, count: segments.length });
   }
 
@@ -80,5 +97,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   };
   const next = pruneProgram([...segments, seg], now);
   await env.PLANET.put(PROGRAM_KEY, JSON.stringify(next));
+  await archiveWrite(env, seg);
   return json(200, { ok: true, id: seg.id, startAt: seg.startAt, liveEdge: seg.startAt + seg.dur * 1000, count: next.length });
 };

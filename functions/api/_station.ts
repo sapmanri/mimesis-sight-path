@@ -6,6 +6,13 @@
 // 오디오 실물은 R2(공개 버킷)에 있고 여기엔 주소만 있다.
 
 export const PROGRAM_KEY = 'radio:program';
+// 지난 방송 보관소 (Vase 08-12: "날짜별로 방송 내용 목록·다시 듣기") — 편성표는 이틀 창이지만
+// 날짜별 보관은 영구다. 등록 때 이중 기록하고, 소리 실물은 R2가 영구 보관한다.
+export const DAYS_KEY = 'radio:days';
+export const DAY_KEY = (d: string) => `radio:day:${d}`;
+export function kstDayOf(ms: number): string {
+  return new Date(ms + 9 * 3_600_000).toISOString().slice(0, 10);
+}
 export const PROGRAM_KEEP = 300;                    // 토막 수 상한
 export const PROGRAM_WINDOW_MS = 48 * 3_600_000;    // 이틀치만 남긴다 — 당기기 한계
 
