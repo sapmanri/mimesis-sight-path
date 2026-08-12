@@ -33,13 +33,16 @@ export interface ProgramSegment {
   script?: string;
 }
 
+/** 새 편 예고 시간 — 청취자 화면이 편성표를 새로 읽는 최악 주기(전면 60초·잠금 심장박동 72초)보다
+ * 길게. 등록 즉시 시작하면 발견 전에 지나간다 (08-12 밤 근본 사고: "계속 듣고 있는데 안 나와"). */
+export const LIVE_LEAD_MS = 90_000;
+
 /**
- * 새 토막의 자리 — 마지막 토막 끝과 지금 중 늦은 쪽.
- * 버퍼가 쌓여 있으면 이어 붙고(미래로), 방송이 비어 있었으면 지금부터 시작한다
- * (빈 구간은 클라이언트가 환경음으로 채운다 — 죽은 공기도 방의 시간이다).
+ * 새 토막의 자리 — 마지막 토막 끝과 (지금+예고) 중 늦은 쪽.
+ * 버퍼가 쌓여 있으면 이어 붙고, 아니면 90초 예고 후 시작 — 모든 청취자가 처음부터 듣는다.
  */
 export function placeSegment(lastEnd: number | null, now: number): number {
-  return Math.max(lastEnd ?? 0, now);
+  return Math.max(lastEnd ?? 0, now + LIVE_LEAD_MS);
 }
 
 export function lastEndOf(segments: ProgramSegment[]): number | null {

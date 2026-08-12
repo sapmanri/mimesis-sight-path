@@ -6,13 +6,12 @@ import { validateRadioScript, situationMessage } from './_radio.ts';
 const seg = (id: string, startAt: number, dur: number): ProgramSegment =>
   ({ id, kind: 'talk', startAt, dur, url: 'https://pub-x.r2.dev/radio/x.m4a', title: id });
 
-test('편성 자리 — 버퍼가 있으면 이어 붙고, 비어 있었으면 지금부터', () => {
-  // 마지막 토막이 미래까지 차 있다 → 그 끝에 이어 붙는다
-  assert.equal(placeSegment(2000, 1000), 2000);
-  // 방송이 비어 있었다 → 지금부터 (죽은 공기는 클라이언트가 환경음으로)
-  assert.equal(placeSegment(500, 1000), 1000);
-  // 첫 토막
-  assert.equal(placeSegment(null, 1000), 1000);
+test('편성 자리 — 버퍼 뒤에 붙거나, 90초 예고 후 시작 (즉시 시작 금지)', () => {
+  // 마지막 토막이 예고 시간보다 멀리 차 있다 → 그 끝에 이어 붙는다
+  assert.equal(placeSegment(200_000, 1000), 200_000);
+  // 방송이 비어 있었다 → 지금+90초 예고 (등록 즉시 시작은 청취자가 발견 전에 지나간다 — 08-12 실사고)
+  assert.equal(placeSegment(500, 1000), 91_000);
+  assert.equal(placeSegment(null, 1000), 91_000);
 });
 
 test('lastEnd — 토막 끝의 최댓값 (등록 순서와 무관)', () => {
