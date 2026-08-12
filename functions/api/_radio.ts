@@ -36,6 +36,7 @@ export interface RadioDraft {
   story: string;
   moderation: RadioModeration;
   script: string;               // 방송 토막 전체 — 구성은 별이가 정했다 (R2)
+  voiceNote: string | null;     // 별이가 정한 그날 목소리 연출 (R3 — 기분→목소리)
   situation: RadioSituation;    // 별이에게 던졌던 상황 (재현·검증용)
   provenance: GenomeProvenance;
   warnings: string[];
@@ -148,15 +149,31 @@ ${focus}
 네가 말하는 방식:
 ${style}
 - 해시태그·이모지·유행어 없음. 말로 읽히는 방송이다 — 괄호 지문 없이, 쉼은 문장부호와 줄바꿈으로.
+- 늘 같은 텐션이면 방송이 아니다. 오늘 기분과 상황 따라 오르내림이 있어도 된다.
 
-출력: 방송에서 말할 것 전체를 본문만. 따옴표·설명·JSON 없이.`;
+맨 마지막 줄에 하나만 덧붙인다 — 오늘 이 토막을 읽을 네 목소리를 네가 정한다:
+[목소리: 짧은 연출 한 줄] (예: 조금 가라앉아서, 평소보다 느리게 / 반 박자 빠르게, 살짝 들떠서. 30자 이내)
+
+출력: 방송에서 말할 것 전체 + 마지막 줄 [목소리: …]. 따옴표·설명·JSON 없이.`;
   return { prompt, warnings: result.warnings };
 }
 
 export interface RadioScriptResult {
   script: string;           // 방송 토막 전체 (사연 원문 포함 가능)
+  voiceNote: string | null; // 별이가 정한 그날 목소리 연출 한 줄 (기분→목소리, 사장 지시 08-12)
   provenance: GenomeProvenance;
   warnings: string[];
+}
+
+/** 원고 끝의 [목소리: …] 셀프 연출을 떼어낸다. 없으면 그대로 — 기본 목소리로 간다. */
+export function parseScriptAndVoice(text: string): { script: string; voiceNote: string | null } {
+  const m = text.match(/\n?\s*\[목소리:\s*([^\]]{1,60})\]\s*$/);
+  if (!m) return { script: text.trim(), voiceNote: null };
+  const note = m[1].trim();
+  const script = text.slice(0, m.index).trim();
+  // 연출 줄에 이모지·해시태그가 섞이면 버린다 — 목소리 서술은 조용한 한 줄이어야 한다
+  if (META_LEAK.test(note)) return { script, voiceNote: null };
+  return { script, voiceNote: note || null };
 }
 
 /** 상황 → user 메시지. 사연은 데이터 블록으로만 — 주입 방어 유지. */
@@ -192,11 +209,12 @@ export async function writeRadioScript(
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
-    const script = (data.content?.find((c) => c.type === 'text')?.text ?? '').trim();
+    const raw = (data.content?.find((c) => c.type === 'text')?.text ?? '').trim();
+    const { script, voiceNote } = parseScriptAndVoice(raw);
     const check = validateRadioScript(script, situation.story);
     if (!check.pass) return null;
     return {
-      script,
+      script, voiceNote,
       provenance: provenance('genome-live', true),
       warnings: [...sys.warnings, ...check.warnings],
     };

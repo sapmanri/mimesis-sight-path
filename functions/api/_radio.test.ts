@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mechanicalFilter, parseModeration, radioSystemPrompt, validateRadioScript, situationMessage,
-  type RadioSituation,
+  parseScriptAndVoice, type RadioSituation,
 } from './_radio.ts';
 import { timeLabelOf } from './radio/draft.ts';
 
@@ -82,6 +82,24 @@ test('상황 메시지 — 사실만 담기고 사연은 데이터 블록', () =
   assert.match(msg, /반복 금지/);
   // 관찰이 없으면 없다고 말한다 — 지어내지 않는다
   assert.match(situationMessage({ ...s, todayLines: [] }), /아직 남긴 관찰이 없다/);
+});
+
+// R3: 기분→목소리 — 별이가 원고 끝에 정하는 셀프 연출 한 줄
+test('[목소리:] 셀프 연출 분리 — 없으면 기본, 이모지 섞이면 버린다', () => {
+  const p = parseScriptAndVoice('방송 본문.\n둘째 줄.\n[목소리: 조금 가라앉아서, 평소보다 느리게]');
+  assert.equal(p.script, '방송 본문.\n둘째 줄.');
+  assert.equal(p.voiceNote, '조금 가라앉아서, 평소보다 느리게');
+  // 없으면 그대로
+  const none = parseScriptAndVoice('연출 없는 본문.');
+  assert.equal(none.script, '연출 없는 본문.');
+  assert.equal(none.voiceNote, null);
+  // 음성: 본문 중간의 [목소리:]는 떼지 않는다 (끝 줄만)
+  const mid = parseScriptAndVoice('[목소리: 가짜] 진짜 본문.');
+  assert.equal(mid.voiceNote, null);
+  // 음성: 연출 줄 오염(이모지)은 버린다 — 본문은 살린다
+  const dirty = parseScriptAndVoice('본문.\n[목소리: 신나게 🔥]');
+  assert.equal(dirty.script, '본문.');
+  assert.equal(dirty.voiceNote, null);
 });
 
 test('시간대 라벨', () => {

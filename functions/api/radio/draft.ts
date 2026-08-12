@@ -54,7 +54,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const queue: RadioStory[] = raw ? JSON.parse(raw) : [];
   const count = (s: RadioStory['status']) => queue.filter((q) => q.status === s).length;
   return json(200, {
-    ok: true, waiting: count('waiting'), used: count('used'), rejected: count('rejected'),
+    // rev: 배포 전파 탐침 — Pages는 Active 표시 뒤에도 엣지가 옛 판을 준다(08-12 실사고:
+    // 첫 호출이 옛 코드에 맞아 사연 하나가 옛 모양으로 소비됨). 배포 후 이 값 확인 전에
+    // 대기열을 소비하지 말 것.
+    ok: true, rev: 'r3', waiting: count('waiting'), used: count('used'), rejected: count('rejected'),
     recent: queue.slice(0, 10).map((q) => ({ id: q.id, at: q.at, status: q.status, chars: q.text.length })),
   });
 };
@@ -117,7 +120,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const draft: RadioDraft = {
     id: story.id, at: Date.now(), story: story.text, moderation,
-    script: written.script, situation,
+    script: written.script, voiceNote: written.voiceNote, situation,
     provenance: written.provenance, warnings: written.warnings,
   };
   if (storyRead) story.status = 'used';
