@@ -219,22 +219,35 @@ amb.loop = false;   // 루프 금지 — 끝나는 순간이 백그라운드에�
 let segs = [], clockOffset = 0, playing = false, live = true, anchor = null; // anchor={P0, t0} 과거 재생 기준
 let currentSeg = null;
 
-/* 재생 거부는 침묵하지 않는다 (08-12 밤 "또 그냥 멈췄어" — 교착의 시작이 .catch(()=>{})였다):
-   한 번의 거부가 소리를 다 죽이면 심장박동(ended)이 다시 뛸 이벤트 자체가 없어진다.
-   그래서 ① 거부를 세고 ② 오래 막히면 화면에 사람 손을 부르고 ③ 제스처가 오면 즉시 되살린다. */
-let rejectAt = 0;
+/* 무조건 나온다 (사장 08-12 밤: "라디오면 그냥 라디온 거야") — 사람 손을 부르는 안내는 금지.
+   대신 되살아나는 길을 전부 깐다: ① 전멸 감시(0.5초마다 — tick 안) ② 멈춤 이벤트 즉시 재시도
+   (인터럽션 직후가 재생 허가가 살아 있는 순간이다) ③ 화면 복귀 순간 라이브 재접속
+   ④ 시스템 미디어 자리 등록(잠금화면·이어폰 버튼이 우리 플레이어를 조작). 거부는 콘솔에만. */
 function tryPlay(el) {
-  el.play().then(() => { rejectAt = 0; }).catch(() => {
-    if (!rejectAt) rejectAt = Date.now();
-    if (playing && Date.now() - rejectAt > 4000) {
-      $('state').textContent = '소리가 잠들었어요 — 화면을 한 번 톡 눌러 주세요';
-    }
+  el.play().catch((e) => {
+    if (!tryPlay.warned) { tryPlay.warned = true; console.warn('재생 거부:', e && e.name); }
   });
 }
-au.addEventListener('playing', () => { rejectAt = 0; amb.pause(); }); // 목소리가 나오면 방 소리는 쉰다
-document.addEventListener('pointerdown', () => {   // 제스처 = iOS가 재생을 다시 허락하는 유일한 순간
-  if (playing && au.paused && amb.paused) { rejectAt = 0; liveAdvance(); }
+au.addEventListener('playing', () => { amb.pause(); }); // 목소리가 나오면 방 소리는 쉰다
+// 예상 밖 멈춤은 그 자리에서 되살린다 — 의도한 멈춤(사용자 정지·간극 전환)은 걸러진다
+au.addEventListener('pause', () => {
+  if (playing && currentSeg !== null && !au.ended) tryPlay(au);
 });
+amb.addEventListener('pause', () => {
+  if (!playing) return;
+  setTimeout(() => { if (playing && au.paused && amb.paused) tryPlay(amb); }, 150);
+});
+document.addEventListener('pointerdown', () => {   // 손이 오면 그 김에 — 요구하진 않는다
+  if (playing && au.paused && amb.paused) liveAdvance();
+});
+document.addEventListener('visibilitychange', () => {  // 화면으로 돌아온 순간 = 라이브로 재접속
+  if (!document.hidden && playing) liveAdvance();
+});
+if ('mediaSession' in navigator) {
+  navigator.mediaSession.metadata = new MediaMetadata({ title: '별리 라디오', artist: '별이' });
+  navigator.mediaSession.setActionHandler('play', () => { if (!playing) $('play').click(); else liveAdvance(); });
+  navigator.mediaSession.setActionHandler('pause', () => { if (playing) $('play').click(); });
+}
 
 async function loadProgram() {
   try {
@@ -368,7 +381,7 @@ au.addEventListener('ended', liveAdvance);
 $('play').onclick = () => {
   playing = !playing;
   $('play').textContent = playing ? '❚❚' : '▶';
-  if (!playing) { au.pause(); amb.pause(); currentSeg = null; rejectAt = 0; $('state').textContent = ''; }
+  if (!playing) { au.pause(); amb.pause(); currentSeg = null; $('state').textContent = ''; }
 };
 $('bar').oninput = () => {
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
