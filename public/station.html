@@ -256,6 +256,10 @@ function tryPlay(el) {
   });
 }
 au.addEventListener('playing', () => { amb.pause(); }); // 목소리가 나오면 방 소리는 쉰다
+au.addEventListener('error', () => {
+  // "지원한다"고 답해놓고 실제론 못 트는 브라우저 대비 — 스트림이 죽으면 파일 모드로 낙하
+  if (usingStream) { usingStream = false; au.removeAttribute('src'); if (playing) liveAdvance(); }
+});
 // 예상 밖 멈춤은 그 자리에서 되살린다 — 의도한 멈춤(사용자 정지·간극 전환)은 걸러진다
 au.addEventListener('pause', () => {
   if (!playing || au.ended) return;
