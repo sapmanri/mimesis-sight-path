@@ -11,7 +11,9 @@ interface Env { PLANET: KVNamespace }
 const PLAYLIST = 'https://pub-8ec6440aae5545379fcfdd50a243847a.r2.dev/radio/stream/live.m3u8';
 
 export const onRequestGet: PagesFunction<Env> = async () => {
-  const r = await fetch(PLAYLIST, { cf: { cacheTtl: 0, cacheEverything: false } } as RequestInit);
+  // 캐시 무효 꼬리표 — r2.dev가 같은 주소의 재생목록을 제멋대로 캐시한다 (08-13 실사고
+  // "나오다가 안 나오다가": 낡은 목록 → 지워진 조각 404 → 침묵). 조각은 불변 이름이라 무해.
+  const r = await fetch(`${PLAYLIST}?t=${Date.now()}`, { cf: { cacheTtl: 0, cacheEverything: false } } as RequestInit);
   if (!r.ok) {
     return new Response('#EXTM3U\n# 방송 준비 중\n', {
       status: 503,
