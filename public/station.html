@@ -283,8 +283,8 @@ function tick() {
   const p = P();
   // 타임라인
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
-  if (document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
-  $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
+  if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
+  if (!scrubbing) $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
   $('liveBtn').classList.toggle('on', live);
   $('dot').classList.toggle('live', live && playing);
 
@@ -395,9 +395,21 @@ $('play').onclick = () => {
     checkVersion();   // 멈춘 김에 — 새 판이 나와 있으면 이 참에 갈아입는다
   }
 };
-$('bar').oninput = () => {
+/* 튜너 (사장 08-12 밤 "여기가 어딘지 모르겠어"): 끄는 동안은 목적지 시각만 크게 보여주고,
+   손을 떼는 순간 이동한다. 끌 때마다 오디오를 갈아끼우던 이전 방식은 더듬거림의 원인이었다. */
+let scrubbing = false;
+const barP = () => {
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
-  const p = a + (b - a) * (Number($('bar').value) / 1000);
+  return { a, b, p: a + (b - a) * (Number($('bar').value) / 1000) };
+};
+$('bar').oninput = () => {
+  scrubbing = true;
+  const { b, p } = barP();
+  $('t0').textContent = b - p < 4000 ? '→ 라이브로' : '→ ' + fmt(p) + ' (KST) 로 이동 — 손을 떼면 이동';
+};
+$('bar').onchange = () => {
+  scrubbing = false;
+  const { b, p } = barP();
   if (b - p < 4000) { live = true; anchor = null; }
   else { live = false; anchor = { P0: p, t0: Date.now() }; }
   currentSeg = null; // 다음 tick이 새 위치로 붙는다
@@ -535,9 +547,13 @@ setInterval(() => {   // 30초 안에 올 다음 토막을 미리 받아둔다
 let pageTag = null, reloadPending = false;
 async function checkVersion() {
   try {
-    const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
-    const t = r.headers.get('etag') || r.headers.get('last-modified');
-    if (!t) return;
+    // 지문 = 본문 해시 — CF Pages는 이 HTML에 ETag를 안 준다 (08-12 실측, HEAD·GET 다 없음).
+    // 헤더에 기대면 감시가 조용히 무력화된다. 1분에 30KB 받는 값이면 공짜다.
+    const r = await fetch(location.pathname, { cache: 'no-store' });
+    const text = await r.text();
+    let h = 0;
+    for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+    const t = text.length + ':' + h;
     if (pageTag === null) { pageTag = t; return; }
     if (t !== pageTag) reloadPending = true;
     if (reloadPending && !playing) {
