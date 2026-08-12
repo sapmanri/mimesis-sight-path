@@ -140,11 +140,6 @@ test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독
   assert.equal(picked?.title, '봄바람');
   // 음성: 전부 부적격이면 안 펼친다 — 억지로 펼치지 않는다
   assert.equal(pickBookcasePiece(pieces.slice(1), () => 0), null);
-  // 재낭독 방지 (08-12 밤 실사고: 같은 원고 40분 만에 두 번): 낭독된 편은 제외된다
-  const two = [...pieces, { title: '두번째', kind: '잠깐멈춰', text: '창가에 볕이 오래 머물다 갔다. 그 자리만 따뜻했다.' }];
-  assert.equal(pickBookcasePiece(two, () => 0, ['봄바람'])?.title, '두번째');
-  // 전부 낭독됐으면 제외를 풀고 고른다 — 빈 책장보다 재회가 낫다
-  assert.equal(pickBookcasePiece(two, () => 0, ['봄바람', '두번째'])?.title, '봄바람');
   // 상황 메시지: 낭독 허락이 명시되고, 잠긴 원고는 제목·소개만 나온다 (본문 노출 없음)
   const s: RadioSituation = {
     timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
@@ -159,6 +154,23 @@ test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독
   assert.match(msg, /「봄바람」 전문/);
   assert.match(msg, /「질투」 · 「미니멀」/);
   assert.match(msg, /아직 못 꺼내는 원고.*「남겨둔 것들」 — 아직 안 나온 장편/);
+});
+
+// 방송 자취 (Vase 08-12 밤): 제약이 아니라 기억 — 며칠치가 상황에 실리고 선택은 별이가
+test('방송 자취 — 며칠치 기억이 실리고, 강제 문구는 없다', () => {
+  const s: RadioSituation = {
+    timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
+    broadcastTrail: [
+      { date: '08-11', items: ['「그때 다시 그곳으로」를 틀었다'] },
+      { date: '08-12', items: ['「별것이 별것 있나요」(책장 원고)을 낭독했다', '사연 하나에 답했다'] },
+    ],
+  };
+  const msg = situationMessage(s);
+  assert.match(msg, /지난 며칠 방송에서 네가 한 일들/);
+  assert.match(msg, /08-12: 「별것이 별것 있나요」/);
+  assert.match(msg, /이어가든 말든 네 마음/);
+  // 음성: "다시 읽지 마라" 같은 금지 문구는 없어야 한다 — 기억은 주되 강제하지 않는다
+  assert.doesNotMatch(msg, /다시 읽지|반복하지 마|낭독 금지/);
 });
 
 test('시간대 라벨', () => {

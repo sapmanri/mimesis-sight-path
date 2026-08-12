@@ -145,6 +145,11 @@ export interface RadioSituation {
       실사고: 웹툰 속 오늘("청국장")을 몰라 사연에 "사실이 아니야"라고 방송했다.
       내용은 별이의 그림 이야기, 말투(이모지체)는 그 채널의 옷 — 관찰 전용·복제 금지. */
   webtoonPosts?: { text: string; when: string }[];
+  /** 방송 자취 — 지난 며칠 방송에서 별이가 한 일의 기계 기록 (Vase 08-12 밤: "원고들이 다시
+      게놈 쌓는 데 도움이 돼야지. 이전 거를 기억하지는 못한다, 이런 건가?").
+      직전 2편(recentScripts)을 넘어 며칠을 기억하는 자리. ⚠ 431-M 기억 체계(관찰 사건 정본)와는
+      별개의 가벼운 자취다 — 게놈 계량 축적은 정본·홈즈 검증이 필요한 별도 매듭. */
+  broadcastTrail?: { date: string; items: string[] }[];
 }
 
 /** 라디오 시스템 프롬프트 — _byeoli-writer와 같은 축 번역에서 파생한다. 새 문학 금지. */
@@ -269,6 +274,9 @@ export function situationMessage(s: RadioSituation): string {
             : null,
         ].filter(Boolean).join('\n')
       : null,
+    s.broadcastTrail?.length
+      ? `지난 며칠 방송에서 네가 한 일들 (네 기억이다 — 이어가든 말든 네 마음):\n${s.broadcastTrail.map((d) => `- ${d.date}: ${d.items.join(' · ')}`).join('\n')}`
+      : null,
     s.recentScripts.length
       ? `최근 방송에서 이미 한 말들 (같은 소재·문형 반복 금지):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 160)}`).join('\n')}`
       : null,
@@ -285,18 +293,15 @@ export interface BookcasePiece { title: string; kind: string; text?: string; loc
     고름은 무작위 — 매일 다른 원고가 펼쳐져 있어야 책장이지 게시판이 아니다. */
 export function pickBookcasePiece(
   pieces: BookcasePiece[], rand: () => number = Math.random,
-  // 최근 펼쳤던 편은 다시 안 펼친다 (08-12 밤 실사고: 같은 원고를 40분 만에 두 번 낭독 —
-  // 사장 "너무 사실적이라 문제". 며칠 뒤 다시 꺼내는 건 자연스러우니 하루 창만 막는다.
-  // 다 제외되면 제외를 풀고 고른다 — 빈 책장보다는 재회가 낫다.)
-  exclude: string[] = [],
 ): { title: string; text: string } | null {
-  const openable = pieces.filter((p) => !p.locked && p.text && !JONDAET.test(p.text)
+  // ⚠ "낭독한 편은 하루 제외" 같은 강제는 넣지 않는다 (사장 판정 08-12 밤: "억지로 제약을
+  //   두지 말고, 게놈으로 다시 보게끔 해서 알아서 하게 두라고. 그래도 또 읽는다? 그럼 그게
+  //   별이인 거야."). 재낭독 방지는 기억(broadcastTrail)이 한다 — 별이가 알고 고른다.
+  const open = pieces.filter((p) => !p.locked && p.text && !JONDAET.test(p.text)
     && !new RegExp(SELF_PRONOUN_SRC).test(p.text)
     && !META_LEAK.test(p.text));
-  const fresh = openable.filter((p) => !exclude.includes(p.title));
-  const pool = fresh.length ? fresh : openable;
-  if (!pool.length) return null;
-  const p = pool[Math.floor(rand() * pool.length)];
+  if (!open.length) return null;
+  const p = open[Math.floor(rand() * open.length)];
   return { title: p.title, text: p.text! };
 }
 

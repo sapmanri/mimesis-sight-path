@@ -20,6 +20,11 @@ interface Env { PLANET: KVNamespace; PULSE_KEY?: string; ANTHROPIC_API_KEY?: str
 const FEED_KEY = 'feed';
 const DRAFT_INDEX_KEY = 'radio:drafts';
 const DRAFT_INDEX_KEEP = 30;
+// 방송 자취 (Vase 08-12 밤 "이전 거를 기억하지는 못한다, 이런 건가?") — 날짜별 기계 기록.
+// 별이가 직전 2편이 아니라 며칠을 기억하게 하는 자리. 게놈 계량 축적은 별도 매듭(431-M 경계).
+const RECALL_KEY = 'radio:recall';
+const RECALL_DAYS = 7;
+const RECALL_ITEMS_MAX = 16;
 // 곡 서가 (노래 편성, 08-12 밤) — 정본은 KV. 채우는 손은 byeol-radio/songs-sync.sh.
 const SONGS_KEY = 'radio:songs';
 interface RadioSong { title: string; url: string; dur: number; lyrics?: string }
@@ -51,11 +56,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw, recallRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
     env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get('radio:bookcase'),
-    env.PLANET.get(TOON_KEY),
+    env.PLANET.get(TOON_KEY), env.PLANET.get(RECALL_KEY),
   ]);
+  const trail: { date: string; items: string[] }[] = recallRaw ? JSON.parse(recallRaw) : [];
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
   const todayKst = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
   const todayLines = feed
@@ -99,15 +105,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // 우리 책장 (Vase 08-12 밤) — 한 편은 펼쳐 두고, 나머지는 등이 보이게 꽂아 둔다.
   // 제목이 너무 많으면 상황이 게시판이 된다 — 등 보이는 건 8권만 무작위로.
-  // ⚠ 같은 원고 재낭독 사고(08-12 밤, 40분 만에 두 번 — 사장 "너무 사실적이라 문제"):
-  // **낭독된** 편만 24시간 제외한다. "펼쳤던 편 전부 제외"는 후보 12편이 저녁 안에 바닥나
-  // 도로 무력화된다 — 제외는 실제로 읽힌 것에만. 낭독 판별은 아래 방송 원고 검사에서.
-  const READ_KEY = 'radio:bookcase:read';
-  const readRaw = await env.PLANET.get(READ_KEY);
-  const readList: { title: string; at: number }[] = (readRaw ? JSON.parse(readRaw) : [])
-    .filter((x: { at: number }) => Date.now() - x.at < 24 * 3_600_000);
+  // 재낭독은 막지 않는다(사장 판정) — 낭독 기록은 방송 자취(trail)로 별이에게 보인다.
   const bookcasePieces: BookcasePiece[] = bookcaseRaw ? JSON.parse(bookcaseRaw) : [];
-  const openPiece = pickBookcasePiece(bookcasePieces, Math.random, readList.map((x) => x.title));
+  const openPiece = pickBookcasePiece(bookcasePieces);
   const bookcase = bookcasePieces.length ? {
     open: openPiece,
     titles: bookcasePieces
@@ -130,6 +130,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     bookcase,
     // 웹툰 최근 편 (08-12 밤 청국장 사건) — 최신 3편만. 읽는 손은 /api/radio/toon.
     webtoonPosts: (toonRaw ? (JSON.parse(toonRaw) as { posts: ToonPost[] }).posts : []).slice(0, 3),
+    broadcastTrail: trail.slice(-4).map((d) => ({ date: d.date.slice(5), items: d.items.slice(-10) })),
   };
 
   const written = await writeRadioScript(env, situation);
@@ -139,22 +140,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const id = story?.id ?? `solo-${Date.now().toString(36)}`;
   if (story && storyRead) { story.status = 'used'; await saveQueue(); }
 
-  // 낭독 판별 — 펼쳐진 원고의 첫머리가 방송 원고에 실려 있으면 "읽힌 것"으로 적는다.
-  // 공백·줄바꿈 차이를 지우고 대조한다 (LLM이 행갈이를 바꿔 읽어도 잡히게).
-  if (openPiece) {
-    const squash = (x: string) => x.replace(/\s+/g, '');
-    if (squash(written.script).includes(squash(openPiece.text).slice(0, 24))) {
-      await env.PLANET.put(READ_KEY, JSON.stringify(
-        [{ title: openPiece.title, at: Date.now() }, ...readList].slice(0, 30)));
-    }
-  }
-
   // 별이가 고른 곡을 서가와 대조 — 서가에 없는 제목은 방송에 못 나간다 (경고만 남긴다)
   const picked = written.songTitle
     ? songs.find((g) => songKey(g.title) === songKey(written.songTitle!)) ?? null
     : null;
   const warnings = [...written.warnings];
   if (written.songTitle && !picked) warnings.push(`song_not_found: ${written.songTitle}`);
+
+  // 방송 자취 적기 — 강제가 아니라 기억이다 (사장 판정 08-12 밤: "게놈으로 다시 보게끔 해서
+  // 알아서 하게 두라고. 그래도 또 읽는다? 그럼 그게 별이인 거야"). 무엇을 낭독했고 틀었고
+  // 답했는지를 날짜별로 적어 다음 상황에 실어 준다 — 다시 읽을지는 별이가 알고 고른다.
+  const squash = (x: string) => x.replace(/\s+/g, '');
+  const readAloud = !!openPiece && squash(written.script).includes(squash(openPiece.text).slice(0, 24));
+  const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
+  const acts: string[] = [];
+  if (storyRead) acts.push('사연 하나에 답했다');
+  if (picked) acts.push(`「${picked.title}」를 틀었다`);
+  if (readAloud) acts.push(`「${openPiece!.title}」(책장 원고)을 낭독했다`);
+  if (!acts.length) acts.push(`이야기: ${written.script.split('\n')[0].slice(0, 24)}`);
+  let day = trail.find((d) => d.date === today);
+  if (!day) { day = { date: today, items: [] }; trail.push(day); }
+  day.items = [...day.items, ...acts].slice(-RECALL_ITEMS_MAX);
 
   const draft: RadioDraft = {
     id, at: Date.now(), story: story?.text ?? '',
@@ -165,6 +171,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await Promise.all([
     env.PLANET.put(RADIO_DRAFT_KEY(id), JSON.stringify(draft)),
     env.PLANET.put(DRAFT_INDEX_KEY, JSON.stringify([id, ...draftIds.filter((x) => x !== id)].slice(0, DRAFT_INDEX_KEEP))),
+    env.PLANET.put(RECALL_KEY, JSON.stringify(trail.slice(-RECALL_DAYS))),
   ]);
   return json(200, {
     // dj: 별리 라디오의 DJ 슬롯 — 초대 DJ는 별이. 훗날 삽만리 등 다른 게놈이 꽂힌다 (Vase 08-12).
