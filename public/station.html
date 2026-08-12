@@ -238,6 +238,16 @@ const HLS_URL = '/api/radio/stream';
 const HLS_OK = au.canPlayType('application/vnd.apple.mpegurl') !== '';
 const HLS_LAT_MS = 18000;   // 자막 시계 보정 — 스트림은 라이브보다 조각 서너 개 뒤에서 들린다 (조율거리)
 let usingStream = false;
+/* 지금 나가는 것 — 생성기의 진실(/api/radio/now). 라벨·[다시 듣기]·자막이 전부 여기서 나온다.
+   재방송은 편성표에 없으므로 편성표 추측(segAt)으로는 화면이 거짓말을 하게 된다 (사장 08-13). */
+let nowData = null, nowFetchedAt = 0;
+async function fetchNow() {
+  try {
+    const r = await fetch('/api/radio/now', { cache: 'no-store' });
+    nowData = await r.json();
+  } catch {}
+  nowFetchedAt = Date.now();
+}
 function streamStart() {
   usingStream = true; live = true; anchor = null; currentSeg = null;
   amb.pause();
@@ -325,24 +335,32 @@ function attachSeg(s, p) {
 
 function tick() {
   if (usingStream) {
-    // HLS 라이브 — 붙이기는 운영체제 몫. 여기선 소생·타임라인·자막만.
+    // HLS 라이브 — 붙이기는 운영체제 몫. 여기선 소생·타임라인·화면 진실(now.json)만.
     if (playing && au.paused) tryPlay(au);
-    const p = liveP() - HLS_LAT_MS;
+    if (playing && Date.now() - nowFetchedAt > 6000) fetchNow();
     const a = spanStart(), b = Math.max(liveP(), a + 60000);
+    const p = liveP() - HLS_LAT_MS;
     if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
     if (!scrubbing) $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
     $('liveBtn').classList.toggle('on', true);
     $('dot').classList.toggle('live', playing);
-    const s = segAt(p);
-    if (s) {
-      $('now').textContent = s.title;
-      $('state').textContent = s.kind === 'story' ? '사연을 읽는 중'
-        : s.kind === 'song' ? '노래 — ' + (s.title || '') : s.voiceNote ? '목소리 — ' + s.voiceNote : '';
+    const nd = nowData;
+    if (nd && nd.kind !== 'bed' && nd.startedAt) {
+      $('now').textContent = nd.title || '별리의 방';
+      $('state').textContent = nd.isReplay
+        ? (nd.kind === 'song' ? '노래 다시 듣기 — ' + (nd.title || '') : '지난 방송 다시 듣기')
+        : nd.kind === 'story' ? '사연을 읽는 중'
+        : nd.kind === 'song' ? '노래 — ' + (nd.title || '')
+        : nd.voiceNote ? '목소리 — ' + nd.voiceNote : '';
+      const elapsed = serverNow() - nd.startedAt - HLS_LAT_MS;
+      const cur = nd.script ? { id: 'now:' + nd.startedAt, script: nd.script,
+        startAt: nd.startedAt + HLS_LAT_MS, dur: nd.dur || 1 } : null;
+      renderScript(cur, cur ? Math.max(0, elapsed / ((nd.dur || 1) * 1000)) : 0);
     } else {
       $('now').textContent = '별리의 방 — 방송 중';
       $('state').textContent = '';
+      renderScript(null, 0);
     }
-    renderScript(s, s ? (p - s.startAt) / (s.dur * 1000) : 0);
     return;
   }
   if (!live && anchor) {
