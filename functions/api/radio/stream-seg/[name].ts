@@ -10,7 +10,8 @@ export const onRequestGet: PagesFunction = async ({ params }) => {
   const name = String(params.name ?? '');
   if (!NAME_OK.test(name)) return new Response('bad name', { status: 400 });
   const r = await fetch(`${R2_BASE}/${name}`, {
-    cf: { cacheEverything: true, cacheTtl: 3600 },
+    // 실패 응답은 캐시 금지 — 업로드 직전의 404가 한 시간 눌어붙으면 그 조각은 영원히 침묵한다
+    cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': 3600, '400-599': 0 } },
   } as RequestInit);
   if (!r.ok) return new Response('gone', { status: 404, headers: { 'cache-control': 'no-store' } });
   return new Response(r.body, {
