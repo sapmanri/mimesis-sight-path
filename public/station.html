@@ -360,7 +360,9 @@ function playDayIdx(i) {
   box.querySelectorAll('.archSeg').forEach((x, xi) => x.classList.toggle('playing', xi === i));
   arch.style.display = 'block';
   arch.src = dayQueue[i].url;
-  arch.onended = () => setTimeout(() => playDayIdx(i + 1), 600);
+  // 토막 사이 6초 — 「우리는 오늘도 느리게 시작합니다」가 잣대다 (사장 08-12 밤:
+  // "1초도 안 띄우면 말하다가 죽어. 최소 5초 이상". 시간 값의 기본은 사람의 숨이다.)
+  arch.onended = () => setTimeout(() => playDayIdx(i + 1), 6000);
   arch.play().catch(() => {});
 }
 async function loadArchDay(day) {
