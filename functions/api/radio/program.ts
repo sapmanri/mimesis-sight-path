@@ -36,7 +36,7 @@ const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r11', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r12', now: Date.now(), segments });
 };
 
 /** 키 인증 삭제 — id+startAt로 정확히 하나만 (같은 id가 사고로 둘일 수 있다 — 08-12 전파 반절 실사고) */
@@ -79,7 +79,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (typeof body.voiceNote === 'string') existing.voiceNote = body.voiceNote.slice(0, 60);
     if (typeof body.dj === 'string' && body.dj) existing.dj = body.dj.slice(0, 20);
     // 소리 교체 재굽기(같은 R2 키에 새 소리)를 위해 dur도 병합 — 자리는 여전히 불변 (08-12)
-    if (Number.isFinite(dur) && dur > 0 && dur <= 1800) existing.dur = dur;
+    if (Number.isFinite(dur) && dur > 0 && dur <= 1800) {
+      // 겹침 상한 가드 (08-12 인계서의 이론 결함 수리): 자리는 불변인데 길이만 늘면
+      // 다음 토막을 침범한다 — 길이를 다음 토막 시작까지로 문다. 넘치는 소리는 어차피
+      // 플레이어가 다음 토막으로 전환하며 끊는다.
+      const nextSeg = segments
+        .filter((x) => x.startAt > existing.startAt)
+        .sort((a, b) => a.startAt - b.startAt)[0];
+      const capped = nextSeg
+        ? Math.min(dur, (nextSeg.startAt - existing.startAt) / 1000)
+        : dur;
+      if (capped > 0) existing.dur = capped;
+    }
     await env.PLANET.put(PROGRAM_KEY, JSON.stringify(segments));
     await archiveWrite(env, existing);
     return json(200, { ok: true, id: existing.id, merged: true, startAt: existing.startAt, count: segments.length });
