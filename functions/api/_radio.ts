@@ -130,6 +130,9 @@ export interface RadioSituation {
   /** 곡 서가 — 방송국에 실재하는 노래들 (Vase 08-12 밤: "15분에 한마디가 라디오냐" — 노래 편성).
       제목만 준다. 틀지 말지·언제 틀지는 별이가 정한다 — 각본 금지 원칙 그대로. */
   songShelf?: { title: string }[];
+  /** 서재 산책 발견 — 별이가 웹에서 직접 찾아 읽고 서가에 둔 책들 (Vase 08-12 밤: 인터넷 개방 1분야).
+      실물은 KV(radio:library:shelf), 산책은 /api/radio/library. 방송에서 꺼낼지는 별이가 정한다. */
+  libraryFinds?: { title: string; author: string; note: string; ago: string }[];
 }
 
 /** 라디오 시스템 프롬프트 — _byeoli-writer와 같은 축 번역에서 파생한다. 새 문학 금지. */
@@ -229,6 +232,9 @@ export function situationMessage(s: RadioSituation): string {
       : null,
     s.songShelf?.length
       ? `방송국 곡 서가 (틀 수 있는 노래들 — 틀지 말지는 네가 정한다):\n${s.songShelf.map((g) => `- ${g.title}`).join('\n')}`
+      : null,
+    s.libraryFinds?.length
+      ? `요즘 서재에서 네가 찾아 읽어 둔 책들 (네가 직접 고른 것이다 — 방송에서 꺼낼지는 네 마음):\n${s.libraryFinds.map((b) => `- 「${b.title}」${b.author ? ` (${b.author})` : ''} — ${b.note} (${b.ago})`).join('\n')}`
       : null,
     s.recentScripts.length
       ? `최근 방송에서 이미 한 말들 (같은 소재·문형 반복 금지):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 160)}`).join('\n')}`

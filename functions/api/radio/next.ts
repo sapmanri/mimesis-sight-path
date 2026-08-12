@@ -11,6 +11,7 @@ import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript,
   type RadioStory, type RadioDraft, type RadioSituation,
 } from '../_radio.ts';
+import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { timeLabelOf } from './draft.ts';
 
 interface Env { PLANET: KVNamespace; PULSE_KEY?: string; ANTHROPIC_API_KEY?: string }
@@ -49,9 +50,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw, songsRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
-    env.PLANET.get(SONGS_KEY),
+    env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY),
   ]);
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
   const todayKst = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
@@ -84,6 +85,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const songs: RadioSong[] = songsRaw ? JSON.parse(songsRaw) : [];
 
+  // 서재 산책 발견 (책 분야 개방, 08-12 밤) — 최근 두 권만 상황에. 시점은 사람 말로.
+  const shelf: LibraryFind[] = shelfRaw ? JSON.parse(shelfRaw) : [];
+  const agoLabel = (at: number): string => {
+    const h = (Date.now() - at) / 3_600_000;
+    return h < 2 ? '조금 전' : h < 24 ? '오늘' : '요 며칠 사이';
+  };
+  const libraryFinds = shelf.slice(0, 2).map((b) => ({
+    title: b.title, author: b.author, note: b.note, ago: agoLabel(b.at),
+  }));
+
   const hour = Number(new Date(Date.now() + 9 * 3_600_000).toISOString().slice(11, 13));
   const situation: RadioSituation = {
     timeLabel: timeLabelOf(hour),
@@ -93,6 +104,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     recentScripts,
     comicBits,
     songShelf: songs.map((g) => ({ title: g.title })),
+    libraryFinds,
   };
 
   const written = await writeRadioScript(env, situation);

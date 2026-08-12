@@ -230,16 +230,19 @@ async function callClaude(
 }
 
 /** 서버 도구는 제 한도에 걸리면 `pause_turn`으로 멈춘다. 그때는 이어서 다시 부른다.
-    ⚠ "계속해"라고 새 사람 말을 덧붙이면 안 된다 — 지금까지의 답만 돌려주면 서버가 이어간다. */
-async function runWithTools(
+    ⚠ "계속해"라고 새 사람 말을 덧붙이면 안 된다 — 지금까지의 답만 돌려주면 서버가 이어간다.
+    (수출·매개변수화 08-12 밤: 서재 산책(_radio-library)이 같은 SSE·pause_turn 규율을 쓴다 —
+     이 함수를 베끼면 524 실사고의 교훈이 두 벌이 된다. 기본값은 음악 큐레이션 그대로.) */
+export async function runWithTools(
   env: MusicWebEnv, messages: unknown[], tools: unknown[],
+  opts?: { model?: string; maxTokens?: number },
 ): Promise<{ transcript: Transcript; error: string | null }> {
   const msgs = [...messages];
   const transcript = readTranscript([]);
   for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
     // ⚠ 도구가 붙은 호출은 반드시 스트리밍이다. 안 그러면 524로 죽는다 (2026-07-27 실사고)
     const r = await callClaude(env, {
-      model: MUSIC_MODEL, max_tokens: MAX_TOKENS,
+      model: opts?.model ?? MUSIC_MODEL, max_tokens: opts?.maxTokens ?? MAX_TOKENS,
       thinking: { type: 'adaptive' },
       tools, messages: msgs,
     }, true);
