@@ -72,7 +72,8 @@
               repeating-linear-gradient(90deg, rgba(60,66,30,.05) 0 1px, transparent 1px 3px),
               linear-gradient(160deg, var(--lcd1), var(--lcd2));
             box-shadow:inset 0 3px 14px rgba(50,55,20,.35), 0 0 26px rgba(190,200,130,.10);
-            padding:18px 20px; min-height:230px; max-height:52vh; overflow-y:auto;
+            /* LCD는 고정 크기다 — 글자 따라 늘어나는 액정은 없다 (Vase 08-12 ㅋㅋ) */
+            padding:18px 20px; height:48vh; overflow-y:auto;
             font-family:'NeoDGM', ui-monospace, Menlo, monospace;
             font-size:15px; line-height:1.9; letter-spacing:.02em; white-space:pre-wrap;
             color:var(--lcdink); text-shadow:0 0 1px rgba(35,38,15,.4); }
