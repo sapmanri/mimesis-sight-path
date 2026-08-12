@@ -278,8 +278,36 @@ function fmt(ms) {
   return d.toISOString().slice(11, 16);
 }
 
+/* 토막 붙이기 — 한 자리에서만 한다. ⚠ 늦참 정책 (사장 08-12 밤 "앞에 꺼 다 씹어먹고
+   마지막 세 줄만"): 잠금화면에선 심장박동이 배경음 끝(최대 90초 간격)에만 뛰어 토막
+   중간에 붙게 된다. 말은 무조건 처음부터 — 3초 넘게 늦었으면 토막 시작으로 닻을 내리고,
+   밀린 시간은 아래 간극 건너뛰기가 따라잡는다. */
+function attachSeg(s, p) {
+  currentSeg = s.id;
+  au.src = s.url;
+  const late = (p - s.startAt) / 1000;
+  if (live && late > 3) {
+    live = false; anchor = { P0: s.startAt, t0: Date.now() };
+    au.currentTime = 0;
+  } else {
+    au.currentTime = Math.max(0, late);
+  }
+  tryPlay(au);
+  $('now').textContent = s.title;
+}
+
 function tick() {
-  if (!live && anchor && P() >= liveP() - 500) { live = true; anchor = null; }  // 과거 청취가 현재를 따라잡으면 라이브 복귀
+  if (!live && anchor) {
+    const pNow = P();
+    if (pNow >= liveP() - 500) { live = true; anchor = null; }   // 따라잡음 — 라이브 복귀
+    else if (playing && !segAt(pNow)) {
+      // 간극은 밀린 시간부터 삼킨다 — 다음 토막 직전(또는 라이브)까지 건너뛰어 따라잡는다.
+      // 과거 당겨 듣기에도 적용된다: 다시 듣기에 빈 공기는 필요 없다.
+      const nxt = segs.filter((x) => x.startAt > pNow).sort((a, b) => a.startAt - b.startAt)[0];
+      const target = Math.min(liveP(), nxt ? nxt.startAt - 2000 : liveP());
+      if (target > pNow + 1000) anchor = { P0: target, t0: Date.now() };
+    }
+  }
   const p = P();
   // 타임라인
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
