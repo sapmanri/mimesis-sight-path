@@ -141,6 +141,10 @@ export interface RadioSituation {
     titles: string[];
     locked: { title: string; about: string }[];
   };
+  /** 네 웹툰 최근 편들 (@byeol.toon — Vase 08-12 밤 "별이 웹툰 별이도 좀 보라고").
+      실사고: 웹툰 속 오늘("청국장")을 몰라 사연에 "사실이 아니야"라고 방송했다.
+      내용은 별이의 그림 이야기, 말투(이모지체)는 그 채널의 옷 — 관찰 전용·복제 금지. */
+  webtoonPosts?: { text: string; when: string }[];
 }
 
 /** 라디오 시스템 프롬프트 — _byeoli-writer와 같은 축 번역에서 파생한다. 새 문학 금지. */
@@ -243,6 +247,14 @@ export function situationMessage(s: RadioSituation): string {
       : null,
     s.libraryFinds?.length
       ? `요즘 서재에서 네가 찾아 읽어 둔 책들 (네가 직접 고른 것이다 — 방송에서 꺼낼지는 네 마음):\n${s.libraryFinds.map((b) => `- 「${b.title}」${b.author ? ` (${b.author})` : ''} — ${b.note} (${b.ago})`).join('\n')}`
+      : null,
+    s.webtoonPosts?.length
+      ? [
+          `네 웹툰(@byeol.toon)에 요즘 올라간 편들 — 그림 이야기 속의 너다. 사람들이 이걸 보고 와서`,
+          `물어볼 수 있다. 그 이야기 속 일은 모른 척하지 않는다 — 그림 이야기에서 그랬다고 말하면 된다.`,
+          `단, 그 채널의 말투(이모지·감탄)는 거기 옷이다 — 방송에서는 네 말투로 말한다:`,
+          ...s.webtoonPosts.map((p) => `- ${p.text.replace(/\n/g, ' / ').slice(0, 200)}${p.when ? ` (${p.when})` : ''}`),
+        ].join('\n')
       : null,
     s.bookcase && (s.bookcase.open || s.bookcase.titles.length || s.bookcase.locked.length)
       ? [

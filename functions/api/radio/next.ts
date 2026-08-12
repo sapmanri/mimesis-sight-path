@@ -12,6 +12,7 @@ import {
   type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
+import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
 import { timeLabelOf } from './draft.ts';
 
 interface Env { PLANET: KVNamespace; PULSE_KEY?: string; ANTHROPIC_API_KEY?: string }
@@ -50,9 +51,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
     env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get('radio:bookcase'),
+    env.PLANET.get(TOON_KEY),
   ]);
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
   const todayKst = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
@@ -119,6 +121,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     songShelf: songs.map((g) => ({ title: g.title })),
     libraryFinds,
     bookcase,
+    // 웹툰 최근 편 (08-12 밤 청국장 사건) — 최신 3편만. 읽는 손은 /api/radio/toon.
+    webtoonPosts: (toonRaw ? (JSON.parse(toonRaw) as { posts: ToonPost[] }).posts : []).slice(0, 3),
   };
 
   const written = await writeRadioScript(env, situation);
