@@ -50,7 +50,8 @@ const ACT_KO: Record<string, string> = { observe: '관찰', rest: '쉼', record:
 /* ═══ Genome → 프롬프트 번역 ═════════════════════════════════════
    각 축은 ID로 인용된다. 여기에 새 문학을 넣지 않는다 — 축에 없는 말은 쓰지 않는다. */
 
-const AXIS_KO: Record<string, Record<string, string>> = {
+// 라디오(_radio.ts)도 같은 번역표에서 파생한다 — 채널이 늘어도 게놈과 번역은 하나다 (08-12).
+export const AXIS_KO: Record<string, Record<string, string>> = {
   voice: { banmal: '반말로 쓴다. 존댓말 금지.', jondaetmal: '존댓말로 쓴다.' },
   selfPresence: {
     rare: '자기 자신은 드물게만 등장한다. 1인칭 대명사를 거의 쓰지 않는다.',
@@ -72,7 +73,7 @@ const AXIS_KO: Record<string, Record<string, string>> = {
   judgement: { low: '판단하거나 설명하지 않는다.', high: '판단을 분명히 적는다.' },
 };
 
-const FOCUS_KO: Record<string, string> = {
+export const FOCUS_KO: Record<string, string> = {
   light: '빛', shadow: '그림자', sound: '소리', movement: '움직임', texture: '질감',
   color: '색', temperature: '온도', object: '사물', quantity: '수량', position: '위치',
   person: '사람', action: '행동', result: '결과', structure: '구조', line: '선',
@@ -105,12 +106,12 @@ ${style}
 /* ═══ 출력 검증 — Vase 지정 5축 ═══════════════════════════════════
    기계로 잡히는 것만 잡는다. 여기서 잡히지 않는 것은 Judgment Contract(다음 빌드)의 몫이다. */
 
-const JONDAET = /(습니다|합니다|입니다|예요|이에요|네요|세요|십시오|해요)([\s.,!?…]|$)/;
+export const JONDAET = /(습니다|합니다|입니다|예요|이에요|네요|세요|십시오|해요)([\s.,!?…]|$)/;
 // 경계를 '소비'하면 인접한 다음 대명사를 놓친다("내가 나도" → 2개가 아니라 1개).
 // 한글 음절 룩어라운드로 경계만 확인한다 — "하나"·"안내"는 걸리지 않는다.
 // 교대 순서도 긴 것부터: `나`가 먼저면 "나는"이 잘린다.
-const SELF_PRONOUN_SRC = `(?<![가-힣])(나는|내가|나를|나도|나|내)(?![가-힣])`;
-const META_LEAK = /(#[^\s#]|[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|관찰일기|엽서의|targetLabel|diaryLines|JSON|시스템 프롬프트)/u;
+export const SELF_PRONOUN_SRC = `(?<![가-힣])(나는|내가|나를|나도|나|내)(?![가-힣])`;
+export const META_LEAK = /(#[^\s#]|[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|관찰일기|엽서의|targetLabel|diaryLines|JSON|시스템 프롬프트)/u;
 
 const words = (s: string) => s.replace(/[.,!?…"']/g, ' ').split(/\s+/).filter((w) => w.length > 1);
 
