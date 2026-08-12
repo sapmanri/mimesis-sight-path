@@ -2,96 +2,13 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>별리 라디오 — 사연 남기기</title>
-<style>
-  /* 별이 라디오 (가칭) — 밤의 접수창. 조용하게, 별이 세계의 톤으로. */
-  :root { --bg:#0b0e14; --card:#131826; --ink:#d7dce6; --dim:#8a93a6; --line:#242c40; --accent:#ffd9a0; }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    background: var(--bg); color: var(--ink);
-    font-family: 'Apple SD Gothic Neo', Pretendard, sans-serif;
-    min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
-  }
-  main { width: 100%; max-width: 460px; }
-  .star { font-size: 22px; margin-bottom: 14px; opacity: .9; }
-  h1 { font-size: 19px; font-weight: 600; margin-bottom: 8px; letter-spacing: -.2px; }
-  p.lead { color: var(--dim); font-size: 13.5px; line-height: 1.7; margin-bottom: 22px; }
-  textarea {
-    width: 100%; min-height: 170px; resize: vertical;
-    background: var(--card); color: var(--ink);
-    border: 1px solid var(--line); border-radius: 12px;
-    padding: 14px 16px; font: inherit; font-size: 14.5px; line-height: 1.8;
-  }
-  textarea:focus { outline: none; border-color: #3a4660; }
-  .row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
-  .count { color: var(--dim); font-size: 12px; }
-  button {
-    background: var(--accent); color: #201607; border: 0; border-radius: 10px;
-    padding: 10px 22px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
-  }
-  button:disabled { opacity: .45; cursor: default; }
-  .note { color: var(--dim); font-size: 12px; line-height: 1.7; margin-top: 18px; }
-  .msg { margin-top: 16px; font-size: 14px; line-height: 1.7; min-height: 22px; }
-  .msg.ok { color: var(--accent); }
-  .msg.err { color: #e08a8a; }
-  .hp { position: absolute; left: -9999px; }
-</style>
+<!-- 접수창은 스테이션 안의 화면이 됐다 (Vase 08-12: "방송 들으면서 사연 남기는 건데").
+     옛 주소는 살아 있어야 하니 그 화면으로 보낸다. -->
+<meta http-equiv="refresh" content="0; url=/station#letter">
+<script>location.replace('/station#letter');</script>
 </head>
-<body>
-<main>
-  <div class="star">✦</div>
-  <h1>별이에게 사연을 남겨 주세요</h1>
-  <p class="lead">여기는 별리(別里)의 작은 방송국, 별리 라디오예요.<br>
-  남겨 주신 이야기를 DJ 별이가 읽고, 자기가 본 것을 옆에 놓아 둡니다.<br>
-  <a href="/station" style="color:var(--accent);text-decoration:none">▶ 지금 방송 듣기</a></p>
-
-  <form id="f">
-    <textarea id="t" maxlength="1000" placeholder="요즘의 이야기를 편하게 적어 주세요. (10자 이상)"></textarea>
-    <input class="hp" type="text" name="hp" id="hp" tabindex="-1" autocomplete="off">
-    <div class="row">
-      <span class="count" id="c">0 / 1000</span>
-      <button id="b" type="submit">남기기</button>
-    </div>
-  </form>
-  <div class="msg" id="m"></div>
-
-  <p class="note">· 이름·연락처·링크 등 개인정보는 적지 말아 주세요 — 들어 있으면 접수되지 않아요.<br>
-  · 남긴 사연은 별이의 목소리로 읽혀 공개될 수 있어요.</p>
-</main>
-<script>
-  const t = document.getElementById('t'), c = document.getElementById('c'),
-        b = document.getElementById('b'), m = document.getElementById('m');
-  t.addEventListener('input', () => { c.textContent = t.value.length + ' / 1000'; });
-  const REASON = {
-    too_short: '조금만 더 적어 주세요. (10자 이상)',
-    too_long: '너무 길어요. 1000자 안으로 줄여 주세요.',
-    url: '링크는 넣을 수 없어요.',
-    email: '이메일 주소는 넣을 수 없어요.',
-    phone: '전화번호는 넣을 수 없어요.',
-    repeat_spam: '같은 글자가 너무 반복돼요.',
-    slow_down: '조금 있다가 다시 남겨 주세요.',
-  };
-  document.getElementById('f').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    b.disabled = true; m.className = 'msg'; m.textContent = '';
-    try {
-      const res = await fetch('/api/radio/story', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: t.value, hp: document.getElementById('hp').value }),
-      });
-      const out = await res.json().catch(() => ({}));
-      if (res.ok && out.ok) {
-        m.className = 'msg ok'; m.textContent = '남겨졌어요. 별이가 읽을 거예요.';
-        t.value = ''; c.textContent = '0 / 1000';
-      } else {
-        m.className = 'msg err'; m.textContent = REASON[out.error] || '지금은 남길 수 없어요. 잠시 후에 다시 해주세요.';
-      }
-    } catch {
-      m.className = 'msg err'; m.textContent = '연결이 잠깐 끊겼어요. 다시 한 번 눌러 주세요.';
-    } finally { b.disabled = false; }
-  });
-</script>
+<body style="background:#08090b;color:#8a93a6;font-family:sans-serif;padding:40px">
+<a href="/station#letter" style="color:#ffd9a0">별리 라디오 — 사연 남기기 화면으로</a>
 </body>
 </html>
