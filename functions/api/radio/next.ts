@@ -99,8 +99,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // 우리 책장 (Vase 08-12 밤) — 한 편은 펼쳐 두고, 나머지는 등이 보이게 꽂아 둔다.
   // 제목이 너무 많으면 상황이 게시판이 된다 — 등 보이는 건 8권만 무작위로.
+  // ⚠ 같은 원고 재낭독 사고(08-12 밤, 40분 만에 두 번 — 사장 "너무 사실적이라 문제"):
+  // **낭독된** 편만 24시간 제외한다. "펼쳤던 편 전부 제외"는 후보 12편이 저녁 안에 바닥나
+  // 도로 무력화된다 — 제외는 실제로 읽힌 것에만. 낭독 판별은 아래 방송 원고 검사에서.
+  const READ_KEY = 'radio:bookcase:read';
+  const readRaw = await env.PLANET.get(READ_KEY);
+  const readList: { title: string; at: number }[] = (readRaw ? JSON.parse(readRaw) : [])
+    .filter((x: { at: number }) => Date.now() - x.at < 24 * 3_600_000);
   const bookcasePieces: BookcasePiece[] = bookcaseRaw ? JSON.parse(bookcaseRaw) : [];
-  const openPiece = pickBookcasePiece(bookcasePieces);
+  const openPiece = pickBookcasePiece(bookcasePieces, Math.random, readList.map((x) => x.title));
   const bookcase = bookcasePieces.length ? {
     open: openPiece,
     titles: bookcasePieces
@@ -131,6 +138,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const storyRead = !!story && !written.warnings.some((w) => w.startsWith('story_not_read'));
   const id = story?.id ?? `solo-${Date.now().toString(36)}`;
   if (story && storyRead) { story.status = 'used'; await saveQueue(); }
+
+  // 낭독 판별 — 펼쳐진 원고의 첫머리가 방송 원고에 실려 있으면 "읽힌 것"으로 적는다.
+  // 공백·줄바꿈 차이를 지우고 대조한다 (LLM이 행갈이를 바꿔 읽어도 잡히게).
+  if (openPiece) {
+    const squash = (x: string) => x.replace(/\s+/g, '');
+    if (squash(written.script).includes(squash(openPiece.text).slice(0, 24))) {
+      await env.PLANET.put(READ_KEY, JSON.stringify(
+        [{ title: openPiece.title, at: Date.now() }, ...readList].slice(0, 30)));
+    }
+  }
 
   // 별이가 고른 곡을 서가와 대조 — 서가에 없는 제목은 방송에 못 나간다 (경고만 남긴다)
   const picked = written.songTitle

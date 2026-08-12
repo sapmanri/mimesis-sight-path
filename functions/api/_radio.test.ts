@@ -140,6 +140,11 @@ test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독
   assert.equal(picked?.title, '봄바람');
   // 음성: 전부 부적격이면 안 펼친다 — 억지로 펼치지 않는다
   assert.equal(pickBookcasePiece(pieces.slice(1), () => 0), null);
+  // 재낭독 방지 (08-12 밤 실사고: 같은 원고 40분 만에 두 번): 낭독된 편은 제외된다
+  const two = [...pieces, { title: '두번째', kind: '잠깐멈춰', text: '창가에 볕이 오래 머물다 갔다. 그 자리만 따뜻했다.' }];
+  assert.equal(pickBookcasePiece(two, () => 0, ['봄바람'])?.title, '두번째');
+  // 전부 낭독됐으면 제외를 풀고 고른다 — 빈 책장보다 재회가 낫다
+  assert.equal(pickBookcasePiece(two, () => 0, ['봄바람', '두번째'])?.title, '봄바람');
   // 상황 메시지: 낭독 허락이 명시되고, 잠긴 원고는 제목·소개만 나온다 (본문 노출 없음)
   const s: RadioSituation = {
     timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],

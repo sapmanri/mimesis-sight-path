@@ -285,12 +285,18 @@ export interface BookcasePiece { title: string; kind: string; text?: string; loc
     고름은 무작위 — 매일 다른 원고가 펼쳐져 있어야 책장이지 게시판이 아니다. */
 export function pickBookcasePiece(
   pieces: BookcasePiece[], rand: () => number = Math.random,
+  // 최근 펼쳤던 편은 다시 안 펼친다 (08-12 밤 실사고: 같은 원고를 40분 만에 두 번 낭독 —
+  // 사장 "너무 사실적이라 문제". 며칠 뒤 다시 꺼내는 건 자연스러우니 하루 창만 막는다.
+  // 다 제외되면 제외를 풀고 고른다 — 빈 책장보다는 재회가 낫다.)
+  exclude: string[] = [],
 ): { title: string; text: string } | null {
-  const open = pieces.filter((p) => !p.locked && p.text && !JONDAET.test(p.text)
+  const openable = pieces.filter((p) => !p.locked && p.text && !JONDAET.test(p.text)
     && !new RegExp(SELF_PRONOUN_SRC).test(p.text)
     && !META_LEAK.test(p.text));
-  if (!open.length) return null;
-  const p = open[Math.floor(rand() * open.length)];
+  const fresh = openable.filter((p) => !exclude.includes(p.title));
+  const pool = fresh.length ? fresh : openable;
+  if (!pool.length) return null;
+  const p = pool[Math.floor(rand() * pool.length)];
   return { title: p.title, text: p.text! };
 }
 
