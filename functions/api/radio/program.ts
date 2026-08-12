@@ -20,7 +20,23 @@ const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r6', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r7', now: Date.now(), segments });
+};
+
+/** 키 인증 삭제 — id+startAt로 정확히 하나만 (같은 id가 사고로 둘일 수 있다 — 08-12 전파 반절 실사고) */
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
+  if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
+  if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
+  const u = new URL(request.url);
+  const id = u.searchParams.get('id');
+  const startAt = Number(u.searchParams.get('startAt'));
+  if (!id || !Number.isFinite(startAt)) return json(400, { ok: false, error: 'id_and_startAt_required' });
+  const raw = await env.PLANET.get(PROGRAM_KEY);
+  const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
+  const next = segments.filter((s) => !(s.id === id && s.startAt === startAt));
+  if (next.length === segments.length) return json(404, { ok: false, error: 'not_found' });
+  await env.PLANET.put(PROGRAM_KEY, JSON.stringify(next));
+  return json(200, { ok: true, removed: segments.length - next.length, count: next.length });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
