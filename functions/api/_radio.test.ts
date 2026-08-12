@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mechanicalFilter, parseModeration, radioSystemPrompt, validateRadioScript, situationMessage,
-  parseScriptAndVoice, parseTrailingTags, type RadioSituation,
+  parseScriptAndVoice, parseTrailingTags, pickBookcasePiece, type RadioSituation,
 } from './_radio.ts';
 import { timeLabelOf } from './radio/draft.ts';
 
@@ -124,6 +124,36 @@ test('[노래:] 곡 선택 분리 — 순서 무관·중간 태그는 무시·�
   // 음성: 태그가 없으면 전부 기본값
   const none = parseTrailingTags('그냥 본문.');
   assert.deepEqual([none.songTitle, none.voiceNote], [null, null]);
+});
+
+// 우리 책장 (Vase 08-12 밤): 우리 원고는 낭독이 허락 — 잠긴 원고는 제목만
+test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독 허락 문구', () => {
+  const pieces = [
+    { title: '봄바람', kind: '잠깐멈춰', text: '봄바람은 꽃보다 먼저 와서 마음을 흔들고 간다. 그래서 계절이 온다.' },
+    { title: '존댓말 편', kind: '잠깐멈춰', text: '마음이 놓입니다. 그렇게 살아요.' },
+    { title: '일인칭 편', kind: '잠깐멈춰', text: '나는 오래 서 있었다. 그늘이 좋았다.' },
+    { title: '이모지 편', kind: '잠깐멈춰', text: '마음이 반짝인다 ✨ 그렇게 남는다.' },
+    { title: '남겨둔 것들', kind: '장편소설', locked: true, about: '아직 안 나온 장편' },
+  ];
+  // 검증을 깨뜨릴 편(존댓말·1인칭·이모지)과 잠긴 편은 펼침 후보에서 빠진다 → 봄바람만 남는다
+  const picked = pickBookcasePiece(pieces, () => 0);
+  assert.equal(picked?.title, '봄바람');
+  // 음성: 전부 부적격이면 안 펼친다 — 억지로 펼치지 않는다
+  assert.equal(pickBookcasePiece(pieces.slice(1), () => 0), null);
+  // 상황 메시지: 낭독 허락이 명시되고, 잠긴 원고는 제목·소개만 나온다 (본문 노출 없음)
+  const s: RadioSituation = {
+    timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
+    bookcase: {
+      open: { title: '봄바람', text: '봄바람은 꽃보다 먼저 와서 마음을 흔들고 간다.' },
+      titles: ['질투', '미니멀'],
+      locked: [{ title: '남겨둔 것들', about: '아직 안 나온 장편' }],
+    },
+  };
+  const msg = situationMessage(s);
+  assert.match(msg, /낭독이 허락/);
+  assert.match(msg, /「봄바람」 전문/);
+  assert.match(msg, /「질투」 · 「미니멀」/);
+  assert.match(msg, /아직 못 꺼내는 원고.*「남겨둔 것들」 — 아직 안 나온 장편/);
 });
 
 test('시간대 라벨', () => {

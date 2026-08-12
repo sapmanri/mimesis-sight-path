@@ -8,8 +8,8 @@
 // 대기열에 남는다). 검열 거절 사연은 표시하고 이번 틱은 혼자 논다.
 
 import {
-  RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript,
-  type RadioStory, type RadioDraft, type RadioSituation,
+  RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript, pickBookcasePiece,
+  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { timeLabelOf } from './draft.ts';
@@ -50,9 +50,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
-    env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY),
+    env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get('radio:bookcase'),
   ]);
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
   const todayKst = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
@@ -95,6 +95,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     title: b.title, author: b.author, note: b.note, ago: agoLabel(b.at),
   }));
 
+  // 우리 책장 (Vase 08-12 밤) — 한 편은 펼쳐 두고, 나머지는 등이 보이게 꽂아 둔다.
+  // 제목이 너무 많으면 상황이 게시판이 된다 — 등 보이는 건 8권만 무작위로.
+  const bookcasePieces: BookcasePiece[] = bookcaseRaw ? JSON.parse(bookcaseRaw) : [];
+  const openPiece = pickBookcasePiece(bookcasePieces);
+  const bookcase = bookcasePieces.length ? {
+    open: openPiece,
+    titles: bookcasePieces
+      .filter((p) => !p.locked && p.title !== openPiece?.title)
+      .sort(() => Math.random() - 0.5).slice(0, 8).map((p) => p.title),
+    locked: bookcasePieces.filter((p) => p.locked)
+      .map((p) => ({ title: p.title, about: p.about ?? '' })),
+  } : undefined;
+
   const hour = Number(new Date(Date.now() + 9 * 3_600_000).toISOString().slice(11, 13));
   const situation: RadioSituation = {
     timeLabel: timeLabelOf(hour),
@@ -105,6 +118,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     comicBits,
     songShelf: songs.map((g) => ({ title: g.title })),
     libraryFinds,
+    bookcase,
   };
 
   const written = await writeRadioScript(env, situation);

@@ -133,6 +133,14 @@ export interface RadioSituation {
   /** 서재 산책 발견 — 별이가 웹에서 직접 찾아 읽고 서가에 둔 책들 (Vase 08-12 밤: 인터넷 개방 1분야).
       실물은 KV(radio:library:shelf), 산책은 /api/radio/library. 방송에서 꺼낼지는 별이가 정한다. */
   libraryFinds?: { title: string; author: string; note: string; ago: string }[];
+  /** 우리 책장 — 이 집 사람(사장)이 쓴 원고들 (Vase 08-12 밤: "자꾸 우리 꺼에도 관심을 가질 수
+      있게 열어줘야 해". 우리 글이라 낭독이 허락되어 있다). open은 이번 틱에 펼쳐진 한 편(전문),
+      titles는 꽂혀 있는 나머지, locked는 아직 못 꺼내는 원고(제목·소개만 — 미발표작 보호). */
+  bookcase?: {
+    open: { title: string; text: string } | null;
+    titles: string[];
+    locked: { title: string; about: string }[];
+  };
 }
 
 /** 라디오 시스템 프롬프트 — _byeoli-writer와 같은 축 번역에서 파생한다. 새 문학 금지. */
@@ -236,10 +244,42 @@ export function situationMessage(s: RadioSituation): string {
     s.libraryFinds?.length
       ? `요즘 서재에서 네가 찾아 읽어 둔 책들 (네가 직접 고른 것이다 — 방송에서 꺼낼지는 네 마음):\n${s.libraryFinds.map((b) => `- 「${b.title}」${b.author ? ` (${b.author})` : ''} — ${b.note} (${b.ago})`).join('\n')}`
       : null,
+    s.bookcase && (s.bookcase.open || s.bookcase.titles.length || s.bookcase.locked.length)
+      ? [
+          `너희 집 책장 — 이 방 사람이 쓴 원고들이다. 우리 글이라 낭독이 허락되어 있다:`,
+          `마음이 가면 방송에서 이야기해도, 몇 문장 소리 내어 읽어도 된다. 안 꺼내도 된다.`,
+          s.bookcase.open
+            ? `오늘 책장에 펼쳐져 있는 한 편 — 「${s.bookcase.open.title}」 전문:\n${s.bookcase.open.text}`
+            : null,
+          s.bookcase.titles.length ? `꽂혀 있는 다른 원고들: ${s.bookcase.titles.map((t) => `「${t}」`).join(' · ')}` : null,
+          s.bookcase.locked.length
+            ? `아직 못 꺼내는 원고 (제목만 안다): ${s.bookcase.locked.map((l) => `「${l.title}」 — ${l.about}`).join(' / ')}`
+            : null,
+        ].filter(Boolean).join('\n')
+      : null,
     s.recentScripts.length
       ? `최근 방송에서 이미 한 말들 (같은 소재·문형 반복 금지):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 160)}`).join('\n')}`
       : null,
   ].filter(Boolean).join('\n\n');
+}
+
+/** 책장 원고 한 조각 (제목·본문). 실물은 KV(radio:bookcase), 채우는 손은 byeol-radio/bookcase-sync.sh. */
+export interface BookcasePiece { title: string; kind: string; text?: string; locked?: boolean; about?: string }
+
+/** 이번 틱에 펼칠 한 편 — 별이가 인용하면 그 문장이 별이의 말로 검증에 잡힌다
+    (사연과 달리 인용문 공제가 없다 — 조율거리). 그래서 검증을 깨뜨릴 수 있는 편은
+    후보에서 뺀다: 존댓말(voice_drift) · 1인칭(웃돌면 self none/rare 상한을 인용문이 잠식 —
+    계약이 none이면 하나로도 죽으므로 0개 편만) · 메타 누출. 후보 풀 크기는 동기화 때 실측.
+    고름은 무작위 — 매일 다른 원고가 펼쳐져 있어야 책장이지 게시판이 아니다. */
+export function pickBookcasePiece(
+  pieces: BookcasePiece[], rand: () => number = Math.random,
+): { title: string; text: string } | null {
+  const open = pieces.filter((p) => !p.locked && p.text && !JONDAET.test(p.text)
+    && !new RegExp(SELF_PRONOUN_SRC).test(p.text)
+    && !META_LEAK.test(p.text));
+  if (!open.length) return null;
+  const p = open[Math.floor(rand() * open.length)];
+  return { title: p.title, text: p.text! };
 }
 
 /** 실패(키 없음·계약 실패·검증 실패) 시 null — 폴백 없음. 라디오는 게놈 아니면 침묵한다. */
