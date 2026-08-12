@@ -450,7 +450,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       observationId: observationIdOf('autopost', runId, usedCapture.captureId ?? usedCapture.r2Key ?? null, usedCapture.capturedAt ?? post.t),
       source: 'autopost',
       sourceRunId: runId,
-      observedAt: usedCapture.capturedAt ?? post.t,
+      // ⚠ 실사고 08-05·08-11 (Vase 승인 08-12: 한 줄 수리): 원본 촬영 시각(capturedAt)으로
+      //   소급하면 옛 엽서 재사용일엔 그날짜 관찰이 안 쌓여 야간 폴딩이 굶는다. 이 기록은
+      //   "이미 발행에 사용한 문맥의 영수증"(_capture-meta.ts 계약) — 영수증의 시각은 행동
+      //   시각이다. 사진의 원촬영 시각은 r2Key 원본 메타에 그대로 남아 있다.
+      observedAt: post.t,
       r2Key: usedCapture.r2Key ?? null,
       photoKey: usedCapture.r2Key ?? null,
       skyPhase: usedCapture.skyPhase ?? null,
