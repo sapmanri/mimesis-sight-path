@@ -31,13 +31,16 @@
   .liveBtn.on { color:var(--accent); border-color:var(--accent); }
   .foot { margin-top:20px; font-size:12.5px; color:var(--dim); }
   .foot a { color:var(--accent); text-decoration:none; }
-  /* 글자 방송 — 못 듣는 청취자를 위한 프롬프터 (Vase 08-12) */
-  .script { margin-top:16px; background:var(--card); border:1px solid var(--line); border-radius:16px;
-            padding:18px 20px; min-height:120px; max-height:260px; overflow-y:auto;
-            font-size:14.5px; line-height:2; }
-  .script p { color:#3a4258; transition:color .8s; margin:0 0 4px; }
-  .script p.said { color:var(--ink); }
-  .script .empty { color:var(--dim); font-size:13px; }
+  /* 글자 방송 — 레트로 문자 방송 (Vase 08-12: "글자들 많이 보이게, 좀 레트로틱하게") */
+  .script { margin-top:16px; background:#0a0c10; border:1px solid var(--line); border-radius:16px;
+            padding:26px 28px; min-height:240px; max-height:56vh; overflow-y:auto;
+            font-family:ui-monospace, Menlo, 'Apple SD Gothic Neo', monospace;
+            font-size:18px; line-height:2.15; letter-spacing:.04em;
+            background-image:repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,217,160,.016) 3px 4px); }
+  .script p { color:#333c52; transition:color 1.2s, text-shadow 1.2s; margin:0 0 10px; }
+  .script p.said { color:var(--accent); text-shadow:0 0 10px rgba(255,217,160,.35); }
+  .script p.said::before { content:'▸ '; opacity:.5; }
+  .script .empty { color:var(--dim); font-size:14px; font-family:inherit; }
 </style>
 </head>
 <body>

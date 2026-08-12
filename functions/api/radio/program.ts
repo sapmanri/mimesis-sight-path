@@ -20,7 +20,7 @@ const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r5', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r6', now: Date.now(), segments });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -37,6 +37,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const now = Date.now();
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
+
+  // 같은 id 재등록 = 병합 — 자리(startAt)는 안 움직이고 대본·제목·연출만 갱신한다.
+  // (08-12: 자막 기능 이전에 등록된 토막들에 대본을 소급 주입하는 길)
+  const existing = typeof body.id === 'string' ? segments.find((s) => s.id === body.id) : undefined;
+  if (existing) {
+    if (typeof body.script === 'string') existing.script = body.script.slice(0, 2000);
+    if (typeof body.title === 'string' && body.title) existing.title = body.title.slice(0, 60);
+    if (typeof body.voiceNote === 'string') existing.voiceNote = body.voiceNote.slice(0, 60);
+    if (typeof body.dj === 'string' && body.dj) existing.dj = body.dj.slice(0, 20);
+    await env.PLANET.put(PROGRAM_KEY, JSON.stringify(segments));
+    return json(200, { ok: true, id: existing.id, merged: true, startAt: existing.startAt, count: segments.length });
+  }
+
   const seg: ProgramSegment = {
     id: typeof body.id === 'string' && body.id ? body.id.slice(0, 40) : `seg-${now.toString(36)}`,
     kind: body.kind as SegmentKind,
