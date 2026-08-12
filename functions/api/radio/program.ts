@@ -36,7 +36,7 @@ const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r7', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r8', now: Date.now(), segments });
 };
 
 /** 키 인증 삭제 — id+startAt로 정확히 하나만 (같은 id가 사고로 둘일 수 있다 — 08-12 전파 반절 실사고) */
@@ -78,6 +78,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (typeof body.title === 'string' && body.title) existing.title = body.title.slice(0, 60);
     if (typeof body.voiceNote === 'string') existing.voiceNote = body.voiceNote.slice(0, 60);
     if (typeof body.dj === 'string' && body.dj) existing.dj = body.dj.slice(0, 20);
+    // 소리 교체 재굽기(같은 R2 키에 새 소리)를 위해 dur도 병합 — 자리는 여전히 불변 (08-12)
+    if (Number.isFinite(dur) && dur > 0 && dur <= 1800) existing.dur = dur;
     await env.PLANET.put(PROGRAM_KEY, JSON.stringify(segments));
     await archiveWrite(env, existing);
     return json(200, { ok: true, id: existing.id, merged: true, startAt: existing.startAt, count: segments.length });
