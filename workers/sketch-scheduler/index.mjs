@@ -24,6 +24,10 @@ const TIME_BUDGET_MS = 12 * 60_000; // scheduled 핸들러 벽시계 한도 안�
 const BACKOFF_S = [3, 8, 15, 30, 45, 60, 90, 120]; // 콜 사이 대기 — 혼잡 구간을 넘긴다
 
 export function terminalResult(status, body) {
+  // ⚠ 실사고 2026-08-11 밤: 접힌 적 없는 전날을 심야 재시도가 400 not_folded로 24번(두 크론
+  //   ×12콜) 두드리며 밤을 태웠다. 「과거 하루를 새로 접지 않는다」가 엔드포인트 계약이므로
+  //   not_folded는 재시도가 절대 살릴 수 없는 종결이다 — 즉시 멈춘다 (영수증 경로는 탄다).
+  if (status === 400 && typeof body?.error === 'string' && body.error.startsWith('not_folded')) return 'not_folded';
   if (!(status >= 200 && status < 300) || !body || body.failed === true) return null;
   if (body.done === true) return 'done';
   if (body.skipped === 'human_day' || body.skipped === 'no_observations') return body.skipped;
@@ -83,6 +87,13 @@ async function run(env, scheduledTime) {
     // 증명된 사람 접기와 관찰 없음만 정당한 종료다. ownership_unknown은 사고/수동 확인 대상.
     if (terminalResultKind === 'human_day' || terminalResultKind === 'no_observations') {
       terminal = true;
+      break;
+    }
+    // not_folded: 재시도 무익 — 루프만 끊고 terminal=false로 둔다. 아래 영수증 경로가 돌아
+    // 전날 reco가 아예 없으면(본진 무실행) 실패 영수증이 경보가 되고, 정직한 건너뜀이
+    // 이미 있으면 서버 가드가 지켜준다(sketch-daily 영수증 핸들러 참조).
+    if (terminalResultKind === 'not_folded') {
+      log.push('not_folded_terminal');
       break;
     }
     // 5xx·비JSON·failed·ownership_unknown·partial은 상한까지 재시도한다.

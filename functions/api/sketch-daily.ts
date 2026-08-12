@@ -67,6 +67,17 @@ export function foldedDayDecision(
   if (day.foldedBy === 'human') return 'human_day';
   return 'ownership_unknown';
 }
+
+/** 스케줄러 소진 영수증이 덮으면 안 되는 기존 기록 판별 (08-11 실사고의 가드) */
+export interface HonestRecoLike { skipped?: unknown; status?: unknown; picks?: unknown }
+export function recoIsHonestTerminal(reco: HonestRecoLike | null): boolean {
+  if (!reco) return false;
+  // 건너뜀 3종(no_observations·human_day·ownership_unknown)은 전부 진단 가치가 있다 —
+  // ownership_unknown도 「수동 확인 필요」라는 정보라 소진 영수증보다 낫다.
+  if (typeof reco.skipped === 'string' && reco.skipped) return true;
+  if (reco.status === 'done') return true;
+  return Array.isArray(reco.picks) && reco.picks.length >= 3;
+}
 const DAILY_MODEL = '@cf/black-forest-labs/flux-2-dev';
 // steps 12 = 품질 판정값 (07-21 심야, "하고하고 또 해서" 결정) — 품질값은 상수다.
 // 07-24 실증: 실패 원인은 스텝이 아니라 30초 클라이언트가 생성 도중 끊은 것.
@@ -205,6 +216,15 @@ async function handleDaily(
   // Worker에 PLANET 바인딩이라는 두 번째 진실을 만들지 않는다.
   if (request.headers.get('X-Scheduler-Receipt') === 'failed') {
     const now = Date.now();
+    // ⚠ 실사고 2026-08-11 밤(08-05에도 동일): 본진이 남긴 정직한 no_observations 영수증을
+    //   심야 재시도의 「스케줄러 소진」 영수증이 덮어써 진단이 사라졌다 — 아침 감시자가
+    //   상류 결함(관찰 없음) 대신 엉뚱한 실패를 보고했다. 정당한 종료 기록은 실패 영수증보다
+    //   진실에 가깝다 — 지우지 않는다. partial·failed·무기록만 소진 영수증으로 덮는다.
+    const prevRecoRaw = await env.PLANET.get(RECO_KEY(date));
+    const prevReco = prevRecoRaw ? JSON.parse(prevRecoRaw) as HonestRecoLike : null;
+    if (recoIsHonestTerminal(prevReco)) {
+      return json(200, { ok: true, receipt: 'kept', kept: prevReco });
+    }
     const priorRaw = await env.PLANET.get(RUN_KEY(date));
     const prior = priorRaw ? JSON.parse(priorRaw) as DailyRun : null;
     const runId = prior?.runId ?? `${date}-${now.toString(36)}`;

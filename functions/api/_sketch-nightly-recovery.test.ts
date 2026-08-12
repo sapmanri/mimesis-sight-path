@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { foldedDayDecision } from './sketch-daily.ts';
+import { foldedDayDecision, recoIsHonestTerminal } from './sketch-daily.ts';
 import { buildImagePrompt, NIGHTLY_POSE_VARIANTS, type MemoryEvent } from './_daily-sketch.ts';
 import { terminalResult, missionFor, kstDateStr } from '../../workers/sketch-scheduler/index.mjs';
 
@@ -22,6 +22,31 @@ test('scheduler는 성공과 증명된 skip에서만 종료한다', () => {
   assert.equal(terminalResult(500, { done: true }), null);
   assert.equal(terminalResult(200, { failed: true }), null);
   assert.equal(terminalResult(200, null), null);
+});
+
+// ⚠ 실사고 2026-08-11 밤: 접힌 적 없는 전날을 재시도 크론 둘이 400 not_folded로 24번
+// 두드리며 밤을 태웠다. 과거 하루는 새로 접지 않는 게 계약 — 이 응답은 재시도 불가 종결이다.
+test('접힌 적 없는 날의 재시도는 not_folded에서 즉시 종결한다', () => {
+  assert.equal(terminalResult(400, { ok: false, error: 'not_folded: 2026-08-11 — 재시도 전용' }), 'not_folded');
+  // 음성: 다른 400(bad_date)·불명 5xx·비JSON은 여전히 재시도 대상이다
+  assert.equal(terminalResult(400, { ok: false, error: 'bad_date' }), null);
+  assert.equal(terminalResult(500, { error: 'not_folded: x' }), null);
+  assert.equal(terminalResult(400, null), null);
+});
+
+// ⚠ 실사고 2026-08-11 밤(08-05 동일): 본진의 정직한 no_observations 영수증을 심야 재시도의
+// 「스케줄러 소진」이 덮어써 아침 감시자가 상류 결함 대신 엉뚱한 실패를 보고했다.
+test('소진 영수증은 정당한 종료 기록을 덮지 않는다', () => {
+  assert.equal(recoIsHonestTerminal({ skipped: 'no_observations' }), true);
+  assert.equal(recoIsHonestTerminal({ skipped: 'human_day' }), true);
+  assert.equal(recoIsHonestTerminal({ skipped: 'ownership_unknown' }), true);
+  assert.equal(recoIsHonestTerminal({ status: 'done', picks: [1, 2, 3] }), true);
+  assert.equal(recoIsHonestTerminal({ picks: [1, 2, 3] }), true);
+  // 음성: 무기록·부분 진행·실패 기록은 소진 영수증이 덮어야 한다 (그게 최종 상태다)
+  assert.equal(recoIsHonestTerminal(null), false);
+  assert.equal(recoIsHonestTerminal({ status: 'partial', picks: [1] }), false);
+  assert.equal(recoIsHonestTerminal({ status: 'failed', failed: true }), false);
+  assert.equal(recoIsHonestTerminal({ skipped: '' }), false);
 });
 
 test('야간 3장은 같은 기억을 서로 다른 능동 포즈로 그린다', () => {
