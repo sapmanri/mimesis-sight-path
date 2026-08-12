@@ -2,14 +2,18 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>별리라됴</title>
 <!-- 공유·파비콘·PWA 패키지 (Vase 08-12 밤) — 로고 정본은 design/make-logo.py, 손으로 안 그린다 -->
 <link rel="icon" type="image/png" sizes="64x64" href="/brand/logo-byeolliradyo-dot-64.png">
 <link rel="icon" type="image/png" sizes="128x128" href="/brand/logo-byeolliradyo-dot-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/brand/logo-byeolliradyo-180.png">
 <link rel="manifest" href="/radio.webmanifest">
-<meta name="theme-color" content="#141414">
+<meta name="theme-color" content="#08090b">
+<!-- 홈 화면 앱의 상태바 — 이 두 줄이 없으면 시계 뒤가 흰색으로 남는다 (사장 실견 08-12 밤).
+     black-translucent = 페이지가 상태바 밑까지 깔린다. 위쪽 안전영역 패딩은 body에서. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta property="og:type" content="website">
 <meta property="og:title" content="별리라됴">
 <meta property="og:description" content="별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송">
@@ -31,8 +35,9 @@
   body { background:radial-gradient(ellipse at 50% 30%, #101114, #08090b 70%); color:var(--ink);
          font-family:'Apple SD Gothic Neo',Pretendard,sans-serif;
          min-height:100vh; min-height:100dvh; display:flex; align-items:center; justify-content:center;
-         /* 아이폰 사파리 아랫바가 화면 끝을 덮는다 — 안전영역만큼 밀어 준다 (Vase 08-12 밤) */
-         padding:24px; padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px)); }
+         /* 아이폰 안전영역 — 아래는 사파리 바, 위는 홈 화면 앱의 상태바(시계) 자리 (Vase 08-12 밤) */
+         padding:24px; padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px));
+         padding-top:calc(24px + env(safe-area-inset-top, 0px)); }
   main { width:100%; max-width:540px; }
   /* 헤더 두 단 (Vase 08-12 밤 "정렬을 좀 잘하던가"): 좁은 화면에서 소개문이 로고와 단추
      사이 좁은 기둥에 끼어 3~4줄로 접히던 판을 폐기 — 1행 로고·제목·단추, 2행 소개문 전폭 */
@@ -385,7 +390,10 @@ au.addEventListener('ended', liveAdvance);
 $('play').onclick = () => {
   playing = !playing;
   $('play').textContent = playing ? '❚❚' : '▶';
-  if (!playing) { au.pause(); amb.pause(); currentSeg = null; $('state').textContent = ''; }
+  if (!playing) {
+    au.pause(); amb.pause(); currentSeg = null; $('state').textContent = '';
+    checkVersion();   // 멈춘 김에 — 새 판이 나와 있으면 이 참에 갈아입는다
+  }
 };
 $('bar').oninput = () => {
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
@@ -519,6 +527,30 @@ setInterval(() => {   // 30초 안에 올 다음 토막을 미리 받아둔다
   const nxt = segs.find((x) => x.startAt > p && x.startAt - p < 30000);
   if (nxt && pre.src !== nxt.url) pre.src = nxt.url;
 }, 5000);
+
+/* 배포 자동 갈아입기 (사장 08-12 밤 "바로바로 해") — 옛 탭이 옛 버그를 무는 문제의 종결.
+   페이지 지문(ETag)을 1분마다 보고 새 판이 나왔으면 스스로 새로고침한다.
+   단 재생 중엔 절대 안 갈아입는다 — 방송을 끊는 새로고침은 라디오가 아니다.
+   멈추는 순간 1분 안에 갈아입는다. 지문이 콜로마다 잠깐 다를 수 있어 시간당 1회 상한. */
+let pageTag = null, reloadPending = false;
+async function checkVersion() {
+  try {
+    const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+    const t = r.headers.get('etag') || r.headers.get('last-modified');
+    if (!t) return;
+    if (pageTag === null) { pageTag = t; return; }
+    if (t !== pageTag) reloadPending = true;
+    if (reloadPending && !playing) {
+      const last = Number(sessionStorage.getItem('reloadedAt') || 0);
+      if (Date.now() - last > 3600000) {
+        sessionStorage.setItem('reloadedAt', String(Date.now()));
+        location.reload();
+      }
+    }
+  } catch {}
+}
+setInterval(checkVersion, 60000);
+checkVersion();
 
 loadProgram();
 setInterval(loadProgram, 60000);
