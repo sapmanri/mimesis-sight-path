@@ -258,9 +258,9 @@ function tick() {
   } else {
     if (currentSeg !== null) { currentSeg = null; au.pause(); }
     if (amb.paused) amb.play().catch(() => {});
-    // 안내 문구 없음 (Vase 08-12: "방송은 계속 중이고, 마이크 앞에 별이가 없을 뿐.
-    // 별이는 저기에서 살고 있는") — 방 소리만 낮게 흐른다. 카운트다운은 대기열이지 방송이 아니다.
-    $('now').textContent = '···';
+    // 안내·카운트다운 없음 (Vase 08-12: "마이크 앞에 별이가 없을 뿐, 별이는 저기 살고 있는").
+    // 대신 방 이름표는 걸어둔다 — 라이브 대기 중 위가 비면 이상하다 (사장 08-12 밤).
+    $('now').textContent = '별리의 방 — 방송 중';
     $('state').textContent = '';
   }
 }
