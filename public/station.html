@@ -34,15 +34,18 @@
          /* 아이폰 사파리 아랫바가 화면 끝을 덮는다 — 안전영역만큼 밀어 준다 (Vase 08-12 밤) */
          padding:24px; padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px)); }
   main { width:100%; max-width:540px; }
-  .brand { display:flex; align-items:center; gap:14px; margin-bottom:26px; }
-  .brand img { width:52px; height:52px; border-radius:12px; flex:none; }
-  .brand .grow { flex:1; min-width:0; }
+  /* 헤더 두 단 (Vase 08-12 밤 "정렬을 좀 잘하던가"): 좁은 화면에서 소개문이 로고와 단추
+     사이 좁은 기둥에 끼어 3~4줄로 접히던 판을 폐기 — 1행 로고·제목·단추, 2행 소개문 전폭 */
+  .brand { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+  .brand img { width:44px; height:44px; border-radius:11px; flex:none; }
+  .brand h1 { flex:1; min-width:0; }
   .nav { display:flex; gap:8px; flex:none; }
   .nav a { color:var(--accent); text-decoration:none; font-size:12px; border:1px solid #4d4133;
            border-radius:8px; padding:5px 10px; white-space:nowrap; }
   @media (max-height:760px) { .script { height:38vh; } }
-  h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; margin-bottom:4px; }
+  h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; }
   .sub { color:var(--dim); font-size:12.5px; }
+  .brandsub { margin-bottom:24px; line-height:1.65; }
   /* 라디오 몸통 — 위에서 빛 받는 갈색 케이스 */
   .deck { background:linear-gradient(175deg, var(--body1), var(--body2) 80%);
           border:1px solid #3d3225; border-top-color:#55462f; border-radius:20px;
@@ -150,12 +153,10 @@
 <main>
   <div class="brand">
     <img src="/brand/logo-byeolliradyo-192.png" alt="별리라됴">
-    <div class="grow">
-      <h1>별리 라디오</h1>
-      <div class="sub">별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
-    </div>
+    <h1>별리 라디오</h1>
     <div class="nav"><a href="#letter">✉ 사연</a><a href="#archive">지난 방송</a></div>
   </div>
+  <div class="sub brandsub">별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
 
   <section id="view-radio">
     <div class="deck">
