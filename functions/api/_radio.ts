@@ -123,6 +123,9 @@ export interface RadioSituation {
   story: string | null;
   waitingCount: number;     // 이 사연 말고 기다리는 사연 수
   recentScripts: string[];  // 최근 방송 토막 (반복 방지)
+  /** 별리 코믹스 — 별이가 직접 지은 이야기들 (Vase 08-12: "엄청 큰 걸 놓치고 있었다").
+      게놈 자산의 재사용: 방송에서 "요즘 만들던 이야기"로 꺼낼 수 있는 실재 창작물. */
+  comicBits?: { title: string; epigraph: string; lines: string[] }[];
 }
 
 /** 라디오 시스템 프롬프트 — _byeoli-writer와 같은 축 번역에서 파생한다. 새 문학 금지. */
@@ -188,6 +191,9 @@ export function situationMessage(s: RadioSituation): string {
       ? `도착해 있는 사연 (읽는다면 원문 그대로. 이번 토막에 안 읽어도 된다):\n<사연>\n${s.story}\n</사연>`
       : '지금은 새 사연이 없다 — 이번 토막은 온전히 네 것이다.',
     s.waitingCount > 0 ? `${s.story ? '이 사연 말고 ' : ''}${s.waitingCount}개의 이야기가 더 기다리고 있다.` : null,
+    s.comicBits?.length
+      ? `요즘 네가 만들던 그림 이야기들 (네 창작물이다 — 방송에서 꺼내 이야기해도 좋다):\n${s.comicBits.map((c) => `- 「${c.title}」 ${c.epigraph}${c.lines.length ? ` / ${c.lines.join(' / ')}` : ''}`).join('\n')}`
+      : null,
     s.recentScripts.length
       ? `최근 방송에서 이미 한 말들 (같은 소재·문형 반복 금지):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 160)}`).join('\n')}`
       : null,

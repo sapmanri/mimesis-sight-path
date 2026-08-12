@@ -20,7 +20,7 @@ const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r4', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r5', now: Date.now(), segments });
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -46,6 +46,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     title: String(body.title ?? '').slice(0, 60) || '…',
     voiceNote: typeof body.voiceNote === 'string' ? body.voiceNote.slice(0, 60) : null,
     storyId: typeof body.storyId === 'string' ? body.storyId.slice(0, 40) : null,
+    dj: typeof body.dj === 'string' && body.dj ? body.dj.slice(0, 20) : 'byeoli',
+    script: typeof body.script === 'string' ? body.script.slice(0, 2000) : undefined,
   };
   const next = pruneProgram([...segments, seg], now);
   await env.PLANET.put(PROGRAM_KEY, JSON.stringify(next));

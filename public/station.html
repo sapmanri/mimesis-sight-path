@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>별이의 라디오</title>
+<title>별리 라디오</title>
 <style>
   /* 별이 라디오 스테이션 (가칭) — 밤의 방. 접수창(radio.html)과 같은 톤. */
   :root { --bg:#0b0e14; --card:#131826; --ink:#d7dce6; --dim:#8a93a6; --line:#242c40; --accent:#ffd9a0; }
@@ -31,13 +31,20 @@
   .liveBtn.on { color:var(--accent); border-color:var(--accent); }
   .foot { margin-top:20px; font-size:12.5px; color:var(--dim); }
   .foot a { color:var(--accent); text-decoration:none; }
+  /* 글자 방송 — 못 듣는 청취자를 위한 프롬프터 (Vase 08-12) */
+  .script { margin-top:16px; background:var(--card); border:1px solid var(--line); border-radius:16px;
+            padding:18px 20px; min-height:120px; max-height:260px; overflow-y:auto;
+            font-size:14.5px; line-height:2; }
+  .script p { color:#3a4258; transition:color .8s; margin:0 0 4px; }
+  .script p.said { color:var(--ink); }
+  .script .empty { color:var(--dim); font-size:13px; }
 </style>
 </head>
 <body>
 <main>
   <div class="star">✦</div>
-  <h1>별이의 라디오</h1>
-  <div class="sub">작은 행성에서 스물네 시간 — 별이가 놀고, 읽고, 가끔 조용한 방송</div>
+  <h1>별리 라디오</h1>
+  <div class="sub">별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
 
   <div class="deck">
     <div class="nowline"><span class="dot" id="dot"></span><span class="now" id="now">…</span></div>
@@ -50,6 +57,8 @@
       </div>
     </div>
   </div>
+
+  <div class="script" id="script"><span class="empty">글자 방송 — 별이가 말하면 여기에도 흐릅니다.</span></div>
 
   <div class="foot">별이에게 하고 싶은 이야기가 있다면 — <a href="/radio">사연 남기기</a></div>
 
@@ -98,8 +107,9 @@ function tick() {
   $('liveBtn').classList.toggle('on', live);
   $('dot').classList.toggle('live', live && playing);
 
-  if (!playing) return;
+  if (!playing) { renderScript(segAt(p), 0); return; }
   const s = segAt(p);
+  renderScript(s, s ? (p - s.startAt) / (s.dur * 1000) : 0);
   if (s) {
     if (currentSeg !== s.id) {
       currentSeg = s.id;
@@ -126,6 +136,26 @@ function tick() {
       $('state').textContent = '방에는 불이 켜져 있어요. 조금만 기다려 주세요.';
     }
   }
+}
+
+/* 글자 방송 — 진행도만큼 줄이 밝아진다 (투디워크의 글자 흐름처럼) */
+let scriptSeg = null;
+function renderScript(s, frac) {
+  const el = $('script');
+  if (!s || !s.script) {
+    if (scriptSeg !== null) { scriptSeg = null; el.innerHTML = '<span class="empty">글자 방송 — 별이가 말하면 여기에도 흐릅니다.</span>'; }
+    return;
+  }
+  const lines = s.script.split('\n').filter((l) => l.trim());
+  if (scriptSeg !== s.id) {
+    scriptSeg = s.id;
+    el.innerHTML = lines.map((l) => '<p></p>').join('');
+    [...el.children].forEach((p, i) => { p.textContent = lines[i]; });
+  }
+  const upto = Math.ceil(lines.length * Math.min(1, frac + 0.08));
+  [...el.children].forEach((p, i) => p.classList.toggle('said', i < upto));
+  const said = el.querySelectorAll('p.said');
+  if (said.length) said[said.length - 1].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 $('play').onclick = () => {

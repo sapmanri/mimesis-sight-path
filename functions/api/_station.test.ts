@@ -42,4 +42,11 @@ test('사연 없는 상황 — 검증은 별이 말만 보고, 메시지는 혼�
   const msg = situationMessage({ timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [] });
   assert.match(msg, /이번 토막은 온전히 네 것이다/);
   assert.doesNotMatch(msg, /<사연>/);
+  // 별리 코믹스 — 별이의 창작물이 상황에 실린다 (게놈 자산 재사용, 08-12)
+  const withComics = situationMessage({
+    timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
+    comicBits: [{ title: '떨어지지 않은 것', epigraph: '하늘이 다 지나갈 때까지 서 있었다.', lines: ['우산을 접었다.'] }],
+  });
+  assert.match(withComics, /네가 만들던 그림 이야기/);
+  assert.match(withComics, /「떨어지지 않은 것」/);
 });

@@ -44,8 +44,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw] = await Promise.all([
-    env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY),
+  const [feedRaw, indexRaw, comicsRaw] = await Promise.all([
+    env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
   ]);
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
   const todayKst = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
@@ -61,6 +61,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (dRaw) { const d = JSON.parse(dRaw) as { script?: string }; if (d.script) recentScripts.push(d.script); }
   }
 
+  // 별리 코믹스 — 별이가 지은 이야기 창고(20편+)에서 두 편을 상황에 실어 준다.
+  // 게놈 자산 재사용(Vase 08-12) + 소재가 좁게 도는 문제의 자연 해소.
+  type ComicLogEntry = { scenario?: { title?: string; epigraph?: string; panels?: { caption?: string | null }[] } };
+  const comicsLog: ComicLogEntry[] = comicsRaw ? JSON.parse(comicsRaw) : [];
+  const comicBits = comicsLog
+    .map((e) => e.scenario ?? (e as ComicLogEntry['scenario']))
+    .filter((s): s is NonNullable<typeof s> => !!s?.title)
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 2)
+    .map((s) => ({
+      title: String(s.title).slice(0, 40),
+      epigraph: String(s.epigraph ?? '').slice(0, 60),
+      lines: (s.panels ?? []).map((p) => p.caption).filter((c): c is string => !!c).slice(0, 2).map((c) => c.slice(0, 60)),
+    }));
+
   const hour = Number(new Date(Date.now() + 9 * 3_600_000).toISOString().slice(11, 13));
   const situation: RadioSituation = {
     timeLabel: timeLabelOf(hour),
@@ -68,6 +83,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     story: story?.text ?? null,
     waitingCount: queue.filter((q) => q.status === 'waiting' && q.id !== story?.id).length,
     recentScripts,
+    comicBits,
   };
 
   const written = await writeRadioScript(env, situation);
@@ -88,7 +104,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.PLANET.put(DRAFT_INDEX_KEY, JSON.stringify([id, ...draftIds.filter((x) => x !== id)].slice(0, DRAFT_INDEX_KEEP))),
   ]);
   return json(200, {
-    ok: true, id, kind: storyRead ? 'story' : 'talk', storyRead,
+    // dj: 별리 라디오의 DJ 슬롯 — 초대 DJ는 별이. 훗날 삽만리 등 다른 게놈이 꽂힌다 (Vase 08-12).
+    ok: true, id, dj: 'byeoli', kind: storyRead ? 'story' : 'talk', storyRead,
     script: written.script, voiceNote: written.voiceNote,
     title: written.script.split('\n')[0].slice(0, 60),
     warnings: written.warnings,

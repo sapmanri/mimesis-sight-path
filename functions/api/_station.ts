@@ -20,6 +20,10 @@ export interface ProgramSegment {
   title: string;        // 타임라인 표기용 (별이 첫 줄에서 딴다)
   voiceNote?: string | null;
   storyId?: string | null;
+  /** DJ 슬롯 — 초대 DJ는 별이(byeoli). 훗날 다른 게놈이 꽂힌다 (Vase 08-12) */
+  dj?: string;
+  /** 글자 방송 — 못 듣는 청취자를 위한 대본 전문 (Vase 08-12: "투디워크처럼 글자로 주루륵") */
+  script?: string;
 }
 
 /**
