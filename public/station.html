@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>별이의 라디오</title>
+<style>
+  /* 별이 라디오 스테이션 (가칭) — 밤의 방. 접수창(radio.html)과 같은 톤. */
+  :root { --bg:#0b0e14; --card:#131826; --ink:#d7dce6; --dim:#8a93a6; --line:#242c40; --accent:#ffd9a0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--ink); font-family:'Apple SD Gothic Neo',Pretendard,sans-serif;
+         min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  main { width:100%; max-width:520px; }
+  .star { font-size:22px; margin-bottom:12px; opacity:.9; }
+  h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; margin-bottom:4px; }
+  .sub { color:var(--dim); font-size:12.5px; margin-bottom:26px; }
+  .deck { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px 20px; }
+  .nowline { display:flex; align-items:center; gap:10px; min-height:24px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#4a5568; flex:none; }
+  .dot.live { background:#e46; box-shadow:0 0 8px #e468; }
+  .now { font-size:14.5px; line-height:1.6; }
+  .state { color:var(--dim); font-size:12px; margin-top:4px; min-height:18px; }
+  .row { display:flex; align-items:center; gap:14px; margin-top:18px; }
+  button.play { width:52px; height:52px; border-radius:50%; border:0; background:var(--accent);
+                color:#201607; font-size:20px; cursor:pointer; flex:none; }
+  .tl { flex:1; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .times { display:flex; justify-content:space-between; color:var(--dim); font-size:11px; margin-top:2px; }
+  .liveBtn { background:none; border:1px solid var(--line); color:var(--dim); border-radius:8px;
+             padding:4px 10px; font-size:12px; cursor:pointer; }
+  .liveBtn.on { color:var(--accent); border-color:var(--accent); }
+  .foot { margin-top:20px; font-size:12.5px; color:var(--dim); }
+  .foot a { color:var(--accent); text-decoration:none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="star">✦</div>
+  <h1>별이의 라디오</h1>
+  <div class="sub">작은 행성에서 스물네 시간 — 별이가 놀고, 읽고, 가끔 조용한 방송</div>
+
+  <div class="deck">
+    <div class="nowline"><span class="dot" id="dot"></span><span class="now" id="now">…</span></div>
+    <div class="state" id="state"></div>
+    <div class="row">
+      <button class="play" id="play">▶</button>
+      <div class="tl">
+        <input type="range" id="bar" min="0" max="1000" value="1000">
+        <div class="times"><span id="t0"></span><button class="liveBtn on" id="liveBtn">● 라이브</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">별이에게 하고 싶은 이야기가 있다면 — <a href="/radio">사연 남기기</a></div>
+
+  <audio id="au" preload="auto"></audio>
+  <audio id="amb" loop preload="auto"></audio>
+</main>
+<script>
+/* 방송 시계 모델:
+   - 편성표(segments)는 절대 시간축. 청취 위치 P(ms)가 그 축 위를 걷는다.
+   - 라이브 = P가 (지금-2초)를 따라감. 당기면 과거의 P에서 걷는다.
+   - P가 토막 안이면 그 파일을 오프셋 재생, 빈 구간이면 환경음, 라이브 앞 공백이면 HOLD. */
+const $ = (id) => document.getElementById(id);
+const au = $('au'), amb = $('amb');
+amb.src = 'https://pub-8ec6440aae5545379fcfdd50a243847a.r2.dev/radio/ambient.m4a';
+amb.volume = 0.35;
+
+let segs = [], clockOffset = 0, playing = false, live = true, anchor = null; // anchor={P0, t0} 과거 재생 기준
+let currentSeg = null;
+
+async function loadProgram() {
+  try {
+    const r = await fetch('/api/radio/program', { cache: 'no-store' });
+    const d = await r.json();
+    if (!d.ok) return;
+    segs = d.segments || [];
+    clockOffset = d.now - Date.now();
+  } catch {}
+}
+const serverNow = () => Date.now() + clockOffset;
+const liveP = () => serverNow() - 2000;
+const P = () => live ? liveP() : (anchor ? anchor.P0 + (Date.now() - anchor.t0) : liveP());
+const spanStart = () => segs.length ? segs[0].startAt : liveP();
+const segAt = (p) => segs.find((s) => p >= s.startAt && p < s.startAt + s.dur * 1000);
+
+function fmt(ms) {
+  const d = new Date(ms + 9 * 3600000);
+  return d.toISOString().slice(11, 16);
+}
+
+function tick() {
+  const p = P();
+  // 타임라인
+  const a = spanStart(), b = Math.max(liveP(), a + 60000);
+  if (document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
+  $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
+  $('liveBtn').classList.toggle('on', live);
+  $('dot').classList.toggle('live', live && playing);
+
+  if (!playing) return;
+  const s = segAt(p);
+  if (s) {
+    if (currentSeg !== s.id) {
+      currentSeg = s.id;
+      au.src = s.url;
+      au.currentTime = Math.max(0, (p - s.startAt) / 1000);
+      au.play().catch(() => {});
+      $('now').textContent = s.title;
+      $('state').textContent = s.kind === 'story' ? '사연을 읽는 중' : s.voiceNote ? '목소리 — ' + s.voiceNote : '';
+      amb.pause();
+    } else {
+      // 표류 보정 — 방송 시계와 파일 재생이 1.5초 이상 어긋나면 맞춘다
+      const want = (p - s.startAt) / 1000;
+      if (Math.abs(au.currentTime - want) > 1.5) au.currentTime = want;
+    }
+  } else {
+    if (currentSeg !== null) { currentSeg = null; au.pause(); }
+    if (amb.paused) amb.play().catch(() => {});
+    const future = segs.find((x) => x.startAt > p);
+    if (future) {
+      $('now').textContent = '…';
+      $('state').textContent = '잠깐 조용한 방 — ' + Math.ceil((future.startAt - p) / 1000) + '초 뒤에 다음 이야기';
+    } else {
+      $('now').textContent = '별이가 잠시 자리를 비웠어요';
+      $('state').textContent = '방에는 불이 켜져 있어요. 조금만 기다려 주세요.';
+    }
+  }
+}
+
+$('play').onclick = () => {
+  playing = !playing;
+  $('play').textContent = playing ? '❚❚' : '▶';
+  if (!playing) { au.pause(); amb.pause(); currentSeg = null; }
+};
+$('bar').oninput = () => {
+  const a = spanStart(), b = Math.max(liveP(), a + 60000);
+  const p = a + (b - a) * (Number($('bar').value) / 1000);
+  if (b - p < 4000) { live = true; anchor = null; }
+  else { live = false; anchor = { P0: p, t0: Date.now() }; }
+  currentSeg = null; // 다음 tick이 새 위치로 붙는다
+};
+$('liveBtn').onclick = () => { live = true; anchor = null; currentSeg = null; };
+
+loadProgram();
+setInterval(loadProgram, 60000);
+setInterval(tick, 500);
+</script>
+</body>
+</html>

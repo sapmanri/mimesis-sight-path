@@ -119,7 +119,8 @@ const OWN_MAX = 700;    // 상한 — 목소리 2분 안팎
 export interface RadioSituation {
   timeLabel: string;        // '새벽' | '아침' | '낮' | '저녁' | '밤'
   todayLines: string[];     // 오늘 별이가 실제로 남긴 관찰 글 (피드 🌏 — 실데이터만)
-  story: string;            // 이번에 들어온 사연 원문
+  /** 사연 — 스테이션에선 선택 사항이다(없으면 별이가 혼자 논다). null = 이번엔 사연 없음 */
+  story: string | null;
   waitingCount: number;     // 이 사연 말고 기다리는 사연 수
   recentScripts: string[];  // 최근 방송 토막 (반복 방지)
 }
@@ -183,8 +184,10 @@ export function situationMessage(s: RadioSituation): string {
     s.todayLines.length
       ? `오늘 네가 남긴 관찰:\n${s.todayLines.map((l) => `- ${l.replace(/\n/g, ' / ')}`).join('\n')}`
       : '오늘은 아직 남긴 관찰이 없다.',
-    `방금 도착한 사연 (읽는다면 원문 그대로):\n<사연>\n${s.story}\n</사연>`,
-    s.waitingCount > 0 ? `이 사연 말고 ${s.waitingCount}개의 이야기가 더 기다리고 있다.` : '기다리는 다른 사연은 없다.',
+    s.story
+      ? `도착해 있는 사연 (읽는다면 원문 그대로. 이번 토막에 안 읽어도 된다):\n<사연>\n${s.story}\n</사연>`
+      : '지금은 새 사연이 없다 — 이번 토막은 온전히 네 것이다.',
+    s.waitingCount > 0 ? `${s.story ? '이 사연 말고 ' : ''}${s.waitingCount}개의 이야기가 더 기다리고 있다.` : null,
     s.recentScripts.length
       ? `최근 방송에서 이미 한 말들 (같은 소재·문형 반복 금지):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 160)}`).join('\n')}`
       : null,
@@ -223,7 +226,7 @@ export async function writeRadioScript(
 
 /** 검증 — 낭독했다면 원문 그대로인가 + 별이 자신의 말이 게놈 계약을 지키는가.
     사연 원문은 별이의 글이 아니므로 축 검사에서 뺀다 (존댓말 사연이 얼마든지 온다). */
-export function validateRadioScript(script: string, story: string): {
+export function validateRadioScript(script: string, story: string | null): {
   pass: boolean; errors: string[]; warnings: string[];
 } {
   const errors: string[] = [];
@@ -231,14 +234,14 @@ export function validateRadioScript(script: string, story: string): {
   const { context } = buildGenomeContext('byeoli', null);
   if (!context) return { pass: false, errors: ['genome_contract_failed'], warnings };
 
-  const storyIncluded = script.includes(story.trim());
-  if (!storyIncluded) {
+  const storyIncluded = !!story && script.includes(story.trim());
+  if (story && !storyIncluded) {
     // 낭독 없이 자기 얘기만 한 토막도 방송으로는 유효하다 — 다만 부분 인용·왜곡은 잡는다
     const head = story.trim().slice(0, 20);
     if (head && script.includes(head)) errors.push('story_mangled: 사연을 원문 그대로 읽지 않고 잘라 읽었다');
     else warnings.push('story_not_read: 이번 토막에서 사연을 읽지 않았다 — 사연은 대기열에 남아야 한다');
   }
-  const own = storyIncluded ? script.replace(story.trim(), '') : script;
+  const own = storyIncluded ? script.replace(story!.trim(), '') : script;
 
   if (own.trim().length < OWN_MIN) errors.push(`own_too_short: 별이 자신의 말이 ${own.trim().length}자 — 낭독기가 아니다`);
   if (own.length > OWN_MAX * 1.5) errors.push(`own_too_long: ${own.length}자 — 상한 ${OWN_MAX}자를 크게 넘었다`);
