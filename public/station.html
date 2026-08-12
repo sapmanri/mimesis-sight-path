@@ -342,9 +342,13 @@ function tick() {
     const p = liveP() - HLS_LAT_MS;
     if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
     if (!scrubbing) $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
-    $('liveBtn').classList.toggle('on', true);
-    $('dot').classList.toggle('live', playing);
     const nd = nowData;
+    // 라이브 알약의 정직 (사장 00:35 "계속 라이브라고 되있는 건 내 핸폰이 삐꾸냐"):
+    // 재방송이 나가는 동안은 「재방송」— 방송 줄기는 라이브지만 내용은 다시 듣기다.
+    const replaying = !!(nd && nd.isReplay && nd.kind !== 'bed');
+    $('liveBtn').textContent = replaying ? '● 재방송' : '● 라이브';
+    $('liveBtn').classList.toggle('on', !replaying);
+    $('dot').classList.toggle('live', playing);
     if (nd && nd.kind !== 'bed' && nd.startedAt) {
       $('now').textContent = nd.title || '별리의 방';
       $('state').textContent = nd.isReplay
@@ -379,6 +383,7 @@ function tick() {
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
   if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
   if (!scrubbing) $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
+  $('liveBtn').textContent = '● 라이브';
   $('liveBtn').classList.toggle('on', live);
   $('dot').classList.toggle('live', live && playing);
 
