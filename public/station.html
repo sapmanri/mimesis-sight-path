@@ -239,6 +239,7 @@ function fmt(ms) {
 }
 
 function tick() {
+  if (!live && anchor && P() >= liveP() - 500) { live = true; anchor = null; }  // 과거 청취가 현재를 따라잡으면 라이브 복귀
   const p = P();
   // 타임라인
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
