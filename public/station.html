@@ -30,10 +30,17 @@
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:radial-gradient(ellipse at 50% 30%, #101114, #08090b 70%); color:var(--ink);
          font-family:'Apple SD Gothic Neo',Pretendard,sans-serif;
-         min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+         min-height:100vh; min-height:100dvh; display:flex; align-items:center; justify-content:center;
+         /* 아이폰 사파리 아랫바가 화면 끝을 덮는다 — 안전영역만큼 밀어 준다 (Vase 08-12 밤) */
+         padding:24px; padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px)); }
   main { width:100%; max-width:540px; }
   .brand { display:flex; align-items:center; gap:14px; margin-bottom:26px; }
   .brand img { width:52px; height:52px; border-radius:12px; flex:none; }
+  .brand .grow { flex:1; min-width:0; }
+  .nav { display:flex; gap:8px; flex:none; }
+  .nav a { color:var(--accent); text-decoration:none; font-size:12px; border:1px solid #4d4133;
+           border-radius:8px; padding:5px 10px; white-space:nowrap; }
+  @media (max-height:760px) { .script { height:38vh; } }
   h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; margin-bottom:4px; }
   .sub { color:var(--dim); font-size:12.5px; }
   /* 라디오 몸통 — 위에서 빛 받는 갈색 케이스 */
@@ -143,10 +150,11 @@
 <main>
   <div class="brand">
     <img src="/brand/logo-byeolliradyo-192.png" alt="별리라됴">
-    <div>
+    <div class="grow">
       <h1>별리 라디오</h1>
       <div class="sub">별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
     </div>
+    <div class="nav"><a href="#letter">✉ 사연</a><a href="#archive">지난 방송</a></div>
   </div>
 
   <section id="view-radio">
