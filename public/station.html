@@ -344,29 +344,55 @@ async function loadArchive() {
     });
   } catch { box.innerHTML = '<div class="archBack">지금은 못 불러왔어요 — 잠시 후 다시.</div>'; }
 }
+/* 그날 방송은 하나의 흐름 — 다시 듣기도 하나 (Vase 08-12: "부분별이 아니고 전체 다시 듣기").
+   목록은 뭐가 있었는지만 보여주고, 버튼 하나로 그날 편들을 이어서 튼다. */
+let dayQueue = [], dayIdx = -1;
+function stopDayReplay() {
+  arch.pause(); arch.onended = null; arch.style.display = 'none';
+  dayQueue = []; dayIdx = -1;
+  document.querySelectorAll('.archSeg').forEach((x) => x.classList.remove('playing'));
+  const btn = $('dayPlay'); if (btn) btn.textContent = '▶ 그날 방송 다시 듣기';
+}
+function playDayIdx(i) {
+  const box = $('archBox');
+  if (i >= dayQueue.length) { stopDayReplay(); return; }
+  dayIdx = i;
+  box.querySelectorAll('.archSeg').forEach((x, xi) => x.classList.toggle('playing', xi === i));
+  arch.style.display = 'block';
+  arch.src = dayQueue[i].url;
+  arch.onended = () => setTimeout(() => playDayIdx(i + 1), 600);
+  arch.play().catch(() => {});
+}
 async function loadArchDay(day) {
   const box = $('archBox');
+  stopDayReplay();
   const d = await (await fetch('/api/radio/archive?day=' + day, { cache: 'no-store' })).json();
   box.innerHTML = '';
   const back = document.createElement('button');
   back.className = 'archBack'; back.textContent = '← ' + day + ' — 날짜 목록으로';
-  back.onclick = () => { arch.pause(); arch.style.display = 'none'; loadArchive(); };
+  back.onclick = () => { stopDayReplay(); loadArchive(); };
   box.appendChild(back);
-  (d.segments || []).forEach((s) => {
+  const segsDay = d.segments || [];
+  const playBtn = document.createElement('button');
+  playBtn.className = 'rp'; playBtn.id = 'dayPlay';
+  playBtn.style.cssText = 'margin:2px 14px 10px; padding:7px 16px; font-size:13px;';
+  playBtn.textContent = '▶ 그날 방송 다시 듣기';
+  playBtn.onclick = () => {
+    if (dayIdx >= 0) { stopDayReplay(); return; }
+    if (playing) $('play').click();               // 라이브 쉬고 (스피커는 하나다)
+    dayQueue = segsDay;
+    playBtn.textContent = '■ 멈추기';
+    playDayIdx(0);
+  };
+  box.appendChild(playBtn);
+  segsDay.forEach((s) => {
     const div = document.createElement('div');
     div.className = 'archSeg';
     div.innerHTML = `<div class="head"><span class="tm">${hhmm(s.startAt)}</span>` +
-      `<span class="kd">${KIND_KO[s.kind] || s.kind}</span><span class="tt"></span>` +
-      `<button class="rp">다시 듣기</button></div><div class="full"></div>`;
+      `<span class="kd">${KIND_KO[s.kind] || s.kind}</span><span class="tt"></span></div><div class="full"></div>`;
     div.querySelector('.tt').textContent = s.title;
     div.querySelector('.full').textContent = s.script || '(대본 없음)';
     div.querySelector('.tt').onclick = () => div.classList.toggle('open');
-    div.querySelector('.rp').onclick = () => {
-      if (playing) $('play').click();               // 라이브 쉬고
-      box.querySelectorAll('.archSeg').forEach((x) => x.classList.remove('playing'));
-      div.classList.add('playing');
-      arch.style.display = 'block'; arch.src = s.url; arch.play().catch(() => {});
-    };
     box.appendChild(div);
   });
 }
