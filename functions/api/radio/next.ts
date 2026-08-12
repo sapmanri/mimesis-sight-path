@@ -18,6 +18,11 @@ interface Env { PLANET: KVNamespace; PULSE_KEY?: string; ANTHROPIC_API_KEY?: str
 const FEED_KEY = 'feed';
 const DRAFT_INDEX_KEY = 'radio:drafts';
 const DRAFT_INDEX_KEEP = 30;
+// 곡 서가 (노래 편성, 08-12 밤) — 정본은 KV. 채우는 손은 byeol-radio/songs-sync.sh.
+const SONGS_KEY = 'radio:songs';
+interface RadioSong { title: string; url: string; dur: number; lyrics?: string }
+/** 제목 대조용 — 공백 차이로 곡을 놓치지 않는다 (별이가 제목을 새로 짓는 건 못 막지만, 그건 warning으로 남는다) */
+const songKey = (t: string) => t.replace(/\s+/g, '').trim();
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
@@ -44,8 +49,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
+    env.PLANET.get(SONGS_KEY),
   ]);
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
   const todayKst = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
@@ -76,6 +82,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       lines: (s.panels ?? []).map((p) => p.caption).filter((c): c is string => !!c).slice(0, 2).map((c) => c.slice(0, 60)),
     }));
 
+  const songs: RadioSong[] = songsRaw ? JSON.parse(songsRaw) : [];
+
   const hour = Number(new Date(Date.now() + 9 * 3_600_000).toISOString().slice(11, 13));
   const situation: RadioSituation = {
     timeLabel: timeLabelOf(hour),
@@ -84,6 +92,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     waitingCount: queue.filter((q) => q.status === 'waiting' && q.id !== story?.id).length,
     recentScripts,
     comicBits,
+    songShelf: songs.map((g) => ({ title: g.title })),
   };
 
   const written = await writeRadioScript(env, situation);
@@ -93,11 +102,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const id = story?.id ?? `solo-${Date.now().toString(36)}`;
   if (story && storyRead) { story.status = 'used'; await saveQueue(); }
 
+  // 별이가 고른 곡을 서가와 대조 — 서가에 없는 제목은 방송에 못 나간다 (경고만 남긴다)
+  const picked = written.songTitle
+    ? songs.find((g) => songKey(g.title) === songKey(written.songTitle!)) ?? null
+    : null;
+  const warnings = [...written.warnings];
+  if (written.songTitle && !picked) warnings.push(`song_not_found: ${written.songTitle}`);
+
   const draft: RadioDraft = {
     id, at: Date.now(), story: story?.text ?? '',
     moderation: { allow: true, category: story ? 'ok' : 'solo', reason: '' },
-    script: written.script, voiceNote: written.voiceNote, situation,
-    provenance: written.provenance, warnings: written.warnings,
+    script: written.script, voiceNote: written.voiceNote, songTitle: written.songTitle, situation,
+    provenance: written.provenance, warnings,
   };
   await Promise.all([
     env.PLANET.put(RADIO_DRAFT_KEY(id), JSON.stringify(draft)),
@@ -107,7 +123,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // dj: 별리 라디오의 DJ 슬롯 — 초대 DJ는 별이. 훗날 삽만리 등 다른 게놈이 꽂힌다 (Vase 08-12).
     ok: true, id, dj: 'byeoli', kind: storyRead ? 'story' : 'talk', storyRead,
     script: written.script, voiceNote: written.voiceNote,
+    // 노래 편성 (08-12 밤): 별이가 고른 곡의 실물 — 조립기(station.sh)가 토막 뒤에 잇는다
+    song: picked ? { title: picked.title, url: picked.url, dur: picked.dur, lyrics: picked.lyrics ?? '' } : null,
     title: written.script.split('\n')[0].slice(0, 60),
-    warnings: written.warnings,
+    warnings,
   });
 };

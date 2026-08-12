@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mechanicalFilter, parseModeration, radioSystemPrompt, validateRadioScript, situationMessage,
-  parseScriptAndVoice, type RadioSituation,
+  parseScriptAndVoice, parseTrailingTags, type RadioSituation,
 } from './_radio.ts';
 import { timeLabelOf } from './radio/draft.ts';
 
@@ -100,6 +100,30 @@ test('[목소리:] 셀프 연출 분리 — 없으면 기본, 이모지 섞이�
   const dirty = parseScriptAndVoice('본문.\n[목소리: 신나게 🔥]');
   assert.equal(dirty.script, '본문.');
   assert.equal(dirty.voiceNote, null);
+});
+
+// 노래 편성 (08-12 밤): [노래: 제목]은 [목소리:]와 같은 꼬리 태그 — 순서 뒤집혀도 받는다
+test('[노래:] 곡 선택 분리 — 순서 무관·중간 태그는 무시·서가 대조는 호출자 몫', () => {
+  const both = parseTrailingTags('본문.\n오늘은 이 노래.\n[노래: 아직 거기 있었다]\n[목소리: 낮게, 느리게]');
+  assert.equal(both.script, '본문.\n오늘은 이 노래.');
+  assert.equal(both.songTitle, '아직 거기 있었다');
+  assert.equal(both.voiceNote, '낮게, 느리게');
+  // 별이가 순서를 뒤집어도 방송이 죽을 이유는 아니다
+  const flipped = parseTrailingTags('본문.\n[목소리: 낮게]\n[노래: 그때 다시 그곳으로]');
+  assert.equal(flipped.script, '본문.');
+  assert.equal(flipped.songTitle, '그때 다시 그곳으로');
+  assert.equal(flipped.voiceNote, '낮게');
+  // 노래 없이 목소리만 — 기존 방송과 동일
+  const voiceOnly = parseTrailingTags('본문.\n[목소리: 담담하게]');
+  assert.equal(voiceOnly.songTitle, null);
+  assert.equal(voiceOnly.voiceNote, '담담하게');
+  // 음성: 본문 중간의 [노래:]는 떼지 않는다 — 끝 꼬리만
+  const mid = parseTrailingTags('[노래: 가짜] 진짜 본문.');
+  assert.equal(mid.songTitle, null);
+  assert.equal(mid.script, '[노래: 가짜] 진짜 본문.');
+  // 음성: 태그가 없으면 전부 기본값
+  const none = parseTrailingTags('그냥 본문.');
+  assert.deepEqual([none.songTitle, none.voiceNote], [null, null]);
 });
 
 test('시간대 라벨', () => {

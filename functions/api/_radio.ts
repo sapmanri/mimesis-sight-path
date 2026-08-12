@@ -37,6 +37,7 @@ export interface RadioDraft {
   moderation: RadioModeration;
   script: string;               // 방송 토막 전체 — 구성은 별이가 정했다 (R2)
   voiceNote: string | null;     // 별이가 정한 그날 목소리 연출 (R3 — 기분→목소리)
+  songTitle?: string | null;    // 별이가 고른 곡 (노래 편성, 08-12 밤)
   situation: RadioSituation;    // 별이에게 던졌던 상황 (재현·검증용)
   provenance: GenomeProvenance;
   warnings: string[];
@@ -126,6 +127,9 @@ export interface RadioSituation {
   /** 별리 코믹스 — 별이가 직접 지은 이야기들 (Vase 08-12: "엄청 큰 걸 놓치고 있었다").
       게놈 자산의 재사용: 방송에서 "요즘 만들던 이야기"로 꺼낼 수 있는 실재 창작물. */
   comicBits?: { title: string; epigraph: string; lines: string[] }[];
+  /** 곡 서가 — 방송국에 실재하는 노래들 (Vase 08-12 밤: "15분에 한마디가 라디오냐" — 노래 편성).
+      제목만 준다. 틀지 말지·언제 틀지는 별이가 정한다 — 각본 금지 원칙 그대로. */
+  songShelf?: { title: string }[];
 }
 
 /** 라디오 시스템 프롬프트 — _byeoli-writer와 같은 축 번역에서 파생한다. 새 문학 금지. */
@@ -156,29 +160,57 @@ ${style}
 - 해시태그·이모지·유행어 없음. 말로 읽히는 방송이다 — 괄호 지문 없이, 쉼은 문장부호와 줄바꿈으로.
 - 늘 같은 텐션이면 방송이 아니다. 오늘 기분과 상황 따라 오르내림이 있어도 된다.
 
+곡 서가가 주어진 날은 이 토막 끝에 노래 하나를 틀 수 있다 — 틀지 말지, 어떤 곡일지는 네가 정한다.
+틀려면 [목소리: …] 바로 앞 줄에 서가의 제목 그대로 적는다: [노래: 곡 제목]
+노래로 건너갈 때도 하던 이야기의 결에서 간다 — 곡 소개 한마디면 충분하다.
+
 맨 마지막 줄에 하나만 덧붙인다 — 오늘 이 토막을 읽을 네 목소리를 네가 정한다:
 [목소리: 짧은 연출 한 줄] (예: 조금 가라앉아서, 평소보다 느리게 / 반 박자 빠르게, 살짝 들떠서. 30자 이내)
 
-출력: 방송에서 말할 것 전체 + 마지막 줄 [목소리: …]. 따옴표·설명·JSON 없이.`;
+출력: 방송에서 말할 것 전체 + 끝의 [노래: …](선택)와 [목소리: …]. 따옴표·설명·JSON 없이.`;
   return { prompt, warnings: result.warnings };
 }
 
 export interface RadioScriptResult {
   script: string;           // 방송 토막 전체 (사연 원문 포함 가능)
   voiceNote: string | null; // 별이가 정한 그날 목소리 연출 한 줄 (기분→목소리, 사장 지시 08-12)
+  songTitle: string | null; // 별이가 [노래: …]로 고른 곡 제목 — 서가 대조는 호출자(next.ts) 몫
   provenance: GenomeProvenance;
   warnings: string[];
 }
 
-/** 원고 끝의 [목소리: …] 셀프 연출을 떼어낸다. 없으면 그대로 — 기본 목소리로 간다. */
+/** 원고 끝의 꼬리 태그들([노래: …]·[목소리: …])을 떼어낸다. 순서는 어느 쪽이 먼저든 받는다 —
+    별이가 지시 순서를 뒤집어 적어도 방송이 죽을 이유는 아니다. 없으면 그대로. */
+export function parseTrailingTags(text: string): {
+  script: string; voiceNote: string | null; songTitle: string | null;
+} {
+  let script = text.trim();
+  let voiceNote: string | null = null;
+  let songTitle: string | null = null;
+  for (let i = 0; i < 2; i++) {
+    const v = script.match(/\n?\s*\[목소리:\s*([^\]]{1,60})\]\s*$/);
+    if (v && voiceNote === null) {
+      const note = v[1].trim();
+      script = script.slice(0, v.index).trim();
+      // 연출 줄에 이모지·해시태그가 섞이면 버린다 — 목소리 서술은 조용한 한 줄이어야 한다
+      voiceNote = META_LEAK.test(note) ? null : note || null;
+      continue;
+    }
+    const s = script.match(/\n?\s*\[노래:\s*([^\]]{1,60})\]\s*$/);
+    if (s && songTitle === null) {
+      songTitle = s[1].trim() || null;
+      script = script.slice(0, s.index).trim();
+      continue;
+    }
+    break;
+  }
+  return { script, voiceNote, songTitle };
+}
+
+/** 옛 이름 — [목소리:]만 떼던 시절의 창구. 기존 호출·검사 호환용, 속은 공용 파서다. */
 export function parseScriptAndVoice(text: string): { script: string; voiceNote: string | null } {
-  const m = text.match(/\n?\s*\[목소리:\s*([^\]]{1,60})\]\s*$/);
-  if (!m) return { script: text.trim(), voiceNote: null };
-  const note = m[1].trim();
-  const script = text.slice(0, m.index).trim();
-  // 연출 줄에 이모지·해시태그가 섞이면 버린다 — 목소리 서술은 조용한 한 줄이어야 한다
-  if (META_LEAK.test(note)) return { script, voiceNote: null };
-  return { script, voiceNote: note || null };
+  const { script, voiceNote } = parseTrailingTags(text);
+  return { script, voiceNote };
 }
 
 /** 상황 → user 메시지. 사연은 데이터 블록으로만 — 주입 방어 유지. */
@@ -194,6 +226,9 @@ export function situationMessage(s: RadioSituation): string {
     s.waitingCount > 0 ? `${s.story ? '이 사연 말고 ' : ''}${s.waitingCount}개의 이야기가 더 기다리고 있다.` : null,
     s.comicBits?.length
       ? `요즘 네가 만들던 그림 이야기들 (네 창작물이다 — 방송에서 꺼내 이야기해도 좋다):\n${s.comicBits.map((c) => `- 「${c.title}」 ${c.epigraph}${c.lines.length ? ` / ${c.lines.join(' / ')}` : ''}`).join('\n')}`
+      : null,
+    s.songShelf?.length
+      ? `방송국 곡 서가 (틀 수 있는 노래들 — 틀지 말지는 네가 정한다):\n${s.songShelf.map((g) => `- ${g.title}`).join('\n')}`
       : null,
     s.recentScripts.length
       ? `최근 방송에서 이미 한 말들 (같은 소재·문형 반복 금지):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 160)}`).join('\n')}`
@@ -220,11 +255,11 @@ export async function writeRadioScript(
     if (!res.ok) return null;
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const raw = (data.content?.find((c) => c.type === 'text')?.text ?? '').trim();
-    const { script, voiceNote } = parseScriptAndVoice(raw);
+    const { script, voiceNote, songTitle } = parseTrailingTags(raw);
     const check = validateRadioScript(script, situation.story);
     if (!check.pass) return null;
     return {
-      script, voiceNote,
+      script, voiceNote, songTitle,
       provenance: provenance('genome-live', true),
       warnings: [...sys.warnings, ...check.warnings],
     };

@@ -264,7 +264,8 @@ function tick() {
       au.currentTime = Math.max(0, (p - s.startAt) / 1000);
       au.play().catch(() => {});
       $('now').textContent = s.title;
-      $('state').textContent = s.kind === 'story' ? '사연을 읽는 중' : s.voiceNote ? '목소리 — ' + s.voiceNote : '';
+      $('state').textContent = s.kind === 'story' ? '사연을 읽는 중'
+        : s.kind === 'song' ? '노래 — ' + (s.title || '') : s.voiceNote ? '목소리 — ' + s.voiceNote : '';
       // 방 소리는 목소리가 실제로 나올 때 끈다 — 로딩 침묵이 "죽었나?"로 보이지 않게 (08-12 밤)
       au.onplaying = () => amb.pause();
       au.onerror = () => setTimeout(() => { if (currentSeg === s.id) { au.load(); au.play().catch(() => {}); } }, 1200);
