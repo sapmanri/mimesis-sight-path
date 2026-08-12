@@ -31,16 +31,18 @@
   .liveBtn.on { color:var(--accent); border-color:var(--accent); }
   .foot { margin-top:20px; font-size:12.5px; color:var(--dim); }
   .foot a { color:var(--accent); text-decoration:none; }
-  /* 글자 방송 — 레트로 문자 방송 (Vase 08-12: "글자들 많이 보이게, 좀 레트로틱하게") */
+  /* 글자 방송 — 말을 뒤따라 써지는 라이브 기록 (Vase 08-12 재판정: "대본이 미리 있는 게
+     티나면 안 돼. 말할 때 글자들이 뒤따라 써지게. 글씨는 작아도 되니 많이") */
   .script { margin-top:16px; background:#0a0c10; border:1px solid var(--line); border-radius:16px;
-            padding:26px 28px; min-height:240px; max-height:56vh; overflow-y:auto;
+            padding:20px 22px; min-height:220px; max-height:52vh; overflow-y:auto;
             font-family:ui-monospace, Menlo, 'Apple SD Gothic Neo', monospace;
-            font-size:18px; line-height:2.15; letter-spacing:.04em;
-            background-image:repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,217,160,.016) 3px 4px); }
-  .script p { color:#333c52; transition:color 1.2s, text-shadow 1.2s; margin:0 0 10px; }
-  .script p.said { color:var(--accent); text-shadow:0 0 10px rgba(255,217,160,.35); }
-  .script p.said::before { content:'▸ '; opacity:.5; }
-  .script .empty { color:var(--dim); font-size:14px; font-family:inherit; }
+            font-size:13.5px; line-height:1.95; letter-spacing:.03em; white-space:pre-wrap;
+            background-image:repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,217,160,.014) 3px 4px); }
+  .script .past { color:#5a6478; display:block; margin:0 0 14px; }
+  .script .typed { color:var(--accent); text-shadow:0 0 8px rgba(255,217,160,.3); display:block; }
+  .script .cursor { animation:blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  .script .empty { color:var(--dim); font-size:13px; font-family:inherit; }
 </style>
 </head>
 <body>
@@ -141,24 +143,37 @@ function tick() {
   }
 }
 
-/* 글자 방송 — 진행도만큼 줄이 밝아진다 (투디워크의 글자 흐름처럼) */
-let scriptSeg = null;
-function renderScript(s, frac) {
+/* 글자 방송 — 말을 뒤따라 한 글자씩 써진다. 지난 토막은 기록으로 쌓인다 (라이브 감). */
+let lastRender = '';
+function renderScript(cur, frac) {
   const el = $('script');
-  if (!s || !s.script) {
-    if (scriptSeg !== null) { scriptSeg = null; el.innerHTML = '<span class="empty">글자 방송 — 별이가 말하면 여기에도 흐릅니다.</span>'; }
+  const p = P();
+  // 지난 토막들 (대본 있는 것만, 최근 6개) — 이미 말해진 기록
+  const past = segs.filter((x) => x.script && x.startAt + x.dur * 1000 <= p && (!cur || x.id !== cur.id)).slice(-6);
+  let html = past.map((x) => `<span class="past"></span>`).join('');
+  let typedText = null;
+  if (cur && cur.script) {
+    const upto = Math.max(0, Math.floor(cur.script.length * Math.min(1, frac)));
+    typedText = cur.script.slice(0, upto);
+    html += `<span class="typed"></span>`;
+  }
+  if (!html) {
+    if (lastRender !== 'empty') { lastRender = 'empty'; el.innerHTML = '<span class="empty">글자 방송 — 별이가 말하면 여기에 뒤따라 써집니다.</span>'; }
     return;
   }
-  const lines = s.script.split('\n').filter((l) => l.trim());
-  if (scriptSeg !== s.id) {
-    scriptSeg = s.id;
-    el.innerHTML = lines.map((l) => '<p></p>').join('');
-    [...el.children].forEach((p, i) => { p.textContent = lines[i]; });
+  const key = past.map((x) => x.id).join(',') + '|' + (typedText ? typedText.length : -1);
+  if (key === lastRender) return;
+  lastRender = key;
+  el.innerHTML = html;
+  const spans = el.querySelectorAll('.past');
+  past.forEach((x, i) => { spans[i].textContent = x.script; });
+  if (typedText !== null) {
+    const t = el.querySelector('.typed');
+    t.textContent = typedText;
+    const c = document.createElement('span'); c.className = 'cursor'; c.textContent = '▌';
+    t.appendChild(c);
   }
-  const upto = Math.ceil(lines.length * Math.min(1, frac + 0.08));
-  [...el.children].forEach((p, i) => p.classList.toggle('said', i < upto));
-  const said = el.querySelectorAll('p.said');
-  if (said.length) said[said.length - 1].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  el.scrollTop = el.scrollHeight;
 }
 
 $('play').onclick = () => {
