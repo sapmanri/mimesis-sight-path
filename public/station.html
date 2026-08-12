@@ -239,6 +239,12 @@ function tick() {
   $('dot').classList.toggle('live', live && playing);
 
   if (!playing) { renderScript(segAt(p), 0); return; }
+  // 꼬리 은혜 (08-12 밤 "말 끝단이 끊겨"): 벽시계가 토막 끝을 지나도 소리가 아직 말하는 중이면
+  // 2.5초까지 기다린다 — 로딩 지연만큼 뒤로 밀린 끝맺음을 자르지 않는다.
+  if (currentSeg !== null && !au.ended && !au.paused) {
+    const cur = segs.find((x) => x.id === currentSeg);
+    if (cur && P() > cur.startAt + cur.dur * 1000 && P() - (cur.startAt + cur.dur * 1000) < 2500) return;
+  }
   const s = segAt(p);
   renderScript(s, s ? (p - s.startAt) / (s.dur * 1000) : 0);
   if (s) {
@@ -249,7 +255,9 @@ function tick() {
       au.play().catch(() => {});
       $('now').textContent = s.title;
       $('state').textContent = s.kind === 'story' ? '사연을 읽는 중' : s.voiceNote ? '목소리 — ' + s.voiceNote : '';
-      amb.pause();
+      // 방 소리는 목소리가 실제로 나올 때 끈다 — 로딩 침묵이 "죽었나?"로 보이지 않게 (08-12 밤)
+      au.onplaying = () => amb.pause();
+      au.onerror = () => setTimeout(() => { if (currentSeg === s.id) { au.load(); au.play().catch(() => {}); } }, 1200);
     } else {
       // 표류 보정 — 방송 시계와 파일 재생이 1.5초 이상 어긋나면 맞춘다
       const want = (p - s.startAt) / 1000;
@@ -428,6 +436,13 @@ $('f').addEventListener('submit', async (e) => {
     m.className = 'lmsg err'; m.textContent = '연결이 잠깐 끊겼어요. 다시 한 번 눌러 주세요.';
   } finally { b.disabled = false; }
 });
+
+const pre = new Audio(); pre.preload = 'auto';
+setInterval(() => {   // 30초 안에 올 다음 토막을 미리 받아둔다
+  const p = P();
+  const nxt = segs.find((x) => x.startAt > p && x.startAt - p < 30000);
+  if (nxt && pre.src !== nxt.url) pre.src = nxt.url;
+}, 5000);
 
 loadProgram();
 setInterval(loadProgram, 60000);
