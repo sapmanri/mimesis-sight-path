@@ -3,7 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>별리 라디오</title>
+<title>별리라됴</title>
+<!-- 공유·파비콘·PWA 패키지 (Vase 08-12 밤) — 로고 정본은 design/make-logo.py, 손으로 안 그린다 -->
+<link rel="icon" type="image/png" sizes="64x64" href="/brand/logo-byeolliradyo-dot-64.png">
+<link rel="icon" type="image/png" sizes="128x128" href="/brand/logo-byeolliradyo-dot-128.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/brand/logo-byeolliradyo-180.png">
+<link rel="manifest" href="/radio.webmanifest">
+<meta name="theme-color" content="#141414">
+<meta property="og:type" content="website">
+<meta property="og:title" content="별리라됴">
+<meta property="og:description" content="별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송">
+<meta property="og:url" content="https://byeoli.sapmanri.com/station">
+<meta property="og:image" content="https://byeoli.sapmanri.com/brand/og-byeolliradyo.png">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   /* 별리 라디오 — 어두운 방의 손라디오 한 대 + 누런 황록빛 옛 LCD 자막창
      (Vase 08-12: "옛날 손라디오… 자막은 누렇고 연한 녹색빛 옛 TFT LCD 느낌") */
@@ -20,9 +32,10 @@
          font-family:'Apple SD Gothic Neo',Pretendard,sans-serif;
          min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
   main { width:100%; max-width:540px; }
-  .star { font-size:22px; margin-bottom:12px; opacity:.9; }
+  .brand { display:flex; align-items:center; gap:14px; margin-bottom:26px; }
+  .brand img { width:52px; height:52px; border-radius:12px; flex:none; }
   h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; margin-bottom:4px; }
-  .sub { color:var(--dim); font-size:12.5px; margin-bottom:26px; }
+  .sub { color:var(--dim); font-size:12.5px; }
   /* 라디오 몸통 — 위에서 빛 받는 갈색 케이스 */
   .deck { background:linear-gradient(175deg, var(--body1), var(--body2) 80%);
           border:1px solid #3d3225; border-top-color:#55462f; border-radius:20px;
@@ -128,9 +141,13 @@
 </head>
 <body>
 <main>
-  <div class="star">✦</div>
-  <h1>별리 라디오</h1>
-  <div class="sub">별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
+  <div class="brand">
+    <img src="/brand/logo-byeolliradyo-192.png" alt="별리라됴">
+    <div>
+      <h1>별리 라디오</h1>
+      <div class="sub">별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
+    </div>
+  </div>
 
   <section id="view-radio">
     <div class="deck">

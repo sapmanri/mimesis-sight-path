@@ -1,0 +1,14 @@
+{
+  "name": "별리라됴",
+  "short_name": "별리라됴",
+  "description": "별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이",
+  "start_url": "/station",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08090b",
+  "theme_color": "#141414",
+  "icons": [
+    { "src": "/brand/logo-byeolliradyo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/logo-byeolliradyo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
