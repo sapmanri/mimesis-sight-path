@@ -213,6 +213,7 @@ const $ = (id) => document.getElementById(id);
 const au = $('au'), amb = $('amb');
 amb.src = 'https://pub-8ec6440aae5545379fcfdd50a243847a.r2.dev/radio/ambient.m4a';
 amb.volume = 0.35;
+amb.loop = false;   // 루프 금지 — 끝나는 순간이 백그라운드에서도 살아 있는 유일한 심장박동이다
 
 let segs = [], clockOffset = 0, playing = false, live = true, anchor = null; // anchor={P0, t0} 과거 재생 기준
 let currentSeg = null;
@@ -313,6 +314,28 @@ function renderScript(cur, frac) {
   }
   el.scrollTop = el.scrollHeight;
 }
+
+/* 라이브 심장박동 — 소리가 끝날 때마다(백그라운드에서도 발화) 편성표를 새로 읽고 다음을 정한다 */
+async function liveAdvance() {
+  if (!playing || !live) return;
+  await loadProgram();
+  const p = liveP();
+  const sNow = segAt(p);
+  if (sNow && currentSeg !== sNow.id) {
+    currentSeg = sNow.id;
+    au.src = sNow.url;
+    au.currentTime = Math.max(0, (p - sNow.startAt) / 1000);
+    au.onplaying = () => amb.pause();
+    au.play().catch(() => {});
+    $('now').textContent = sNow.title;
+  } else if (currentSeg === null || au.ended || au.paused) {
+    currentSeg = null;
+    amb.currentTime = 0;
+    amb.play().catch(() => {});
+  }
+}
+amb.onended = liveAdvance;
+au.addEventListener('ended', liveAdvance);
 
 $('play').onclick = () => {
   playing = !playing;
