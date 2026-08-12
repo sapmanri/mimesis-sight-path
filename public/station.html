@@ -172,14 +172,10 @@ function tick() {
   } else {
     if (currentSeg !== null) { currentSeg = null; au.pause(); }
     if (amb.paused) amb.play().catch(() => {});
-    const future = segs.find((x) => x.startAt > p);
-    if (future) {
-      $('now').textContent = '…';
-      $('state').textContent = '잠깐 조용한 방 — ' + Math.ceil((future.startAt - p) / 1000) + '초 뒤에 다음 이야기';
-    } else {
-      $('now').textContent = '별이가 잠시 자리를 비웠어요';
-      $('state').textContent = '방에는 불이 켜져 있어요. 조금만 기다려 주세요.';
-    }
+    // 안내 문구 없음 (Vase 08-12: "방송은 계속 중이고, 마이크 앞에 별이가 없을 뿐.
+    // 별이는 저기에서 살고 있는") — 방 소리만 낮게 흐른다. 카운트다운은 대기열이지 방송이 아니다.
+    $('now').textContent = '···';
+    $('state').textContent = '';
   }
 }
 
