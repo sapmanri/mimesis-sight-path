@@ -40,8 +40,11 @@
   .brand img { width:44px; height:44px; border-radius:11px; flex:none; }
   .brand h1 { flex:1; min-width:0; }
   .nav { display:flex; gap:8px; flex:none; }
-  .nav a { color:var(--accent); text-decoration:none; font-size:12px; border:1px solid #4d4133;
-           border-radius:8px; padding:5px 10px; white-space:nowrap; }
+  /* 이모지 금지 — ✉ 한 글자가 글줄 높이를 밀어 올려 두 단추가 삐딱해진다 (사장 실견 08-12 밤).
+     inline-flex + line-height 1로 두 단추를 같은 상자에 가둔다. */
+  .nav a { color:var(--accent); text-decoration:none; font-size:12px; line-height:1;
+           display:inline-flex; align-items:center; border:1px solid #4d4133;
+           border-radius:8px; padding:8px 12px; white-space:nowrap; }
   @media (max-height:760px) { .script { height:38vh; } }
   h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; }
   .sub { color:var(--dim); font-size:12.5px; }
@@ -154,9 +157,10 @@
   <div class="brand">
     <img src="/brand/logo-byeolliradyo-192.png" alt="별리라됴">
     <h1>별리 라디오</h1>
-    <div class="nav"><a href="#letter">✉ 사연</a><a href="#archive">지난 방송</a></div>
+    <div class="nav"><a href="#letter">사연</a><a href="#archive">지난 방송</a></div>
   </div>
-  <div class="sub brandsub">별리(別里)에서 스물네 시간 — 오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
+  <!-- 두 줄로 의도해서 자른다 — 화면 폭 따라 "방송" 두 글자만 떨어지는 고아 줄 금지 (사장 실견) -->
+  <div class="sub brandsub">별리(別里)에서 스물네 시간 —<br>오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
 
   <section id="view-radio">
     <div class="deck">
