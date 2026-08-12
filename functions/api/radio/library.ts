@@ -18,22 +18,42 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
-  const raw = await env.PLANET.get(LIBRARY_SHELF_KEY);
+  const [raw, receiptRaw] = await Promise.all([
+    env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get('radio:library:receipt'),
+  ]);
   const shelf: LibraryFind[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, count: shelf.length, shelf });
+  return json(200, {
+    ok: true, count: shelf.length, shelf,
+    lastWalk: receiptRaw ? JSON.parse(receiptRaw) : null,
+  });
 };
+
+// 산책 영수증 — 성공·빈손·실패 전부 남는다. 클라이언트가 타임아웃으로 끊겨 응답을 못 봐도
+// 무슨 일이 있었는지는 여기 있다 (규칙 5 — 첫 판에 이걸 빼먹었다가 실패가 침묵했다, 08-12 밤).
+const RECEIPT_KEY = 'radio:library:receipt';
+// 시도 쿨다운 — 서가가 비어 있으면 신선도 문이 안 잠기므로, 실패가 반복되면 매 틱
+// 몇 분짜리 산책이 돌아 버린다. 시도 자체에 문을 하나 더 둔다.
+const ATTEMPT_KEY = 'radio:library:attempt';
+const ATTEMPT_COOLDOWN_MS = 30 * 60_000;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
   if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
 
   const now = Date.now();
-  const shelfRaw = await env.PLANET.get(LIBRARY_SHELF_KEY);
+  const [shelfRaw, attemptRaw] = await Promise.all([
+    env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get(ATTEMPT_KEY),
+  ]);
   const shelf: LibraryFind[] = shelfRaw ? JSON.parse(shelfRaw) : [];
   const latest = shelf[0]?.at ?? 0;
   if (now - latest < LIBRARY_FRESH_MS) {
     return json(200, { ok: true, skipped: 'fresh', count: shelf.length });
   }
+  const lastAttempt = attemptRaw ? Number(attemptRaw) : 0;
+  if (now - lastAttempt < ATTEMPT_COOLDOWN_MS) {
+    return json(200, { ok: true, skipped: 'cooldown', count: shelf.length });
+  }
+  await env.PLANET.put(ATTEMPT_KEY, String(now));
 
   // 상황 재료 — 편성 틱과 같은 원천(오늘 피드 관찰 + 최근 방송)
   const [feedRaw, indexRaw] = await Promise.all([env.PLANET.get('feed'), env.PLANET.get('radio:drafts')]);
@@ -57,15 +77,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     shelfTitles: shelf.map((f) => f.title),
   }, now);
 
-  if (receipt.find) {
-    const next = [receipt.find, ...shelf].slice(0, LIBRARY_SHELF_KEEP);
-    await env.PLANET.put(LIBRARY_SHELF_KEY, JSON.stringify(next));
-  }
-  // 영수증 그대로 — 빈손(find null·error null)도, 실패도 숨기지 않는다 (규칙 5)
-  return json(receipt.error && !receipt.find ? 502 : 200, {
-    ok: !receipt.error || !!receipt.find,
-    find: receipt.find,
+  const record = {
+    at: now, find: receipt.find,
     queriesRun: receipt.queriesRun, read: receipt.read,
     toolErrors: receipt.toolErrors, error: receipt.error,
-  });
+  };
+  const writes: Promise<void>[] = [env.PLANET.put(RECEIPT_KEY, JSON.stringify(record))];
+  if (receipt.find) {
+    writes.push(env.PLANET.put(LIBRARY_SHELF_KEY, JSON.stringify([receipt.find, ...shelf].slice(0, LIBRARY_SHELF_KEEP))));
+  }
+  await Promise.all(writes);
+  // 영수증 그대로 — 빈손(find null·error null)도, 실패도 숨기지 않는다 (규칙 5)
+  return json(receipt.error && !receipt.find ? 502 : 200, { ok: !receipt.error || !!receipt.find, ...record });
 };
