@@ -9,7 +9,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript, pickBookcasePiece,
-  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece,
+  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
@@ -74,11 +74,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .map((p) => String(p.text))
     .slice(0, 3);
   const draftIds: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+  // 별이가 기억하는 방송 — 08-13 밤까지 **직전 2편**뿐이었다. 굽기가 21분→3분으로 빨라지면서
+  // 기억이 상대적으로 열 배 줄었고, 그날 대본 57편 중 41편이 같은 첫마디로 시작했다(실측).
+  // 12편이면 최근 40분~1시간치다. 앞의 4편은 전문, 나머지는 거울 집계에만 쓴다.
+  const RECALL_DRAFTS = 12;
   const recentScripts: string[] = [];
-  for (const did of draftIds.slice(0, 2)) {
+  const recentCorners: string[] = [];
+  for (const did of draftIds.slice(0, RECALL_DRAFTS)) {
     const dRaw = await env.PLANET.get(RADIO_DRAFT_KEY(did));
-    if (dRaw) { const d = JSON.parse(dRaw) as { script?: string }; if (d.script) recentScripts.push(d.script); }
+    if (!dRaw) continue;
+    const d = JSON.parse(dRaw) as { script?: string; situation?: { corner?: { key?: string } } };
+    if (d.script) recentScripts.push(d.script);
+    const ck = d.situation?.corner?.key;
+    if (ck) recentCorners.push(ck);
   }
+  const airMirror = buildAirMirror(recentScripts);
 
   // 별리 코믹스 — 별이가 지은 이야기 창고(20편+)에서 두 편을 상황에 실어 준다.
   // 게놈 자산 재사용(Vase 08-12) + 소재가 좁게 도는 문제의 자연 해소.
@@ -127,7 +137,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     todayLines,
     story: story?.text ?? null,
     waitingCount: queue.filter((q) => q.status === 'waiting' && q.id !== story?.id).length,
-    recentScripts,
+    // 전문은 앞 4편만 싣는다 — 12편 전문은 프롬프트를 불린다. 나머지는 거울(집계)이 대신 말한다.
+    recentScripts: recentScripts.slice(0, 4),
+    airMirror,
     comicBits,
     songShelf: songs.map((g) => ({ title: g.title })),
     libraryFinds,
@@ -153,6 +165,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       })),
     broadcastTrail: trail.slice(-4).map((d) => ({ date: d.date.slice(5), items: d.items.slice(-10) })),
   };
+
+  // 이번 판의 자리 — 재료가 있는 코너 중 가장 오래 안 쓴 것. 같은 질문을 3분마다 던지지 않기 위해서다.
+  const available = new Set<string>();
+  if (situation.story) available.add('story');
+  if (situation.songShelf?.length) available.add('song');
+  if (situation.libraryFinds?.length) available.add('library');
+  if (situation.bookcase?.open) available.add('bookcase');
+  if (situation.webObservations?.length) available.add('web');
+  if (situation.webtoonPosts?.length) available.add('toon');
+  if (situation.broadcastTrail?.length) available.add('trail');
+  available.add('observe');
+  situation.corner = pickCorner(available, recentCorners);
 
   const written = await writeRadioScript(env, situation);
   if (!written) return json(502, { ok: false, error: 'writer_failed' });

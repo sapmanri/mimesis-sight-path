@@ -13,7 +13,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript,
-  type RadioStory, type RadioDraft, type RadioSituation,
+  type RadioStory, type RadioDraft, type RadioSituation, buildAirMirror,
 } from '../_radio.ts';
 
 interface Env { PLANET: KVNamespace; PULSE_KEY?: string; ANTHROPIC_API_KEY?: string }
@@ -130,18 +130,30 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .map((p) => String(p.text))
     .slice(0, 3);
   const draftIds: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+  // 별이가 기억하는 방송 — 08-13 밤까지 **직전 2편**뿐이었다. 굽기가 21분→3분으로 빨라지면서
+  // 기억이 상대적으로 열 배 줄었고, 그날 대본 57편 중 41편이 같은 첫마디로 시작했다(실측).
+  // 12편이면 최근 40분~1시간치다. 앞의 4편은 전문, 나머지는 거울 집계에만 쓴다.
+  const RECALL_DRAFTS = 12;
   const recentScripts: string[] = [];
-  for (const did of draftIds.slice(0, 2)) {
+  const recentCorners: string[] = [];
+  for (const did of draftIds.slice(0, RECALL_DRAFTS)) {
     const dRaw = await env.PLANET.get(RADIO_DRAFT_KEY(did));
-    if (dRaw) { const d = JSON.parse(dRaw) as { script?: string }; if (d.script) recentScripts.push(d.script); }
+    if (!dRaw) continue;
+    const d = JSON.parse(dRaw) as { script?: string; situation?: { corner?: { key?: string } } };
+    if (d.script) recentScripts.push(d.script);
+    const ck = d.situation?.corner?.key;
+    if (ck) recentCorners.push(ck);
   }
+  const airMirror = buildAirMirror(recentScripts);
 
   const situation: RadioSituation = {
     timeLabel: timeLabelOf(kstHour()),
     todayLines,
     story: story.text,
     waitingCount: queue.filter((q) => q.status === 'waiting' && q.id !== story.id).length,
-    recentScripts,
+    recentScripts: recentScripts.slice(0, 4),
+    airMirror,
+    corner: { key: 'story', label: '사연', hint: '기다리는 사연을 읽고, 거기에 네 얘기를 하나만 보탠다' },
   };
 
   const written = await writeRadioScript(env, situation);

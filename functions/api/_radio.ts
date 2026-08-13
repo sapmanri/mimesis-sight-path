@@ -164,6 +164,13 @@ export interface RadioSituation {
   story: string | null;
   waitingCount: number;     // 이 사연 말고 기다리는 사연 수
   recentScripts: string[];  // 최근 방송 토막 (반복 방지)
+  /** 방송 거울 — 최근 판들이 실제로 어떻게 나가고 있는지의 집계.
+      금지가 아니라 **인지**다 (사장 08-14 새벽: "지가 지금 계속 하고 있는 걸 인지시켜.
+      그래야 내가 계속 똑같은 걸 하고 있구나 하고 스스로 각성하게"). 보고 나서 고르는 건 별이다. */
+  airMirror?: { total: number; openings: { text: string; count: number }[]; overused: { word: string; docs: number }[] };
+  /** 이번 판의 자리 — 편성이 지정한 코너. 자리는 편성이 정하고 무슨 말을 할지는 별이가 정한다.
+      08-13 밤 실측: 하루 57편 중 41편이 같은 첫마디였다. 같은 질문을 3분마다 던지면 같은 답이 온다. */
+  corner?: { key: string; label: string; hint: string };
   /** 별리 코믹스 — 별이가 직접 지은 이야기들 (Vase 08-12: "엄청 큰 걸 놓치고 있었다").
       게놈 자산의 재사용: 방송에서 "요즘 만들던 이야기"로 꺼낼 수 있는 실재 창작물. */
   comicBits?: { title: string; epigraph: string; lines: string[] }[];
@@ -372,10 +379,83 @@ export function situationMessage(s: RadioSituation): string {
     s.broadcastTrail?.length
       ? `지난 며칠 방송에서 네가 한 일들 (네 기억이다 — 이어가든 말든 네 마음):\n${s.broadcastTrail.map((d) => `- ${d.date}: ${d.items.join(' · ')}`).join('\n')}`
       : null,
+    `너는 지금 라디오 DJ다. 별리라됴의 진행자고, 이 시각에 누군가 이걸 듣고 있다.\n`
+      + `라디오 DJ가 하는 일은 대개 이렇다 — 지금 몇 시인지 알려 주고, 곡을 왜 트는지 한마디 얹고,\n`
+      + `사연을 읽고 거기에 자기 얘기를 하나 보태고, 오늘 있었던 일을 꺼내고, 다음에 뭐가 올지 흘리고,\n`
+      + `혼잣말이 아니라 듣는 사람에게 말한다. 매번 다 할 필요는 없고 한 판에 하나면 된다.\n`
+      + `참고만 해라 — 그대로 하든 네 식대로 하든 네가 정한다.`,
+    s.corner
+      ? `이번 판의 자리: **${s.corner.label}** — ${s.corner.hint}\n자리는 편성이 정한다. 그 자리에서 무슨 말을 할지는 네가 정한다.`
+      : null,
+    s.airMirror && (s.airMirror.openings.length || s.airMirror.overused.length)
+      ? [
+          `지금 네 방송이 이렇게 나가고 있어 (최근 ${s.airMirror.total}판을 세어 본 것이다):`,
+          ...(s.airMirror.openings.length
+            ? [`- 첫마디: ${s.airMirror.openings.map((o) => `「${o.text}」 ${o.count}번`).join(' · ')}`] : []),
+          ...(s.airMirror.overused.length
+            ? [`- 자주 나온 것: ${s.airMirror.overused.map((w) => `${w.word}(${w.docs}판)`).join(' · ')}`] : []),
+          `금지가 아니다. 알고 하는 것과 모르고 하는 것은 다르다 — 보고 나서 네가 정해라.`,
+        ].join('\n')
+      : null,
     s.recentScripts.length
-      ? `최근 방송에서 이미 한 말들 (같은 소재·문형 반복 금지):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 160)}`).join('\n')}`
+      ? `최근 방송에서 한 말들 (네가 방금 한 얘기다):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 110)}`).join('\n')}`
       : null,
   ].filter(Boolean).join('\n\n');
+}
+
+
+/** 최근 대본들에서 「어떻게 나가고 있나」를 센다 — 첫마디 반복과 여러 판에 걸친 낱말.
+    형태소 분석 없이 한글 어절만 훑는 가벼운 셈이라 완벽하지 않다. 목적은 정확한 통계가 아니라
+    별이가 자기 방송을 **보게** 하는 것이다. */
+const MIRROR_STOP = new Set([
+  '그냥', '그런', '그거', '그게', '이런', '저런', '오늘', '지금', '그리고', '근데', '하는', '있는',
+  '하고', '같아', '있어', '없어', '했다', '한다', '보다', '보고', '조금', '아직', '다시', '자꾸',
+  '그래', '그럼', '나는', '내가', '우리', '이건', '거기', '여기', '뭔가', '계속', '정도', '사람',
+  '생각', '모르', '이렇', '그렇', '어제', '내일', '동안', '이제', '아마', '한번', '이번',
+]);
+export function buildAirMirror(scripts: string[]): { total: number; openings: { text: string; count: number }[]; overused: { word: string; docs: number }[] } | undefined {
+  if (scripts.length < 3) return undefined;
+  const openTally = new Map<string, number>();
+  const wordDocs = new Map<string, number>();
+  for (const raw of scripts) {
+    const first = String(raw).split('\n').map((l) => l.trim()).find(Boolean) ?? '';
+    if (first) openTally.set(first, (openTally.get(first) ?? 0) + 1);
+    for (const w of new Set(String(raw).match(/[가-힣]{2,4}/g) ?? [])) {
+      if (!MIRROR_STOP.has(w)) wordDocs.set(w, (wordDocs.get(w) ?? 0) + 1);
+    }
+  }
+  const half = Math.max(2, Math.ceil(scripts.length / 2));
+  return {
+    total: scripts.length,
+    openings: [...openTally.entries()].filter(([, n]) => n >= 2)
+      .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([text, count]) => ({ text, count })),
+    overused: [...wordDocs.entries()].filter(([, n]) => n >= half)
+      .sort((a, b) => b[1] - a[1]).slice(0, 6).map(([word, docs]) => ({ word, docs })),
+  };
+}
+
+/** 코너 — 매 판 같은 것을 묻지 않기 위한 자리. 재료가 있는 코너 중 가장 오래 안 쓴 것을 고른다.
+    사장 08-14 새벽: "별이가 계속 새로운 얘기를 하게끔 유도를 해야지." */
+export const RADIO_CORNERS: { key: string; label: string; hint: string }[] = [
+  { key: 'story',    label: '사연',        hint: '기다리는 사연을 읽고, 거기에 네 얘기를 하나만 보탠다' },
+  { key: 'song',     label: '곡 소개',     hint: '곡 하나를 골라 왜 지금 이 곡인지 한마디 얹고 튼다' },
+  { key: 'library',  label: '서재',        hint: '요즘 읽은 책에서 한 대목만 꺼낸다' },
+  { key: 'bookcase', label: '책장 낭독',   hint: '책장에 펼쳐진 원고를 소리 내어 읽는다' },
+  { key: 'web',      label: '오늘 본 것',  hint: '하늘·그림·사진·옛 글에서 하나' },
+  { key: 'toon',     label: '웹툰',        hint: '@byeol.toon 최근 편을 보고 든 생각' },
+  { key: 'trail',    label: '지난 방송',   hint: '며칠 전 방송에서 한 얘기를 다시 꺼내 이어 본다' },
+  { key: 'observe',  label: '관찰',        hint: '오늘 본 것 하나' },
+];
+export function pickCorner(available: Set<string>, recentKeys: string[]): { key: string; label: string; hint: string } {
+  const usable = RADIO_CORNERS.filter((c) => available.has(c.key));
+  const pool = usable.length ? usable : RADIO_CORNERS.filter((c) => c.key === 'observe');
+  let best = pool[0]; let bestAge = -1;
+  for (const c of pool) {
+    const idx = recentKeys.indexOf(c.key);           // 0 = 바로 직전
+    const age = idx === -1 ? 999 : idx;              // 안 쓴 지 오래된 것일수록 크다
+    if (age > bestAge) { best = c; bestAge = age; }
+  }
+  return best;
 }
 
 /** 책장 원고 한 조각 (제목·본문). 실물은 KV(radio:bookcase), 채우는 손은 byeol-radio/bookcase-sync.sh. */

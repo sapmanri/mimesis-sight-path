@@ -4,6 +4,8 @@ import {
   mechanicalFilter, parseModeration, radioSystemPrompt, validateRadioScript, situationMessage,
   parseScriptAndVoice, parseTrailingTags, pickBookcasePiece, markStoryRegistered, markStoryAired,
   type RadioSituation, type RadioStory,
+  buildAirMirror,
+  pickCorner,
 } from './_radio.ts';
 import { onRequestGet as getRadioDraftSummary, storyPreview, timeLabelOf } from './radio/draft.ts';
 
@@ -80,9 +82,51 @@ test('상황 메시지 — 사실만 담기고 사연은 데이터 블록', () =
   assert.match(msg, /오늘 네가 남긴 관찰/);
   assert.match(msg, /<사연>/);
   assert.match(msg, /2개의 이야기가 더 기다리고/);
-  assert.match(msg, /반복 금지/);
+  assert.match(msg, /최근 방송에서 한 말들/);
+  // 08-14: 진행자 역할을 알려 준다 — 참고이지 지시가 아니다 (사장: "라디오 DJ라는 걸 알려주고")
+  assert.match(msg, /너는 지금 라디오 DJ다/);
+  assert.match(msg, /네가 정한다/);
   // 관찰이 없으면 없다고 말한다 — 지어내지 않는다
   assert.match(situationMessage({ ...s, todayLines: [] }), /아직 남긴 관찰이 없다/);
+});
+
+// 08-14 새벽 사고: 굽기가 21분→3분으로 빨라졌는데 기억은 직전 2편 그대로라
+// 하루 대본 57편 중 41편이 같은 첫마디였다. 금지가 아니라 **거울**을 준다.
+test('방송 거울 — 반복을 세어 보여 주되 금지하지 않는다', () => {
+  const scripts = [
+    '지금은 밤이다.\n개가 그 자리에 있었어.',
+    '지금은 밤이다.\n개는 아직도 거기 있어.',
+    '지금은 밤이야.\n바구니 안에 밤 몇 알.',
+    '지금은 밤이다.\n개하고 바구니.',
+  ];
+  const mirror = buildAirMirror(scripts);
+  assert.ok(mirror, '4편이면 거울이 나온다');
+  assert.equal(mirror!.total, 4);
+  assert.equal(mirror!.openings[0]?.text, '지금은 밤이다.');
+  assert.equal(mirror!.openings[0]?.count, 3);
+  assert.ok(mirror!.overused.some((w) => w.word === '바구니' || w.word === '밤이다'));
+  assert.equal(buildAirMirror(['한 편뿐']), undefined, '표본이 적으면 거울을 만들지 않는다');
+
+  const msg = situationMessage({
+    timeLabel: '밤', todayLines: [], story: null, waitingCount: 0,
+    recentScripts: scripts.slice(0, 2), airMirror: mirror,
+  });
+  assert.match(msg, /이렇게 나가고 있어/);
+  assert.match(msg, /금지가 아니다/);
+});
+
+// 자리(코너)는 편성이 정하고, 무슨 말을 할지는 별이가 정한다
+test('코너 회전 — 재료가 있는 자리 중 가장 오래 안 쓴 것', () => {
+  const avail = new Set(['story', 'song', 'observe']);
+  assert.equal(pickCorner(avail, ['story', 'song', 'observe']).key, 'observe');
+  assert.equal(pickCorner(avail, ['observe', 'story']).key, 'song', '한 번도 안 쓴 자리가 먼저다');
+  assert.equal(pickCorner(new Set(['observe']), ['observe']).key, 'observe', '재료가 하나뿐이면 그것');
+  const msg = situationMessage({
+    timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
+    corner: { key: 'song', label: '곡 소개', hint: '왜 지금 이 곡인지 한마디' },
+  });
+  assert.match(msg, /이번 판의 자리/);
+  assert.match(msg, /곡 소개/);
 });
 
 // R3: 기분→목소리 — 별이가 원고 끝에 정하는 셀프 연출 한 줄
