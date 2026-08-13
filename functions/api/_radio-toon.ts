@@ -1,79 +1,123 @@
-// 별이 웹툰 읽기 — 자기 웹툰(@byeol.toon 스레드)의 최근 편을 별이가 알고 방송한다.
+// @byeol.toon 공개 웹툰 관측 서가.
 //
-// 태생이 실사고다 (08-12 밤, Vase): 웹툰에 "오늘 청국장 먹었다" 편이 올라갔는데, 라디오
-// 별이는 그걸 몰라서 사연으로 물어온 청취자에게 "사실이 아니야"라고 방송했다.
-// "별이 웹툰 별이도 좀 보라고 한 거거든." — 그래서 웹툰을 상황에 실어 준다.
+// 소유권 경계가 이 파일의 가장 중요한 계약이다.
+// - @byeol.toon은 별이의 계정이 아니다. 다른 사람이 별이를 소재로 운영하는 공개 계정이다.
+// - 따라서 이 선은 Crawl4AI로 공개 게시물을 읽기만 한다. 게시·댓글·답글 권한은 절대 없다.
+// - 별이의 자기 계정 @byeoli_log는 이 선에 넣지 않는다. 읽기·쓰기는 Meta 공식 API 전용이다.
 //
-// ⚠ 결(게놈) 경계 — 이게 이 모듈의 제일 중요한 줄이다:
-//   웹툰 별이의 말투(이모지·"꿀맛!😊" 류)는 그 채널의 옷이다. 라디오 별이의 결(담담 반말·
-//   이모지 금지)과 다르다. **내용은 별이의 것이되, 말투는 관찰 전용·복제 금지** —
-//   덕이 유행어와 같은 원칙. 상황 블록 문구가 그 경계를 세운다 (situationMessage 쪽).
-//
-// 읽기는 기계적 추출이다 — 별이 인격 없이, 서버 도구 web_fetch로 공개 프로필을 펼쳐
-// 게시물 텍스트를 그대로 뽑는다 (08-12 실측: 스레드 공개 페이지는 도구로 읽힌다.
-// 인스타는 로그인벽 — 같은 편이 올라가므로 스레드로 충분).
-
-import { readTranscript, extractJson, runWithTools, type MusicWebEnv } from './_music-web.ts';
+// Cloudflare Pages가 외부 Threads를 다시 긁지 않는다. 로컬 브라우저가 렌더링한 결과를
+// X-Pulse-Key로 밀어 넣고, 서버는 주소·시각·게시물 링크를 검증한 뒤 마지막 성공 서가만 보존한다.
 
 export const TOON_KEY = 'radio:toon';
+export const TOON_RECEIPT_KEY = 'radio:toon:receipt';
 export const TOON_URL = 'https://www.threads.com/@byeol.toon';
-export const TOON_FRESH_MS = 3 * 3_600_000;
-const TOON_MODEL = 'claude-sonnet-5';
-const MAX_TOKENS = 3000;
-const POSTS_MAX = 5;
+export const TOON_HANDLE = 'byeol.toon';
+export const TOON_POSTS_MAX = 12;
+export const TOON_CRAWL_MAX_AGE_MS = 30 * 60_000;
 
-export interface ToonPost { text: string; when: string }
-export interface ToonReadReceipt {
+export interface ToonPost {
+  id: string;
+  text: string;
+  when: string;
+  permalink: string;
+}
+
+export interface ToonCrawlPayload {
+  engine: 'crawl4ai';
+  sourceUrl: typeof TOON_URL;
+  fetchedAt: number;
   posts: ToonPost[];
-  read: string[];
-  toolErrors: string[];
-  error: string | null;
 }
 
-export function buildToonPrompt(): string {
-  return [
-    `아래 주소는 웹툰 계정의 공개 스레드 프로필이다. web_fetch로 펼쳐 읽고,`,
-    `보이는 최근 게시물의 **본문 텍스트를 그대로**(요약·수정 없이) 뽑아라. 최대 ${POSTS_MAX}개.`,
-    TOON_URL,
-    ``,
-    `각 게시물의 상대 시각 표기(예: 4시간 전, 1일 전)가 보이면 when에 그대로 적는다. 없으면 빈 문자열.`,
-    `게시물이 안 보이거나 페이지를 못 읽으면 {"posts": []} 라고만 답한다 — 지어내지 않는다.`,
-    ``,
-    `마지막 답으로 JSON 하나만: {"posts": [{"text": "", "when": ""}]}`,
-  ].join('\n');
+export interface ToonShelf {
+  at: number;
+  sourceAt: number;
+  sourceUrl: typeof TOON_URL;
+  source: 'crawl4ai';
+  ownership: 'external_read_only';
+  posts: ToonPost[];
 }
 
-/** 추출 검증 — 페이지를 실제로 펼쳐 읽었을 때만 인정한다 (읽은 척 방지, 서재 산책과 같은 문). */
-export function validateToonPosts(
-  parsed: unknown, fetched: string[],
-): { posts: ToonPost[]; why: string | null } {
-  const p = parsed as { posts?: unknown } | null;
-  if (!p || !Array.isArray(p.posts)) return { posts: [], why: 'json_unreadable' };
-  if (!fetched.some((u) => u.includes('threads.'))) return { posts: [], why: 'page_not_fetched' };
+export type ToonValidation =
+  | { ok: true; payload: ToonCrawlPayload }
+  | { ok: false; error: string };
+
+const compact = (value: unknown): string => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+function canonicalProfile(value: unknown): string | null {
+  try {
+    const url = new URL(String(value ?? ''));
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const path = url.pathname.replace(/\/+$/, '');
+    if (url.protocol !== 'https:' || host !== 'threads.com' || path !== `/@${TOON_HANDLE}`) return null;
+    return TOON_URL;
+  } catch {
+    return null;
+  }
+}
+
+function canonicalPost(value: unknown): { id: string; permalink: string } | null {
+  try {
+    const url = new URL(String(value ?? ''));
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    const match = url.pathname.replace(/\/+$/, '').match(new RegExp(`^/@${TOON_HANDLE}/post/([A-Za-z0-9_-]{5,80})$`));
+    if (url.protocol !== 'https:' || host !== 'threads.com' || !match) return null;
+    return { id: match[1], permalink: `https://www.threads.com/@${TOON_HANDLE}/post/${match[1]}` };
+  } catch {
+    return null;
+  }
+}
+
+/** 로컬 브라우저 결과가 정말 @byeol.toon에서 방금 읽은 공개글인지 검증한다. */
+export function validateToonCrawl(raw: unknown, now = Date.now()): ToonValidation {
+  const input = raw as Partial<ToonCrawlPayload> | null;
+  if (!input || input.engine !== 'crawl4ai') return { ok: false, error: 'engine_must_be_crawl4ai' };
+  if (canonicalProfile(input.sourceUrl) !== TOON_URL) return { ok: false, error: 'source_must_be_external_byeol_toon' };
+
+  const fetchedAt = Number(input.fetchedAt);
+  if (!Number.isFinite(fetchedAt)) return { ok: false, error: 'fetched_at_invalid' };
+  if (fetchedAt > now + 2 * 60_000) return { ok: false, error: 'fetched_at_in_future' };
+  if (now - fetchedAt > TOON_CRAWL_MAX_AGE_MS) return { ok: false, error: 'crawl_result_stale' };
+  if (!Array.isArray(input.posts) || input.posts.length < 1) return { ok: false, error: 'posts_empty' };
+  if (input.posts.length > TOON_POSTS_MAX) return { ok: false, error: 'posts_too_many' };
+
+  const seen = new Set<string>();
   const posts: ToonPost[] = [];
-  for (const raw of p.posts.slice(0, POSTS_MAX) as Partial<ToonPost>[]) {
-    const text = String(raw.text ?? '').trim().slice(0, 400);
-    if (!text) continue;
-    posts.push({ text, when: String(raw.when ?? '').trim().slice(0, 20) });
+  for (const value of input.posts) {
+    const post = value as Partial<ToonPost>;
+    const link = canonicalPost(post.permalink);
+    if (!link) return { ok: false, error: 'post_permalink_not_byeol_toon' };
+    if (post.id && compact(post.id) !== link.id) return { ok: false, error: 'post_id_permalink_mismatch' };
+    if (seen.has(link.id)) return { ok: false, error: 'post_duplicate' };
+    const text = compact(post.text);
+    const when = compact(post.when);
+    if (!text || text.length > 1800) return { ok: false, error: 'post_text_invalid' };
+    if (when.length > 60) return { ok: false, error: 'post_when_too_long' };
+    seen.add(link.id);
+    posts.push({ id: link.id, text, when, permalink: link.permalink });
   }
-  return { posts, why: null };   // 빈 목록도 유효 — "오늘은 못 읽었다"가 지어내기보다 낫다
+
+  return {
+    ok: true,
+    payload: { engine: 'crawl4ai', sourceUrl: TOON_URL, fetchedAt, posts },
+  };
 }
 
-export async function runToonRead(env: MusicWebEnv): Promise<ToonReadReceipt> {
-  const empty = readTranscript([]);
-  if (!env.ANTHROPIC_API_KEY) {
-    return { posts: [], read: [], toolErrors: [], error: 'anthropic_key_missing' };
-  }
-  const { transcript, error } = await runWithTools(
-    env,
-    [{ role: 'user', content: buildToonPrompt() }],
-    // allowed_domains 명시 (08-12 밤 실측: 없으면 fetch: url_not_allowed — 검색 결과에서 온
-    // 주소가 아닌 직접 지정 주소는 허용 목록이 있어야 열린다)
-    [{ type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 2,
-       allowed_domains: ['threads.com', 'www.threads.com'] }],
-    { model: TOON_MODEL, maxTokens: MAX_TOKENS },
-  );
-  if (error) return { posts: [], read: transcript.fetched, toolErrors: transcript.toolErrors, error };
-  const { posts, why } = validateToonPosts(extractJson(transcript.text), transcript.fetched);
-  return { posts, read: transcript.fetched, toolErrors: transcript.toolErrors, error: why };
+export function decodeToonShelf(raw: unknown): ToonShelf | null {
+  const shelf = raw as Partial<ToonShelf> | null;
+  if (!shelf || !Array.isArray(shelf.posts)) return null;
+  if (shelf.source !== 'crawl4ai' || shelf.ownership !== 'external_read_only') return null;
+  const checked = validateToonCrawl({
+    engine: 'crawl4ai', sourceUrl: shelf.sourceUrl, fetchedAt: shelf.sourceAt, posts: shelf.posts,
+  // 보관본은 시간이 지나도 마지막 성공 서가로 유효하다. 신선도는 새 적재 시점에만 검사한다.
+  }, Number(shelf.sourceAt));
+  if (!checked.ok) return null;
+  return {
+    at: Number(shelf.at) || Number(shelf.sourceAt),
+    sourceAt: checked.payload.fetchedAt,
+    sourceUrl: TOON_URL,
+    source: 'crawl4ai',
+    ownership: 'external_read_only',
+    posts: checked.payload.posts,
+  };
 }

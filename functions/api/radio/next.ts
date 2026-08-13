@@ -13,6 +13,7 @@ import {
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
+import { WEB_OBSERVATIONS_KEY, type WebObservationShelf } from '../_radio-observations.ts';
 import { THREADS_SHELF_KEY, YOUTUBE_SHELF_KEY, type ThreadsShelf, type YoutubeShelf } from '../_radio-social-types.ts';
 import { timeLabelOf } from './draft.ts';
 
@@ -57,11 +58,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw, recallRaw, threadsRaw, youtubeRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw, recallRaw, threadsRaw, youtubeRaw, observationsRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
     env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get('radio:bookcase'),
     env.PLANET.get(TOON_KEY), env.PLANET.get(RECALL_KEY),
     env.PLANET.get(THREADS_SHELF_KEY), env.PLANET.get(YOUTUBE_SHELF_KEY),
+    env.PLANET.get(WEB_OBSERVATIONS_KEY),
   ]);
   const trail: { date: string; items: string[] }[] = recallRaw ? JSON.parse(recallRaw) : [];
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
@@ -130,14 +132,25 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     songShelf: songs.map((g) => ({ title: g.title })),
     libraryFinds,
     bookcase,
-    // 웹툰 최근 편 (08-12 밤 청국장 사건) — 최신 3편만. 읽는 손은 /api/radio/toon.
-    webtoonPosts: (toonRaw ? (JSON.parse(toonRaw) as { posts: ToonPost[] }).posts : []).slice(0, 3),
+    // 외부 웹툰 @byeol.toon — 별이 소유 계정이 아니다. Crawl4AI 읽기 전용 최근 3편만.
+    webtoonPosts: (toonRaw ? (JSON.parse(toonRaw) as { posts: ToonPost[] }).posts : []).slice(0, 3).map((p) => ({
+      text: p.text, when: p.when, permalink: p.permalink,
+    })),
     threadsPosts: (threadsRaw ? (JSON.parse(threadsRaw) as ThreadsShelf).posts : []).slice(0, 5).map((p) => ({
       text: p.text, when: p.timestamp, permalink: p.permalink,
     })),
     youtubeVideos: (youtubeRaw ? (JSON.parse(youtubeRaw) as YoutubeShelf).videos : []).slice(0, 5).map((v) => ({
       title: v.title, publishedAt: v.publishedAt, url: v.url, description: v.description,
     })),
+    // 실제 브라우저 렌더 관측. 영상은 공개 페이지 텍스트만 읽었으며 시청·청취를 주장하지 않는다.
+    webObservations: (observationsRaw
+      ? (JSON.parse(observationsRaw) as WebObservationShelf).sources
+      : []).slice(0, 4).map((source) => ({
+        id: source.id, label: source.label, kind: source.kind, sourceUrl: source.sourceUrl,
+        items: source.items.slice(0, 5).map((item) => ({
+          title: item.title, text: item.text, when: item.when, url: item.url,
+        })),
+      })),
     broadcastTrail: trail.slice(-4).map((d) => ({ date: d.date.slice(5), items: d.items.slice(-10) })),
   };
 
