@@ -6,6 +6,7 @@ import {
   type RadioSituation, type RadioStory,
   buildAirMirror,
   pickCorner,
+  stripBrokenTag,
 } from './_radio.ts';
 import { onRequestGet as getRadioDraftSummary, storyPreview, timeLabelOf } from './radio/draft.ts';
 
@@ -139,6 +140,19 @@ test('지문 — 본문에서 떼어 숨으로 남기고, 지문 자체는 기�
   const keep = parseScriptAndVoice('그 집(지금은 없다)에 갔어.');
   assert.equal(keep.script, '그 집(지금은 없다)에 갔어.');
   assert.deepEqual(keep.stageCues, []);
+});
+
+// 08-14 새벽: 대본이 「[노래: 그때 다」에서 잘려 그 조각을 TTS가 읽었다(사장 실청).
+// 한도는 올렸지만 언젠가 또 잘린다 — 잘리는 건 막을 수 없어도 읽히는 건 막는다.
+test('잘린 태그 조각 — 본문에서 떼어내고 경고로 남긴다', () => {
+  const cut = stripBrokenTag('그 그림 보다가 이 곡이 떠올랐어.\n\n[노래: 그때 다');
+  assert.equal(cut.script, '그 그림 보다가 이 곡이 떠올랐어.');
+  assert.equal(cut.broken, true);
+  const ok = stripBrokenTag('멀쩡한 본문이야.');
+  assert.equal(ok.broken, false);
+  assert.equal(ok.script, '멀쩡한 본문이야.');
+  // 닫힌 태그는 건드리지 않는다 (그건 parseTrailingTags 몫)
+  assert.equal(stripBrokenTag('본문.\n[노래: 그때 다시 그곳으로]').broken, false);
 });
 
 // R3: 기분→목소리 — 별이가 원고 끝에 정하는 셀프 연출 한 줄

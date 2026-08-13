@@ -327,6 +327,15 @@ export function parseTrailingTags(text: string): {
     막지 않는다 (사장 판정: "지문도 쓸 줄 아네, 대견해"). 대신 읽히는 대신 **들리게** 한다 —
     지문 줄을 본문에서 떼어 문단 경계로 남기면 say-byeol이 그 자리에 1.1초 숨을 넣고
     mix-foley가 생활음을 얹는다. 별이가 의도한 숨이 진짜 숨이 된다. 떼어낸 지문은 버리지 않고 남긴다. */
+/** 닫히지 않은 제어 태그 조각을 떼어낸다 — 08-14 실사고 방어.
+    모델 출력이 잘리면 「[노래: 그때 다」 같은 조각이 본문에 남고 TTS가 그대로 읽는다.
+    한도를 올려도 언젠가 또 잘린다. 잘리는 건 막을 수 없어도 **읽히는 건 막는다.** */
+export function stripBrokenTag(script: string): { script: string; broken: boolean } {
+  const m = script.match(/\n?\s*\[[^\]\n]*$/);
+  if (!m) return { script, broken: false };
+  return { script: script.slice(0, m.index).trimEnd(), broken: true };
+}
+
 export function extractStageCues(script: string): { script: string; stageCues: string[] } {
   const cues: string[] = [];
   const kept: string[] = [];
@@ -530,7 +539,10 @@ export async function writeRadioScript(
       method: 'POST',
       headers: HEADERS(env.ANTHROPIC_API_KEY),
       body: JSON.stringify({
-        model: CLAUDE_MODEL, max_tokens: 1200, system: sys.prompt,
+        // 08-14 새벽 실사고: 대본이 「[노래: 그때 다」에서 잘렸다. 태그가 안 닫혀 곡이 안 걸렸고
+        // 그 조각을 TTS가 「노래 그때 다」로 읽었다. 한국어는 글자당 토큰을 많이 먹는데
+        // 재료가 풍부해지며 대본이 길어져(최장 516자) 1200에 걸렸다.
+        model: CLAUDE_MODEL, max_tokens: 2400, system: sys.prompt,
         messages: [{ role: 'user', content: situationMessage(situation) }],
       }),
     });
@@ -538,14 +550,15 @@ export async function writeRadioScript(
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const raw = (data.content?.find((c) => c.type === 'text')?.text ?? '').trim();
     const parsed = parseTrailingTags(raw);
-    const { script, stageCues } = extractStageCues(parsed.script);
+    const fixed = stripBrokenTag(parsed.script);
+    const { script, stageCues } = extractStageCues(fixed.script);
     const { voiceNote, songTitle, musicTransition } = parsed;
     const check = validateRadioScript(script, situation.story);
     if (!check.pass) return null;
     return {
       script, voiceNote, songTitle, musicTransition, stageCues,
       provenance: provenance('genome-live', true),
-      warnings: [...sys.warnings, ...check.warnings],
+      warnings: [...sys.warnings, ...check.warnings, ...(fixed.broken ? ['truncated_tag_stripped'] : [])],
     };
   } catch { return null; }
 }
