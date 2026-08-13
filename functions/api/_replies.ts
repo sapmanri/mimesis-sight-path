@@ -30,14 +30,14 @@ export function maskUsername(username: string): string {
   return username[0] + '***' + username[username.length - 1];
 }
 
-/** 휴리스틱 분류 — 민감/스팸의 1차 필터. 생성 단계에서 Claude가 2차로 거른다. */
+/** 분석용 라벨. 어떤 라벨도 답글 여부를 결정하거나 후보에서 제외하지 않는다. */
 export function categorize(text: string): ReplyCategory {
   const t = text.trim();
   if (!t) return 'spam';
   if (/https?:\/\/|bit\.ly|팔로|맞팔|홍보|광고|수익|코인|주식|투자/i.test(t)) return 'spam';
   if (/병원|의사|약 |처방|변호사|소송|고소|대통령|정당|선거|정치|주민번호|전화번호/.test(t)) return 'sensitive';
   const stripped = t.replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}\sㅋㅎㅠㅜ.!~^]+/gu, '');
-  if (stripped.length < 2) return 'light';                     // 이모지·ㅋㅋ뿐 — 기본 무응답
+  if (stripped.length < 2) return 'light';                     // 이모지·ㅋㅋ 중심 라벨
   if (/\?|나요|까요|어때|뭐예요|뭔가요|누구/.test(t)) return 'question';
   if (/잘 보고|잘보고|응원|왔어요|왔다감|좋아요|좋다|고마워/.test(t) && t.length < 30) return 'greeting';
   return 'observation';
@@ -81,7 +81,7 @@ export const repliesConfig = {
   POSTS_TO_CHECK: 12,
 };
 
-/* ── 2026-07-20 — 답글 판단의 세계 사실·강제 후보 (threads-replies가 사용) ── */
+/* ── 답글 판단에 제공하는 확인된 세계 사실 (threads-replies가 사용) ── */
 
 /**
  * 세계의 사실 — "지어내지 않는다"의 기준선. 실사고: "펫 안 데리고 다니니?" 댓글에
@@ -92,8 +92,3 @@ export const WORLD_FACTS = `세계의 사실 (이건 실제다 — 지어내지 
 - 네 곁에는 흰 고양이 '빼콩이'가 있다. 산책에 늘 따라다닌다. 그 외의 펫은 없다.
 - 펫·고양이 얘기가 나오면 빼콩이가 답의 재료다. "데리고 다니는 펫이 없다"고 판단하지 마라.
 - 너는 픽셀 동네를 걷고, 관찰한 것을 짧게 남긴다. 그 이상의 과거·계획은 지어내지 않는다.`;
-
-/**
- * 운영자 강제 후보 — 무응답 레코드의 [후보 만들기]는 사람이 무응답 판단을 뒤집겠다는
- * 뜻이다. 정책 위반(비난·도발·정치·의료·법률·개인정보)만은 사람도 못 뒤집는다.
- */
