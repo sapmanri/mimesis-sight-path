@@ -57,6 +57,8 @@ export interface SocialAgentReceipt {
     errorCode: string | null;
     requestId: string | null;
   };
+  continuationNeeded: boolean;
+  continuationDelayMs: number | null;
   nextLookAt: number | null;
   error: string | null;
 }
@@ -96,8 +98,13 @@ async function eligibleSegments(env: SocialAgentEnv, segments: ProgramSegment[])
 
 function emptyReplyRun(error: string): AutonomousReplyRun {
   return {
-    ingest: { ok: false, error, added: 0 }, examined: 0, published: 0, ignored: 0,
-    bookmarked: 0, failed: 1, publishedIds: [], errors: [error],
+    ingest: {
+      ok: false, error, added: 0, checked: 0, total: 0, pages: 0,
+      cycleComplete: false, remainingPosts: 0,
+    },
+    examined: 0, published: 0, ignored: 0, bookmarked: 0, failed: 1, pending: 0,
+    continuationNeeded: true, continuationDelayMs: 10 * 60_000,
+    publishedIds: [], errors: [error],
   };
 }
 
@@ -129,6 +136,7 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
           account: { ok: false, count: 0, error: 'agent_busy' }, replies: null, editorial: null,
           externalComments: { ok: false, count: 0, account: '@byeol.toon', error: 'agent_busy' },
           post: { attempted: false, ok: false, errorCode: null, requestId: null },
+          continuationNeeded: true, continuationDelayMs: 60_000,
           nextLookAt: null, error: 'agent_busy_current_state_will_be_seen_next_run',
         };
       }
@@ -158,84 +166,81 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
       replies = emptyReplyRun(message.slice(0, 160));
     }
 
-    const [programRaw, observationsRaw, shelfRaw, toonRaw] = await Promise.all([
-      env.PLANET.get(PROGRAM_KEY), env.PLANET.get(WEB_OBSERVATIONS_KEY),
-      env.PLANET.get(THREADS_SHELF_KEY), env.PLANET.get(TOON_KEY),
-    ]);
-    let segments: ProgramSegment[] = [];
-    let observationRaw: unknown = null;
-    let shelf: ThreadsShelf | null = null;
-    let toonShelf = decodeToonShelf(null);
-    try { segments = programRaw ? JSON.parse(programRaw) as ProgramSegment[] : []; } catch { /* empty */ }
-    try { observationRaw = observationsRaw ? JSON.parse(observationsRaw) : null; } catch { /* empty */ }
-    try { shelf = shelfRaw ? JSON.parse(shelfRaw) as ThreadsShelf : null; } catch { /* empty */ }
-    try { toonShelf = toonRaw ? decodeToonShelf(JSON.parse(toonRaw)) : null; } catch { /* empty */ }
-    const ownThreads = shelf?.posts?.filter((item) => !item.isReply && item.id && item.text).map((item) => ({
-      id: item.id, text: item.text, timestamp: item.timestamp,
-      username: '@byeoli_log', ownership: 'self' as const,
-    })) ?? [];
-    const external = await resolveObservedExternalTargets(env, toonShelf);
-    externalComments = external.receipt;
-    const commentTargets = [
-      ...ownThreads,
-      ...external.targets.map((item) => ({
+    // 수집/답글 판단 이어달리기가 남았으면 그 기술 작업을 먼저 완주한다. 게시 횟수를
+    // 제한하는 것이 아니라 같은 사건에서 편집 판단을 여러 번 중복 실행하지 않는 경계다.
+    if (!replies.continuationNeeded) {
+      const [programRaw, observationsRaw, shelfRaw, toonRaw] = await Promise.all([
+        env.PLANET.get(PROGRAM_KEY), env.PLANET.get(WEB_OBSERVATIONS_KEY),
+        env.PLANET.get(THREADS_SHELF_KEY), env.PLANET.get(TOON_KEY),
+      ]);
+      let segments: ProgramSegment[] = [];
+      let observationRaw: unknown = null;
+      let shelf: ThreadsShelf | null = null;
+      let toonShelf = decodeToonShelf(null);
+      try { segments = programRaw ? JSON.parse(programRaw) as ProgramSegment[] : []; } catch { /* empty */ }
+      try { observationRaw = observationsRaw ? JSON.parse(observationsRaw) : null; } catch { /* empty */ }
+      try { shelf = shelfRaw ? JSON.parse(shelfRaw) as ThreadsShelf : null; } catch { /* empty */ }
+      try { toonShelf = toonRaw ? decodeToonShelf(JSON.parse(toonRaw)) : null; } catch { /* empty */ }
+      const ownThreads = shelf?.posts?.filter((item) => !item.isReply && item.id && item.text).map((item) => ({
         id: item.id, text: item.text, timestamp: item.timestamp,
-        username: item.username, ownership: 'external_observed' as const,
-      })),
-    ];
-    // 새 루트 글뿐 아니라 별이가 이미 남긴 자기 댓글/답글과도 같은 말을 되풀이하지 않는다.
-    // 행동 후보는 루트 글 전체지만, 중복 검사는 자기 계정의 모든 최근 저장글을 쓴다.
-    const recentTexts = shelf?.posts?.map((item) => item.text).filter(Boolean) ?? [];
-    const candidates = radioEditorialCandidates(
-      observationText(observationRaw), await eligibleSegments(env, segments), Date.now(),
-    );
-    const decision = await chooseEditorial(env, candidates, commentTargets);
-    if (!decision) {
-      error = candidates.length ? 'editorial_decision_unavailable' : 'editorial_candidates_empty';
-    } else {
-      editorial = {
-        source: decision.source, action: decision.action, reason: decision.reason,
-        text: decision.text, targetPostId: decision.targetPostId,
-      };
-      const requestedNext = decision.nextLookInMinutes == null
-        ? null
-        : Date.now() + decision.nextLookInMinutes * 60_000;
-      nextLookAt = requestedNext != null && Number.isFinite(requestedNext) && requestedNext <= 8.64e15
-        ? Math.trunc(requestedNext)
-        : null;
-      if (decision.action === 'silence' || decision.source === 'silence' || !decision.text) {
-        await appendPublishLog(env, {
-          invokedAt: Date.now(), scheduledFor: null, result: 'editorial_skip', httpStatus: 200,
-          textIndex: null, imageKey: null,
-          threads: { attempted: false, ok: false, errorCode: null, requestId: null },
-          editorial: {
-            source: 'silence', action: 'silence', targetPostId: null,
-            reason: decision.reason,
-          },
-        });
-      } else if (isRecentDuplicate(decision.text, recentTexts)) {
-        error = 'recent_text_duplicate_blocked';
+        username: '@byeoli_log', ownership: 'self' as const,
+      })) ?? [];
+      const external = await resolveObservedExternalTargets(env, toonShelf);
+      externalComments = external.receipt;
+      const commentTargets = [
+        ...ownThreads,
+        ...external.targets.map((item) => ({
+          id: item.id, text: item.text, timestamp: item.timestamp,
+          username: item.username, ownership: 'external_observed' as const,
+        })),
+      ];
+      const recentTexts = shelf?.posts?.map((item) => item.text).filter(Boolean) ?? [];
+      const candidates = radioEditorialCandidates(
+        observationText(observationRaw), await eligibleSegments(env, segments), Date.now(),
+      );
+      const decision = await chooseEditorial(env, candidates, commentTargets);
+      if (!decision) {
+        error = candidates.length ? 'editorial_decision_unavailable' : 'editorial_candidates_empty';
       } else {
-        // comment 대상은 chooseEditorial이 자기 루트 또는 읽고 Meta에서 재확인한 외부 글 목록 안에서 검증했다.
-        const result = await dispatchToThreads(
-          env, decision.text, null, false,
-          decision.action === 'comment' ? decision.targetPostId : null,
-        );
-        post = {
-          attempted: result.attempted, ok: result.ok,
-          errorCode: result.errorCode, requestId: result.requestId,
+        editorial = {
+          source: decision.source, action: decision.action, reason: decision.reason,
+          text: decision.text, targetPostId: decision.targetPostId,
         };
-        await appendPublishLog(env, {
-          invokedAt: Date.now(), scheduledFor: null,
-          result: result.ok ? 'success' : 'threads_failed', httpStatus: 200,
-          textIndex: null, imageKey: null,
-          threads: post,
-          editorial: {
-            source: decision.source, action: decision.action,
-            targetPostId: decision.targetPostId, reason: decision.reason,
-          },
-        });
-        if (result.ok) await refreshThreadsShelf(env);
+        const requestedNext = decision.nextLookInMinutes == null
+          ? null
+          : Date.now() + decision.nextLookInMinutes * 60_000;
+        nextLookAt = requestedNext != null && Number.isFinite(requestedNext) && requestedNext <= 8.64e15
+          ? Math.trunc(requestedNext)
+          : null;
+        if (decision.action === 'silence' || decision.source === 'silence' || !decision.text) {
+          await appendPublishLog(env, {
+            invokedAt: Date.now(), scheduledFor: null, result: 'editorial_skip', httpStatus: 200,
+            textIndex: null, imageKey: null,
+            threads: { attempted: false, ok: false, errorCode: null, requestId: null },
+            editorial: { source: 'silence', action: 'silence', targetPostId: null, reason: decision.reason },
+          });
+        } else if (isRecentDuplicate(decision.text, recentTexts)) {
+          error = 'recent_text_duplicate_blocked';
+        } else {
+          const result = await dispatchToThreads(
+            env, decision.text, null, false,
+            decision.action === 'comment' ? decision.targetPostId : null,
+          );
+          post = {
+            attempted: result.attempted, ok: result.ok,
+            errorCode: result.errorCode, requestId: result.requestId,
+          };
+          await appendPublishLog(env, {
+            invokedAt: Date.now(), scheduledFor: null,
+            result: result.ok ? 'success' : 'threads_failed', httpStatus: 200,
+            textIndex: null, imageKey: null, threads: post,
+            editorial: {
+              source: decision.source, action: decision.action,
+              targetPostId: decision.targetPostId, reason: decision.reason,
+            },
+          });
+          if (result.ok) await refreshThreadsShelf(env);
+        }
       }
     }
   } catch (runError) {
@@ -246,7 +251,10 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
     version: 'byeoli-social-agent-v1', runId, at, finishedAt: Date.now(), trigger,
     ok: error === null && account.ok && externalComments.ok && (post.attempted ? post.ok : true)
       && (replies ? replies.ingest.ok : false),
-    duplicate: false, account, externalComments, replies, editorial, post, nextLookAt, error,
+    duplicate: false, account, externalComments, replies, editorial, post,
+    continuationNeeded: replies?.continuationNeeded === true,
+    continuationDelayMs: replies?.continuationDelayMs ?? null,
+    nextLookAt, error,
   };
   await saveReceipt(env, receipt);
   const currentLease = await env.PLANET.get(SOCIAL_LEASE_KEY);

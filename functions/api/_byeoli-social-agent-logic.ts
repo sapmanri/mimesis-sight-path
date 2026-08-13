@@ -5,6 +5,7 @@ export type SocialTriggerKind =
   | 'story_aired'
   | 'observation_arrived'
   | 'social_refreshed'
+  | 'backlog_continue'
   | 'curiosity'
   | 'manual_start';
 
@@ -17,7 +18,7 @@ export interface SocialTrigger {
 
 const VALID_TRIGGERS = new Set<SocialTriggerKind>([
   'program_registered', 'story_aired', 'observation_arrived',
-  'social_refreshed', 'curiosity', 'manual_start',
+  'social_refreshed', 'backlog_continue', 'curiosity', 'manual_start',
 ]);
 
 export function parseSocialTrigger(raw: unknown, now = Date.now()): SocialTrigger | null {

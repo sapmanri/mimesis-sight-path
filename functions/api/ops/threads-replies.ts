@@ -7,6 +7,7 @@
 // 저장 금지: 토큰 · username 원문 · IP · UA (해시+마스크만).
 
 import { dispatchToThreads, getThreadsAuth, type ThreadsEnv } from '../_threads-client.ts';
+import { THREADS_SHELF_KEY, type ThreadsShelf } from '../_radio-social-types.ts';
 import {
   categorize, maskUsername, mergeReplies, draftEligibility,
   replyBoundary, repliesConfig, WORLD_FACTS, type ReplyRecord,
@@ -65,123 +66,199 @@ interface ThreadsPage<T> {
   error?: { code?: number };
 }
 
-/** Meta cursor가 끝날 때까지 읽는다. 별도의 글/댓글 개수 상한은 두지 않는다. */
-async function collectThreadsPages<T>(firstUrl: URL): Promise<{ ok: boolean; data: T[]; error: string | null }> {
-  const data: T[] = [];
-  let next: string | null = firstUrl.toString();
-  const seen = new Set<string>();
-  while (next) {
-    if (seen.has(next)) return { ok: false, data, error: 'paging_cycle' };
-    seen.add(next);
-    const pageUrl = new URL(next);
-    if (pageUrl.protocol !== 'https:' || pageUrl.hostname !== 'graph.threads.net') {
-      return { ok: false, data, error: 'paging_host_mismatch' };
-    }
-    let response: Response;
-    try { response = await fetch(pageUrl.toString()); }
-    catch { return { ok: false, data, error: 'network' }; }
-    const page = await response.json().catch(() => ({})) as ThreadsPage<T>;
-    if (!response.ok) return { ok: false, data, error: `threads_${page.error?.code ?? response.status}` };
-    data.push(...(page.data ?? []));
-    next = typeof page.paging?.next === 'string' && page.paging.next ? page.paging.next : null;
+const INGEST_CYCLE_KEY = 'reply_ingest_cycle_v2';
+// 행동 상한이 아니다. Cloudflare 한 요청의 외부 호출 한도를 넘지 않도록 나누는 기술 묶음이다.
+// 남은 글과 페이지는 Social Director가 즉시 다음 실행으로 이어받는다.
+const INGEST_PAGE_BUDGET = 20;
+const REPLY_DECISION_BUDGET = 2;
+
+type ConversationMode = 'conversation' | 'replies';
+interface IngestCycle {
+  version: 2;
+  ids: string[];
+  index: number;
+  active: null | { postId: string; mode: ConversationMode; after: string | null };
+  startedAt: number;
+  updatedAt: number;
+}
+
+export interface ReplyIngestRun {
+  ok: boolean;
+  error: string | null;
+  added: number;
+  checked: number;
+  total: number;
+  pages: number;
+  cycleComplete: boolean;
+  remainingPosts: number;
+}
+
+function validCycle(value: unknown): IngestCycle | null {
+  const cycle = value as Partial<IngestCycle> | null;
+  if (!cycle || cycle.version !== 2 || !Array.isArray(cycle.ids)
+    || !cycle.ids.every((id) => typeof id === 'string' && id.length > 0)
+    || !Number.isInteger(cycle.index) || Number(cycle.index) < 0 || Number(cycle.index) > cycle.ids.length) {
+    return null;
   }
-  return { ok: true, data, error: null };
+  if (cycle.active) {
+    if (typeof cycle.active.postId !== 'string'
+      || !['conversation', 'replies'].includes(cycle.active.mode)
+      || (cycle.active.after !== null && typeof cycle.active.after !== 'string')) return null;
+  }
+  return cycle as IngestCycle;
+}
+
+function nextAfter(page: ThreadsPage<unknown>): string | null {
+  if (!page.paging?.next) return null;
+  if (page.paging.cursors?.after) return page.paging.cursors.after;
+  try {
+    const next = new URL(page.paging.next);
+    return next.hostname === 'graph.threads.net' ? next.searchParams.get('after') : null;
+  } catch { return null; }
+}
+
+async function fetchConversationPage<T>(
+  mediaId: string, mode: ConversationMode, after: string | null, token: string,
+): Promise<{ ok: boolean; page: ThreadsPage<T>; error: string | null }> {
+  const url = new URL(`${THREADS_API}/${mediaId}/${mode}`);
+  url.searchParams.set('fields', 'id,text,timestamp,username');
+  url.searchParams.set('reverse', 'true');
+  url.searchParams.set('limit', '100');
+  if (after) url.searchParams.set('after', after);
+  url.searchParams.set('access_token', token);
+  try {
+    const response = await fetch(url.toString());
+    const page = await response.json().catch(() => ({})) as ThreadsPage<T>;
+    if (!response.ok) {
+      return { ok: false, page, error: `threads_${page.error?.code ?? response.status}` };
+    }
+    return { ok: true, page, error: null };
+  } catch { return { ok: false, page: {}, error: 'network' }; }
+}
+
+async function rootPostIds(env: Env): Promise<string[]> {
+  try {
+    const raw = await env.PLANET.get(THREADS_SHELF_KEY);
+    const shelf = raw ? JSON.parse(raw) as ThreadsShelf : null;
+    const ids = shelf?.posts?.filter((post) => !post.isReply && post.id).map((post) => post.id) ?? [];
+    if (ids.length) return [...new Set(ids)];
+  } catch { /* 아래의 발행 영수증 폴백 */ }
+  const publishRaw = await env.PLANET.get('publish_log');
+  const runs = publishRaw ? (JSON.parse(publishRaw) as { threads?: { ok?: boolean; requestId?: string | null } }[]) : [];
+  return [...new Set(
+    runs.filter((run) => run.threads?.ok && run.threads.requestId)
+      .map((run) => run.threads!.requestId as string),
+  )];
 }
 
 /* ── 수집 — 최근 발행물의 top-level 댓글 (Threads /replies) ── */
-export async function runIngest(env: Env): Promise<{ ok: boolean; error: string | null; added: number }> {
+export async function runIngest(env: Env): Promise<ReplyIngestRun> {
   const auth = await getThreadsAuth(env);
-  if (!auth) return { ok: false, error: 'auth_missing', added: 0 };
+  if (!auth) return {
+    ok: false, error: 'auth_missing', added: 0, checked: 0, total: 0,
+    pages: 0, cycleComplete: true, remainingPosts: 0,
+  };
 
-  // 우리 계정 답글 제외용 username
-  let myUsername = '';
-  try {
-    const meRes = await fetch(`${THREADS_API}/me?fields=username&access_token=${encodeURIComponent(auth.token)}`);
-    const me = (await meRes.json()) as { username?: string };
-    myUsername = me.username ?? '';
-  } catch { /* 아래에서 안전하게 중단 */ }
-  if (!myUsername) return { ok: false, error: 'auth_profile_missing', added: 0 };
+  const myUsername = auth.username;
+  if (!myUsername) return {
+    ok: false, error: 'auth_profile_missing', added: 0, checked: 0, total: 0,
+    pages: 0, cycleComplete: true, remainingPosts: 0,
+  };
   const expected = (env.BYEOLI_THREADS_HANDLE ?? 'byeoli_log').replace(/^@/, '').toLowerCase();
   if (myUsername.toLowerCase() !== expected) {
-    return { ok: false, error: `account_mismatch_expected_@${expected}`, added: 0 };
+    return {
+      ok: false, error: `account_mismatch_expected_@${expected}`, added: 0, checked: 0, total: 0,
+      pages: 0, cycleComplete: true, remainingPosts: 0,
+    };
   }
 
-  // 현재 계정의 실제 최근 Threads를 우선한다. 시스템 밖에서 직접 올린 글의 댓글도 별이가 본다.
-  let mediaIds: string[] = [];
-  let postListError: string | null = null;
-  try {
-    const u = new URL(`${THREADS_API}/me/threads`);
-    u.searchParams.set('fields', 'id,is_reply');
-    u.searchParams.set('limit', '100');
-    u.searchParams.set('access_token', auth.token);
-    const pages = await collectThreadsPages<{ id?: string; is_reply?: boolean }>(u);
-    mediaIds = pages.data.filter((p) => p.is_reply !== true)
-      .map((p) => p.id).filter((id): id is string => !!id);
-    postListError = pages.error;
-  } catch { postListError = 'post_list_failed'; }
-  if (!mediaIds.length) {
-    const publishRaw = await env.PLANET.get('publish_log');
-    const runs = publishRaw ? (JSON.parse(publishRaw) as { threads?: { ok?: boolean; requestId?: string | null } }[]) : [];
-    mediaIds = [...new Set(
-      runs.filter((r) => r.threads?.ok && r.threads.requestId).map((r) => r.threads!.requestId as string),
-    )];
-  }
-
+  const mediaIds = await rootPostIds(env);
   const incoming: ReplyRecord[] = [];
   const now = Date.now();
   const ingestErrors: string[] = [];
-  if (postListError) ingestErrors.push(postListError);
-  for (const mediaId of mediaIds) {
-    try {
-      // conversation은 답글 가지 전체를 준다. 권한/버전 차이로 거절되면 top-level replies로 폴백한다.
-      let first = new URL(`${THREADS_API}/${mediaId}/conversation`);
-      first.searchParams.set('fields', 'id,text,timestamp,username');
-      first.searchParams.set('reverse', 'true');
-      first.searchParams.set('limit', '100');
-      first.searchParams.set('access_token', auth.token);
-      let pages = await collectThreadsPages<{ id: string; text?: string; timestamp?: string; username?: string }>(first);
-      if (!pages.ok && pages.data.length === 0) {
-        first = new URL(`${THREADS_API}/${mediaId}/replies`);
-        first.searchParams.set('fields', 'id,text,timestamp,username');
-        first.searchParams.set('reverse', 'true');
-        first.searchParams.set('limit', '100');
-        first.searchParams.set('access_token', auth.token);
-        pages = await collectThreadsPages(first);
+  let cycle: IngestCycle | null = null;
+  try {
+    const saved = await env.PLANET.get(INGEST_CYCLE_KEY);
+    cycle = saved ? validCycle(JSON.parse(saved)) : null;
+  } catch { cycle = null; }
+  if (!cycle) {
+    cycle = {
+      version: 2, ids: mediaIds, index: 0, active: null,
+      startedAt: now, updatedAt: now,
+    };
+  }
+
+  const total = cycle.ids.length;
+  const startedIndex = cycle.index;
+  let pages = 0;
+  while (cycle.index < cycle.ids.length && pages < INGEST_PAGE_BUDGET) {
+    const mediaId = cycle.ids[cycle.index];
+    if (!cycle.active || cycle.active.postId !== mediaId) {
+      cycle.active = { postId: mediaId, mode: 'conversation', after: null };
+    }
+    const active = cycle.active;
+    const fetched = await fetchConversationPage<{
+      id: string; text?: string; timestamp?: string; username?: string;
+    }>(mediaId, active.mode, active.after, auth.token);
+    pages += 1;
+    if (!fetched.ok) {
+      // conversation 첫 페이지가 권한/버전 차이로 거절될 때만 replies로 폴백한다.
+      if (active.mode === 'conversation' && active.after === null) {
+        cycle.active = { postId: mediaId, mode: 'replies', after: null };
+        continue;
       }
-      if (!pages.ok) ingestErrors.push(`${mediaId}:${pages.error ?? 'conversation_failed'}`);
-      for (const reply of pages.data) {
-        if (!reply.id || !reply.username) continue;
-        if (myUsername && reply.username === myUsername) continue; // 별이 자신의 답글
-        const text = (reply.text ?? '').slice(0, 500);
-        incoming.push({
-          sourceCommentId: reply.id,
-          sourcePostId: mediaId,
-          text,
-          commentCreatedAt: reply.timestamp ? Date.parse(reply.timestamp) : now,
-          detectedAt: now,
-          authorIdHash: await pepperHash(env.PLANET, reply.username),
-          authorMask: maskUsername(reply.username),
-          category: categorize(text),
-          decision: 'collected',
-          reason: null, generatedText: null, bookmarked: false,
-          decisionSource: null, decidedAt: null,
-          publishedAt: null,
-          threads: { errorCode: null, requestId: null }, modelVersion: null,
-        });
-      }
-    } catch { ingestErrors.push(`${mediaId}:conversation_exception`); }
+      ingestErrors.push(`${mediaId}:${fetched.error ?? 'conversation_failed'}`);
+      cycle.index += 1;
+      cycle.active = null;
+      continue;
+    }
+    for (const reply of fetched.page.data ?? []) {
+      if (!reply.id || !reply.username) continue;
+      if (reply.username.toLowerCase() === myUsername.toLowerCase()) continue;
+      const text = (reply.text ?? '').slice(0, 500);
+      incoming.push({
+        sourceCommentId: reply.id,
+        sourcePostId: mediaId,
+        text,
+        commentCreatedAt: reply.timestamp ? Date.parse(reply.timestamp) : now,
+        detectedAt: now,
+        authorIdHash: await pepperHash(env.PLANET, reply.username),
+        authorMask: maskUsername(reply.username),
+        category: categorize(text),
+        decision: 'collected',
+        reason: null, generatedText: null, bookmarked: false,
+        decisionSource: null, decidedAt: null,
+        publishedAt: null,
+        threads: { errorCode: null, requestId: null }, modelVersion: null,
+      });
+    }
+    const after = nextAfter(fetched.page);
+    if (after) cycle.active = { ...active, after };
+    else {
+      cycle.index += 1;
+      cycle.active = null;
+    }
   }
 
   const log = await loadLog(env.PLANET);
   const merged = mergeReplies(log, incoming);
   await saveLog(env.PLANET, merged.log);
+  cycle.updatedAt = Date.now();
+  const cycleComplete = cycle.index >= cycle.ids.length;
+  if (cycleComplete) await env.PLANET.delete(INGEST_CYCLE_KEY);
+  else await env.PLANET.put(INGEST_CYCLE_KEY, JSON.stringify(cycle));
+  const checked = Math.max(0, cycle.index - startedIndex);
+  const remainingPosts = Math.max(0, total - cycle.index);
   await env.PLANET.put(repliesConfig.INGEST_META_KEY, JSON.stringify({
-    lastIngestAt: now, added: merged.added, checked: mediaIds.length, errors: ingestErrors.slice(0, 30),
+    lastIngestAt: now, added: merged.added, checked, total, pages,
+    cycleComplete, remainingPosts, cycleStartedAt: cycle.startedAt,
+    errors: ingestErrors.slice(0, 30),
   }));
   return {
-    ok: postListError === null && ingestErrors.length === 0,
+    ok: ingestErrors.length === 0,
     error: ingestErrors.length ? ingestErrors.slice(0, 3).join(';') : null,
     added: merged.added,
+    checked, total, pages, cycleComplete, remainingPosts,
   };
 }
 
@@ -273,12 +350,16 @@ export async function publishReply(env: Env, replyToId: string, text: string):
 }
 
 export interface AutonomousReplyRun {
-  ingest: { ok: boolean; error: string | null; added: number };
+  ingest: ReplyIngestRun;
   examined: number;
   published: number;
   ignored: number;
   bookmarked: number;
   failed: number;
+  pending: number;
+  /** 행동 제한이 아니라 아직 완주하지 못한 기술 작업이 있다는 뜻이다. */
+  continuationNeeded: boolean;
+  continuationDelayMs: number | null;
   publishedIds: string[];
   errors: string[];
 }
@@ -305,10 +386,13 @@ export async function processCollectedReplies(env: Env): Promise<AutonomousReply
   const pending = log.filter((record) => record.decision === 'collected');
   const summary: AutonomousReplyRun = {
     ingest, examined: 0, published: 0, ignored: 0, bookmarked: 0, failed: 0,
-    publishedIds: [], errors: [],
+    pending: pending.length, continuationNeeded: !ingest.cycleComplete || pending.length > 0,
+    continuationDelayMs: null, publishedIds: [], errors: [],
   };
+  let transientFailure = false;
 
-  for (const rec of pending) {
+  // 댓글을 버리는 상한이 아니다. 이 묶음이 끝나면 감독이 남은 댓글을 바로 이어서 판단한다.
+  for (const rec of pending.slice(0, REPLY_DECISION_BUDGET)) {
     summary.examined += 1;
     const postText = await originalPostText(env, rec.sourcePostId);
     const out = await generateDraft(env, rec, postText, []);
@@ -316,6 +400,7 @@ export async function processCollectedReplies(env: Env): Promise<AutonomousReply
       // 모델/API의 일시 실패는 별이의 무응답 판단이 아니다. 다음 사건에서 다시 볼 수 있게 둔다.
       rec.reason = `판단 실행 실패: ${out.error}`;
       summary.failed += 1;
+      transientFailure = true;
       summary.errors.push(`${rec.sourceCommentId}:${out.error}`);
       await saveLog(env.PLANET, log);
       continue;
@@ -365,6 +450,11 @@ export async function processCollectedReplies(env: Env): Promise<AutonomousReply
     }
     await saveLog(env.PLANET, log);
   }
+  summary.pending = log.filter((record) => record.decision === 'collected').length;
+  summary.continuationNeeded = !ingest.cycleComplete || summary.pending > 0;
+  summary.continuationDelayMs = summary.continuationNeeded
+    ? transientFailure ? 10 * 60_000 : 1_000
+    : null;
   return summary;
 }
 

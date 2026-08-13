@@ -28,10 +28,11 @@ export class ByeoliSocialDirector extends DurableObject {
     this.state = {
       version: 'social-director-v1', lastWakeAt: null, lastFinishedAt: null,
       lastStatus: 'idle', lastRunId: null, nextLookAt: null, lastError: null,
+      continuationPending: false,
     };
     this.queue = Promise.resolve();
     ctx.blockConcurrencyWhile(async () => {
-      this.state = (await ctx.storage.get(STATE_KEY)) ?? this.state;
+      this.state = { ...this.state, ...((await ctx.storage.get(STATE_KEY)) ?? {}) };
     });
   }
 
@@ -65,12 +66,19 @@ export class ByeoliSocialDirector extends DurableObject {
       if (!response.ok && response.status !== 207) {
         throw new Error(`pages_http_${response.status}:${payload?.error ?? 'unknown'}`);
       }
-      const next = Number(payload?.nextLookAt);
+      const continuationPending = payload?.continuationNeeded === true;
+      const requestedDelay = Number(payload?.continuationDelayMs);
+      const continuationDelay = Number.isFinite(requestedDelay)
+        ? Math.min(10 * 60_000, Math.max(1_000, Math.trunc(requestedDelay)))
+        : 1_000;
+      const editorialNext = Number(payload?.nextLookAt);
+      const next = continuationPending ? Date.now() + continuationDelay : editorialNext;
       this.state = {
         ...this.state, lastFinishedAt: Date.now(), lastStatus: payload?.ok ? 'ok' : 'partial',
         lastRunId: payload?.runId ?? null,
         nextLookAt: Number.isFinite(next) && next > Date.now() ? Math.trunc(next) : null,
         lastError: payload?.error ?? payload?.replies?.errors?.[0] ?? null,
+        continuationPending,
       };
       await this.ctx.storage.deleteAlarm();
       if (this.state.nextLookAt) await this.ctx.storage.setAlarm(this.state.nextLookAt);
@@ -82,7 +90,7 @@ export class ByeoliSocialDirector extends DurableObject {
       const retryAt = Date.now() + 10 * 60_000;
       this.state = {
         ...this.state, lastFinishedAt: Date.now(), lastStatus: 'failed',
-        nextLookAt: retryAt, lastError: message,
+        nextLookAt: retryAt, lastError: message, continuationPending: true,
       };
       await this.ctx.storage.setAlarm(retryAt);
       await this.persist();
@@ -97,7 +105,8 @@ export class ByeoliSocialDirector extends DurableObject {
   }
 
   async alarm() {
-    await this.enqueue({ kind: 'curiosity', eventId: eventId('curiosity', Date.now()), occurredAt: Date.now() });
+    const kind = this.state.continuationPending ? 'backlog_continue' : 'curiosity';
+    await this.enqueue({ kind, eventId: eventId(kind, Date.now()), occurredAt: Date.now() });
   }
 
   async fetch(request) {

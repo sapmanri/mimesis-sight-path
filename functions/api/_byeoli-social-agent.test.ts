@@ -5,6 +5,7 @@ import { isRecentDuplicate, observationText, parseSocialTrigger } from './_byeol
 test('자율 실행 사건은 고정 슬롯이 아니라 실제 사건/자기 알람만 받는다', () => {
   const now = Date.now();
   assert.equal(parseSocialTrigger({ kind: 'curiosity', eventId: 'curiosity:abc123', occurredAt: now }, now)?.kind, 'curiosity');
+  assert.equal(parseSocialTrigger({ kind: 'backlog_continue', eventId: 'backlog:abc123', occurredAt: now }, now)?.kind, 'backlog_continue');
   assert.equal(parseSocialTrigger({ kind: 'fixed_0800', eventId: 'fixed:abc123', occurredAt: now }, now), null);
 });
 
