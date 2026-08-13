@@ -76,6 +76,7 @@ export interface RadioDraft {
   voiceNote: string | null;     // 별이가 정한 그날 목소리 연출 (R3 — 기분→목소리)
   songTitle?: string | null;    // 별이가 고른 곡 (노래 편성, 08-12 밤)
   stageCues?: string[];         // 별이가 스스로 쓴 지문 — 본문에선 떼어냈고 그 자리는 숨이 됐다 (08-14)
+  promptChars?: number;         // 이번 판에 실제로 보낸 프롬프트 크기 (다이어트 실측용, 08-14)
   musicTransition?: MusicTransition | null; // 소개하고 틀지, 말없이 바로 틀지 — 별이의 편집 판단
   situation: RadioSituation;    // 별이에게 던졌던 상황 (재현·검증용)
   provenance: GenomeProvenance;
@@ -284,6 +285,9 @@ export interface RadioScriptResult {
   /** 별이가 스스로 쓴 지문 — 본문에서 떼어냈고 그 자리는 숨(문단 경계)으로 남는다.
       버리지 않고 남기는 이유: 시킨 적 없는 연출이라 기록할 값어치가 있다(사장 08-14: "대견해"). */
   stageCues: string[];
+  /** 이번 판에 실제로 보낸 프롬프트 크기(자). 다이어트가 먹히는지·원고비가 어디로 가는지
+      눈으로 보려고 남긴다 — 저장되는 situation은 접기 전 것이라 이 값이 없으면 알 수 없다. */
+  promptChars: number;
   provenance: GenomeProvenance;
   warnings: string[];
 }
@@ -570,6 +574,7 @@ export async function writeRadioScript(
   const sys = radioSystemPrompt();
   if (!sys.prompt) return null;
   try {
+    const userMessage = situationMessage(situation);
     const res = await fetch(API, {
       method: 'POST',
       headers: HEADERS(env.ANTHROPIC_API_KEY),
@@ -578,7 +583,7 @@ export async function writeRadioScript(
         // 그 조각을 TTS가 「노래 그때 다」로 읽었다. 한국어는 글자당 토큰을 많이 먹는데
         // 재료가 풍부해지며 대본이 길어져(최장 516자) 1200에 걸렸다.
         model: CLAUDE_MODEL, max_tokens: 2400, system: sys.prompt,
-        messages: [{ role: 'user', content: situationMessage(situation) }],
+        messages: [{ role: 'user', content: userMessage }],
       }),
     });
     if (!res.ok) return null;
@@ -592,6 +597,7 @@ export async function writeRadioScript(
     if (!check.pass) return null;
     return {
       script, voiceNote, songTitle, musicTransition, stageCues,
+      promptChars: userMessage.length + (sys.prompt?.length ?? 0),
       provenance: provenance('genome-live', true),
       warnings: [...sys.warnings, ...check.warnings, ...(fixed.broken ? ['truncated_tag_stripped'] : [])],
     };
