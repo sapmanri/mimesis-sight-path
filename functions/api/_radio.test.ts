@@ -7,6 +7,7 @@ import {
   buildAirMirror,
   pickCorner,
   stripBrokenTag,
+  trimSituationForCorner,
 } from './_radio.ts';
 import { onRequestGet as getRadioDraftSummary, storyPreview, timeLabelOf } from './radio/draft.ts';
 
@@ -153,6 +154,31 @@ test('잘린 태그 조각 — 본문에서 떼어내고 경고로 남긴다', (
   assert.equal(ok.script, '멀쩡한 본문이야.');
   // 닫힌 태그는 건드리지 않는다 (그건 parseTrailingTags 몫)
   assert.equal(stripBrokenTag('본문.\n[노래: 그때 다시 그곳으로]').broken, false);
+});
+
+// 08-14 사장 지시: 상황이 매 판 12,396자였고 그중 7,000자 넘게가 다른 자리 재료였다.
+// 목차는 다 주고 본문은 이번 자리 것만 준다 — 원고비를 반 이하로 줄이되 별이의 앎은 지킨다.
+test('입력 다이어트 — 이번 자리만 펼치고 나머지는 목차로 접는다', () => {
+  const base: RadioSituation = {
+    timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
+    corner: { key: 'bookcase', label: '책장 낭독', hint: '펼쳐진 원고를 읽는다' },
+    bookcase: { open: { title: '멈춰 선 자리', text: '본문 전문…' }, titles: ['다른 원고'], locked: [] },
+    libraryFinds: [{ title: '곤충 인문학', author: '', note: '풀숲', ago: '어제' }],
+    youtubeVideos: [{ title: '삽만리 새 영상', publishedAt: '', url: '' }],
+    webObservations: [{ id: 'sky', label: '오늘의 하늘', kind: 'fact', engine: 'api', sourceUrl: '', items: [] }],
+  };
+  const cut = trimSituationForCorner(base);
+  assert.ok(cut.bookcase?.open, '이번 자리 재료는 전문 그대로');
+  assert.equal(cut.libraryFinds, undefined, '다른 자리 재료는 접힌다');
+  assert.equal(cut.youtubeVideos, undefined);
+  assert.equal(cut.webObservations, undefined);
+  assert.ok(cut.shelfIndex?.some((l) => l.includes('곤충 인문학')), '접혔어도 목차에는 남는다');
+  const msg = situationMessage(cut);
+  assert.match(msg, /집에 있는 것들/);
+  assert.match(msg, /곤충 인문학/);
+  assert.ok(situationMessage(cut).length < situationMessage(base).length, '보내는 양이 줄어야 한다');
+  // 자리가 없으면 아무것도 접지 않는다
+  assert.deepEqual(trimSituationForCorner({ ...base, corner: undefined }), { ...base, corner: undefined });
 });
 
 // R3: 기분→목소리 — 별이가 원고 끝에 정하는 셀프 연출 한 줄

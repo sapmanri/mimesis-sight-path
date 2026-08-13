@@ -9,7 +9,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript, pickBookcasePiece,
-  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner,
+  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner, trimSituationForCorner,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
@@ -177,8 +177,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (situation.broadcastTrail?.length) available.add('trail');
   available.add('observe');
   situation.corner = pickCorner(available, recentCorners);
+  // 입력 다이어트 — 이번 자리 재료만 펼치고 나머지는 목차로 접는다(08-14 사장 지시).
+  // 저장은 접기 **전** 상황으로 한다: 재현·검증에는 무엇을 가졌었는지가 필요하다.
+  const sent = trimSituationForCorner(situation);
 
-  const written = await writeRadioScript(env, situation);
+  const written = await writeRadioScript(env, sent);
   if (!written) return json(502, { ok: false, error: 'writer_failed' });
 
   const storyRead = !!story && !written.warnings.some((w) => w.startsWith('story_not_read'));

@@ -186,6 +186,11 @@ export interface RadioSituation {
   /** 이번 판의 자리 — 편성이 지정한 코너. 자리는 편성이 정하고 무슨 말을 할지는 별이가 정한다.
       08-13 밤 실측: 하루 57편 중 41편이 같은 첫마디였다. 같은 질문을 3분마다 던지면 같은 답이 온다. */
   corner?: { key: string; label: string; hint: string };
+  /** 집에 있는 것들의 목차 — 이번 자리 재료만 전문으로 펼치고 나머지는 제목만 남긴 결과.
+      08-14 실측: 상황이 매 판 12,396자였는데 그중 7,000자 넘게가 「혹시 쓸까 봐」 실려 간
+      다른 자리 재료였다(책장 낭독 판에 유튜브 목록 2,567자). 목차는 다 주고 본문은 이번 것만 준다 —
+      별이는 집에 뭐가 있는지 계속 알되, 한 판에는 한 가지에 머문다. */
+  shelfIndex?: string[];
   /** 별리 코믹스 — 별이가 직접 지은 이야기들 (Vase 08-12: "엄청 큰 걸 놓치고 있었다").
       게놈 자산의 재사용: 방송에서 "요즘 만들던 이야기"로 꺼낼 수 있는 실재 창작물. */
   comicBits?: { title: string; epigraph: string; lines: string[] }[];
@@ -431,6 +436,9 @@ export function situationMessage(s: RadioSituation): string {
       + `사연을 읽고 거기에 자기 얘기를 하나 보태고, 오늘 있었던 일을 꺼내고, 다음에 뭐가 올지 흘리고,\n`
       + `혼잣말이 아니라 듣는 사람에게 말한다. 매번 다 할 필요는 없고 한 판에 하나면 된다.\n`
       + `참고만 해라 — 그대로 하든 네 식대로 하든 네가 정한다.`,
+    s.shelfIndex?.length
+      ? `집에 있는 것들 (이번 자리 것만 펼쳐 뒀다 — 나머지는 다음 자리에서 꺼낼 수 있다):\n${s.shelfIndex.map((l) => `- ${l}`).join('\n')}`
+      : null,
     s.corner
       ? `이번 판의 자리: **${s.corner.label}** — ${s.corner.hint}\n자리는 편성이 정한다. 그 자리에서 무슨 말을 할지는 네가 정한다.`
       : null,
@@ -493,6 +501,33 @@ export const RADIO_CORNERS: { key: string; label: string; hint: string }[] = [
   { key: 'trail',    label: '지난 방송',   hint: '며칠 전 방송에서 한 얘기를 다시 꺼내 이어 본다' },
   { key: 'observe',  label: '관찰',        hint: '오늘 본 것 하나' },
 ];
+/** 이번 자리 재료만 전문으로 남기고 나머지는 목차로 접는다. 원고비를 반 이하로 줄이면서
+    별이가 무엇을 가졌는지는 계속 알게 한다. 접힌 것은 다음 자리에서 펼쳐진다. */
+export function trimSituationForCorner(s: RadioSituation): RadioSituation {
+  const key = s.corner?.key;
+  if (!key) return s;
+  const out: RadioSituation = { ...s };
+  const index: string[] = [];
+  const fold = (label: string, titles: string[]) => {
+    const clean = titles.map((t) => String(t).replace(/\n/g, ' ').trim()).filter(Boolean);
+    if (clean.length) index.push(`${label} ${clean.length}개 — ${clean.slice(0, 3).map((t) => t.slice(0, 24)).join(' · ')}`);
+  };
+  if (key !== 'library' && out.libraryFinds?.length) { fold('서재에 읽어 둔 책', out.libraryFinds.map((b) => b.title)); out.libraryFinds = undefined; }
+  if (key !== 'web' && out.webObservations?.length) { fold('오늘 본 것', out.webObservations.map((o) => o.label)); out.webObservations = undefined; }
+  if (key !== 'toon' && out.webtoonPosts?.length) { fold('웹툰 최근 편', out.webtoonPosts.map((p) => p.text)); out.webtoonPosts = undefined; }
+  if (key !== 'trail' && out.broadcastTrail?.length) { fold('지난 며칠 방송', out.broadcastTrail.map((d) => d.date)); out.broadcastTrail = undefined; }
+  if (key !== 'bookcase' && out.bookcase?.open) {
+    out.bookcase = { ...out.bookcase, open: null, titles: [out.bookcase.open.title, ...(out.bookcase.titles ?? [])] };
+  }
+  // 코믹스·유튜브는 어느 자리의 재료도 아니다 — 늘 목차로 접는다.
+  if (out.comicBits?.length) { fold('네가 지은 그림 이야기', out.comicBits.map((c) => c.title)); out.comicBits = undefined; }
+  if (out.youtubeVideos?.length) { fold('감성찾아삽만리 새 영상', out.youtubeVideos.map((v) => v.title)); out.youtubeVideos = undefined; }
+  // 자기 Threads는 정체성에 가까워 두 편만 남긴다(연속성 유지).
+  if (out.threadsPosts && out.threadsPosts.length > 2) out.threadsPosts = out.threadsPosts.slice(0, 2);
+  out.shelfIndex = index;
+  return out;
+}
+
 export function pickCorner(available: Set<string>, recentKeys: string[]): { key: string; label: string; hint: string } {
   const usable = RADIO_CORNERS.filter((c) => available.has(c.key));
   const pool = usable.length ? usable : RADIO_CORNERS.filter((c) => c.key === 'observe');
