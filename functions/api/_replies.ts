@@ -65,7 +65,8 @@ export function draftEligibility(
 /** 별이가 답하기로 한 뒤에도 기계가 막는 것은 외부 노출 사고 형태뿐이다.
  *  댓글 내용의 종류나 답글 빈도는 판단하지 않는다. */
 export function replyBoundary(text: string): string | null {
-  if (text.length > 300) return 'too_long';
+  // Length is Byeoli's editorial choice. Only enforce Threads' own platform limit.
+  if (text.length > 500) return 'threads_platform_limit';
   if (/https?:\/\/|www\./i.test(text)) return 'url';
   if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(text)) return 'email';
   if (/01[016789][-\.\s]?\d{3,4}[-\.\s]?\d{4}/.test(text)) return 'phone';

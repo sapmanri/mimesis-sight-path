@@ -69,5 +69,6 @@ test('외부 답글 경계는 취향이 아니라 중복 노출 사고 형태만
   assert.equal(replyBoundary('한참 비어 있었어. 그래서 조금 더 오래 봤어.'), null);
   assert.equal(replyBoundary('여기 봐 https://example.com'), 'url');
   assert.equal(replyBoundary('연락은 010-1234-5678'), 'phone');
-  assert.equal(replyBoundary('x'.repeat(301)), 'too_long');
+  assert.equal(replyBoundary('x'.repeat(500)), null);
+  assert.equal(replyBoundary('x'.repeat(501)), 'threads_platform_limit');
 });

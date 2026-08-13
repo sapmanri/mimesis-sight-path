@@ -166,7 +166,7 @@ async function callClaude(env: Env, messages: { role: string; content: string }[
     // 실패 사유를 실어 보낸다 — "bad_output" 한 단어로는 다음 사람이 또 헤맨다 (Layer1 정신)
     if (!m) return { error: `claude_bad_output(${data.stop_reason ?? '?'}): ${text.slice(0, 60) || '빈 응답'}` };
     const out = JSON.parse(m[0]) as { reply?: unknown; bookmark?: unknown; reason?: unknown };
-    const reply = typeof out.reply === 'string' && out.reply.trim() ? out.reply.trim().slice(0, 300) : null;
+    const reply = typeof out.reply === 'string' && out.reply.trim() ? out.reply.trim().slice(0, 500) : null;
     return { reply, bookmark: out.bookmark === true, reason: String(out.reason ?? '').slice(0, 200) };
   } catch { return { error: 'claude_network' }; }
 }
