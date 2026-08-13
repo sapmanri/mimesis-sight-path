@@ -126,12 +126,33 @@ function bytesToB64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
+type VisionMediaType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
+
+/**
+ * 파일명·R2 메타를 믿지 않고 실제 바이트를 읽는다.
+ * 08-12 실물은 .png 키인데 Anthropic이 image/png 불일치로 거부했다. 확장자를 고치는
+ * 땜질이면 옛 파일과 다음 공급자 변경 때 또 죽으므로 판정 경계에서 직접 판별한다.
+ */
+export function detectVisionMediaType(buf: ArrayBuffer): VisionMediaType | null {
+  const b = new Uint8Array(buf);
+  if (b.length >= 8
+    && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
+    && b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) return 'image/png';
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.length >= 12
+    && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46
+    && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return 'image/webp';
+  if (b.length >= 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46
+    && b[3] === 0x38 && (b[4] === 0x37 || b[4] === 0x39) && b[5] === 0x61) return 'image/gif';
+  return null;
+}
+
 /** ⑥ 판정기 — 클로드 vision. 기준은 새로 쓰지 않는다: 체크리스트·규칙·그날의 줄을 조립. */
 interface CandidateRecommendation { pick: number | null; reasons: string; verdicts: string[] }
 interface JudgeOutcome { reco: CandidateRecommendation | null; error: string | null }
 
 async function judgeCandidates(
-  env: Env, day: DayMemory, images: { seed: number; bytes: ArrayBuffer }[],
+  env: Env, day: DayMemory, images: { seed: number; bytes: ArrayBuffer; mediaType: VisionMediaType }[],
 ): Promise<JudgeOutcome> {
   if (!env.ANTHROPIC_API_KEY) return { reco: null, error: 'judge_key_missing' };
   if (!images.length) return { reco: null, error: 'judge_images_missing' };
@@ -146,7 +167,10 @@ async function judgeCandidates(
 {"verdicts": ["1장: ..."], "pick": n, "reasons": "추천 사유 한 줄"}`,
     }];
     for (const im of images) {
-      content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: bytesToB64(im.bytes) } });
+      content.push({
+        type: 'image',
+        source: { type: 'base64', media_type: im.mediaType, data: bytesToB64(im.bytes) },
+      });
     }
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -429,11 +453,20 @@ async function generateDaily(
     // 판정은 별도의 *요청* 단계에서 끝낸다. 이미지 생성과 vision을 한 요청에 겹치지 않아
     // 30초 창을 지키면서도, 응답 뒤 waitUntil에 기록을 맡기지 않는다. 3장째 응답이
     // done:false를 반환하므로 서버 스케줄러가 이 분기를 반드시 한 번 더 호출한다.
-    const imgs: { seed: number; bytes: ArrayBuffer }[] = [];
+    const imgs: { seed: number; bytes: ArrayBuffer; mediaType: VisionMediaType }[] = [];
     for (const pk of priorPicks.slice(0, 3)) {
       const obj = await env.CAPTURES.get(pk.r2Key);
-      if (obj) imgs.push({ seed: pk.seed, bytes: await obj.arrayBuffer() });
-      else errors.push(`judge_image_missing: ${pk.r2Key}`);
+      if (!obj) {
+        errors.push(`judge_image_missing: ${pk.r2Key}`);
+        continue;
+      }
+      const bytes = await obj.arrayBuffer();
+      const mediaType = detectVisionMediaType(bytes);
+      if (!mediaType) {
+        errors.push(`judge_image_unsupported: ${pk.r2Key}`);
+        continue;
+      }
+      imgs.push({ seed: pk.seed, bytes, mediaType });
     }
     if (imgs.length !== 3) {
       const judgeError = `judge_images_incomplete: expected=3 actual=${imgs.length}`;
@@ -525,7 +558,13 @@ async function generateDaily(
   if (!art.bytes) { errors.push(`#${n}: empty`); await persist(null); return { made: 0, total: priorPicks.length, done: false, trialId, errors, phase: 'generate_next' }; }
 
   const r2Key = trialKey(trialId, DAILY_MODEL, n);
-  await env.CAPTURES.put(r2Key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
+  const outputMediaType = detectVisionMediaType(art.bytes);
+  if (!outputMediaType) {
+    errors.push(`#${n}: unsupported_image_bytes`);
+    await persist(null);
+    return { made: 0, total: priorPicks.length, done: false, trialId, errors, phase: 'generate_next' };
+  }
+  await env.CAPTURES.put(r2Key, art.bytes, { httpMetadata: { contentType: outputMediaType } });
   const record: TrialRecord = {
     trialId, createdAt: Date.now(), providerId: 'workers-ai', model: DAILY_MODEL,
     params: { steps: DAILY_STEPS, width: 1024, height: 1024 }, seed: base + n, r2Key,

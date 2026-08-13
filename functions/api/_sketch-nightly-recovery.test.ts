@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  foldedDayDecision, hasRecordedRecommendation, recoIsHonestTerminal, recoNeedsJudge,
+  detectVisionMediaType, foldedDayDecision, hasRecordedRecommendation,
+  recoIsHonestTerminal, recoNeedsJudge,
 } from './sketch-daily.ts';
 import { buildImagePrompt, NIGHTLY_POSE_VARIANTS, type MemoryEvent } from './_daily-sketch.ts';
 import { terminalResult, missionFor, kstDateStr } from '../../workers/sketch-scheduler/index.mjs';
@@ -68,6 +69,17 @@ test('옛 3장·무판정 기록은 그림을 다시 만들지 않고 판정 단
     status: 'done', picks: [1, 2, 3],
     reco: { pick: 1, reasons: '합격', verdicts: ['1장: 합격'] },
   }), false);
+});
+
+test('vision MIME은 파일명이 아니라 실제 바이트 시그니처로 정한다', () => {
+  const bytes = (...values: number[]) => Uint8Array.from(values).buffer;
+  assert.equal(detectVisionMediaType(bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)), 'image/png');
+  assert.equal(detectVisionMediaType(bytes(0xff, 0xd8, 0xff, 0xe0)), 'image/jpeg');
+  assert.equal(detectVisionMediaType(bytes(
+    0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+  )), 'image/webp');
+  assert.equal(detectVisionMediaType(bytes(0x47, 0x49, 0x46, 0x38, 0x39, 0x61)), 'image/gif');
+  assert.equal(detectVisionMediaType(bytes(1, 2, 3, 4)), null);
 });
 
 test('야간 3장은 같은 기억을 서로 다른 능동 포즈로 그린다', () => {
