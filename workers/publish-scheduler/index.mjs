@@ -8,7 +8,9 @@
 import { DurableObject } from 'cloudflare:workers';
 
 const NAME = 'byeoli-social-director';
-const STATE_KEY = 'social-director-v1';
+// v2 starts from a clean one-shot state. The v1 alarm belonged to the faulty
+// event/backlog chain and must never be inherited when outbound access reopens.
+const STATE_KEY = 'social-director-v2';
 const ENDPOINT = 'https://mimesis-sight-path.pages.dev/api/radio/social-agent';
 const REQUEST_TIMEOUT_MS = 120_000;
 
@@ -26,13 +28,21 @@ export class ByeoliSocialDirector extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.state = {
-      version: 'social-director-v1', lastWakeAt: null, lastFinishedAt: null,
+      version: 'social-director-v2', lastWakeAt: null, lastFinishedAt: null,
       lastStatus: 'idle', lastRunId: null, nextLookAt: null, lastError: null,
-      continuationPending: false,
+      continuationPending: false, selfWakeAt: null,
     };
     this.queue = Promise.resolve();
     ctx.blockConcurrencyWhile(async () => {
-      this.state = { ...this.state, ...((await ctx.storage.get(STATE_KEY)) ?? {}) };
+      const stored = await ctx.storage.get(STATE_KEY);
+      if (stored) {
+        this.state = { ...this.state, ...stored };
+        return;
+      }
+      // A stale v1 alarm may still be retrying while publishing is locked.
+      // Clear it once, then wait for the explicit one-time start below.
+      await ctx.storage.deleteAlarm();
+      await ctx.storage.put(STATE_KEY, this.state);
     });
   }
 
@@ -71,14 +81,21 @@ export class ByeoliSocialDirector extends DurableObject {
       const continuationDelay = Number.isFinite(requestedDelay)
         ? Math.min(10 * 60_000, Math.max(1_000, Math.trunc(requestedDelay)))
         : 1_000;
+      const agencyWake = normalizedTrigger.kind === 'curiosity' || normalizedTrigger.kind === 'manual_start';
       const editorialNext = Number(payload?.nextLookAt);
-      const next = continuationPending ? Date.now() + continuationDelay : editorialNext;
+      const chosenSelfWake = agencyWake
+        ? Number.isFinite(editorialNext) && editorialNext > Date.now() ? Math.trunc(editorialNext) : null
+        : this.state.selfWakeAt;
+      const overdueSelfWake = Number.isFinite(chosenSelfWake) && chosenSelfWake <= Date.now();
+      const next = continuationPending
+        ? Date.now() + continuationDelay
+        : overdueSelfWake ? Date.now() + 1_000 : chosenSelfWake;
       this.state = {
         ...this.state, lastFinishedAt: Date.now(), lastStatus: payload?.ok ? 'ok' : 'partial',
         lastRunId: payload?.runId ?? null,
         nextLookAt: Number.isFinite(next) && next > Date.now() ? Math.trunc(next) : null,
         lastError: payload?.error ?? payload?.replies?.errors?.[0] ?? null,
-        continuationPending,
+        continuationPending, selfWakeAt: chosenSelfWake,
       };
       await this.ctx.storage.deleteAlarm();
       if (this.state.nextLookAt) await this.ctx.storage.setAlarm(this.state.nextLookAt);
@@ -134,7 +151,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/health') {
-      return json({ ok: true, service: NAME, mode: 'event_and_byeoli_chosen_wake' });
+      return json({ ok: true, service: NAME, mode: 'byeoli_chosen_wake_only' });
     }
     if (request.method === 'GET' && url.pathname === '/state') {
       if (!env.PULSE_KEY || request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) {

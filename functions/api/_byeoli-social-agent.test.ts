@@ -1,12 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isRecentDuplicate, observationText, parseSocialTrigger } from './_byeoli-social-agent-logic.ts';
+import {
+  isAgencyWake, isRecentDuplicate, observationText, parseSocialTrigger,
+} from './_byeoli-social-agent-logic.ts';
 
 test('자율 실행 사건은 고정 슬롯이 아니라 실제 사건/자기 알람만 받는다', () => {
   const now = Date.now();
   assert.equal(parseSocialTrigger({ kind: 'curiosity', eventId: 'curiosity:abc123', occurredAt: now }, now)?.kind, 'curiosity');
   assert.equal(parseSocialTrigger({ kind: 'backlog_continue', eventId: 'backlog:abc123', occurredAt: now }, now)?.kind, 'backlog_continue');
   assert.equal(parseSocialTrigger({ kind: 'fixed_0800', eventId: 'fixed:abc123', occurredAt: now }, now), null);
+});
+
+test('창작 판단은 별이 자신의 기상에서만 열린다', () => {
+  assert.equal(isAgencyWake('manual_start'), true);
+  assert.equal(isAgencyWake('curiosity'), true);
+  assert.equal(isAgencyWake('backlog_continue'), false);
+  assert.equal(isAgencyWake('observation_arrived'), false);
+  assert.equal(isAgencyWake('program_registered'), false);
+  assert.equal(isAgencyWake('story_aired'), false);
+  assert.equal(isAgencyWake('social_refreshed'), false);
 });
 
 test('같은 글의 공백 차이는 다시 발행하지 않는다', () => {

@@ -1,5 +1,5 @@
 // 별이의 실제 Threads 자율 실행선.
-// 정시 슬롯과 사람 승인 없이, 방송·관찰·댓글 사건 또는 별이가 고른 1회 알람에서 깨어난다.
+// 정시 슬롯과 사람 승인 없이, 별이가 스스로 고른 1회 알람에서 자기 공간을 둘러본다.
 // @byeoli_log에만 쓰며 @byeol.toon 등 외부 계정은 이 파일의 후보로 읽기만 한다.
 
 import { appendPublishLog } from './_publish-log.ts';
@@ -15,7 +15,7 @@ import {
   processCollectedReplies, type AutonomousReplyRun, type Env as ReplyEnv,
 } from './ops/threads-replies.ts';
 import {
-  isRecentDuplicate, observationText,
+  isAgencyWake, isRecentDuplicate, observationText,
   type SocialTrigger, type SocialTriggerKind,
 } from './_byeoli-social-agent-logic.ts';
 
@@ -166,9 +166,9 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
       replies = emptyReplyRun(message.slice(0, 160));
     }
 
-    // 수집/답글 판단 이어달리기가 남았으면 그 기술 작업을 먼저 완주한다. 게시 횟수를
-    // 제한하는 것이 아니라 같은 사건에서 편집 판단을 여러 번 중복 실행하지 않는 경계다.
-    if (!replies.continuationNeeded) {
+    // 백로그·방송·관찰은 별이에게 글쓰기 임무를 주지 않는다. 자기 기상에서만 한 번
+    // 자기 공간을 둘러보고, 쓰기·댓글·침묵과 다음 기상을 별이가 직접 고른다.
+    if (isAgencyWake(trigger.kind)) {
       const [programRaw, observationsRaw, shelfRaw, toonRaw] = await Promise.all([
         env.PLANET.get(PROGRAM_KEY), env.PLANET.get(WEB_OBSERVATIONS_KEY),
         env.PLANET.get(THREADS_SHELF_KEY), env.PLANET.get(TOON_KEY),
@@ -185,10 +185,15 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
         id: item.id, text: item.text, timestamp: item.timestamp,
         username: '@byeoli_log', ownership: 'self' as const,
       })) ?? [];
+      const recentActivity = shelf?.posts?.filter((item) => item.id && item.text).slice(0, 20).map((item) => ({
+        id: item.id, text: item.text, timestamp: item.timestamp,
+        username: '@byeoli_log', ownership: 'self' as const,
+      })) ?? [];
       const external = await resolveObservedExternalTargets(env, toonShelf);
       externalComments = external.receipt;
+      const recentOwnThreads = ownThreads.slice(0, 12);
       const commentTargets = [
-        ...ownThreads,
+        ...recentOwnThreads,
         ...external.targets.map((item) => ({
           id: item.id, text: item.text, timestamp: item.timestamp,
           username: item.username, ownership: 'external_observed' as const,
@@ -198,7 +203,7 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
       const candidates = radioEditorialCandidates(
         observationText(observationRaw), await eligibleSegments(env, segments), Date.now(),
       );
-      const decision = await chooseEditorial(env, candidates, commentTargets);
+      const decision = await chooseEditorial(env, candidates, commentTargets, recentActivity);
       if (!decision) {
         error = candidates.length ? 'editorial_decision_unavailable' : 'editorial_candidates_empty';
       } else {

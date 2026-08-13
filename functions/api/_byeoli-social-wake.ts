@@ -27,10 +27,10 @@ export function deferSocialWake(
   trigger: SocialTrigger,
   label: string,
 ): void {
-  // Pages 운영에는 waitUntil이 항상 있다. 순수 단위시험은 감독 바인딩이 없으므로
-  // 가짜 실패를 만들지 않는다. 운영에서 바인딩이 빠졌다면 아래 task가 명시적으로 기록한다.
-  if (typeof context.waitUntil !== 'function') return;
-  const task = wakeSocialDirector(env, trigger)
-    .catch((error) => console.error(`social-director ${label}`, error));
-  context.waitUntil(task);
+  // 방송·관찰·사연은 별이에게 Threads 임무를 배정하지 않는다. 호출부는 기존 방송
+  // 계통과의 호환을 위해 남아 있지만, 별이 자신의 알람 외에는 감독을 깨우지 않는다.
+  void context;
+  void env;
+  void trigger;
+  void label;
 }

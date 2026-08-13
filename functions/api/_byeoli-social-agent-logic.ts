@@ -32,6 +32,14 @@ export function parseSocialTrigger(raw: unknown, now = Date.now()): SocialTrigge
   return { kind: value.kind as SocialTriggerKind, eventId, occurredAt, refId };
 }
 
+/**
+ * 별이가 자기 공간을 둘러보는 실행만 새 글/댓글 편집 판단을 연다.
+ * 방송·관찰 사건과 댓글 수집 이어달리기는 자료를 갱신할 뿐, 별이에게 일을 배정하지 않는다.
+ */
+export function isAgencyWake(kind: SocialTriggerKind): boolean {
+  return kind === 'curiosity' || kind === 'manual_start';
+}
+
 export function observationText(raw: unknown): string {
   const shelf = decodeWebObservationShelf(raw);
   return shelf.sources.slice(0, 5).flatMap((source) =>
