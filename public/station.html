@@ -39,24 +39,34 @@
          padding:24px; padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px));
          padding-top:calc(24px + env(safe-area-inset-top, 0px)); }
   main { width:100%; max-width:540px; }
-  /* 헤더 두 단 (Vase 08-12 밤 "정렬을 좀 잘하던가"): 좁은 화면에서 소개문이 로고와 단추
-     사이 좁은 기둥에 끼어 3~4줄로 접히던 판을 폐기 — 1행 로고·제목·단추, 2행 소개문 전폭 */
+  /* 헤더는 간판만 맡는다. 사연·기록은 아래 라디오 프리셋 판으로 내려 몸체에 심는다. */
   .brand { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
   .brand img { width:44px; height:44px; border-radius:11px; flex:none; }
   .brand h1 { flex:1; min-width:0; }
-  .nav { display:flex; gap:8px; flex:none; }
-  /* 이모지 금지 — ✉ 한 글자가 글줄 높이를 밀어 올려 두 단추가 삐딱해진다 (사장 실견 08-12 밤).
-     inline-flex + line-height 1로 두 단추를 같은 상자에 가둔다. */
-  .nav a { color:var(--accent); text-decoration:none; font-size:12px; line-height:1;
-           display:inline-flex; align-items:center; border:1px solid #4d4133;
-           border-radius:8px; padding:8px 12px; white-space:nowrap; }
   @media (max-height:760px) { .script { height:38vh; } }
   h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; }
   .sub { color:var(--dim); font-size:12.5px; }
-  .brandsub { margin-bottom:24px; line-height:1.65; }
+  .brandsub { margin-bottom:14px; line-height:1.65; }
+  /* 손라디오의 프리셋 단추 세 개. 페이지 밖의 링크가 아니라 같은 기계의 기능처럼 보인다. */
+  .stationNav { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-bottom:0;
+                padding:8px 10px 9px; border:1px solid #3d3225; border-bottom-color:#211a12;
+                border-radius:18px 18px 0 0;
+                background:linear-gradient(175deg,var(--body1),#1b150f);
+                box-shadow:0 10px 24px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,220,170,.07); }
+  .stationNav a { position:relative; min-height:39px; display:flex; align-items:center; justify-content:center;
+                  color:#82745e; text-decoration:none; font-size:12px; letter-spacing:.02em;
+                  border:1px solid #332b21; border-radius:8px;
+                  background:linear-gradient(180deg,#29231c,#191510);
+                  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 2px 3px rgba(0,0,0,.35); }
+  .stationNav a::before { content:''; width:5px; height:5px; border-radius:50%; margin-right:7px;
+                          background:#42392d; box-shadow:inset 0 1px 2px #090806; }
+  .stationNav a.active { color:#eadbbf; border-color:#695740;
+                         background:linear-gradient(180deg,#3a3024,#211a13); }
+  .stationNav a.active::before { background:var(--accent); box-shadow:0 0 7px rgba(255,217,160,.65); }
+  .stationNav a:active { transform:translateY(1px); box-shadow:inset 0 2px 4px rgba(0,0,0,.45); }
   /* 라디오 몸통 — 위에서 빛 받는 갈색 케이스 */
   .deck { background:linear-gradient(175deg, var(--body1), var(--body2) 80%);
-          border:1px solid #3d3225; border-top-color:#55462f; border-radius:20px;
+          border:1px solid #3d3225; border-top:0; border-radius:0 0 20px 20px;
           padding:20px 20px 14px; box-shadow:0 18px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,220,170,.08); }
   .nowline { display:flex; align-items:center; gap:10px; min-height:24px; }
   .dot { width:8px; height:8px; border-radius:50%; background:#4d4335; flex:none; }
@@ -72,19 +82,34 @@
   button.play:active { transform:translateY(1px); }
   /* 주파수 다이얼 — 눈금판 위를 바늘이 달린다 */
   .tl { flex:1; }
-  .dial { position:relative; height:34px; border-radius:8px; background:#15110c;
+  .dial { position:relative; height:48px; border-radius:10px; background:#15110c;
           border:1px solid #3a2f21; box-shadow:inset 0 2px 6px rgba(0,0,0,.6);
           background-image:
             repeating-linear-gradient(90deg, rgba(255,217,160,.28) 0 1px, transparent 1px 34px),
             repeating-linear-gradient(90deg, rgba(255,217,160,.12) 0 1px, transparent 1px 8.5px);
           background-size:100% 55%, 100% 32%; background-position:0 100%, 0 100%; background-repeat:no-repeat; }
-  .dial input[type=range] { -webkit-appearance:none; appearance:none; position:absolute; inset:0;
-          width:100%; height:100%; background:transparent; margin:0; cursor:pointer; }
-  .dial input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:4px; height:30px;
-          border-radius:2px; background:var(--accent); box-shadow:0 0 8px rgba(255,217,160,.7); }
-  .dial input[type=range]::-moz-range-thumb { width:4px; height:30px; border:0; border-radius:2px;
-          background:var(--accent); box-shadow:0 0 8px rgba(255,217,160,.7); }
-  .times { display:flex; justify-content:space-between; color:#8a795d; font-size:11px; margin-top:6px; }
+  .dial::after { content:''; position:absolute; inset:5px 8px auto; height:1px;
+                 background:linear-gradient(90deg,transparent,#6b573a,transparent); opacity:.55; }
+  .dialMarks { position:absolute; inset:0 10px; pointer-events:none; overflow:hidden; }
+  .dialMark { position:absolute; bottom:5px; width:2px; height:10px; border-radius:2px;
+              background:#8b7655; opacity:.62; transform:translateX(-1px); }
+  .dialMark.voice { height:15px; background:#c6cf97; opacity:.82; }
+  .dial input[type=range] { -webkit-appearance:none; appearance:none; position:absolute; inset:-5px 0;
+          width:100%; height:58px; background:transparent; margin:0; cursor:grab; touch-action:pan-y; }
+  .dial input[type=range]:active { cursor:grabbing; }
+  .dial input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:42px;
+          border-radius:7px; border:1px solid #725f45;
+          background:linear-gradient(90deg,#282016 0 8px,var(--accent) 8px 13px,#282016 13px 100%);
+          box-shadow:0 2px 7px rgba(0,0,0,.75),0 0 9px rgba(255,217,160,.3),inset 0 1px rgba(255,255,255,.12); }
+  .dial input[type=range]::-moz-range-thumb { width:22px; height:42px; border-radius:7px;
+          border:1px solid #725f45;
+          background:linear-gradient(90deg,#282016 0 8px,var(--accent) 8px 13px,#282016 13px 100%);
+          box-shadow:0 2px 7px rgba(0,0,0,.75),0 0 9px rgba(255,217,160,.3); }
+  .dial.magnetic { border-color:#7c6749; box-shadow:inset 0 2px 6px rgba(0,0,0,.6),0 0 10px rgba(255,217,160,.12); }
+  .times { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#8a795d;
+           font-size:11px; margin-top:7px; min-height:28px; }
+  .tunerReadout { flex:1; min-width:0; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tunerReadout.session { color:#c6cf97; }
   .liveBtn { background:none; border:1px solid #4d4133; color:#8a795d; border-radius:8px;
              padding:4px 10px; font-size:12px; cursor:pointer; }
   .liveBtn.on { color:var(--accent); border-color:var(--accent); }
@@ -101,8 +126,8 @@
   main.letter #view-letter { display:block; }
   main.archive #view-archive { display:block; }
   /* 지난 방송 */
-  .archCard { background:linear-gradient(175deg, #1c1a22, #131218); border:1px solid #2e2b38;
-              border-radius:16px; padding:8px 6px; }
+  .archCard { background:linear-gradient(175deg, #1c1a22, #131218); border:1px solid #3d3225; border-top:0;
+              border-radius:0 0 16px 16px; padding:8px 6px; }
   .archDayRow { display:flex; justify-content:space-between; align-items:center; width:100%;
                 background:none; border:0; color:var(--ink); font:inherit; font-size:14.5px;
                 padding:12px 14px; cursor:pointer; border-radius:10px; text-align:left; }
@@ -122,8 +147,8 @@
   .archSeg.open .full { display:block; }
   .archSeg.playing .tt { color:var(--accent); }
   #arch { width:100%; margin-top:12px; filter:invert(.9) hue-rotate(180deg); border-radius:8px; }
-  .letterCard { background:linear-gradient(175deg, #1c1a22, #131218); border:1px solid #2e2b38;
-                border-radius:16px; padding:22px 20px; }
+  .letterCard { background:linear-gradient(175deg, #1c1a22, #131218); border:1px solid #3d3225; border-top:0;
+                border-radius:0 0 16px 16px; padding:22px 20px; }
   .letterCard textarea { width:100%; min-height:170px; resize:vertical; background:#0e0d13;
                 color:var(--ink); border:1px solid #2e2b38; border-radius:12px;
                 padding:14px 16px; font:inherit; font-size:14.5px; line-height:1.8; }
@@ -155,6 +180,13 @@
   .script .cursor { animation:blink 1s step-end infinite; }
   @keyframes blink { 50% { opacity:0; } }
   .script .empty { color:#6b7245; font-size:13.5px; font-family:inherit; }
+  @media (max-width:420px) {
+    body { padding-left:15px; padding-right:15px; }
+    .deck { padding-left:16px; padding-right:16px; }
+    .row { gap:12px; }
+    button.play { width:54px; height:54px; }
+    .stationNav a { font-size:11.5px; }
+  }
 </style>
 </head>
 <body>
@@ -162,10 +194,14 @@
   <div class="brand">
     <img src="/brand/logo-byeolliradyo-192.png" alt="별리라됴">
     <h1>별리 라디오</h1>
-    <div class="nav"><a href="#letter">사연</a><a href="#archive">지난 방송</a></div>
   </div>
   <!-- 두 줄로 의도해서 자른다 — 화면 폭 따라 "방송" 두 글자만 떨어지는 고아 줄 금지 (사장 실견) -->
   <div class="sub brandsub">별리(別里)에서 스물네 시간 —<br>오늘의 DJ는 별이. 놀고, 읽고, 가끔 조용한 방송</div>
+  <nav class="stationNav" aria-label="별리 라디오 프리셋">
+    <a href="#radio" data-view="radio">방송</a>
+    <a href="#letter" data-view="letter">사연</a>
+    <a href="#archive" data-view="archive">지난 방송</a>
+  </nav>
 
   <section id="view-radio">
     <div class="deck">
@@ -174,8 +210,8 @@
       <div class="row">
         <button class="play" id="play">▶</button>
         <div class="tl">
-          <div class="dial"><input type="range" id="bar" min="0" max="1000" value="1000"></div>
-          <div class="times"><span id="t0"></span><button class="liveBtn on" id="liveBtn">● 라이브</button></div>
+          <div class="dial" id="dial"><div class="dialMarks" id="dialMarks"></div><input type="range" id="bar" min="0" max="100000" value="100000" aria-label="지난 방송 시간 맞추기"></div>
+          <div class="times"><span class="tunerReadout" id="t0"></span><button class="liveBtn on" id="liveBtn">● 라이브</button></div>
         </div>
       </div>
       <div class="grille"></div>
@@ -183,7 +219,7 @@
 
     <div class="script" id="script"><span class="empty">글자 방송 — 별이가 말하면 여기에도 흐릅니다.</span></div>
 
-    <div class="foot">별이에게 하고 싶은 이야기가 있다면 — <a href="#letter">사연 남기기</a> · <a href="#archive">지난 방송</a></div>
+    <div class="foot">하루의 소리와 이야기가 천천히 지나가는 작은 방송국.</div>
   </section>
 
   <!-- 사연 남기기 — 같은 방의 다른 벽. 방송은 계속 흐른다 (페이지 이동 없음, Vase 08-12) -->
@@ -201,14 +237,12 @@
       <div class="lnote">· 이름·연락처·링크 등 개인정보는 적지 말아 주세요 — 들어 있으면 접수되지 않아요.<br>
       · 남긴 사연은 별이의 목소리로 읽혀 방송될 수 있어요.</div>
     </div>
-    <div class="foot"><a href="#radio">← 라디오 화면으로</a></div>
   </section>
 
   <!-- 지난 방송 — 날짜별 목록·내용·다시 듣기 (Vase 08-12) -->
   <section id="view-archive">
     <div class="archCard" id="archBox"><div class="archBack">불러오는 중…</div></div>
     <audio id="arch" controls preload="none" style="display:none"></audio>
-    <div class="foot"><a href="#radio">← 라디오 화면으로</a></div>
   </section>
 
   <audio id="au" preload="auto"></audio>
@@ -228,16 +262,14 @@ amb.loop = false;   // 루프 금지 — 끝나는 순간이 백그라운드에�
 let segs = [], clockOffset = 0, playing = false, live = true, anchor = null; // anchor={P0, t0} 과거 재생 기준
 let currentSeg = null;
 
-/* ═══ HLS 스트림 (08-13 새벽 구조 교체 — 사장: "이거 안 고치면 나머지는 필요도 없어") ═══
-   파일 갈아끼우기 플레이어는 아이폰 잠금화면에서 코드가 얼어 원리적으로 라디오가 못 된다
-   (멈춤 22:0x·앞부분 삼킴 23:4x 실사고, 코덱스 동일 판정). HLS는 운영체제가 직접 이어
-   받으므로 페이지가 얼어도 방송이 계속 나온다. 라이브 = HLS(지원 브라우저), 과거 당겨
-   듣기 = 기존 파일 플레이어(화면 보며 쓰는 기능이라 얼 일이 없다). 배경음도 스트림에
-   구워져 있어 HLS 중엔 amb를 켜지 않는다. */
-const HLS_URL = '/api/radio/stream';
-const HLS_OK = au.canPlayType('application/vnd.apple.mpegurl') !== '';
-const HLS_LAT_MS = 18000;   // 자막 시계 보정 — 스트림은 라이브보다 조각 서너 개 뒤에서 들린다 (조율거리)
+/* ═══ Liquidsoap 연속 MP3 (08-13 구조 최종 교체) ═══
+   HLS의 6초 조각·재생목록·배달·캐시 층을 걷어냈다. 라이브는 하나로 이어진 MP3 줄기를
+   운영체제가 계속 받고, 과거 튜닝만 기존 영구 파일을 쓴다. */
+const LIVE_URL = '/api/radio/stream';
+const LIVE_LAT_MS = 3500;   // 32KB harbor burst + 터널 왕복. HLS의 18초 지연은 사라졌다.
+const BAR_MAX = 100000;     // 48시간 눈금에서도 초 단위 목적지를 잡을 수 있는 해상도
 let usingStream = false;
+let streamRetryTimer = null, streamRetryDelay = 1500;
 /* 지금 나가는 것 — 생성기의 진실(/api/radio/now). 라벨·[다시 듣기]·자막이 전부 여기서 나온다.
    재방송은 편성표에 없으므로 편성표 추측(segAt)으로는 화면이 거짓말을 하게 된다 (사장 08-13). */
 let nowData = null, nowFetchedAt = 0;
@@ -249,11 +281,21 @@ async function fetchNow() {
   nowFetchedAt = Date.now();
 }
 function streamStart() {
+  if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
   usingStream = true; live = true; anchor = null; currentSeg = null;
   amb.pause();
-  au.src = HLS_URL;
+  au.src = LIVE_URL + '?connect=' + Date.now();
   tryPlay(au);
   $('now').textContent = '별리의 방 — 방송 중';
+}
+function scheduleStreamRetry() {
+  if (streamRetryTimer || !playing || !live) return;
+  const delay = streamRetryDelay;
+  streamRetryDelay = Math.min(15000, Math.round(streamRetryDelay * 1.7));
+  streamRetryTimer = setTimeout(() => {
+    streamRetryTimer = null;
+    if (playing && live) streamStart();
+  }, delay);
 }
 
 /* 무조건 나온다 (사장 08-12 밤: "라디오면 그냥 라디온 거야") — 사람 손을 부르는 안내는 금지.
@@ -265,10 +307,18 @@ function tryPlay(el) {
     if (!tryPlay.warned) { tryPlay.warned = true; console.warn('재생 거부:', e && e.name); }
   });
 }
-au.addEventListener('playing', () => { amb.pause(); }); // 목소리가 나오면 방 소리는 쉰다
+au.addEventListener('playing', () => {
+  amb.pause();
+  if (usingStream) streamRetryDelay = 1500;
+}); // 목소리가 나오면 방 소리는 쉰다
 au.addEventListener('error', () => {
-  // "지원한다"고 답해놓고 실제론 못 트는 브라우저 대비 — 스트림이 죽으면 파일 모드로 낙하
-  if (usingStream) { usingStream = false; au.removeAttribute('src'); if (playing) liveAdvance(); }
+  // 원점이 잠깐 죽어도 과거 파일 붙이기 엔진으로 되돌아가지 않는다. 방 소리를 깔고
+  // 하나의 연속 줄기에 지수 백오프로 다시 붙는다. Tunnel 주소 변경도 여기서 회복한다.
+  if (usingStream) {
+    usingStream = false;
+    au.removeAttribute('src');
+    if (playing && live) { amb.currentTime = 0; tryPlay(amb); scheduleStreamRetry(); }
+  }
 });
 // 예상 밖 멈춤은 그 자리에서 되살린다 — 의도한 멈춤(사용자 정지·간극 전환)은 걸러진다
 au.addEventListener('pause', () => {
@@ -302,6 +352,7 @@ async function loadProgram() {
     if (!d.ok) return;
     segs = d.segments || [];
     clockOffset = d.now - Date.now();
+    renderDialMarks();
   } catch {}
 }
 const serverNow = () => Date.now() + clockOffset;
@@ -313,6 +364,37 @@ const segAt = (p) => segs.find((s) => p >= s.startAt && p < s.startAt + s.dur * 
 function fmt(ms) {
   const d = new Date(ms + 9 * 3600000);
   return d.toISOString().slice(11, 16);
+}
+function fmtSeconds(ms) {
+  const d = new Date(ms + 9 * 3600000);
+  return d.toISOString().slice(11, 19);
+}
+function tunerKind(kind) {
+  return ({ talk:'이야기', story:'사연', song:'노래', ambient:'쉼' })[kind] || '방송';
+}
+function setTunerReadout(p, moving=false) {
+  const el = $('t0');
+  const session = segAt(p);
+  el.classList.toggle('session', !!session);
+  if (session) {
+    el.textContent = `${tunerKind(session.kind)} · ${session.title}${moving ? ' — 여기로 맞추기' : ''}`;
+  } else {
+    el.textContent = `${fmtSeconds(p)} KST${moving ? ' — 손을 떼면 이동' : ''}`;
+  }
+}
+function renderDialMarks() {
+  const box = $('dialMarks');
+  if (!box) return;
+  const a = spanStart(), b = Math.max(liveP(), a + 60000);
+  box.innerHTML = '';
+  segs.slice(-300).forEach((session) => {
+    const ratio = (session.startAt - a) / (b - a);
+    if (ratio < 0 || ratio > 1) return;
+    const mark = document.createElement('i');
+    mark.className = 'dialMark' + (session.kind === 'talk' || session.kind === 'story' ? ' voice' : '');
+    mark.style.left = (ratio * 100) + '%';
+    box.appendChild(mark);
+  });
 }
 
 /* 토막 붙이기 — 한 자리에서만 한다. ⚠ 늦참 정책 (사장 08-12 밤 "앞에 꺼 다 씹어먹고
@@ -335,13 +417,13 @@ function attachSeg(s, p) {
 
 function tick() {
   if (usingStream) {
-    // HLS 라이브 — 붙이기는 운영체제 몫. 여기선 소생·타임라인·화면 진실(now.json)만.
+    // 연속 MP3 라이브 — 붙이기는 운영체제 몫. 여기선 소생·타임라인·화면 진실만.
     if (playing && au.paused) tryPlay(au);
     if (playing && Date.now() - nowFetchedAt > 6000) fetchNow();
     const a = spanStart(), b = Math.max(liveP(), a + 60000);
-    const p = liveP() - HLS_LAT_MS;
-    if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
-    if (!scrubbing) $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
+    const p = liveP() - LIVE_LAT_MS;
+    if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(BAR_MAX * (p - a) / (b - a));
+    if (!scrubbing) setTunerReadout(p);
     const nd = nowData;
     // 라이브 알약의 정직 (사장 00:35 "계속 라이브라고 되있는 건 내 핸폰이 삐꾸냐"):
     // 재방송이 나가는 동안은 「재방송」— 방송 줄기는 라이브지만 내용은 다시 듣기다.
@@ -356,9 +438,9 @@ function tick() {
         : nd.kind === 'story' ? '사연을 읽는 중'
         : nd.kind === 'song' ? '노래 — ' + (nd.title || '')
         : nd.voiceNote ? '목소리 — ' + nd.voiceNote : '';
-      const elapsed = serverNow() - nd.startedAt - HLS_LAT_MS;
+      const elapsed = serverNow() - nd.startedAt - LIVE_LAT_MS;
       const cur = nd.script ? { id: 'now:' + nd.startedAt, script: nd.script,
-        startAt: nd.startedAt + HLS_LAT_MS, dur: nd.dur || 1 } : null;
+        startAt: nd.startedAt + LIVE_LAT_MS, dur: nd.dur || 1 } : null;
       renderScript(cur, cur ? Math.max(0, elapsed / ((nd.dur || 1) * 1000)) : 0);
     } else {
       $('now').textContent = '별리의 방 — 방송 중';
@@ -381,8 +463,8 @@ function tick() {
   const p = P();
   // 타임라인
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
-  if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(1000 * (p - a) / (b - a));
-  if (!scrubbing) $('t0').textContent = fmt(a) + ' — ' + fmt(b) + ' (KST)';
+  if (!scrubbing && document.activeElement !== $('bar')) $('bar').value = Math.round(BAR_MAX * (p - a) / (b - a));
+  if (!scrubbing) setTunerReadout(p);
   $('liveBtn').textContent = '● 라이브';
   $('liveBtn').classList.toggle('on', live);
   $('dot').classList.toggle('live', live && playing);
@@ -466,7 +548,7 @@ function renderScript(cur, frac) {
    모든 소리가 죽어 심장박동 자체가 멎었다. 이제 이벤트 문맥 **안에서** 방 소리부터 즉시 살리고
    (소리가 살아 있으면 세션이 유지돼 뒤의 play()도 허락된다), 그다음에 편성표를 읽는다. */
 async function liveAdvance() {
-  if (!playing || usingStream) return;   // HLS 중엔 붙이기·방 소리 전부 운영체제/스트림 몫
+  if (!playing || usingStream) return;   // 연속 스트림 중엔 붙이기·방 소리 전부 Liquidsoap 몫
   if ((au.paused || au.ended) && amb.paused) { amb.currentTime = 0; tryPlay(amb); }
   if (!live) return;
   await loadProgram();
@@ -490,30 +572,58 @@ $('play').onclick = () => {
   playing = !playing;
   $('play').textContent = playing ? '❚❚' : '▶';
   if (playing) {
-    if (HLS_OK && live) streamStart();   // 라이브는 스트림으로 — 잠가도 나온다
+    if (live) streamStart();             // 라이브는 연속 MP3 — 잠가도 나온다
   } else {
     usingStream = false;
+    if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     au.pause(); au.removeAttribute('src'); amb.pause(); currentSeg = null; $('state').textContent = '';
     checkVersion();   // 멈춘 김에 — 새 판이 나와 있으면 이 참에 갈아입는다
   }
 };
-/* 튜너 (사장 08-12 밤 "여기가 어딘지 모르겠어"): 끄는 동안은 목적지 시각만 크게 보여주고,
-   손을 떼는 순간 이동한다. 끌 때마다 오디오를 갈아끼우던 이전 방식은 더듬거림의 원인이었다. */
+/* 세션 튜너: 10만 눈금으로 손가락 정밀도를 확보하고, 방송 시작점 가까이 가면 가볍게
+   자석처럼 붙는다. 세션 안에서는 분초 대신 실제 방송 제목을 보여준다. */
 let scrubbing = false;
+let magnetKey = '';
 const barP = () => {
   const a = spanStart(), b = Math.max(liveP(), a + 60000);
-  return { a, b, p: a + (b - a) * (Number($('bar').value) / 1000) };
+  return { a, b, p: a + (b - a) * (Number($('bar').value) / BAR_MAX) };
 };
+function magnetize(a, b, rawP) {
+  const threshold = Math.min(30000, Math.max(8000, (b - a) * 0.008));
+  let nearest = null, distance = Infinity;
+  for (const session of segs) {
+    const d = Math.abs(session.startAt - rawP);
+    if (d < distance) { nearest = session; distance = d; }
+  }
+  if (nearest && distance <= threshold) {
+    $('bar').value = Math.round(BAR_MAX * (nearest.startAt - a) / (b - a));
+    $('dial').classList.add('magnetic');
+    if (magnetKey !== nearest.id) {
+      magnetKey = nearest.id;
+      if (navigator.vibrate) navigator.vibrate(8);
+    }
+    return nearest.startAt;
+  }
+  magnetKey = '';
+  $('dial').classList.remove('magnetic');
+  return rawP;
+}
 $('bar').oninput = () => {
   scrubbing = true;
-  const { b, p } = barP();
-  $('t0').textContent = b - p < 4000 ? '→ 라이브로' : '→ ' + fmt(p) + ' (KST) 로 이동 — 손을 떼면 이동';
+  const { a, b, p: rawP } = barP();
+  const p = magnetize(a, b, rawP);
+  if (b - p < 4000) {
+    $('t0').classList.remove('session');
+    $('t0').textContent = '라이브에 맞추기';
+  } else setTunerReadout(p, true);
 };
 $('bar').onchange = () => {
   scrubbing = false;
   const { b, p } = barP();
+  $('dial').classList.remove('magnetic');
+  magnetKey = '';
   if (b - p < 4000) {
-    if (playing && HLS_OK) { streamStart(); return; }
+    if (playing) { streamStart(); return; }
     live = true; anchor = null;
   } else {
     // 과거 당겨 듣기 — 파일 플레이어로 내려온다 (화면 보며 쓰는 기능이라 얼 일이 없다)
@@ -523,7 +633,7 @@ $('bar').onchange = () => {
   currentSeg = null; // 다음 tick이 새 위치로 붙는다
 };
 $('liveBtn').onclick = () => {
-  if (playing && HLS_OK) { streamStart(); return; }
+  if (playing) { streamStart(); return; }
   live = true; anchor = null; currentSeg = null;
 };
 
@@ -532,6 +642,8 @@ function applyView() {
   const m = document.querySelector('main');
   m.classList.toggle('letter', location.hash === '#letter');
   m.classList.toggle('archive', location.hash === '#archive');
+  const view = location.hash === '#letter' ? 'letter' : location.hash === '#archive' ? 'archive' : 'radio';
+  document.querySelectorAll('.stationNav a').forEach((link) => link.classList.toggle('active', link.dataset.view === view));
   if (location.hash === '#archive') loadArchive();
 }
 window.addEventListener('hashchange', applyView);

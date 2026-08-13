@@ -1,24 +1,24 @@
 // 별리라됴 "지금 나가는 것" 창구 — GET /api/radio/now (공개)
-// 스트림 생성기가 발행하는 진실(now.json): 제목·종류·재방송 여부·시작 시각·자막.
-// 화면(HLS 모드)의 라벨·자막이 전부 이걸 마신다 — 편성표 추측 금지.
-// (08-13 사장: "재방송 틀 때 라이브 표시 어떻게 할 건지 그런 거 다 생각하고 해라")
+// Liquidsoap의 실제 on-track 사건을 feeder가 Worker에 기록한다. 편성 시각이나
+// HLS 재생목록을 추측하지 않고 실제 출력 엔진의 사실만 전달한다.
 
 const NOW_URL = 'https://byeol-radio-ingest-v2.byulsarang.workers.dev/now.json';
 
 export const onRequestGet: PagesFunction = async () => {
-  const r = await fetch(NOW_URL, {
+  const response = await fetch(`${NOW_URL}?t=${Date.now()}`, {
     cf: { cacheTtl: 0, cacheEverything: false },
   } as RequestInit);
-  if (!r.ok) {
-    return new Response(JSON.stringify({ kind: 'bed', title: '별리의 방', isReplay: false }), {
+  if (!response.ok) {
+    return new Response(JSON.stringify({ kind: 'bed', title: '별리의 방', isReplay: false, engine: 'liquidsoap' }), {
       headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     });
   }
-  return new Response(await r.text(), {
+  return new Response(await response.text(), {
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
+      'cache-control': 'no-store, no-cache, must-revalidate',
       'access-control-allow-origin': '*',
+      'x-byeol-engine': 'liquidsoap',
     },
   });
 };

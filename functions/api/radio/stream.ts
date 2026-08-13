@@ -1,28 +1,37 @@
-// 별리라됴 스트림 창구 — GET /api/radio/stream (공개)
-// 송출 전용 Worker의 미닫이 재생목록(live.m3u8)을 캐시 금지로 넘겨준다. 조각 주소는
-// 상대경로라 청취자는 계속 이 사이트의 동일출처 조각 창구만 사용한다.
-// ⚠ 재생목록만은 no-store여야 한다 — 엣지가 옛 목록을 물면 라이브가 몇 조각씩 얼어 보인다.
+// 별리라됴 연속 방송 창구 — GET /api/radio/stream (공개)
 //
-// 존재 이유(08-13 새벽): 파일 갈아끼우기 플레이어는 아이폰 잠금화면에서 원리적으로
-// 라디오가 될 수 없다 — HLS는 운영체제가 직접 이어 받는다. 생성기는 byeol-radio/stream/.
+// HLS 조각·재생목록 배달층을 폐기하고 Liquidsoap의 하나로 이어진 MP3 줄기를
+// 같은 출처로 그대로 넘긴다. 본문을 읽거나 버퍼링하지 않고 스트림을 전달한다.
 
-interface Env { PLANET: KVNamespace }
+const STREAM_URL = 'https://byeol-radio-ingest-v2.byulsarang.workers.dev/live.mp3';
 
-const PLAYLIST = 'https://byeol-radio-ingest-v2.byulsarang.workers.dev/live.m3u8';
-
-export const onRequestGet: PagesFunction<Env> = async () => {
-  const r = await fetch(PLAYLIST, { cf: { cacheTtl: 0, cacheEverything: false } } as RequestInit);
-  if (!r.ok) {
-    return new Response('#EXTM3U\n# 방송 준비 중\n', {
+export const onRequestGet: PagesFunction = async ({ request }) => {
+  const upstream = await fetch(STREAM_URL, {
+    headers: {
+      'user-agent': 'byeoli-station/continuous-1',
+      'icy-metadata': request.headers.get('icy-metadata') ?? '0',
+    },
+    cf: { cacheTtl: 0, cacheEverything: false },
+  } as RequestInit);
+  if (!upstream.ok || !upstream.body) {
+    upstream.body?.cancel();
+    return new Response(JSON.stringify({ ok: false, error: 'radio_origin_unavailable' }), {
       status: 503,
-      headers: { 'content-type': 'application/vnd.apple.mpegurl', 'cache-control': 'no-store' },
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+        'retry-after': '3',
+      },
     });
   }
-  return new Response(await r.text(), {
+  return new Response(upstream.body, {
+    status: 200,
     headers: {
-      'content-type': 'application/vnd.apple.mpegurl',
-      'cache-control': 'no-store',
+      'content-type': upstream.headers.get('content-type') || 'audio/mpeg',
+      'cache-control': 'no-store, no-cache, must-revalidate',
       'access-control-allow-origin': '*',
+      'x-content-type-options': 'nosniff',
+      'x-byeol-engine': 'liquidsoap',
     },
   });
 };
