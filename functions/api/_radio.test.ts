@@ -123,6 +123,15 @@ test('[노래:] 곡 선택 분리 — 순서 무관·중간 태그는 무시·�
 
   const intro = parseTrailingTags('본문.\n[노래: 아직 거기 있었다 | 소개]\n[목소리: 낮게]');
   assert.equal(intro.musicTransition, 'intro');
+  assert.equal(intro.script, '본문.');
+
+  // 실제 08-13 유실 판: 별이가 제어어 대신 자기 소개 문장을 태그 안에 썼다.
+  // 곡 선택을 버리지 않고 그 문장을 소리 낼 본문으로 되살린다.
+  const freeIntro = parseTrailingTags('본문.\n[목소리: 낮게]\n[노래: 그때 다시 그곳으로 | 오늘은 그냥, 자리 하나에게]');
+  assert.equal(freeIntro.songTitle, '그때 다시 그곳으로');
+  assert.equal(freeIntro.musicTransition, 'intro');
+  assert.equal(freeIntro.voiceNote, '낮게');
+  assert.equal(freeIntro.script, '본문.\n\n오늘은 그냥, 자리 하나에게');
   assert.equal(flipped.voiceNote, '낮게');
   // 노래 없이 목소리만 — 기존 방송과 동일
   const voiceOnly = parseTrailingTags('본문.\n[목소리: 담담하게]');

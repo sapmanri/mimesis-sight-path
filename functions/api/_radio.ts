@@ -236,6 +236,7 @@ ${style}
 - 아무 말 없이 곧바로 틀고 싶으면 본문에서 곡 제목을 억지로 말하지 말고 [노래: 곡 제목 | 바로]
 - 마음이 가지 않으면 노래 태그를 쓰지 않는다.
 곡 제목은 서가의 제목 그대로 쓴다. 소개는 의무가 아니다 — 네가 지금 방송에 맞다고 느낄 때만 한다.
+노래 태그의 | 뒤에는 반드시 '소개' 또는 '바로' 둘 중 하나만 쓴다. 네가 실제로 말할 소개 문장은 태그 안이 아니라 본문에 쓴다.
 
 맨 마지막 줄에 하나만 덧붙인다 — 오늘 이 토막을 읽을 네 목소리를 네가 정한다:
 [목소리: 짧은 연출 한 줄] (예: 조금 가라앉아서, 평소보다 느리게 / 반 박자 빠르게, 살짝 들떠서. 30자 이내)
@@ -262,6 +263,7 @@ export function parseTrailingTags(text: string): {
   let voiceNote: string | null = null;
   let songTitle: string | null = null;
   let musicTransition: MusicTransition | null = null;
+  let spokenSongIntro: string | null = null;
   for (let i = 0; i < 2; i++) {
     const v = script.match(/\n?\s*\[목소리:\s*([^\]]{1,60})\]\s*$/);
     if (v && voiceNote === null) {
@@ -271,16 +273,22 @@ export function parseTrailingTags(text: string): {
       voiceNote = META_LEAK.test(note) ? null : note || null;
       continue;
     }
-    const s = script.match(/\n?\s*\[노래:\s*([^\]|]{1,60})(?:\s*\|\s*(소개|바로))?\s*\]\s*$/);
+    const s = script.match(/\n?\s*\[노래:\s*([^\]|]{1,60})(?:\s*\|\s*([^\]\n]{1,100}))?\s*\]\s*$/);
     if (s && songTitle === null) {
       songTitle = s[1].trim() || null;
+      const mode = (s[2] ?? '').trim();
       // 옛 원고의 [노래: 제목]은 당시 계약이 "소개 한마디"였으므로 소개로 해석한다.
-      musicTransition = s[2] === '바로' ? 'direct' : 'intro';
+      // 모델이 제어어 대신 실제 소개 문장을 태그 안에 쓴 옛/일탈 원고도 버리지 않는다.
+      // 그 문장은 태그에서 꺼내 방송 본문 끝에 놓고, 이어지는 곡과 intro 한 묶음으로 만든다.
+      const direct = /^(바로|말없이|소개\s*없이|direct)$/i.test(mode);
+      musicTransition = direct ? 'direct' : 'intro';
+      if (mode && mode !== '소개' && !direct && !META_LEAK.test(mode)) spokenSongIntro = mode;
       script = script.slice(0, s.index).trim();
       continue;
     }
     break;
   }
+  if (spokenSongIntro) script = [script, spokenSongIntro].filter(Boolean).join('\n\n');
   return { script, voiceNote, songTitle, musicTransition };
 }
 
