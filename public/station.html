@@ -35,13 +35,15 @@
   body { background:radial-gradient(ellipse at 50% 30%, #101114, #08090b 70%); color:var(--ink);
          font-family:'Apple SD Gothic Neo',Pretendard,sans-serif;
          min-height:100vh; min-height:100dvh; display:flex; align-items:center; justify-content:center;
+         overflow-x:hidden;
          /* 아이폰 안전영역 — 아래는 사파리 바, 위는 홈 화면 앱의 상태바(시계) 자리 (Vase 08-12 밤) */
          padding:24px; padding-bottom:calc(24px + env(safe-area-inset-bottom, 0px));
          padding-top:calc(24px + env(safe-area-inset-top, 0px)); }
-  main { width:100%; max-width:540px; }
+  main { width:100%; max-width:540px; min-width:0; }
   /* 헤더는 간판만 맡는다. 사연·기록은 아래 라디오 프리셋 판으로 내려 몸체에 심는다. */
   .brand { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
-  .brand img { width:44px; height:44px; border-radius:11px; flex:none; }
+  .brand img { width:48px; height:48px; border-radius:50%; object-fit:cover; flex:none;
+               box-shadow:0 4px 14px rgba(0,0,0,.42),0 0 0 1px rgba(255,217,160,.11); }
   .brand h1 { flex:1; min-width:0; }
   @media (max-height:760px) { .script { height:38vh; } }
   h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; }
@@ -71,9 +73,9 @@
   .nowline { display:flex; align-items:center; gap:10px; min-height:24px; }
   .dot { width:8px; height:8px; border-radius:50%; background:#4d4335; flex:none; }
   .dot.live { background:#e46; box-shadow:0 0 8px #e468; }
-  .now { font-size:14.5px; line-height:1.6; color:#e8d9bd; }
+  .now { min-width:0; font-size:14.5px; line-height:1.6; color:#e8d9bd; overflow-wrap:anywhere; }
   .state { color:#907f63; font-size:12px; margin-top:4px; min-height:18px; }
-  .row { display:flex; align-items:center; gap:16px; margin-top:16px; }
+  .row { display:flex; align-items:center; gap:16px; min-width:0; margin-top:16px; }
   /* 재생 노브 */
   button.play { width:56px; height:56px; border-radius:50%; border:1px solid #61503a; cursor:pointer; flex:none;
                 background:radial-gradient(circle at 35% 30%, #ffe9c4, var(--accent) 55%, #c79a5e);
@@ -81,8 +83,18 @@
                 box-shadow:0 4px 10px rgba(0,0,0,.5), inset 0 -3px 6px rgba(120,80,30,.45), inset 0 2px 3px rgba(255,255,255,.5); }
   button.play:active { transform:translateY(1px); }
   /* 주파수 다이얼 — 눈금판 위를 바늘이 달린다 */
-  .tl { flex:1; }
-  .dial { position:relative; height:48px; border-radius:10px; background:#15110c;
+  .tl { flex:1 1 auto; min-width:0; }
+  .tunerRail { display:grid; grid-template-columns:40px minmax(0,1fr) 40px; align-items:center;
+               gap:7px; width:100%; min-width:0; }
+  .tuneStep { width:40px; height:48px; display:grid; place-items:center; border:1px solid #493b2a;
+              border-radius:10px; background:linear-gradient(180deg,#2b241b,#17120d); color:#c8b58f;
+              font:600 24px/1 ui-monospace,Menlo,monospace; cursor:pointer; touch-action:manipulation;
+              box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 2px 5px rgba(0,0,0,.38); }
+  .tuneStep:active,.tuneStep.pulse { transform:translateY(1px); color:var(--accent); border-color:#80684a;
+                                    box-shadow:inset 0 2px 5px rgba(0,0,0,.48),0 0 9px rgba(255,217,160,.13); }
+  .tuneStep:disabled { opacity:.28; cursor:default; transform:none; box-shadow:none; }
+  .dial { position:relative; width:100%; min-width:0; height:48px; overflow:hidden;
+          border-radius:10px; background:#15110c;
           border:1px solid #3a2f21; box-shadow:inset 0 2px 6px rgba(0,0,0,.6);
           background-image:
             repeating-linear-gradient(90deg, rgba(255,217,160,.28) 0 1px, transparent 1px 34px),
@@ -97,13 +109,13 @@
   .dial input[type=range] { -webkit-appearance:none; appearance:none; position:absolute; inset:-5px 0;
           width:100%; height:58px; background:transparent; margin:0; cursor:grab; touch-action:pan-y; }
   .dial input[type=range]:active { cursor:grabbing; }
-  .dial input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:22px; height:42px;
-          border-radius:7px; border:1px solid #725f45;
-          background:linear-gradient(90deg,#282016 0 8px,var(--accent) 8px 13px,#282016 13px 100%);
+  .dial input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:30px; height:44px;
+          border-radius:9px; border:1px solid #725f45;
+          background:linear-gradient(90deg,#282016 0 11px,var(--accent) 11px 18px,#282016 18px 100%);
           box-shadow:0 2px 7px rgba(0,0,0,.75),0 0 9px rgba(255,217,160,.3),inset 0 1px rgba(255,255,255,.12); }
-  .dial input[type=range]::-moz-range-thumb { width:22px; height:42px; border-radius:7px;
+  .dial input[type=range]::-moz-range-thumb { width:30px; height:44px; border-radius:9px;
           border:1px solid #725f45;
-          background:linear-gradient(90deg,#282016 0 8px,var(--accent) 8px 13px,#282016 13px 100%);
+          background:linear-gradient(90deg,#282016 0 11px,var(--accent) 11px 18px,#282016 18px 100%);
           box-shadow:0 2px 7px rgba(0,0,0,.75),0 0 9px rgba(255,217,160,.3); }
   .dial.magnetic { border-color:#7c6749; box-shadow:inset 0 2px 6px rgba(0,0,0,.6),0 0 10px rgba(255,217,160,.12); }
   .times { display:flex; align-items:center; justify-content:space-between; gap:8px; color:#8a795d;
@@ -111,7 +123,7 @@
   .tunerReadout { flex:1; min-width:0; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .tunerReadout.session { color:#c6cf97; }
   .liveBtn { background:none; border:1px solid #4d4133; color:#8a795d; border-radius:8px;
-             padding:4px 10px; font-size:12px; cursor:pointer; }
+             padding:4px 10px; flex:none; max-width:44%; font-size:12px; white-space:nowrap; cursor:pointer; }
   .liveBtn.on { color:var(--accent); border-color:var(--accent); }
   /* 스피커 그릴 */
   .grille { margin-top:16px; height:26px; border-radius:8px;
@@ -182,9 +194,13 @@
   .script .empty { color:#6b7245; font-size:13.5px; font-family:inherit; }
   @media (max-width:420px) {
     body { padding-left:15px; padding-right:15px; }
-    .deck { padding-left:16px; padding-right:16px; }
-    .row { gap:12px; }
-    button.play { width:54px; height:54px; }
+    .deck { padding-left:14px; padding-right:14px; }
+    .row { gap:10px; }
+    button.play { width:52px; height:52px; }
+    .tunerRail { grid-template-columns:36px minmax(0,1fr) 36px; gap:6px; }
+    .tuneStep { width:36px; height:48px; }
+    .times { gap:6px; }
+    .liveBtn { padding-left:8px; padding-right:8px; }
     .stationNav a { font-size:11.5px; }
   }
 </style>
@@ -210,7 +226,11 @@
       <div class="row">
         <button class="play" id="play">▶</button>
         <div class="tl">
-          <div class="dial" id="dial"><div class="dialMarks" id="dialMarks"></div><input type="range" id="bar" min="0" max="100000" value="100000" aria-label="지난 방송 시간 맞추기"></div>
+          <div class="tunerRail">
+            <button class="tuneStep" id="prevSession" type="button" aria-label="이전 방송 시작점으로" title="이전 방송">‹</button>
+            <div class="dial" id="dial"><div class="dialMarks" id="dialMarks"></div><input type="range" id="bar" min="0" max="100000" value="100000" aria-label="지난 방송 시간 맞추기"></div>
+            <button class="tuneStep" id="nextSession" type="button" aria-label="다음 방송 시작점으로" title="다음 방송">›</button>
+          </div>
           <div class="times"><span class="tunerReadout" id="t0"></span><button class="liveBtn on" id="liveBtn">● 라이브</button></div>
         </div>
       </div>
@@ -395,6 +415,7 @@ function renderDialMarks() {
     mark.style.left = (ratio * 100) + '%';
     box.appendChild(mark);
   });
+  updateTunerStepButtons();
 }
 
 /* 토막 붙이기 — 한 자리에서만 한다. ⚠ 늦참 정책 (사장 08-12 밤 "앞에 꺼 다 씹어먹고
@@ -581,7 +602,8 @@ $('play').onclick = () => {
   }
 };
 /* 세션 튜너: 10만 눈금으로 손가락 정밀도를 확보하고, 방송 시작점 가까이 가면 가볍게
-   자석처럼 붙는다. 세션 안에서는 분초 대신 실제 방송 제목을 보여준다. */
+   자석처럼 붙는다. 세션 안에서는 분초 대신 실제 방송 제목을 보여준다.
+   좌우 하드웨어 버튼은 빈 시간에 멈추지 않고 실제 방송 시작점과 라이브 사이만 이동한다. */
 let scrubbing = false;
 let magnetKey = '';
 const barP = () => {
@@ -608,6 +630,67 @@ function magnetize(a, b, rawP) {
   $('dial').classList.remove('magnetic');
   return rawP;
 }
+function tunerStops() {
+  const a = spanStart(), b = Math.max(liveP(), a + 60000);
+  const seen = new Set();
+  const stops = segs
+    .filter((session) => session.startAt >= a && session.startAt < b - 4000)
+    .sort((left, right) => left.startAt - right.startAt)
+    .filter((session) => {
+      const key = Math.round(session.startAt / 1000);
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    })
+    .map((session) => ({ p:session.startAt, session, live:false }));
+  stops.push({ p:b, session:null, live:true });
+  return { a, b, stops };
+}
+function tunerStepTarget(direction) {
+  const { b, stops } = tunerStops();
+  const current = live ? b : P();
+  const currentSession = live ? null : segAt(current);
+  const base = currentSession ? currentSession.startAt : current;
+  const tolerance = 750;
+  if (direction < 0) {
+    return [...stops].reverse().find((stop) => !stop.live && stop.p < base - tolerance) || null;
+  }
+  return stops.find((stop) => stop.p > base + tolerance) || null;
+}
+function updateTunerStepButtons() {
+  const previous = $('prevSession'), next = $('nextSession');
+  if (!previous || !next) return;
+  previous.disabled = !tunerStepTarget(-1);
+  next.disabled = !tunerStepTarget(1);
+}
+function commitTunerPosition(p, b) {
+  if (b - p < 4000) {
+    if (playing) { streamStart(); updateTunerStepButtons(); return; }
+    live = true; anchor = null;
+  } else {
+    usingStream = false;
+    if (playing) { au.pause(); au.removeAttribute('src'); }
+    live = false; anchor = { P0:p, t0:Date.now() };
+  }
+  currentSeg = null;
+  tick();
+  updateTunerStepButtons();
+}
+function jumpTuner(direction) {
+  const target = tunerStepTarget(direction);
+  if (!target) return;
+  const { a, b } = tunerStops();
+  $('bar').value = target.live ? BAR_MAX : Math.round(BAR_MAX * (target.p - a) / (b - a));
+  $('dial').classList.add('magnetic');
+  const button = direction < 0 ? $('prevSession') : $('nextSession');
+  button.classList.add('pulse');
+  if (navigator.vibrate) navigator.vibrate(8);
+  if (target.live) {
+    $('t0').classList.remove('session');
+    $('t0').textContent = '라이브에 맞추기';
+  } else setTunerReadout(target.p, false);
+  commitTunerPosition(target.p, b);
+  setTimeout(() => { $('dial').classList.remove('magnetic'); button.classList.remove('pulse'); }, 180);
+}
 $('bar').oninput = () => {
   scrubbing = true;
   const { a, b, p: rawP } = barP();
@@ -622,19 +705,14 @@ $('bar').onchange = () => {
   const { b, p } = barP();
   $('dial').classList.remove('magnetic');
   magnetKey = '';
-  if (b - p < 4000) {
-    if (playing) { streamStart(); return; }
-    live = true; anchor = null;
-  } else {
-    // 과거 당겨 듣기 — 파일 플레이어로 내려온다 (화면 보며 쓰는 기능이라 얼 일이 없다)
-    usingStream = false; if (playing) { au.pause(); au.removeAttribute('src'); }
-    live = false; anchor = { P0: p, t0: Date.now() };
-  }
-  currentSeg = null; // 다음 tick이 새 위치로 붙는다
+  commitTunerPosition(p, b);
 };
+$('prevSession').onclick = () => jumpTuner(-1);
+$('nextSession').onclick = () => jumpTuner(1);
 $('liveBtn').onclick = () => {
   if (playing) { streamStart(); return; }
   live = true; anchor = null; currentSeg = null;
+  updateTunerStepButtons();
 };
 
 /* 화면 오가기 — 방송(오디오 요소)은 그대로 산다. 해시로 오가니 뒤로가기도 먹는다. */
