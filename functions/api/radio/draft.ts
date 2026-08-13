@@ -41,6 +41,29 @@ export function timeLabelOf(hour: number): string {
   return '밤';
 }
 
+const STORY_PREVIEW_LIMIT = 96;
+const REJECTED_PREVIEW = '방송 부적합 판정으로 내용은 표시하지 않습니다.';
+
+/**
+ * 관제실은 원문 보관소가 아니다. 사람이 사연을 구별할 만큼만 한 줄로 보내고,
+ * 실수로 들어온 연락처·링크·주민번호 모양은 엣지에서 먼저 가린다.
+ */
+export function storyPreview(text: string, status: RadioStory['status']): string {
+  if (status === 'rejected') return REJECTED_PREVIEW;
+  const oneLine = String(text ?? '')
+    .replace(/https?:\/\/\S+|www\.\S+/gi, '[링크 가림]')
+    .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[이메일 가림]')
+    .replace(/(?:\+?82[-.\s]?)?0?1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/g, '[전화번호 가림]')
+    .replace(/\b\d{6}[-.\s]?[1-4]\d{6}\b/g, '[개인번호 가림]')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!oneLine) return '내용 미리보기 없음';
+  return oneLine.length <= STORY_PREVIEW_LIMIT
+    ? oneLine
+    : `${oneLine.slice(0, STORY_PREVIEW_LIMIT - 1).trimEnd()}…`;
+}
+
 /** 키 인증 조회 — ?id=드래프트, 없으면 대기열 요약 */
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const gate = keyGate(request, env);
@@ -57,11 +80,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     // rev: 배포 전파 탐침 — Pages는 Active 표시 뒤에도 엣지가 옛 판을 준다(08-12 실사고:
     // 첫 호출이 옛 코드에 맞아 사연 하나가 옛 모양으로 소비됨). 배포 후 이 값 확인 전에
     // 대기열을 소비하지 말 것.
-    ok: true, rev: 'r4', waiting: count('waiting'), registered: count('registered'),
+    ok: true, rev: 'r5', waiting: count('waiting'), registered: count('registered'),
     aired: count('aired'), rejected: count('rejected'), legacyUnknown: count('used'),
     // 옛 관제실 호환 필드. 의미는 이제 명확히 '실제 송출 확인'뿐이다.
     used: count('aired'),
-    recent: queue.slice(0, 10).map((q) => ({ id: q.id, at: q.at, status: q.status, chars: q.text.length })),
+    recent: queue.slice(0, 10).map((q) => ({
+      id: q.id,
+      at: q.at,
+      status: q.status,
+      chars: q.text.length,
+      preview: storyPreview(q.text, q.status),
+    })),
   });
 };
 

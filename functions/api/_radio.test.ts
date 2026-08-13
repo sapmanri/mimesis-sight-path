@@ -5,7 +5,7 @@ import {
   parseScriptAndVoice, parseTrailingTags, pickBookcasePiece, markStoryRegistered, markStoryAired,
   type RadioSituation, type RadioStory,
 } from './_radio.ts';
-import { timeLabelOf } from './radio/draft.ts';
+import { onRequestGet as getRadioDraftSummary, storyPreview, timeLabelOf } from './radio/draft.ts';
 
 test('기계적 필터 — 연락처·링크·도배를 문 앞에서 막는다', () => {
   assert.equal(mechanicalFilter('요즘 회사 일이 손에 안 잡혀서 고민이에요.').ok, true);
@@ -191,6 +191,44 @@ test('시간대 라벨', () => {
   assert.equal(timeLabelOf(14), '낮');
   assert.equal(timeLabelOf(19), '저녁');
   assert.equal(timeLabelOf(23), '밤');
+});
+
+test('관제실 사연 미리보기 — 한 줄·상한·연락처 가림·거부 원문 비공개', () => {
+  assert.equal(
+    storyPreview('첫 줄입니다.\n\n둘째 줄입니다.', 'waiting'),
+    '첫 줄입니다. 둘째 줄입니다.',
+  );
+  const masked = storyPreview(
+    '연락처 me@example.com, 010-1234-5678, https://example.com 이야기는 남깁니다.',
+    'waiting',
+  );
+  assert.doesNotMatch(masked, /me@example|010-1234|https:\/\//);
+  assert.match(masked, /\[이메일 가림\].*\[전화번호 가림\].*\[링크 가림\]/);
+  assert.equal(storyPreview('사적인 거부 원문', 'rejected'), '방송 부적합 판정으로 내용은 표시하지 않습니다.');
+  const long = storyPreview('가'.repeat(120), 'waiting');
+  assert.equal(long.length, 96);
+  assert.ok(long.endsWith('…'));
+});
+
+test('관제실 요약 계약 r5 — 저장 원문 대신 안전한 preview만 반환한다', async () => {
+  const storedText = '새벽에 본 이야기입니다. 연락은 owner@example.com 으로 주세요.';
+  const queue: RadioStory[] = [{ id: 'story-1', text: storedText, at: 100, status: 'waiting' }];
+  const response = await getRadioDraftSummary({
+    request: new Request('https://example.test/api/radio/draft', { headers: { 'X-Pulse-Key': 'secret' } }),
+    env: {
+      PULSE_KEY: 'secret',
+      PLANET: { get: async () => JSON.stringify(queue) },
+    },
+  } as never);
+  const body = await response.json() as {
+    rev: string;
+    recent: { preview: string; text?: string }[];
+  };
+  assert.equal(body.rev, 'r5');
+  assert.equal(body.recent[0].text, undefined);
+  assert.match(body.recent[0].preview, /새벽에 본 이야기/);
+  assert.match(body.recent[0].preview, /\[이메일 가림\]/);
+  assert.doesNotMatch(JSON.stringify(body), /owner@example\.com/);
 });
 
 test('사연 상태는 원고 생성이 아니라 편성 등록과 실제 송출 증거로 전진한다', () => {
