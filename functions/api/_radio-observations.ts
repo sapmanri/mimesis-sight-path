@@ -1,14 +1,28 @@
-// Crawl4AI가 실제 브라우저로 펼쳐 읽은 공개 페이지의 범용 관측 서가.
-// YouTube 공개 페이지와 앞으로 추가할 공개 사이트가 여기에 들어간다.
+// 별이가 읽기 전용 통로로 받아 보는 범용 감각 재료 서가.
+// 브라우저로 펼친 공개 페이지뿐 아니라, 출처가 분명한 공개 API와 우리 사진 인덱스도 들어간다.
 // @byeoli_log는 Meta 공식 API 전용, Threads 외부 계정은 소유권을 고정한 _radio-toon 전용이다.
 
 export const WEB_OBSERVATIONS_KEY = 'radio:web-observations:v1';
 export const WEB_OBSERVATIONS_RECEIPT_KEY = 'radio:web-observations:receipt';
+export const WEB_OBSERVATIONS_RECEIPTS_KEY = 'radio:web-observations:receipts:v1';
 export const WEB_OBSERVATIONS_SOURCE_MAX = 12;
 export const WEB_OBSERVATIONS_ITEM_MAX = 10;
 export const WEB_OBSERVATIONS_CRAWL_MAX_AGE_MS = 30 * 60_000;
 
-export type WebObservationKind = 'youtube_channel' | 'web_page';
+export type WebObservationKind =
+  | 'youtube_channel'
+  | 'web_page'
+  | 'sky_data'
+  | 'image_library'
+  | 'art_collection'
+  | 'wikisource';
+
+export type WebObservationEngine =
+  | 'crawl4ai'
+  | 'sunrise-sunset-api'
+  | 'local-image-index'
+  | 'artic-api'
+  | 'mediawiki-api';
 
 export interface WebObservationItem {
   id: string;
@@ -24,7 +38,7 @@ export interface WebObservationSource {
   kind: WebObservationKind;
   sourceUrl: string;
   fetchedAt: number;
-  engine: 'crawl4ai';
+  engine: WebObservationEngine;
   ownership: 'read_only';
   items: WebObservationItem[];
 }
@@ -37,6 +51,30 @@ export interface WebObservationShelf {
 
 export type WebObservationValidation =
   | { ok: true; source: WebObservationSource }
+  | { ok: false; error: string };
+
+export interface WebObservationReceipt {
+  at: number;
+  ok: boolean;
+  sourceId: string;
+  label: string;
+  kind: WebObservationKind;
+  sourceUrl: string;
+  engine: WebObservationEngine;
+  ownership: 'read_only';
+  fetchedAt: number;
+  count: number;
+  error: string | null;
+}
+
+export interface WebObservationReceiptShelf {
+  version: 'web-observation-receipts-v1';
+  updatedAt: number;
+  receipts: WebObservationReceipt[];
+}
+
+export type WebObservationReceiptValidation =
+  | { ok: true; receipt: WebObservationReceipt }
   | { ok: false; error: string };
 
 const compact = (value: unknown): string => String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -60,20 +98,45 @@ function isThreadsUrl(value: string): boolean {
   catch { return false; }
 }
 
-export function validateWebObservation(raw: unknown, now = Date.now(), enforceFresh = true): WebObservationValidation {
+const KIND_ENGINES: Record<WebObservationKind, readonly WebObservationEngine[]> = {
+  youtube_channel: ['crawl4ai'],
+  web_page: ['crawl4ai'],
+  sky_data: ['sunrise-sunset-api'],
+  image_library: ['local-image-index'],
+  art_collection: ['artic-api'],
+  wikisource: ['mediawiki-api', 'crawl4ai'],
+};
+
+type SourceIdentity = Pick<
+  WebObservationSource,
+  'id' | 'label' | 'kind' | 'sourceUrl' | 'engine' | 'ownership'
+>;
+
+function validateSourceIdentity(raw: unknown): { ok: true; identity: SourceIdentity } | { ok: false; error: string } {
   const input = raw as Partial<WebObservationSource> | null;
-  if (!input || input.engine !== 'crawl4ai') return { ok: false, error: 'engine_must_be_crawl4ai' };
-  if (input.ownership !== 'read_only') return { ok: false, error: 'ownership_must_be_read_only' };
+  if (!input || input.ownership !== 'read_only') return { ok: false, error: 'ownership_must_be_read_only' };
   const id = compact(input.id);
   if (!/^[a-z0-9][a-z0-9-]{2,47}$/.test(id)) return { ok: false, error: 'source_id_invalid' };
   const label = compact(input.label);
   if (!label || label.length > 100) return { ok: false, error: 'source_label_invalid' };
-  if (input.kind !== 'youtube_channel' && input.kind !== 'web_page') return { ok: false, error: 'source_kind_invalid' };
+  const kind = input.kind as WebObservationKind;
+  const engine = input.engine as WebObservationEngine;
+  if (!KIND_ENGINES[kind]) return { ok: false, error: 'source_kind_invalid' };
+  if (!(KIND_ENGINES[kind] as readonly WebObservationEngine[]).includes(engine)) {
+    return { ok: false, error: 'source_engine_mismatch' };
+  }
   const sourceUrl = publicHttpsUrl(input.sourceUrl);
   if (!sourceUrl) return { ok: false, error: 'source_url_invalid' };
   // Threads는 계정 소유권 혼선을 막기 위해 범용 서가에 넣지 않는다.
   // @byeoli_log는 공식 Meta API, @byeol.toon은 전용 읽기 서가만 쓴다.
   if (isThreadsUrl(sourceUrl)) return { ok: false, error: 'threads_requires_owned_or_external_dedicated_path' };
+  return { ok: true, identity: { id, label, kind, sourceUrl, engine, ownership: 'read_only' } };
+}
+
+export function validateWebObservation(raw: unknown, now = Date.now(), enforceFresh = true): WebObservationValidation {
+  const input = raw as Partial<WebObservationSource> | null;
+  const identity = validateSourceIdentity(raw);
+  if (!identity.ok) return identity;
 
   const fetchedAt = Number(input.fetchedAt);
   if (!Number.isFinite(fetchedAt)) return { ok: false, error: 'fetched_at_invalid' };
@@ -104,7 +167,34 @@ export function validateWebObservation(raw: unknown, now = Date.now(), enforceFr
 
   return {
     ok: true,
-    source: { id, label, kind: input.kind, sourceUrl, fetchedAt, engine: 'crawl4ai', ownership: 'read_only', items },
+    source: { ...identity.identity, fetchedAt, items },
+  };
+}
+
+export function validateWebObservationFailureReceipt(
+  raw: unknown, now = Date.now(),
+): WebObservationReceiptValidation {
+  const input = raw as (Partial<WebObservationSource> & {
+    receiptOnly?: boolean; outcome?: string; error?: unknown;
+  }) | null;
+  if (!input || input.receiptOnly !== true || input.outcome !== 'failure') {
+    return { ok: false, error: 'failure_receipt_contract_invalid' };
+  }
+  const identity = validateSourceIdentity(input);
+  if (!identity.ok) return identity;
+  const fetchedAt = Number(input.fetchedAt);
+  if (!Number.isFinite(fetchedAt) || fetchedAt > now + 2 * 60_000) {
+    return { ok: false, error: 'fetched_at_invalid' };
+  }
+  const error = compact(input.error).slice(0, 300);
+  if (!error) return { ok: false, error: 'failure_error_missing' };
+  return {
+    ok: true,
+    receipt: {
+      at: now, ok: false, sourceId: identity.identity.id, label: identity.identity.label,
+      kind: identity.identity.kind, sourceUrl: identity.identity.sourceUrl,
+      engine: identity.identity.engine, ownership: 'read_only', fetchedAt, count: 0, error,
+    },
   };
 }
 
@@ -131,6 +221,52 @@ export function mergeWebObservation(
     updatedAt: now,
     sources: [winner, ...shelf.sources.filter((item) => item.id !== source.id)]
       .sort((a, b) => b.fetchedAt - a.fetchedAt)
+      .slice(0, WEB_OBSERVATIONS_SOURCE_MAX),
+  };
+}
+
+export function receiptForWebObservation(
+  source: WebObservationSource, now = Date.now(),
+): WebObservationReceipt {
+  return {
+    at: now, ok: true, sourceId: source.id, label: source.label, kind: source.kind,
+    sourceUrl: source.sourceUrl, engine: source.engine, ownership: 'read_only',
+    fetchedAt: source.fetchedAt, count: source.items.length, error: null,
+  };
+}
+
+export function decodeWebObservationReceipts(raw: unknown): WebObservationReceiptShelf {
+  const input = raw as Partial<WebObservationReceiptShelf> | null;
+  if (!input || input.version !== 'web-observation-receipts-v1' || !Array.isArray(input.receipts)) {
+    return { version: 'web-observation-receipts-v1', updatedAt: 0, receipts: [] };
+  }
+  const receipts: WebObservationReceipt[] = [];
+  for (const value of input.receipts.slice(0, WEB_OBSERVATIONS_SOURCE_MAX)) {
+    const candidate = value as Partial<WebObservationReceipt>;
+    const identity = validateSourceIdentity({ ...candidate, id: candidate.sourceId });
+    const at = Number(candidate.at);
+    const fetchedAt = Number(candidate.fetchedAt);
+    if (!identity.ok || !Number.isFinite(at) || !Number.isFinite(fetchedAt) || typeof candidate.ok !== 'boolean') continue;
+    receipts.push({
+      at, ok: candidate.ok, sourceId: identity.identity.id, label: identity.identity.label,
+      kind: identity.identity.kind, sourceUrl: identity.identity.sourceUrl, engine: identity.identity.engine,
+      ownership: 'read_only', fetchedAt, count: Math.max(0, Number(candidate.count) || 0),
+      error: candidate.ok ? null : compact(candidate.error).slice(0, 300) || 'unknown_failure',
+    });
+  }
+  return { version: 'web-observation-receipts-v1', updatedAt: Number(input.updatedAt) || 0, receipts };
+}
+
+export function mergeWebObservationReceipt(
+  shelf: WebObservationReceiptShelf, receipt: WebObservationReceipt, now = Date.now(),
+): WebObservationReceiptShelf {
+  const previous = shelf.receipts.find((item) => item.sourceId === receipt.sourceId);
+  const winner = previous && previous.at > receipt.at ? previous : receipt;
+  return {
+    version: 'web-observation-receipts-v1',
+    updatedAt: now,
+    receipts: [winner, ...shelf.receipts.filter((item) => item.sourceId !== receipt.sourceId)]
+      .sort((a, b) => b.at - a.at)
       .slice(0, WEB_OBSERVATIONS_SOURCE_MAX),
   };
 }

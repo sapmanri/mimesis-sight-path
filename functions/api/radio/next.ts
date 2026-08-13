@@ -142,11 +142,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     youtubeVideos: (youtubeRaw ? (JSON.parse(youtubeRaw) as YoutubeShelf).videos : []).slice(0, 5).map((v) => ({
       title: v.title, publishedAt: v.publishedAt, url: v.url, description: v.description,
     })),
-    // 실제 브라우저 렌더 관측. 영상은 공개 페이지 텍스트만 읽었으며 시청·청취를 주장하지 않는다.
+    // 읽기 전용 감각 재료. engine은 브라우저/API/로컬 인덱스의 실제 통로를 숨기지 않는다.
     webObservations: (observationsRaw
       ? (JSON.parse(observationsRaw) as WebObservationShelf).sources
-      : []).slice(0, 4).map((source) => ({
-        id: source.id, label: source.label, kind: source.kind, sourceUrl: source.sourceUrl,
+      : []).slice(0, 8).map((source) => ({
+        id: source.id, label: source.label, kind: source.kind, engine: source.engine, sourceUrl: source.sourceUrl,
         items: source.items.slice(0, 5).map((item) => ({
           title: item.title, text: item.text, when: item.when, url: item.url,
         })),
