@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { foldedDayDecision, recoIsHonestTerminal } from './sketch-daily.ts';
+import {
+  foldedDayDecision, hasRecordedRecommendation, recoIsHonestTerminal, recoNeedsJudge,
+} from './sketch-daily.ts';
 import { buildImagePrompt, NIGHTLY_POSE_VARIANTS, type MemoryEvent } from './_daily-sketch.ts';
 import { terminalResult, missionFor, kstDateStr } from '../../workers/sketch-scheduler/index.mjs';
 
@@ -40,13 +42,32 @@ test('소진 영수증은 정당한 종료 기록을 덮지 않는다', () => {
   assert.equal(recoIsHonestTerminal({ skipped: 'no_observations' }), true);
   assert.equal(recoIsHonestTerminal({ skipped: 'human_day' }), true);
   assert.equal(recoIsHonestTerminal({ skipped: 'ownership_unknown' }), true);
-  assert.equal(recoIsHonestTerminal({ status: 'done', picks: [1, 2, 3] }), true);
-  assert.equal(recoIsHonestTerminal({ picks: [1, 2, 3] }), true);
+  const picked = { pick: 2, reasons: '둘째가 맞다', verdicts: ['1장: 불합격', '2장: 합격'] };
+  const allRejected = { pick: null, reasons: '전부 불합격', verdicts: ['1장: 불합격'] };
+  assert.equal(hasRecordedRecommendation(picked), true);
+  assert.equal(hasRecordedRecommendation(allRejected), true);
+  assert.equal(recoIsHonestTerminal({ status: 'done', picks: [1, 2, 3], reco: picked }), true);
+  assert.equal(recoIsHonestTerminal({ picks: [1, 2, 3], reco: allRejected }), true);
   // 음성: 무기록·부분 진행·실패 기록은 소진 영수증이 덮어야 한다 (그게 최종 상태다)
   assert.equal(recoIsHonestTerminal(null), false);
   assert.equal(recoIsHonestTerminal({ status: 'partial', picks: [1] }), false);
+  assert.equal(recoIsHonestTerminal({ status: 'done', picks: [1, 2, 3], reco: null }), false);
+  assert.equal(recoIsHonestTerminal({ status: 'done', picks: [1, 2, 3], reco: {} }), false);
+  assert.equal(recoIsHonestTerminal({ status: 'images_ready', picks: [1, 2, 3] }), false);
+  assert.equal(recoIsHonestTerminal({ picks: [1, 2, 3] }), false);
   assert.equal(recoIsHonestTerminal({ status: 'failed', failed: true }), false);
   assert.equal(recoIsHonestTerminal({ skipped: '' }), false);
+});
+
+test('옛 3장·무판정 기록은 그림을 다시 만들지 않고 판정 단계만 재개한다', () => {
+  assert.equal(recoNeedsJudge({ status: 'done', picks: [1, 2, 3], reco: null }), true);
+  assert.equal(recoNeedsJudge({ status: 'images_ready', picks: [1, 2, 3] }), true);
+  assert.equal(recoNeedsJudge({ status: 'partial', picks: [1, 2] }), false);
+  assert.equal(recoNeedsJudge({ skipped: 'human_day', picks: [1, 2, 3] }), false);
+  assert.equal(recoNeedsJudge({
+    status: 'done', picks: [1, 2, 3],
+    reco: { pick: 1, reasons: '합격', verdicts: ['1장: 합격'] },
+  }), false);
 });
 
 test('야간 3장은 같은 기억을 서로 다른 능동 포즈로 그린다', () => {

@@ -69,14 +69,31 @@ export function foldedDayDecision(
 }
 
 /** 스케줄러 소진 영수증이 덮으면 안 되는 기존 기록 판별 (08-11 실사고의 가드) */
-export interface HonestRecoLike { skipped?: unknown; status?: unknown; picks?: unknown }
+export interface HonestRecoLike { skipped?: unknown; status?: unknown; picks?: unknown; reco?: unknown }
+export function hasRecordedRecommendation(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const reco = value as Record<string, unknown>;
+  return Object.prototype.hasOwnProperty.call(reco, 'pick')
+    && Array.isArray(reco.verdicts)
+    && typeof reco.reasons === 'string';
+}
+export function recoNeedsJudge(reco: HonestRecoLike | null): boolean {
+  return !!reco
+    && !(typeof reco.skipped === 'string' && reco.skipped)
+    && Array.isArray(reco.picks)
+    && reco.picks.length >= 3
+    && !hasRecordedRecommendation(reco.reco);
+}
 export function recoIsHonestTerminal(reco: HonestRecoLike | null): boolean {
   if (!reco) return false;
   // 건너뜀 3종(no_observations·human_day·ownership_unknown)은 전부 진단 가치가 있다 —
   // ownership_unknown도 「수동 확인 필요」라는 정보라 소진 영수증보다 낫다.
   if (typeof reco.skipped === 'string' && reco.skipped) return true;
-  if (reco.status === 'done') return true;
-  return Array.isArray(reco.picks) && reco.picks.length >= 3;
+  // 그림 3장은 판정 준비일 뿐 완료가 아니다. 08-12 실사고처럼 status=done·picks=3인데
+  // reco=null인 기록을 완료로 인정하면 스케줄러 소진 영수증과 아침 감시가 둘 다 거짓말한다.
+  const judged = hasRecordedRecommendation(reco.reco);
+  if (reco.status === 'done') return judged;
+  return judged && Array.isArray(reco.picks) && reco.picks.length >= 3;
 }
 const DAILY_MODEL = '@cf/black-forest-labs/flux-2-dev';
 // steps 12 = 품질 판정값 (07-21 심야, "하고하고 또 해서" 결정) — 품질값은 상수다.
@@ -110,10 +127,14 @@ function bytesToB64(buf: ArrayBuffer): string {
 }
 
 /** ⑥ 판정기 — 클로드 vision. 기준은 새로 쓰지 않는다: 체크리스트·규칙·그날의 줄을 조립. */
+interface CandidateRecommendation { pick: number | null; reasons: string; verdicts: string[] }
+interface JudgeOutcome { reco: CandidateRecommendation | null; error: string | null }
+
 async function judgeCandidates(
   env: Env, day: DayMemory, images: { seed: number; bytes: ArrayBuffer }[],
-): Promise<{ pick: number | null; reasons: string; verdicts: string[] } | null> {
-  if (!env.ANTHROPIC_API_KEY || !images.length) return null;
+): Promise<JudgeOutcome> {
+  if (!env.ANTHROPIC_API_KEY) return { reco: null, error: 'judge_key_missing' };
+  if (!images.length) return { reco: null, error: 'judge_images_missing' };
   try {
     const content: unknown[] = [{
       type: 'text',
@@ -136,19 +157,25 @@ async function judgeCandidates(
       },
       body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 500, messages: [{ role: 'user', content }] }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);
+      return { reco: null, error: `judge_http_${res.status}${detail ? `: ${detail}` : ''}` };
+    }
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const text = data.content?.find((c) => c.type === 'text')?.text ?? '';
     const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return null;
+    if (!m) return { reco: null, error: 'judge_non_json_response' };
     const out = JSON.parse(m[0]) as { pick?: number; reasons?: string; verdicts?: string[] };
     const pick = Number(out.pick);
-    return {
-      pick: Number.isInteger(pick) && pick >= 1 && pick <= images.length ? pick : null,
-      reasons: String(out.reasons ?? '').slice(0, 300),
-      verdicts: Array.isArray(out.verdicts) ? out.verdicts.map((v) => String(v).slice(0, 200)) : [],
-    };
-  } catch { return null; }
+    return { reco: {
+        pick: Number.isInteger(pick) && pick >= 1 && pick <= images.length ? pick : null,
+        reasons: String(out.reasons ?? '').slice(0, 300),
+        verdicts: Array.isArray(out.verdicts) ? out.verdicts.map((v) => String(v).slice(0, 200)) : [],
+      }, error: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { reco: null, error: `judge_exception: ${message.slice(0, 160)}` };
+  }
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -162,9 +189,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const e = error instanceof Error ? error : new Error(String(error));
     const now = Date.now();
     let previous: DailyRun | null = null;
+    let previousReco: Record<string, unknown> | null = null;
     try {
-      const raw = await context.env.PLANET.get(RUN_KEY(date));
+      const [raw, recoRaw] = await Promise.all([
+        context.env.PLANET.get(RUN_KEY(date)),
+        context.env.PLANET.get(RECO_KEY(date)),
+      ]);
       previous = raw ? JSON.parse(raw) as DailyRun : null;
+      previousReco = recoRaw ? JSON.parse(recoRaw) as Record<string, unknown> : null;
     } catch { /* 실패 영수증 쓰기를 계속 시도한다 */ }
     const runId = trace.runId || previous?.runId || `${date}-${now.toString(36)}`;
     const failed: DailyRun = {
@@ -176,7 +208,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       await Promise.all([
         context.env.PLANET.put(RUN_KEY(date), JSON.stringify(failed)),
         context.env.PLANET.put(RECO_KEY(date), JSON.stringify({
-          date, at: now, status: 'failed', failed: true, stage: trace.stage,
+          ...(previousReco ?? {}), date, at: now, status: 'failed', failed: true, stage: trace.stage,
           errorCode: 'unhandled_exception', errorName: failed.errorName,
           errorMessage: failed.errorMessage, runId,
         })),
@@ -267,7 +299,9 @@ async function handleDaily(
     // 이때 재실행하면 '사람 우선'으로 오인해 물러났다 — 자동 생성이 전멸한 날은
     // 접힌 하루를 재사용해 생성만 재시도한다 (하루는 다시 접지 않는다).
     const recoRaw = await env.PLANET.get(RECO_KEY(date));
-    const prevReco = recoRaw ? JSON.parse(recoRaw) as { picks?: unknown[]; errors?: unknown[]; skipped?: string } : null;
+    const prevReco = recoRaw ? JSON.parse(recoRaw) as {
+      picks?: unknown[]; errors?: unknown[]; skipped?: string; reco?: unknown;
+    } : null;
     day = JSON.parse(storedRaw) as DayMemory;
     const ownership = foldedDayDecision(
       day,
@@ -276,6 +310,9 @@ async function handleDaily(
     const ownedByAuto = ownership === 'resume';
     const resumable = ownedByAuto || (!!prevReco && !prevReco.skipped
       && Array.isArray(prevReco.picks) && prevReco.picks.length < 3)
+      // 08-12 실사고 복구: 세 장과 reco:null은 판정기가 응답 뒤에서 증발했다는 직접 증거다.
+      // 옛 하루에 foldedBy가 없더라도 그림을 다시 만들지 않고 판정 단계만 재개한다.
+      || recoNeedsJudge(prevReco)
       // 실사고(07-24, 매일 밤 반복된 교착): 크론이 하루를 접은 직후 30초에 살해당하면
       // memoryKey는 있는데 reco엔 자정의 no_observations 잔해만 남는다. 하루가 접혔다는
       // 것은 관측이 있었다는 뜻 — 그 위의 '관측 없음' 기록은 모순이며 사람일 수 없다.
@@ -339,7 +376,7 @@ async function handleDaily(
   // 못한다 (202 후 무변화 2회 실증). 결론: 30초 안에 동기로 끝내고, 한 장 끝날 때마다
   // 즉시 기록한다 — 도중에 끊겨도 부분 결과가 남는다.
   trace.stage = 'generate';
-  const summary = await generateDaily(env, date, day, context, resetParam && pulseRetryOk);
+  const summary = await generateDaily(env, date, day, resetParam && pulseRetryOk);
   const now = Date.now();
   const currentRunRaw = await env.PLANET.get(RUN_KEY(date));
   const currentRun = currentRunRaw ? JSON.parse(currentRunRaw) as DailyRun : run;
@@ -347,7 +384,7 @@ async function handleDaily(
     await env.PLANET.put(RUN_KEY(date), JSON.stringify({
       ...currentRun,
       status: summary.done ? 'done' : 'generating',
-      stage: summary.done ? 'complete' : 'generate_next',
+      stage: summary.done ? 'complete' : summary.phase === 'images_ready' ? 'judge_next' : summary.phase,
       updatedAt: now,
     }));
   }
@@ -355,23 +392,76 @@ async function handleDaily(
     ok: summary.made > 0 || summary.done, date, memoryEventId: day.memoryEventId,
     generatedNow: summary.made, totalImages: summary.total, done: summary.done,
     trialId: summary.trialId, errors: summary.errors,
-    next: summary.done ? '3장 완성 — 아침에 📌 → 🕊' : '아직 부족 — 같은 호출을 다시 (한 호출 = 한 장)',
+    phase: summary.phase,
+    next: summary.done
+      ? '3장 판정까지 완성 — 아침에 📌 → 🕊'
+      : summary.phase === 'images_ready'
+        ? '3장 완성 — 같은 호출을 한 번 더 해 판정을 기록한다'
+        : summary.phase === 'judge_retry'
+          ? '판정 실패 — 같은 호출을 다시 해 판정만 재시도한다'
+          : '아직 부족 — 같은 호출을 다시 (한 호출 = 한 장)',
   });
 }
 
 async function generateDaily(
-  env: Env, date: string, day: DayMemory, context: Parameters<PagesFunction<Env>>[0], reset = false,
-): Promise<{ made: number; total: number; done: boolean; trialId: string; errors: string[] }> {
+  env: Env, date: string, day: DayMemory, reset = false,
+): Promise<{
+  made: number; total: number; done: boolean; trialId: string; errors: string[];
+  phase: 'generate_next' | 'images_ready' | 'judge_retry' | 'complete';
+}> {
   // 이어 그리기 상태 — flux-2-dev는 느리다(장당 10~20초). 한 호출은 한 장만 (30초 창 준수).
   const prevRaw = await env.PLANET.get(RECO_KEY(date));
   const prev = prevRaw ? JSON.parse(prevRaw) as {
     trialId?: string; picks?: { seed: number; r2Key: string }[]; errors?: string[]; skipped?: string;
+    status?: string; reco?: CandidateRecommendation | null;
   } : null;
   const priorPicks = (!reset && !prev?.skipped && Array.isArray(prev?.picks)) ? prev!.picks! : [];
   const errors: string[] = [];
   if (reset && (prev?.picks?.length ?? 0) > 0) errors.push(`reset: 이전 ${prev!.picks!.length}장 폐기 후 정규 품질로 재생성`);
   if (priorPicks.length >= 3) {
-    return { made: 0, total: 3, done: true, trialId: prev?.trialId ?? '', errors: ['already_complete'] };
+    if (hasRecordedRecommendation(prev?.reco)) {
+      return {
+        made: 0, total: 3, done: true, trialId: prev?.trialId ?? '',
+        errors: ['already_complete'], phase: 'complete',
+      };
+    }
+
+    // 판정은 별도의 *요청* 단계에서 끝낸다. 이미지 생성과 vision을 한 요청에 겹치지 않아
+    // 30초 창을 지키면서도, 응답 뒤 waitUntil에 기록을 맡기지 않는다. 3장째 응답이
+    // done:false를 반환하므로 서버 스케줄러가 이 분기를 반드시 한 번 더 호출한다.
+    const imgs: { seed: number; bytes: ArrayBuffer }[] = [];
+    for (const pk of priorPicks.slice(0, 3)) {
+      const obj = await env.CAPTURES.get(pk.r2Key);
+      if (obj) imgs.push({ seed: pk.seed, bytes: await obj.arrayBuffer() });
+      else errors.push(`judge_image_missing: ${pk.r2Key}`);
+    }
+    if (imgs.length !== 3) {
+      const judgeError = `judge_images_incomplete: expected=3 actual=${imgs.length}`;
+      errors.push(judgeError);
+      await env.PLANET.put(RECO_KEY(date), JSON.stringify({
+        ...prev, date, at: Date.now(), picks: priorPicks, reco: null,
+        status: 'judge_failed', errors: [...(prev?.errors ?? []), ...errors], judgeError,
+      }));
+      return { made: 0, total: 3, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_retry' };
+    }
+
+    const judged = await judgeCandidates(env, day, imgs);
+    if (!judged.reco) {
+      const judgeError = judged.error ?? 'judge_unknown_failure';
+      errors.push(judgeError);
+      await env.PLANET.put(RECO_KEY(date), JSON.stringify({
+        ...prev, date, at: Date.now(), picks: priorPicks, reco: null,
+        status: 'judge_failed', errors: [...(prev?.errors ?? []), ...errors], judgeError,
+      }));
+      return { made: 0, total: 3, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_retry' };
+    }
+    await env.PLANET.put(RECO_KEY(date), JSON.stringify({
+      ...prev, date, at: Date.now(), picks: priorPicks, reco: judged.reco,
+      status: 'done', failed: false, errors: [...(prev?.errors ?? []), ...errors],
+      judgedAt: Date.now(), judgeError: null,
+      errorCode: null, errorName: null, errorMessage: null, stage: 'complete',
+    }));
+    return { made: 0, total: 3, done: true, trialId: prev?.trialId ?? '', errors, phase: 'complete' };
   }
   const n = priorPicks.length;   // 다음에 그릴 장 번호 (seed 결정론 유지)
 
@@ -427,12 +517,12 @@ async function generateDaily(
       picks: newPick ? [...priorPicks, newPick] : priorPicks,
       reco: null,
       errors: [...(prev?.errors ?? []).filter((e) => typeof e === 'string'), ...errors],
-      status: (newPick ? priorPicks.length + 1 : priorPicks.length) >= 3 ? 'done' : 'partial',
+      status: (newPick ? priorPicks.length + 1 : priorPicks.length) >= 3 ? 'images_ready' : 'partial',
     }));
   };
 
-  if ('error' in art) { errors.push(`#${n}: ${art.error}`); await persist(null); return { made: 0, total: priorPicks.length, done: false, trialId, errors }; }
-  if (!art.bytes) { errors.push(`#${n}: empty`); await persist(null); return { made: 0, total: priorPicks.length, done: false, trialId, errors }; }
+  if ('error' in art) { errors.push(`#${n}: ${art.error}`); await persist(null); return { made: 0, total: priorPicks.length, done: false, trialId, errors, phase: 'generate_next' }; }
+  if (!art.bytes) { errors.push(`#${n}: empty`); await persist(null); return { made: 0, total: priorPicks.length, done: false, trialId, errors, phase: 'generate_next' }; }
 
   const r2Key = trialKey(trialId, DAILY_MODEL, n);
   await env.CAPTURES.put(r2Key, art.bytes, { httpMetadata: { contentType: 'image/png' } });
@@ -449,21 +539,9 @@ async function generateDaily(
   await persist({ seed: base + n, r2Key });
 
   const total = priorPicks.length + 1;
-  // 3장 완성 시 판정기 — 보너스 (완주 확인된 그림들만 대상, 실패해도 그림은 안전)
-  if (total >= 3) {
-    context.waitUntil((async () => {
-      const imgs: { seed: number; bytes: ArrayBuffer }[] = [];
-      for (const pk of [...priorPicks, { seed: base + n, r2Key }]) {
-        const obj = await env.CAPTURES.get(pk.r2Key);
-        if (obj) imgs.push({ seed: pk.seed, bytes: await obj.arrayBuffer() });
-      }
-      const reco = await judgeCandidates(env, day, imgs);
-      const raw = await env.PLANET.get(RECO_KEY(date));
-      const cur = raw ? JSON.parse(raw) : {};
-      await env.PLANET.put(RECO_KEY(date), JSON.stringify({ ...cur, reco }));
-    })().catch(() => { /* 판정기 실패가 그림을 지우지 않는다 */ }));
-  }
-
   console.log(`sketch-daily one-shot date=${date} n=${n} total=${total} errors=${errors.length}`);
-  return { made: 1, total, done: total >= 3, trialId, errors };
+  return {
+    made: 1, total, done: false, trialId, errors,
+    phase: total >= 3 ? 'images_ready' : 'generate_next',
+  };
 }
