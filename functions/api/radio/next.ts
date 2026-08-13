@@ -213,6 +213,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     id, at: Date.now(), story: story?.text ?? '',
     moderation: { allow: true, category: story ? 'ok' : 'solo', reason: '' },
     script: written.script, voiceNote: written.voiceNote, songTitle: written.songTitle,
+    stageCues: written.stageCues,
     musicTransition: picked ? (written.musicTransition ?? 'intro') : null, situation,
     provenance: written.provenance, warnings,
   };

@@ -129,6 +129,18 @@ test('코너 회전 — 재료가 있는 자리 중 가장 오래 안 쓴 것', 
   assert.match(msg, /곡 소개/);
 });
 
+// 08-14 새벽: 별이가 시킨 적 없는 지문을 스스로 썼다 — 「(작게 숨 고르는 소리)」.
+// TTS가 그걸 읽어버려서 우스운 꼴이 됐다. 막지 않고, 읽히는 대신 들리게 한다(문단 숨으로).
+test('지문 — 본문에서 떼어 숨으로 남기고, 지문 자체는 기록한다', () => {
+  const p = parseScriptAndVoice('(작게 숨 고르는 소리)\n\n지금은 새벽이다.\n아직 아무것도 안 봤어.');
+  assert.equal(p.script, '지금은 새벽이다.\n아직 아무것도 안 봤어.', '지문은 읽지 않는다');
+  assert.deepEqual(p.stageCues, ['작게 숨 고르는 소리'], '지문은 버리지 않고 남긴다');
+  // 문장 속 괄호는 건드리지 않는다
+  const keep = parseScriptAndVoice('그 집(지금은 없다)에 갔어.');
+  assert.equal(keep.script, '그 집(지금은 없다)에 갔어.');
+  assert.deepEqual(keep.stageCues, []);
+});
+
 // R3: 기분→목소리 — 별이가 원고 끝에 정하는 셀프 연출 한 줄
 test('[목소리:] 셀프 연출 분리 — 없으면 기본, 이모지 섞이면 버린다', () => {
   const p = parseScriptAndVoice('방송 본문.\n둘째 줄.\n[목소리: 조금 가라앉아서, 평소보다 느리게]');
