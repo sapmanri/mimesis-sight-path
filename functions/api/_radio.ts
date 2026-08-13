@@ -16,12 +16,49 @@ export const RADIO_QUEUE_KEY = 'radio:queue';
 export const RADIO_QUEUE_KEEP = 200;
 export const RADIO_DRAFT_KEY = (id: string) => `radio:draft:${id}`;
 
+export type RadioStoryStatus = 'waiting' | 'registered' | 'aired' | 'rejected' | 'used';
+
 export interface RadioStory {
   id: string;
   text: string;
   at: number;
-  status: 'waiting' | 'used' | 'rejected';
+  /**
+   * waiting    — 아직 실제 편성에 등록되지 않음
+   * registered — R2 실물 확인 뒤 방송 편성에 등록됨
+   * aired      — Liquidsoap의 실제 on-track 사건이 확인됨
+   * rejected   — 방송 부적합 판정
+   * used       — 2026-08-13 이전의 모호한 옛 값. 송출 증거로 쓰지 않는다.
+   */
+  status: RadioStoryStatus;
   reason?: string;
+  registeredAt?: number;
+  registeredSegmentId?: string;
+  airedAt?: number;
+  airedSegmentId?: string;
+}
+
+/** 편성 등록은 원고 생성보다 강한 증거지만, 실제 송출 증거는 아니다. */
+export function markStoryRegistered(
+  queue: RadioStory[], storyId: string, segmentId: string, at: number,
+): RadioStory | null {
+  const story = queue.find((item) => item.id === storyId);
+  if (!story || story.status === 'rejected') return null;
+  if (story.status !== 'aired') story.status = 'registered';
+  story.registeredAt = Number.isFinite(at) ? at : Date.now();
+  story.registeredSegmentId = segmentId;
+  return story;
+}
+
+/** 실제 출력 엔진의 on-track 사건만 사연을 aired로 닫을 수 있다. */
+export function markStoryAired(
+  queue: RadioStory[], storyId: string, segmentId: string, at: number,
+): RadioStory | null {
+  const story = queue.find((item) => item.id === storyId);
+  if (!story || story.status === 'rejected') return null;
+  story.status = 'aired';
+  story.airedAt = Number.isFinite(at) ? at : Date.now();
+  story.airedSegmentId = segmentId;
+  return story;
 }
 
 export interface RadioModeration {

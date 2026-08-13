@@ -6,6 +6,7 @@ import {
   PROGRAM_KEY, DAYS_KEY, DAY_KEY, kstDayOf, placeSegment, lastEndOf, pruneProgram,
   type ProgramSegment, type SegmentKind,
 } from '../_station.ts';
+import { RADIO_QUEUE_KEY, markStoryRegistered, type RadioStory } from '../_radio.ts';
 
 /** 날짜별 보관소 이중 기록 — upsert(id+startAt 일치 시 갱신, 아니면 추가) */
 async function archiveWrite(env: { PLANET: KVNamespace }, seg: ProgramSegment): Promise<void> {
@@ -36,7 +37,7 @@ const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r12', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r13', now: Date.now(), segments });
 };
 
 /** 키 인증 삭제 — id+startAt로 정확히 하나만 (같은 id가 사고로 둘일 수 있다 — 08-12 전파 반절 실사고) */
@@ -67,17 +68,42 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (typeof body.url !== 'string' || !URL_OK.test(body.url)) return json(400, { ok: false, error: 'bad_url' });
 
   const now = Date.now();
-  const raw = await env.PLANET.get(PROGRAM_KEY);
+  const [raw, queueRaw] = await Promise.all([
+    env.PLANET.get(PROGRAM_KEY), env.PLANET.get(RADIO_QUEUE_KEY),
+  ]);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
+  const queue: RadioStory[] = queueRaw ? JSON.parse(queueRaw) : [];
+  // 구형 조립기는 storyId를 보내지 않았지만 story 토막의 id는 사연 id였다.
+  // 이 규칙을 서버에서 한 번만 흡수해 조립기마다 상태 코드를 복제하지 않는다.
+  const requestedStoryId = body.kind === 'story'
+    ? (typeof body.storyId === 'string' && body.storyId
+      ? body.storyId.slice(0, 40)
+      : typeof body.id === 'string' ? body.id.slice(0, 40) : null)
+    : null;
+  if (requestedStoryId) {
+    const story = queue.find((item) => item.id === requestedStoryId);
+    if (!story) return json(409, { ok: false, error: 'story_not_found' });
+    if (story.status === 'rejected') return json(409, { ok: false, error: 'story_rejected' });
+  }
+
+  const recordRegistered = async (segment: ProgramSegment): Promise<string | null> => {
+    if (!requestedStoryId || segment.kind !== 'story') return null;
+    const story = markStoryRegistered(queue, requestedStoryId, segment.id, Date.now());
+    if (!story) throw new Error('story_transition_failed');
+    await env.PLANET.put(RADIO_QUEUE_KEY, JSON.stringify(queue));
+    return story.status;
+  };
 
   // 같은 id 재등록 = 병합 — 자리(startAt)는 안 움직이고 대본·제목·연출만 갱신한다.
   // (08-12: 자막 기능 이전에 등록된 토막들에 대본을 소급 주입하는 길)
   const existing = typeof body.id === 'string' ? segments.find((s) => s.id === body.id) : undefined;
   if (existing) {
+    if (existing.kind !== body.kind) return json(409, { ok: false, error: 'id_kind_conflict' });
     if (typeof body.script === 'string') existing.script = body.script.slice(0, 2000);
     if (typeof body.title === 'string' && body.title) existing.title = body.title.slice(0, 60);
     if (typeof body.voiceNote === 'string') existing.voiceNote = body.voiceNote.slice(0, 60);
     if (typeof body.dj === 'string' && body.dj) existing.dj = body.dj.slice(0, 20);
+    if (requestedStoryId) existing.storyId = requestedStoryId;
     if (body.musicTransition === 'intro' || body.musicTransition === 'direct') existing.musicTransition = body.musicTransition;
     if (typeof body.pairId === 'string' && body.pairId) existing.pairId = body.pairId.slice(0, 40);
     // 소리 교체 재굽기(같은 R2 키에 새 소리)를 위해 dur도 병합 — 자리는 여전히 불변 (08-12)
@@ -95,7 +121,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
     await env.PLANET.put(PROGRAM_KEY, JSON.stringify(segments));
     await archiveWrite(env, existing);
-    return json(200, { ok: true, id: existing.id, merged: true, startAt: existing.startAt, count: segments.length });
+    const storyStatus = await recordRegistered(existing);
+    return json(200, { ok: true, id: existing.id, merged: true, startAt: existing.startAt, count: segments.length, storyStatus });
   }
 
   const seg: ProgramSegment = {
@@ -106,7 +133,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     url: body.url,
     title: String(body.title ?? '').slice(0, 60) || '…',
     voiceNote: typeof body.voiceNote === 'string' ? body.voiceNote.slice(0, 60) : null,
-    storyId: typeof body.storyId === 'string' ? body.storyId.slice(0, 40) : null,
+    storyId: requestedStoryId,
     dj: typeof body.dj === 'string' && body.dj ? body.dj.slice(0, 20) : 'byeoli',
     script: typeof body.script === 'string' ? body.script.slice(0, 2000) : undefined,
     musicTransition: body.musicTransition === 'intro' || body.musicTransition === 'direct' ? body.musicTransition : null,
@@ -115,5 +142,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const next = pruneProgram([...segments, seg], now);
   await env.PLANET.put(PROGRAM_KEY, JSON.stringify(next));
   await archiveWrite(env, seg);
-  return json(200, { ok: true, id: seg.id, startAt: seg.startAt, liveEdge: seg.startAt + seg.dur * 1000, count: next.length });
+  const storyStatus = await recordRegistered(seg);
+  return json(200, { ok: true, id: seg.id, startAt: seg.startAt, liveEdge: seg.startAt + seg.dur * 1000, count: next.length, storyStatus });
 };

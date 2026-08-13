@@ -57,7 +57,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     // rev: 배포 전파 탐침 — Pages는 Active 표시 뒤에도 엣지가 옛 판을 준다(08-12 실사고:
     // 첫 호출이 옛 코드에 맞아 사연 하나가 옛 모양으로 소비됨). 배포 후 이 값 확인 전에
     // 대기열을 소비하지 말 것.
-    ok: true, rev: 'r3', waiting: count('waiting'), used: count('used'), rejected: count('rejected'),
+    ok: true, rev: 'r4', waiting: count('waiting'), registered: count('registered'),
+    aired: count('aired'), rejected: count('rejected'), legacyUnknown: count('used'),
+    // 옛 관제실 호환 필드. 의미는 이제 명확히 '실제 송출 확인'뿐이다.
+    used: count('aired'),
     recent: queue.slice(0, 10).map((q) => ({ id: q.id, at: q.at, status: q.status, chars: q.text.length })),
   });
 };
@@ -123,11 +126,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     script: written.script, voiceNote: written.voiceNote, situation,
     provenance: written.provenance, warnings: written.warnings,
   };
-  if (storyRead) story.status = 'used';
   await Promise.all([
     env.PLANET.put(RADIO_DRAFT_KEY(story.id), JSON.stringify(draft)),
     env.PLANET.put(DRAFT_INDEX_KEY, JSON.stringify([story.id, ...draftIds.filter((x) => x !== story.id)].slice(0, DRAFT_INDEX_KEEP))),
     saveQueue(),
   ]);
-  return json(200, { ok: true, draft, storyRead });
+  return json(200, { ok: true, draft, storyRead, storyId: storyRead ? story.id : null });
 };

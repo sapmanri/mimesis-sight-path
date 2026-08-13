@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mechanicalFilter, parseModeration, radioSystemPrompt, validateRadioScript, situationMessage,
-  parseScriptAndVoice, parseTrailingTags, pickBookcasePiece, type RadioSituation,
+  parseScriptAndVoice, parseTrailingTags, pickBookcasePiece, markStoryRegistered, markStoryAired,
+  type RadioSituation, type RadioStory,
 } from './_radio.ts';
 import { timeLabelOf } from './radio/draft.ts';
 
@@ -190,4 +191,21 @@ test('시간대 라벨', () => {
   assert.equal(timeLabelOf(14), '낮');
   assert.equal(timeLabelOf(19), '저녁');
   assert.equal(timeLabelOf(23), '밤');
+});
+
+test('사연 상태는 원고 생성이 아니라 편성 등록과 실제 송출 증거로 전진한다', () => {
+  const queue: RadioStory[] = [{ id: 'story-1', text: STORY, at: 1, status: 'waiting' }];
+  assert.equal(queue[0].status, 'waiting', '원고만 쓴 단계에서는 그대로 기다린다');
+  assert.equal(markStoryRegistered(queue, 'story-1', 'seg-1', 200)?.status, 'registered');
+  assert.equal(queue[0].airedAt, undefined, '편성 등록은 실제 송출이 아니다');
+  assert.equal(markStoryAired(queue, 'story-1', 'seg-1', 300)?.status, 'aired');
+  assert.equal(queue[0].airedAt, 300);
+});
+
+test('옛 used는 송출 증거가 아니며, 실제 on-track 영수증이 와야 aired가 된다', () => {
+  const queue: RadioStory[] = [{ id: 'legacy', text: STORY, at: 1, status: 'used' }];
+  assert.equal(markStoryRegistered(queue, 'legacy', 'seg-old', 200)?.status, 'registered');
+  assert.equal(markStoryAired(queue, 'legacy', 'seg-old', 300)?.status, 'aired');
+  const rejected: RadioStory[] = [{ id: 'no', text: STORY, at: 1, status: 'rejected' }];
+  assert.equal(markStoryAired(rejected, 'no', 'seg-no', 300), null);
 });

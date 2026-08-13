@@ -158,8 +158,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!written) return json(502, { ok: false, error: 'writer_failed' });
 
   const storyRead = !!story && !written.warnings.some((w) => w.startsWith('story_not_read'));
-  const id = story?.id ?? `solo-${Date.now().toString(36)}`;
-  if (story && storyRead) { story.status = 'used'; await saveQueue(); }
+  // 원고를 썼다는 이유로 사연을 소비하지 않는다. station.sh가 R2 실물을 확인하고
+  // /api/radio/program 등록까지 성공했을 때 registered, Liquidsoap on-track 때 aired가 된다.
+  // 별이가 이번에 읽지 않았다면 사연 id까지 차지하지 않고 다음 회차에 그대로 기다린다.
+  const id = storyRead && story ? story.id : `solo-${Date.now().toString(36)}`;
 
   // 별이가 고른 곡을 서가와 대조 — 서가에 없는 제목은 방송에 못 나간다 (경고만 남긴다)
   const picked = written.songTitle
@@ -198,6 +200,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   return json(200, {
     // dj: 별리 라디오의 DJ 슬롯 — 초대 DJ는 별이. 훗날 삽만리 등 다른 게놈이 꽂힌다 (Vase 08-12).
     ok: true, id, dj: 'byeoli', kind: storyRead ? 'story' : 'talk', storyRead,
+    storyId: storyRead && story ? story.id : null,
     script: written.script, voiceNote: written.voiceNote,
     // 노래 편성 (08-12 밤): 별이가 고른 곡의 실물 — 조립기(station.sh)가 토막 뒤에 잇는다
     song: picked ? {
