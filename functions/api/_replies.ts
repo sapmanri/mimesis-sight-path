@@ -1,13 +1,6 @@
 // BUILD 425-B/C — Threads 댓글 수집·답글 정책 순수 로직
-// 정본: docs/BUILD_425_THREADS_CAPTURE_AND_REPLY.md §4 (Vase 판정: 상한 = 오늘 신규 댓글의 ~30%)
-//
-// 별이는 고객센터가 아니다. 모든 댓글에 답하지 않는다. 애매하면 답하지 않는다.
-// Phase 1(현재): 후보는 기계가 만들고, 발행은 Vase 승인 클릭으로만 나간다(지시서 E항).
-
-export const REPLY_RATIO = 0.3;            // 오늘 신규 댓글 대비 답글 상한
-export const AGING_MS = 10 * 60 * 1000;    // 댓글 10분 숙성 후 후보
-export const PER_ACCOUNT_MS = 24 * 3600 * 1000; // 같은 계정 24시간 1회
-export const PER_POST_MAX = 2;             // 게시물당 최대 답글
+// 2026-08-13 Vase 판정: 수량·숙성·계정·게시물 상한은 전부 폐기한다.
+// 댓글마다 별이가 답할지/지나갈지/기억할지를 직접 정한다. 기계는 중복 실행만 막는다.
 export const LOG_KEEP = 200;
 
 export type ReplyCategory = 'observation' | 'question' | 'greeting' | 'light' | 'spam' | 'sensitive';
@@ -60,42 +53,22 @@ export function mergeReplies(log: ReplyRecord[], incoming: ReplyRecord[]): { log
   return { log: next, added: fresh.length };
 }
 
-const kstDayKey = (ms: number) => {
-  const d = new Date(ms + 9 * 3600 * 1000);
-  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
-};
-
-/** 오늘 상한: ceil(오늘 신규 댓글 × 30%) — 상한이지 목표가 아니다 */
-export function dailyReplyCap(log: ReplyRecord[], now: number): { cap: number; used: number; todayNew: number } {
-  const today = kstDayKey(now);
-  const todayNew = log.filter((r) => kstDayKey(r.commentCreatedAt) === today).length;
-  const used = log.filter((r) => r.publishedAt && kstDayKey(r.publishedAt) === today).length;
-  return { cap: Math.ceil(todayNew * REPLY_RATIO), used, todayNew };
+/** 이 댓글을 다시 판단해도 되는가. 취향·수량 정책은 없다 — 이미 처리했는지만 본다. */
+export function draftEligibility(
+  rec: ReplyRecord, _log: ReplyRecord[], _now: number,
+  _opts: { automated?: boolean } = {},
+): string | null {
+  if (rec.decision !== 'collected') return 'already_handled';
+  return null;
 }
 
-/** 이 댓글에 답글 후보를 만들어도 되는가.
- *  정책 전부(30% 상한·10분 숙성·게시물당 2·계정당 24h·카테고리 필터)는
- *  **자동 발행 전용**이다(Vase 판정 07-19: "사람이 할 때는 그냥 풀어놔").
- *  수동(기본값)은 이미 답한 댓글만 막는다 — 판단은 승인 버튼을 쥔 사람의 것.
- *  Phase 2 자동 경로는 반드시 automated:true로 호출할 것 (enforceDailyCap 포함 개념). */
-export function draftEligibility(
-  rec: ReplyRecord, log: ReplyRecord[], now: number,
-  opts: { automated?: boolean } = {},
-): string | null {
-  if (rec.decision === 'published') return 'already_published';
-  if (!opts.automated) return null; // 수동: 전부 개방 — 카테고리는 라벨로만 보인다
-
-  if (rec.category === 'spam') return 'category_spam';
-  if (rec.category === 'sensitive') return 'category_sensitive'; // 자동 경로 금지 (지시서 C)
-  if (rec.category === 'light') return 'category_light';
-  if (now - rec.commentCreatedAt < AGING_MS) return 'aging';     // 10분 숙성
-  const { cap, used } = dailyReplyCap(log, now);
-  if (used >= cap) return 'daily_cap';                           // 오늘 30% 소진 (enforceDailyCap)
-  const samePost = log.filter((r) => r.sourcePostId === rec.sourcePostId && r.publishedAt).length;
-  if (samePost >= PER_POST_MAX) return 'per_post_cap';
-  const sameAuthor = log.some((r) =>
-    r.authorIdHash === rec.authorIdHash && r.publishedAt && now - r.publishedAt < PER_ACCOUNT_MS);
-  if (sameAuthor) return 'per_account_cooldown';                 // 같은 계정 24h 1회
+/** 별이가 답하기로 한 뒤에도 기계가 막는 것은 외부 노출 사고 형태뿐이다.
+ *  댓글 내용의 종류나 답글 빈도는 판단하지 않는다. */
+export function replyBoundary(text: string): string | null {
+  if (text.length > 300) return 'too_long';
+  if (/https?:\/\/|www\./i.test(text)) return 'url';
+  if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(text)) return 'email';
+  if (/01[016789][-\.\s]?\d{3,4}[-\.\s]?\d{4}/.test(text)) return 'phone';
   return null;
 }
 
@@ -123,5 +96,3 @@ export const WORLD_FACTS = `세계의 사실 (이건 실제다 — 지어내지 
  * 운영자 강제 후보 — 무응답 레코드의 [후보 만들기]는 사람이 무응답 판단을 뒤집겠다는
  * 뜻이다. 정책 위반(비난·도발·정치·의료·법률·개인정보)만은 사람도 못 뒤집는다.
  */
-export const FORCE_INSTRUCTION =
-  '운영자가 이 댓글의 답 후보를 요청했다. 비난·도발·정치·의료·법률·개인정보성 댓글이 아닌 한 reply를 null로 두지 말고, 세계의 사실 안에서 답을 만들어라.';

@@ -107,6 +107,15 @@ test('누락 판정의 정본은 로그 존재가 아니라 성공 (홈즈 판�
   assert.deepEqual(computeMissedSlots([rec('2026-07-26T08:00:00+09:00'), rec('2026-07-26T18:00:00+09:00'), dup], now), ['2026-07-26T22:00:00+09:00']);
 });
 
+test('별이가 침묵을 고른 슬롯은 누락이 아니라 완수다', () => {
+  const slot = '2026-07-26T22:00:00+09:00';
+  const skipped: PublishLogRecord = { ...rec(slot), result: 'editorial_skip', threads: { attempted: false, ok: false, errorCode: null, requestId: null } };
+  assert.equal(hasSuccessfulRun([skipped], slot), true);
+  const now = kstSlotUtc(2026, 7, 26, 22) + 30 * 60 * 1000;
+  const log = [rec('2026-07-26T08:00:00+09:00'), rec('2026-07-26T18:00:00+09:00'), skipped];
+  assert.deepEqual(computeMissedSlots(log, now), []);
+});
+
 /* ── 명시적 scheduledFor 검증 (홈즈 판정 2026-07-26) ── */
 
 import { validateSlotIso, RECONCILE_WINDOW_MS } from './_publish-log.ts';

@@ -224,7 +224,9 @@ if (!walkHtml.includes('buildCollectiveSnapshot')) errors.push('걷기 앱에 co
 const opsCollective = await readFile(new URL('../functions/api/ops/collective.ts', import.meta.url), 'utf8').catch(() => '');
 if (!opsCollective.includes('kAnonView')) errors.push('ops/collective.ts가 k-익명 필터를 거치지 않는다');
 
-// ── 11. 425-B/C 답글 하드룰 (§4 · Phase 1) ────────────────
+// ── 11. 425-B/C 답글 계약 (승인 발행 단계) ─────────────────
+// 2026-08-13 Vase 판정: 답글 비율·숙성·계정당·게시물당·카테고리 상한은 없다.
+// 별이가 댓글마다 답/무응답/기억을 고른다. 공개 쓰기는 아직 Access 승인 버튼만 허용한다.
 const repliesTs = await readFile(new URL('../functions/api/ops/threads-replies.ts', import.meta.url), 'utf8').catch(() => '');
 if (!repliesTs) {
   errors.push('threads-replies.ts가 없다');
@@ -234,16 +236,17 @@ if (!repliesTs) {
   if (!repliesTs.includes("decision !== 'drafted'")) errors.push('답글: 승인은 drafted 상태에서만 가능해야 한다');
 }
 const repliesLogic = await readFile(new URL('../functions/api/_replies.ts', import.meta.url), 'utf8').catch(() => '');
-if (!/REPLY_RATIO\s*=\s*0\.3/.test(repliesLogic)) errors.push('답글: 30% 상한 상수가 없다');
-// 모든 정속 규칙(30%·숙성·게시물당·계정당·카테고리)은 자동 발행 전용(Vase 07-19).
-// 수동은 전부 개방 — 단 자동화용 스위치(automated)가 정책 모듈에 남아 있어야 한다.
-if (!repliesLogic.includes('automated')) {
-  errors.push('답글: 자동 발행용 정책 스위치(automated)가 사라졌다');
+for (const removed of ['REPLY_RATIO', 'AGING_MS', 'PER_ACCOUNT_MS', 'PER_POST_MAX', 'dailyReplyCap']) {
+  if (repliesLogic.includes(removed)) errors.push(`답글: 폐기된 강제 상한 ${removed}이 남아 있다`);
 }
-if (!/if \(!opts\.automated\) return null/.test(repliesLogic)) {
-  errors.push('답글: 수동 개방 계약(!automated → null)이 사라졌다');
+if (!/if \(rec\.decision !== 'collected'\) return 'already_handled'/.test(repliesLogic)) {
+  errors.push('답글: 같은 댓글의 중복 처리 방지가 없다');
 }
-if (!repliesLogic.includes("'category_sensitive'")) errors.push('답글: 민감 카테고리 차단이 없다');
+if (!repliesLogic.includes('replyBoundary')) errors.push('답글: 연락처·링크 외부 노출 경계가 없다');
+if (!repliesTs.includes('account_mismatch_expected_@')) errors.push('답글: @byeoli_log 계정 오발행 방지가 없다');
+if (repliesTs.includes('runAutonomousReplyCycle') || repliesTs.includes('BYEOLI_SOCIAL_AUTONOMY')) {
+  errors.push('답글: 최종 승인 전 자동 공개 발행 경로가 열려 있다');
+}
 
 // ── 12. 425-D 별이 문장 작가 — 폴백 안전 계약 ─────────────
 const autopostTs = await readFile(new URL('../functions/api/autopost.ts', import.meta.url), 'utf8').catch(() => '');

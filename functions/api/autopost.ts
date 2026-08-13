@@ -26,6 +26,7 @@ export interface Env {
   THREADS_TOKEN?: string;        // BUILD 417: (선택) 대시보드 토큰 생성기로 만든 장기 토큰 — 첫 실행 시 KV로 이관
   THREADS_USER_ID?: string;      // BUILD 417: (미사용 — /me 자동 조회로 대체. 남아 있어도 무해)
   ANTHROPIC_API_KEY?: string;    // BUILD 425-D: 별이 문장 작가 (없으면 문장 풀 폴백)
+  BYEOLI_THREADS_HANDLE?: string; // 외부 쓰기 전 실제 /me username과 대조 (기본 @byeoli_log)
 }
 
 const FEED_KEY = 'feed';
@@ -69,7 +70,7 @@ const THREADS_AUTH_KEY = 'threads_auth';
 const THREADS_API = 'https://graph.threads.net/v1.0';
 const REFRESH_AFTER_MS = 7 * 24 * 3600 * 1000; // 7일마다 갱신 (만료 60일)
 
-interface ThreadsAuth { token: string; userId: string; refreshedAt: number }
+export interface ThreadsAuth { token: string; userId: string; username: string; refreshedAt: number }
 
 export async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
   const raw = await env.PLANET.get(THREADS_AUTH_KEY);
@@ -86,12 +87,22 @@ export async function getThreadsAuth(env: Env): Promise<ThreadsAuth | null> {
       );
       const me = (await meRes.json()) as { id?: string; username?: string };
       if (meRes.ok && me.id) {
-        auth = { token: env.THREADS_TOKEN, userId: me.id, refreshedAt: Date.now() };
+        auth = { token: env.THREADS_TOKEN, userId: me.id, username: me.username ?? '', refreshedAt: Date.now() };
         await env.PLANET.put(THREADS_AUTH_KEY, JSON.stringify(auth));
       }
     } catch { /* 부트스트랩 실패 — 아래에서 null 반환 */ }
   }
   if (!auth || !auth.token || !auth.userId) return null;
+  // 옛 KV에는 username이 없다. 현재 /me를 한 번 읽어 보강하고, 확인 실패 시 외부 쓰기를 열지 않는다.
+  if (!auth.username) {
+    try {
+      const meRes = await fetch(`${THREADS_API}/me?fields=id,username&access_token=${encodeURIComponent(auth.token)}`);
+      const me = (await meRes.json()) as { id?: string; username?: string };
+      if (!meRes.ok || !me.id || !me.username || me.id !== auth.userId) return null;
+      auth = { ...auth, username: me.username };
+      await env.PLANET.put(THREADS_AUTH_KEY, JSON.stringify(auth));
+    } catch { return null; }
+  }
   // 자동 갱신 — 토큰이 24시간 이상 묵어야 갱신 가능하므로 7일 주기가 안전
   if (Date.now() - auth.refreshedAt > REFRESH_AFTER_MS) {
     try {
@@ -130,6 +141,10 @@ export async function dispatchToThreads(
 ): Promise<ThreadsResult> {
   const auth = await getThreadsAuth(env);
   if (!auth) return { attempted: false, ok: false, detail: 'threads auth not configured — GET /api/threads-auth?key=... 먼저', errorCode: 'auth_missing', requestId: null };
+  const expected = (env.BYEOLI_THREADS_HANDLE ?? 'byeoli_log').replace(/^@/, '').toLowerCase();
+  if (auth.username.replace(/^@/, '').toLowerCase() !== expected) {
+    return { attempted: false, ok: false, detail: `threads account mismatch — expected @${expected}`, errorCode: 'account_mismatch', requestId: null };
+  }
 
   // 1) 컨테이너 생성 — Threads 본문 한도 500자
   const create = new URL(`${THREADS_API}/${auth.userId}/threads`);

@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  categorize, maskUsername, mergeReplies, dailyReplyCap, draftEligibility,
-  WORLD_FACTS, FORCE_INSTRUCTION, type ReplyRecord,
+  categorize, maskUsername, mergeReplies, draftEligibility,
+  replyBoundary, WORLD_FACTS, type ReplyRecord,
 } from './_replies.ts';
 
 const NOW = Date.parse('2026-07-18T21:00:00+09:00');
@@ -43,46 +43,18 @@ test('mergeReplies: sourceCommentId 멱등 + 최신순 유지', () => {
   assert.equal(again.log.length, 3);
 });
 
-test('30% 상한: 오늘 신규 10건 → cap 3', () => {
-  const log: ReplyRecord[] = [];
-  for (let i = 0; i < 10; i++) log.push(rec({ sourceCommentId: `c${i}`, commentCreatedAt: NOW - i * 60000 }));
-  const { cap, used } = dailyReplyCap(log, NOW);
-  assert.equal(cap, 3);
-  assert.equal(used, 0);
-});
-
-test('draftEligibility: 수동은 전부 개방, 정책은 자동(automated) 전용', () => {
+test('draftEligibility: 수량·숙성·계정·카테고리 상한 없이 미처리 댓글은 별이가 판단한다', () => {
   const base: ReplyRecord[] = [];
   for (let i = 0; i < 10; i++) base.push(rec({ sourceCommentId: `c${i}`, authorIdHash: `h${i}`, commentCreatedAt: NOW - (i + 2) * 600000 }));
   const AUTO = { automated: true };
-
-  // 수동(기본값): 이미 답한 것만 막는다 (Vase 판정 07-19 "사람이 할 때는 풀어놔")
   assert.equal(draftEligibility(rec({ category: 'spam' }), base, NOW), null);
   assert.equal(draftEligibility(rec({ category: 'sensitive' }), base, NOW), null);
   assert.equal(draftEligibility(rec({ commentCreatedAt: NOW - 60000 }), base, NOW), null);
-  assert.equal(draftEligibility(rec({ decision: 'published' }), base, NOW), 'already_published');
-
-  // 자동: 정책 전부 강제
-  assert.equal(draftEligibility(rec({ category: 'spam' }), base, NOW, AUTO), 'category_spam');
-  assert.equal(draftEligibility(rec({ category: 'sensitive' }), base, NOW, AUTO), 'category_sensitive');
-  assert.equal(draftEligibility(rec({ category: 'light' }), base, NOW, AUTO), 'category_light');
-  assert.equal(draftEligibility(rec({ commentCreatedAt: NOW - 60000 }), base, NOW, AUTO), 'aging');
-  assert.equal(draftEligibility(rec(), base, NOW, AUTO), null); // 조건 없으면 자동도 통과
-
-  // 30% 상한 (per_post·per_account와 분리된 픽스처)
-  const capped = base.map((r, i) => (i < 3 ? { ...r, publishedAt: NOW - 1000, decision: 'published' as const } : r));
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'x', sourcePostId: 'other', authorIdHash: 'hx' }), capped, NOW, AUTO), 'daily_cap');
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'x', sourcePostId: 'other', authorIdHash: 'hx' }), capped, NOW), null);
-
-  // 같은 게시물 2건 발행 → per_post_cap (자동만)
-  const perPost = base.map((r, i) => (i < 2 ? { ...r, sourcePostId: 'pp', publishedAt: NOW - 1000 } : r));
-  assert.equal(draftEligibility(rec({ sourcePostId: 'pp', sourceCommentId: 'y' }), perPost, NOW, AUTO), 'per_post_cap');
-  assert.equal(draftEligibility(rec({ sourcePostId: 'pp', sourceCommentId: 'y' }), perPost, NOW), null);
-
-  // 같은 계정 24h 내 발행 → cooldown (자동만)
-  const sameAuthor = [rec({ sourceCommentId: 'z0', authorIdHash: 'hh', publishedAt: NOW - 3600_000 }), ...base];
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'z1', authorIdHash: 'hh' }), sameAuthor, NOW, AUTO), 'per_account_cooldown');
-  assert.equal(draftEligibility(rec({ sourceCommentId: 'z1', authorIdHash: 'hh' }), sameAuthor, NOW), null);
+  assert.equal(draftEligibility(rec({ category: 'spam' }), base, NOW, AUTO), null);
+  assert.equal(draftEligibility(rec({ category: 'sensitive' }), base, NOW, AUTO), null);
+  assert.equal(draftEligibility(rec({ category: 'light' }), base, NOW, AUTO), null);
+  assert.equal(draftEligibility(rec({ decision: 'published' }), base, NOW), 'already_handled');
+  assert.equal(draftEligibility(rec({ decision: 'ignored' }), base, NOW, AUTO), 'already_handled');
 });
 
 /* ── 2026-07-20 실사고 회귀: "펫이 없으므로" 오판 ── */
@@ -91,7 +63,11 @@ test('세계의 사실에 빼콩이가 선언돼 있다 — 지어내지 않기�
   // 빼콩이가 예시가 아니라 사실로 존재해야 한다 (예시 한 줄만 있던 것이 오판의 원인)
   assert.match(WORLD_FACTS, /빼콩이/);
   assert.match(WORLD_FACTS, /펫이 없다.*판단하지 마라|"데리고 다니는 펫이 없다"고 판단하지 마라/);
-  // 강제 후보도 정책 위반만은 못 뒤집는다
-  assert.match(FORCE_INSTRUCTION, /비난|정치|의료/);
-  assert.match(FORCE_INSTRUCTION, /null로 두지 말/);
+});
+
+test('외부 답글 경계는 취향이 아니라 중복 노출 사고 형태만 막는다', () => {
+  assert.equal(replyBoundary('한참 비어 있었어. 그래서 조금 더 오래 봤어.'), null);
+  assert.equal(replyBoundary('여기 봐 https://example.com'), 'url');
+  assert.equal(replyBoundary('연락은 010-1234-5678'), 'phone');
+  assert.equal(replyBoundary('x'.repeat(301)), 'too_long');
 });

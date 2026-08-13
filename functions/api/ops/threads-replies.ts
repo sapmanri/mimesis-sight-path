@@ -1,7 +1,7 @@
 // BUILD 425-B/C — /api/ops/threads-replies (Ops 호스트 전용 · Access 뒤)
-// 정본: docs/BUILD_425_THREADS_CAPTURE_AND_REPLY.md §4 + Vase 판정(상한 30% · 승인 발행)
+// 2026-08-13: 답글 상한·숙성·계정/게시물 제한 폐기. 댓글마다 별이가 직접 답/무응답/기억을 고른다.
 //
-// GET  — 댓글 목록·상한 현황. 마지막 수집 후 25분 지났으면 lazy 수집(관측소가 열려 있는 동안).
+// GET  — 댓글 목록. 마지막 수집 후 25분 지났으면 lazy 수집(관측소가 열려 있는 동안).
 // POST — 쓰기 예외 4호. action:
 //   draft   : 정책 통과한 댓글의 답글 후보를 Claude로 생성 (+⭐ 기억해둠 판정)
 //   approve : Vase 승인 → 그 자리에서 Threads reply 발행 (Phase 1 — 승인 없이는 아무 말도 없다)
@@ -11,12 +11,13 @@
 
 import { getThreadsAuth, type Env as AutopostEnv } from '../autopost';
 import {
-  categorize, maskUsername, mergeReplies, dailyReplyCap, draftEligibility,
-  repliesConfig, WORLD_FACTS, FORCE_INSTRUCTION, type ReplyRecord,
+  categorize, maskUsername, mergeReplies, draftEligibility,
+  replyBoundary, repliesConfig, WORLD_FACTS, type ReplyRecord,
 } from '../_replies';
 
-interface Env extends AutopostEnv {
+export interface Env extends AutopostEnv {
   ANTHROPIC_API_KEY?: string;
+  BYEOLI_THREADS_HANDLE?: string;
 }
 
 const THREADS_API = 'https://graph.threads.net/v1.0';
@@ -32,15 +33,15 @@ async function pepperHash(kv: KVNamespace, username: string): Promise<string> {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function loadLog(kv: KVNamespace): Promise<ReplyRecord[]> {
+export async function loadLog(kv: KVNamespace): Promise<ReplyRecord[]> {
   const raw = await kv.get(repliesConfig.LOG_KEY);
   return raw ? (JSON.parse(raw) as ReplyRecord[]) : [];
 }
-const saveLog = (kv: KVNamespace, log: ReplyRecord[]) =>
+export const saveLog = (kv: KVNamespace, log: ReplyRecord[]) =>
   kv.put(repliesConfig.LOG_KEY, JSON.stringify(log));
 
 /* ── 수집 — 최근 발행물의 top-level 댓글 (Threads /replies) ── */
-async function runIngest(env: Env): Promise<{ ok: boolean; error: string | null; added: number }> {
+export async function runIngest(env: Env): Promise<{ ok: boolean; error: string | null; added: number }> {
   const auth = await getThreadsAuth(env);
   if (!auth) return { ok: false, error: 'auth_missing', added: 0 };
 
@@ -50,14 +51,31 @@ async function runIngest(env: Env): Promise<{ ok: boolean; error: string | null;
     const meRes = await fetch(`${THREADS_API}/me?fields=username&access_token=${encodeURIComponent(auth.token)}`);
     const me = (await meRes.json()) as { username?: string };
     myUsername = me.username ?? '';
-  } catch { /* 못 얻으면 제외 없이 진행 */ }
+  } catch { /* 아래에서 안전하게 중단 */ }
+  if (!myUsername) return { ok: false, error: 'auth_profile_missing', added: 0 };
+  const expected = (env.BYEOLI_THREADS_HANDLE ?? 'byeoli_log').replace(/^@/, '').toLowerCase();
+  if (myUsername.toLowerCase() !== expected) {
+    return { ok: false, error: `account_mismatch_expected_@${expected}`, added: 0 };
+  }
 
-  // 대상 게시물: publish_log의 성공 발행 media id
-  const publishRaw = await env.PLANET.get('publish_log');
-  const runs = publishRaw ? (JSON.parse(publishRaw) as { threads?: { ok?: boolean; requestId?: string | null } }[]) : [];
-  const mediaIds = [...new Set(
-    runs.filter((r) => r.threads?.ok && r.threads.requestId).map((r) => r.threads!.requestId as string),
-  )].slice(0, repliesConfig.POSTS_TO_CHECK);
+  // 현재 계정의 실제 최근 Threads를 우선한다. 시스템 밖에서 직접 올린 글의 댓글도 별이가 본다.
+  let mediaIds: string[] = [];
+  try {
+    const u = new URL(`${THREADS_API}/me/threads`);
+    u.searchParams.set('fields', 'id');
+    u.searchParams.set('limit', String(repliesConfig.POSTS_TO_CHECK));
+    u.searchParams.set('access_token', auth.token);
+    const res = await fetch(u.toString());
+    const data = (await res.json()) as { data?: { id?: string }[] };
+    if (res.ok) mediaIds = (data.data ?? []).map((p) => p.id).filter((id): id is string => !!id);
+  } catch { /* publish_log 폴백 */ }
+  if (!mediaIds.length) {
+    const publishRaw = await env.PLANET.get('publish_log');
+    const runs = publishRaw ? (JSON.parse(publishRaw) as { threads?: { ok?: boolean; requestId?: string | null } }[]) : [];
+    mediaIds = [...new Set(
+      runs.filter((r) => r.threads?.ok && r.threads.requestId).map((r) => r.threads!.requestId as string),
+    )].slice(0, repliesConfig.POSTS_TO_CHECK);
+  }
 
   const incoming: ReplyRecord[] = [];
   const now = Date.now();
@@ -113,7 +131,7 @@ ${WORLD_FACTS}
 - "고마워"류 인사 반복 금지. 과도한 친밀감 금지. 인간인 척 금지.
 - 모르는 사실을 지어내지 않는다. 실제로 보지 않은 것을 봤다고 하지 않는다.
 - 다음 행동을 약속하지 않는다. 상대와의 과거 관계를 기억한다고 말하지 않는다.
-- 비난·도발·정치·의료·법률·개인정보성 댓글이거나 답이 애매하면 답하지 않는다.
+- 어떤 종류의 댓글이든 답할지 말지는 네가 직접 정한다. 다만 개인정보를 되풀이하거나 위험한 조언을 만들지는 않는다.
 
 좋은 예: 댓글 "저 벤치가 왠지 쓸쓸해 보여요." → "한참 비어 있었어. 그래서 조금 더 오래 봤어."
 좋은 예: 댓글 "오늘도 잘 보고 가요." → "오늘도 같이 걸었네."
@@ -153,15 +171,14 @@ async function callClaude(env: Env, messages: { role: string; content: string }[
   } catch { return { error: 'claude_network' }; }
 }
 
-async function generateDraft(
-  env: Env, rec: ReplyRecord, postText: string | null, diaryLines: string[], force = false,
+export async function generateDraft(
+  env: Env, rec: ReplyRecord, postText: string | null, diaryLines: string[], _force = false,
 ): Promise<{ reply: string | null; bookmark: boolean; reason: string; model: string } | { error: string }> {
   if (!env.ANTHROPIC_API_KEY) return { error: 'claude_key_missing' };
   const context = [
     postText ? `원 게시물: ${postText}` : null,
     diaryLines.length ? `그 엽서의 관찰일기:\n${diaryLines.join('\n')}` : null,
     `댓글: ${rec.text}`,
-    force ? FORCE_INSTRUCTION : null,
   ].filter(Boolean).join('\n\n');
 
   let out = await callClaude(env, [{ role: 'user', content: context }]);
@@ -181,7 +198,7 @@ async function generateDraft(
 }
 
 /* ── 답글 발행 — reply_to_id 컨테이너 → 발행 (30초 대기 권장 규격은 재시도로 흡수) ── */
-async function publishReply(env: Env, replyToId: string, text: string):
+export async function publishReply(env: Env, replyToId: string, text: string):
   Promise<{ ok: boolean; errorCode: string | null; requestId: string | null }> {
   const auth = await getThreadsAuth(env);
   if (!auth) return { ok: false, errorCode: 'auth_missing', requestId: null };
@@ -225,17 +242,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     ingest = { ranNow: true, error: r.error, added: r.added };
   }
   const log = await loadLog(env.PLANET);
-  const capInfo = dailyReplyCap(log, now);
   return json(200, {
     ok: true,
     generatedAt: now,
     lastIngestAt: ingest.ranNow ? now : (meta.lastIngestAt ?? null),
     ingest,
-    cap: capInfo,
+    replyPolicy: 'byeoli_decides_each_comment',
     claudeReady: !!env.ANTHROPIC_API_KEY,
     replies: log.slice(0, 60).map((r) => ({
       ...r,
-      eligibility: r.decision === 'collected' ? draftEligibility(r, log, now) : null,
+      eligibility: r.decision === 'collected' ? draftEligibility(r, log, now) : 'already_handled',
     })),
   });
 };
@@ -281,6 +297,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (out.reply === null) {
       rec.decision = 'ignored'; rec.reason = `무응답 판단: ${out.reason}`;
     } else {
+      const boundary = replyBoundary(out.reply);
+      if (boundary) return json(422, { ok: false, error: `reply_boundary_${boundary}` });
       rec.decision = 'drafted'; rec.generatedText = out.reply; rec.reason = out.reason;
     }
     await saveLog(env.PLANET, log);
@@ -289,8 +307,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (body.action === 'approve') {
     if (rec.decision !== 'drafted' || !rec.generatedText) return json(409, { ok: false, error: 'not_drafted' });
-    // 30% 상한은 자동 발행 전용(Vase 판정 07-19) — 사람의 승인은 막지 않는다.
-    // Phase 2 자동 발행 경로가 생기면 그쪽에서 dailyReplyCap으로 daily_cap을 강제할 것.
     const result = await publishReply(env, rec.sourceCommentId, rec.generatedText);
     rec.approvedAt = now;
     rec.threads = { errorCode: result.errorCode, requestId: result.requestId };

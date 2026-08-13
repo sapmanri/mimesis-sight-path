@@ -21,7 +21,7 @@ const MISSED_GRACE_MS = 10 * 60 * 1000;
 const K_401_TTL_S = 24 * 60 * 60;
 const SLOT_401_MS = 10 * 60 * 1000; // 10분 버킷
 
-export type PublishResult = 'success' | 'threads_failed' | 'key_missing' | 'slot_duplicate';
+export type PublishResult = 'success' | 'editorial_skip' | 'threads_failed' | 'key_missing' | 'slot_duplicate';
 
 export interface PublishLogRecord {
   runId: string;
@@ -40,6 +40,8 @@ export interface PublishLogRecord {
     errorCode: string | null;
     requestId: string | null;
   };
+  /** 별이가 어떤 공개 재료를 골랐는지. 원문·토큰 없이 선택과 이유만. */
+  editorial?: { source: 'observation' | 'radio' | 'story' | 'schedule' | 'silence'; reason: string };
 }
 
 /** 공개 URL을 R2 키로 되돌린다 (별이 일지엔 키만, 원문 URL 노출 최소화) */
@@ -163,7 +165,7 @@ export interface SlotReceipt {
  *     publish_log를 함께 본다. 둘 중 하나라도 "발행됨"이면 보충하지 않는다.
  */
 export function hasSuccessfulRun(log: readonly PublishLogRecord[], slotIso: string): boolean {
-  return log.some((r) => r.scheduledFor === slotIso && r.result === 'success');
+  return log.some((r) => r.scheduledFor === slotIso && (r.result === 'success' || r.result === 'editorial_skip'));
 }
 
 export async function readSlotReceipt(env: PublishLogEnv, slot: string): Promise<SlotReceipt | null> {
@@ -195,7 +197,7 @@ export function computeMissedSlots(log: PublishLogRecord[], now: number): string
   // threads_failed·key_missing·slot_duplicate 레코드가 남아 있어도 그 슬롯은 여전히 보충 대상이다
   // (실패 로그를 '발행됨'으로 세면 누락이 조용히 사라진다 — 침묵이 버그다).
   const present = new Set(
-    log.filter((r) => r.result === 'success').map((r) => r.scheduledFor).filter(Boolean) as string[],
+    log.filter((r) => r.result === 'success' || r.result === 'editorial_skip').map((r) => r.scheduledFor).filter(Boolean) as string[],
   );
   const missed: string[] = [];
   for (let dayBack = 0; dayBack <= 1; dayBack++) {

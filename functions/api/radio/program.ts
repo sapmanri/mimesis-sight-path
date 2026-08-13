@@ -78,6 +78,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (typeof body.title === 'string' && body.title) existing.title = body.title.slice(0, 60);
     if (typeof body.voiceNote === 'string') existing.voiceNote = body.voiceNote.slice(0, 60);
     if (typeof body.dj === 'string' && body.dj) existing.dj = body.dj.slice(0, 20);
+    if (body.musicTransition === 'intro' || body.musicTransition === 'direct') existing.musicTransition = body.musicTransition;
+    if (typeof body.pairId === 'string' && body.pairId) existing.pairId = body.pairId.slice(0, 40);
     // 소리 교체 재굽기(같은 R2 키에 새 소리)를 위해 dur도 병합 — 자리는 여전히 불변 (08-12)
     if (Number.isFinite(dur) && dur > 0 && dur <= 1800) {
       // 겹침 상한 가드 (08-12 인계서의 이론 결함 수리): 자리는 불변인데 길이만 늘면
@@ -107,6 +109,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     storyId: typeof body.storyId === 'string' ? body.storyId.slice(0, 40) : null,
     dj: typeof body.dj === 'string' && body.dj ? body.dj.slice(0, 20) : 'byeoli',
     script: typeof body.script === 'string' ? body.script.slice(0, 2000) : undefined,
+    musicTransition: body.musicTransition === 'intro' || body.musicTransition === 'direct' ? body.musicTransition : null,
+    pairId: typeof body.pairId === 'string' && body.pairId ? body.pairId.slice(0, 40) : null,
   };
   const next = pruneProgram([...segments, seg], now);
   await env.PLANET.put(PROGRAM_KEY, JSON.stringify(next));

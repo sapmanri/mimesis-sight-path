@@ -13,6 +13,7 @@ import {
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
+import { THREADS_SHELF_KEY, YOUTUBE_SHELF_KEY, type ThreadsShelf, type YoutubeShelf } from '../_radio-social-types.ts';
 import { timeLabelOf } from './draft.ts';
 
 interface Env { PLANET: KVNamespace; PULSE_KEY?: string; ANTHROPIC_API_KEY?: string }
@@ -56,10 +57,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw, recallRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw, recallRaw, threadsRaw, youtubeRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
     env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get('radio:bookcase'),
     env.PLANET.get(TOON_KEY), env.PLANET.get(RECALL_KEY),
+    env.PLANET.get(THREADS_SHELF_KEY), env.PLANET.get(YOUTUBE_SHELF_KEY),
   ]);
   const trail: { date: string; items: string[] }[] = recallRaw ? JSON.parse(recallRaw) : [];
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
@@ -130,6 +132,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     bookcase,
     // 웹툰 최근 편 (08-12 밤 청국장 사건) — 최신 3편만. 읽는 손은 /api/radio/toon.
     webtoonPosts: (toonRaw ? (JSON.parse(toonRaw) as { posts: ToonPost[] }).posts : []).slice(0, 3),
+    threadsPosts: (threadsRaw ? (JSON.parse(threadsRaw) as ThreadsShelf).posts : []).slice(0, 5).map((p) => ({
+      text: p.text, when: p.timestamp, permalink: p.permalink,
+    })),
+    youtubeVideos: (youtubeRaw ? (JSON.parse(youtubeRaw) as YoutubeShelf).videos : []).slice(0, 5).map((v) => ({
+      title: v.title, publishedAt: v.publishedAt, url: v.url, description: v.description,
+    })),
     broadcastTrail: trail.slice(-4).map((d) => ({ date: d.date.slice(5), items: d.items.slice(-10) })),
   };
 
@@ -155,7 +163,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
   const acts: string[] = [];
   if (storyRead) acts.push('사연 하나에 답했다');
-  if (picked) acts.push(`「${picked.title}」를 틀었다`);
+  if (picked) acts.push(`「${picked.title}」를 ${written.musicTransition === 'direct' ? '말없이 바로 틀었다' : '소개하고 틀었다'}`);
   if (readAloud) acts.push(`「${openPiece!.title}」(책장 원고)을 낭독했다`);
   if (!acts.length) acts.push(`이야기: ${written.script.split('\n')[0].slice(0, 24)}`);
   let day = trail.find((d) => d.date === today);
@@ -165,7 +173,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const draft: RadioDraft = {
     id, at: Date.now(), story: story?.text ?? '',
     moderation: { allow: true, category: story ? 'ok' : 'solo', reason: '' },
-    script: written.script, voiceNote: written.voiceNote, songTitle: written.songTitle, situation,
+    script: written.script, voiceNote: written.voiceNote, songTitle: written.songTitle,
+    musicTransition: picked ? (written.musicTransition ?? 'intro') : null, situation,
     provenance: written.provenance, warnings,
   };
   await Promise.all([
@@ -178,7 +187,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ok: true, id, dj: 'byeoli', kind: storyRead ? 'story' : 'talk', storyRead,
     script: written.script, voiceNote: written.voiceNote,
     // 노래 편성 (08-12 밤): 별이가 고른 곡의 실물 — 조립기(station.sh)가 토막 뒤에 잇는다
-    song: picked ? { title: picked.title, url: picked.url, dur: picked.dur, lyrics: picked.lyrics ?? '' } : null,
+    song: picked ? {
+      title: picked.title, url: picked.url, dur: picked.dur, lyrics: picked.lyrics ?? '',
+      transition: written.musicTransition ?? 'intro',
+    } : null,
     title: written.script.split('\n')[0].slice(0, 60),
     warnings,
   });

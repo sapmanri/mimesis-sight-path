@@ -31,6 +31,10 @@ export interface ProgramSegment {
   dj?: string;
   /** 글자 방송 — 못 듣는 청취자를 위한 대본 전문 (Vase 08-12: "투디워크처럼 글자로 주루륵") */
   script?: string;
+  /** 뒤따르는 곡을 별이가 소개했는지, 말없이 바로 틀기로 했는지. talk/song 양쪽에 같은 값. */
+  musicTransition?: 'intro' | 'direct' | null;
+  /** 멘트와 곡을 재방송에서도 갈라놓지 않기 위한 편성 묶음 ID. */
+  pairId?: string | null;
 }
 
 /** 새 편 예고 시간 — 청취자 화면이 편성표를 새로 읽는 최악 주기(전면 60초·잠금 심장박동 72초)보다

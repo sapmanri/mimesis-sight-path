@@ -38,10 +38,13 @@ export interface RadioDraft {
   script: string;               // 방송 토막 전체 — 구성은 별이가 정했다 (R2)
   voiceNote: string | null;     // 별이가 정한 그날 목소리 연출 (R3 — 기분→목소리)
   songTitle?: string | null;    // 별이가 고른 곡 (노래 편성, 08-12 밤)
+  musicTransition?: MusicTransition | null; // 소개하고 틀지, 말없이 바로 틀지 — 별이의 편집 판단
   situation: RadioSituation;    // 별이에게 던졌던 상황 (재현·검증용)
   provenance: GenomeProvenance;
   warnings: string[];
 }
+
+export type MusicTransition = 'intro' | 'direct';
 
 /* ═══ ① 기계적 필터 — 접수 시점, AI 이전 ═══════════════════════════ */
 
@@ -145,6 +148,10 @@ export interface RadioSituation {
       실사고: 웹툰 속 오늘("청국장")을 몰라 사연에 "사실이 아니야"라고 방송했다.
       내용은 별이의 그림 이야기, 말투(이모지체)는 그 채널의 옷 — 관찰 전용·복제 금지. */
   webtoonPosts?: { text: string; when: string }[];
+  /** 자기 Threads(@byeoli_log) 최근 글. 자기 채널의 연속성을 알고 방송에서 꺼낼지 스스로 정한다. */
+  threadsPosts?: { text: string; when: string; permalink?: string }[];
+  /** 감성찾아삽만리 YouTube 최근 영상. 참고원일 뿐, 언급·시청을 강제하지 않는다. */
+  youtubeVideos?: { title: string; publishedAt: string; url: string; description?: string }[];
   /** 방송 자취 — 지난 며칠 방송에서 별이가 한 일의 기계 기록 (Vase 08-12 밤: "원고들이 다시
       게놈 쌓는 데 도움이 돼야지. 이전 거를 기억하지는 못한다, 이런 건가?").
       직전 2편(recentScripts)을 넘어 며칠을 기억하는 자리. ⚠ 431-M 기억 체계(관찰 사건 정본)와는
@@ -180,14 +187,16 @@ ${style}
 - 해시태그·이모지·유행어 없음. 말로 읽히는 방송이다 — 괄호 지문 없이, 쉼은 문장부호와 줄바꿈으로.
 - 늘 같은 텐션이면 방송이 아니다. 오늘 기분과 상황 따라 오르내림이 있어도 된다.
 
-곡 서가가 주어진 날은 이 토막 끝에 노래 하나를 틀 수 있다 — 틀지 말지, 어떤 곡일지는 네가 정한다.
-틀려면 [목소리: …] 바로 앞 줄에 서가의 제목 그대로 적는다: [노래: 곡 제목]
-노래로 건너갈 때도 하던 이야기의 결에서 간다 — 곡 소개 한마디면 충분하다.
+곡 서가가 주어진 날은 이 토막 끝에 노래 하나를 틀 수 있다 — 틀지 말지, 어떤 곡일지, 소개하고 틀지 말없이 바로 틀지까지 네가 정한다.
+- 소개하고 틀려면 본문에서 네 말로 자연스럽게 곡을 건넨 뒤 [노래: 곡 제목 | 소개]
+- 아무 말 없이 곧바로 틀고 싶으면 본문에서 곡 제목을 억지로 말하지 말고 [노래: 곡 제목 | 바로]
+- 마음이 가지 않으면 노래 태그를 쓰지 않는다.
+곡 제목은 서가의 제목 그대로 쓴다. 소개는 의무가 아니다 — 네가 지금 방송에 맞다고 느낄 때만 한다.
 
 맨 마지막 줄에 하나만 덧붙인다 — 오늘 이 토막을 읽을 네 목소리를 네가 정한다:
 [목소리: 짧은 연출 한 줄] (예: 조금 가라앉아서, 평소보다 느리게 / 반 박자 빠르게, 살짝 들떠서. 30자 이내)
 
-출력: 방송에서 말할 것 전체 + 끝의 [노래: …](선택)와 [목소리: …]. 따옴표·설명·JSON 없이.`;
+출력: 방송에서 말할 것 전체 + 끝의 [노래: 곡 제목 | 소개/바로](선택)와 [목소리: …]. 따옴표·설명·JSON 없이.`;
   return { prompt, warnings: result.warnings };
 }
 
@@ -195,6 +204,7 @@ export interface RadioScriptResult {
   script: string;           // 방송 토막 전체 (사연 원문 포함 가능)
   voiceNote: string | null; // 별이가 정한 그날 목소리 연출 한 줄 (기분→목소리, 사장 지시 08-12)
   songTitle: string | null; // 별이가 [노래: …]로 고른 곡 제목 — 서가 대조는 호출자(next.ts) 몫
+  musicTransition: MusicTransition | null;
   provenance: GenomeProvenance;
   warnings: string[];
 }
@@ -202,11 +212,12 @@ export interface RadioScriptResult {
 /** 원고 끝의 꼬리 태그들([노래: …]·[목소리: …])을 떼어낸다. 순서는 어느 쪽이 먼저든 받는다 —
     별이가 지시 순서를 뒤집어 적어도 방송이 죽을 이유는 아니다. 없으면 그대로. */
 export function parseTrailingTags(text: string): {
-  script: string; voiceNote: string | null; songTitle: string | null;
+  script: string; voiceNote: string | null; songTitle: string | null; musicTransition: MusicTransition | null;
 } {
   let script = text.trim();
   let voiceNote: string | null = null;
   let songTitle: string | null = null;
+  let musicTransition: MusicTransition | null = null;
   for (let i = 0; i < 2; i++) {
     const v = script.match(/\n?\s*\[목소리:\s*([^\]]{1,60})\]\s*$/);
     if (v && voiceNote === null) {
@@ -216,15 +227,17 @@ export function parseTrailingTags(text: string): {
       voiceNote = META_LEAK.test(note) ? null : note || null;
       continue;
     }
-    const s = script.match(/\n?\s*\[노래:\s*([^\]]{1,60})\]\s*$/);
+    const s = script.match(/\n?\s*\[노래:\s*([^\]|]{1,60})(?:\s*\|\s*(소개|바로))?\s*\]\s*$/);
     if (s && songTitle === null) {
       songTitle = s[1].trim() || null;
+      // 옛 원고의 [노래: 제목]은 당시 계약이 "소개 한마디"였으므로 소개로 해석한다.
+      musicTransition = s[2] === '바로' ? 'direct' : 'intro';
       script = script.slice(0, s.index).trim();
       continue;
     }
     break;
   }
-  return { script, voiceNote, songTitle };
+  return { script, voiceNote, songTitle, musicTransition };
 }
 
 /** 옛 이름 — [목소리:]만 떼던 시절의 창구. 기존 호출·검사 호환용, 속은 공용 파서다. */
@@ -259,6 +272,18 @@ export function situationMessage(s: RadioSituation): string {
           `물어볼 수 있다. 그 이야기 속 일은 모른 척하지 않는다 — 그림 이야기에서 그랬다고 말하면 된다.`,
           `단, 그 채널의 말투(이모지·감탄)는 거기 옷이다 — 방송에서는 네 말투로 말한다:`,
           ...s.webtoonPosts.map((p) => `- ${p.text.replace(/\n/g, ' / ').slice(0, 200)}${p.when ? ` (${p.when})` : ''}`),
+        ].join('\n')
+      : null,
+    s.threadsPosts?.length
+      ? [
+          `네 Threads(@byeoli_log)에 최근 네가 올린 글들 — 네 공개 자취다. 방송에서 이어 말해도 되고 그냥 지나가도 된다:`,
+          ...s.threadsPosts.map((p) => `- ${p.text.replace(/\n/g, ' / ').slice(0, 220)}${p.when ? ` (${p.when})` : ''}`),
+        ].join('\n')
+      : null,
+    s.youtubeVideos?.length
+      ? [
+          `감성찾아삽만리 YouTube에 최근 올라온 영상들 — 보고 싶은 것이 있으면 참고하고, 마음이 안 가면 보지 않아도 된다:`,
+          ...s.youtubeVideos.map((v) => `- ${v.title}${v.publishedAt ? ` (${v.publishedAt.slice(0, 10)})` : ''}${v.description ? ` — ${v.description.replace(/\n/g, ' ').slice(0, 140)}` : ''}`),
         ].join('\n')
       : null,
     s.bookcase && (s.bookcase.open || s.bookcase.titles.length || s.bookcase.locked.length)
@@ -324,11 +349,11 @@ export async function writeRadioScript(
     if (!res.ok) return null;
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const raw = (data.content?.find((c) => c.type === 'text')?.text ?? '').trim();
-    const { script, voiceNote, songTitle } = parseTrailingTags(raw);
+    const { script, voiceNote, songTitle, musicTransition } = parseTrailingTags(raw);
     const check = validateRadioScript(script, situation.story);
     if (!check.pass) return null;
     return {
-      script, voiceNote, songTitle,
+      script, voiceNote, songTitle, musicTransition,
       provenance: provenance('genome-live', true),
       warnings: [...sys.warnings, ...check.warnings],
     };

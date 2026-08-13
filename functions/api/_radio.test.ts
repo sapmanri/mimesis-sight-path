@@ -107,15 +107,26 @@ test('[노래:] 곡 선택 분리 — 순서 무관·중간 태그는 무시·�
   const both = parseTrailingTags('본문.\n오늘은 이 노래.\n[노래: 아직 거기 있었다]\n[목소리: 낮게, 느리게]');
   assert.equal(both.script, '본문.\n오늘은 이 노래.');
   assert.equal(both.songTitle, '아직 거기 있었다');
+  assert.equal(both.musicTransition, 'intro', '옛 태그는 당시 계약대로 소개로 해석');
   assert.equal(both.voiceNote, '낮게, 느리게');
   // 별이가 순서를 뒤집어도 방송이 죽을 이유는 아니다
   const flipped = parseTrailingTags('본문.\n[목소리: 낮게]\n[노래: 그때 다시 그곳으로]');
   assert.equal(flipped.script, '본문.');
   assert.equal(flipped.songTitle, '그때 다시 그곳으로');
+  assert.equal(flipped.musicTransition, 'intro');
+
+  const direct = parseTrailingTags('본문.\n[노래: 그때 다시 그곳으로 | 바로]\n[목소리: 낮게]');
+  assert.equal(direct.script, '본문.');
+  assert.equal(direct.songTitle, '그때 다시 그곳으로');
+  assert.equal(direct.musicTransition, 'direct');
+
+  const intro = parseTrailingTags('본문.\n[노래: 아직 거기 있었다 | 소개]\n[목소리: 낮게]');
+  assert.equal(intro.musicTransition, 'intro');
   assert.equal(flipped.voiceNote, '낮게');
   // 노래 없이 목소리만 — 기존 방송과 동일
   const voiceOnly = parseTrailingTags('본문.\n[목소리: 담담하게]');
   assert.equal(voiceOnly.songTitle, null);
+  assert.equal(voiceOnly.musicTransition, null);
   assert.equal(voiceOnly.voiceNote, '담담하게');
   // 음성: 본문 중간의 [노래:]는 떼지 않는다 — 끝 꼬리만
   const mid = parseTrailingTags('[노래: 가짜] 진짜 본문.');
