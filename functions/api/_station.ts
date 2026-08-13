@@ -17,6 +17,8 @@ export const PROGRAM_KEEP = 300;                    // 토막 수 상한
 export const PROGRAM_WINDOW_MS = 48 * 3_600_000;    // 이틀치만 남긴다 — 당기기 한계
 
 export type SegmentKind = 'talk' | 'story' | 'song' | 'ambient';
+export type RadioTimeLabel = '새벽' | '아침' | '낮' | '저녁' | '밤';
+export const RADIO_TIME_LABELS: RadioTimeLabel[] = ['새벽', '아침', '낮', '저녁', '밤'];
 
 export interface ProgramSegment {
   id: string;
@@ -27,6 +29,8 @@ export interface ProgramSegment {
   title: string;        // 타임라인 표기용 (별이 첫 줄에서 딴다)
   voiceNote?: string | null;
   storyId?: string | null;
+  /** 대본이 만들어진 KST 시간 결. 재방송 선택기가 현재 시간과 맞출 때 쓴다. */
+  timeLabel?: RadioTimeLabel | null;
   /** DJ 슬롯 — 초대 DJ는 별이(byeoli). 훗날 다른 게놈이 꽂힌다 (Vase 08-12) */
   dj?: string;
   /** 글자 방송 — 못 듣는 청취자를 위한 대본 전문 (Vase 08-12: "투디워크처럼 글자로 주루륵") */

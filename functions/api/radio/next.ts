@@ -201,6 +201,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     // dj: 별리 라디오의 DJ 슬롯 — 초대 DJ는 별이. 훗날 삽만리 등 다른 게놈이 꽂힌다 (Vase 08-12).
     ok: true, id, dj: 'byeoli', kind: storyRead ? 'story' : 'talk', storyRead,
     storyId: storyRead && story ? story.id : null,
+    timeLabel: situation.timeLabel,
     script: written.script, voiceNote: written.voiceNote,
     // 노래 편성 (08-12 밤): 별이가 고른 곡의 실물 — 조립기(station.sh)가 토막 뒤에 잇는다
     song: picked ? {

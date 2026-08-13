@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { placeSegment, lastEndOf, pruneProgram, PROGRAM_KEEP, type ProgramSegment } from './_station.ts';
+import {
+  placeSegment, lastEndOf, pruneProgram, PROGRAM_KEEP, RADIO_TIME_LABELS,
+  type ProgramSegment,
+} from './_station.ts';
 import { validateRadioScript, situationMessage } from './_radio.ts';
 
 const seg = (id: string, startAt: number, dur: number): ProgramSegment =>
@@ -17,6 +20,12 @@ test('편성 자리 — 버퍼 뒤에 붙거나, 90초 예고 후 시작 (즉시
 test('lastEnd — 토막 끝의 최댓값 (등록 순서와 무관)', () => {
   assert.equal(lastEndOf([]), null);
   assert.equal(lastEndOf([seg('a', 0, 10), seg('b', 5000, 10)]), 15000);
+});
+
+test('재방송 시간대 태그는 다섯 KST 결만 허용한다', () => {
+  assert.deepEqual(RADIO_TIME_LABELS, ['새벽', '아침', '낮', '저녁', '밤']);
+  const tagged: ProgramSegment = { ...seg('night', 0, 10), timeLabel: '밤' };
+  assert.equal(tagged.timeLabel, '밤');
 });
 
 test('편성표 정리 — 이틀 창 밖과 수 상한 초과는 과거부터 자른다', () => {

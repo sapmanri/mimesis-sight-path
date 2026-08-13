@@ -4,7 +4,7 @@
 
 import {
   PROGRAM_KEY, DAYS_KEY, DAY_KEY, kstDayOf, placeSegment, lastEndOf, pruneProgram,
-  type ProgramSegment, type SegmentKind,
+  RADIO_TIME_LABELS, type ProgramSegment, type SegmentKind, type RadioTimeLabel,
 } from '../_station.ts';
 import { RADIO_QUEUE_KEY, markStoryRegistered, type RadioStory } from '../_radio.ts';
 
@@ -31,13 +31,16 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
 const KINDS: SegmentKind[] = ['talk', 'story', 'song', 'ambient'];
+const timeLabel = (value: unknown): RadioTimeLabel | null =>
+  typeof value === 'string' && RADIO_TIME_LABELS.includes(value as RadioTimeLabel)
+    ? value as RadioTimeLabel : null;
 // R2 공개 버킷만 허용 — 편성표가 남의 주소를 트는 일은 없어야 한다
 const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\//;
 
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r13', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r14', now: Date.now(), segments });
 };
 
 /** 키 인증 삭제 — id+startAt로 정확히 하나만 (같은 id가 사고로 둘일 수 있다 — 08-12 전파 반절 실사고) */
@@ -106,6 +109,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (requestedStoryId) existing.storyId = requestedStoryId;
     if (body.musicTransition === 'intro' || body.musicTransition === 'direct') existing.musicTransition = body.musicTransition;
     if (typeof body.pairId === 'string' && body.pairId) existing.pairId = body.pairId.slice(0, 40);
+    if (timeLabel(body.timeLabel)) existing.timeLabel = timeLabel(body.timeLabel);
     // 소리 교체 재굽기(같은 R2 키에 새 소리)를 위해 dur도 병합 — 자리는 여전히 불변 (08-12)
     if (Number.isFinite(dur) && dur > 0 && dur <= 1800) {
       // 겹침 상한 가드 (08-12 인계서의 이론 결함 수리): 자리는 불변인데 길이만 늘면
@@ -134,6 +138,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     title: String(body.title ?? '').slice(0, 60) || '…',
     voiceNote: typeof body.voiceNote === 'string' ? body.voiceNote.slice(0, 60) : null,
     storyId: requestedStoryId,
+    timeLabel: timeLabel(body.timeLabel),
     dj: typeof body.dj === 'string' && body.dj ? body.dj.slice(0, 20) : 'byeoli',
     script: typeof body.script === 'string' ? body.script.slice(0, 2000) : undefined,
     musicTransition: body.musicTransition === 'intro' || body.musicTransition === 'direct' ? body.musicTransition : null,
