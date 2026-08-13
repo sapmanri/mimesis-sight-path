@@ -3,10 +3,10 @@
 // 화면(HLS 모드)의 라벨·자막이 전부 이걸 마신다 — 편성표 추측 금지.
 // (08-13 사장: "재방송 틀 때 라이브 표시 어떻게 할 건지 그런 거 다 생각하고 해라")
 
-const NOW_URL = 'https://pub-8ec6440aae5545379fcfdd50a243847a.r2.dev/radio/stream/now.json';
+const NOW_URL = 'https://byeol-radio-ingest-v2.byulsarang.workers.dev/now.json';
 
 export const onRequestGet: PagesFunction = async () => {
-  const r = await fetch(`${NOW_URL}?t=${Date.now()}`, {   // r2.dev 캐시 무효 꼬리표 (stream.ts와 동일)
+  const r = await fetch(NOW_URL, {
     cf: { cacheTtl: 0, cacheEverything: false },
   } as RequestInit);
   if (!r.ok) {
