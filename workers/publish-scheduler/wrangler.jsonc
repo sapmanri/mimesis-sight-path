@@ -1,21 +1,21 @@
 {
-  // byeoli-publish-scheduler — 자동발행 서버측 스케줄러 (홈즈 처방 ②+④, 판정 2026-07-26)
-  // 배포: 이 폴더에서 `npx wrangler deploy` / 관측: `npx wrangler tail byeoli-publish-scheduler`
-  // 비밀: PUBLISH_KEY (`npx wrangler secret put PUBLISH_KEY` — Pages 프로젝트와 동일 값)
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "byeoli-publish-scheduler",
   "main": "index.mjs",
-  "compatibility_date": "2026-07-01",
-  "triggers": {
-    // KST 08:05 / 18:05 / 22:05 = UTC 23:05(전날) / 09:05 / 13:05
-    // **정각이 아니라 +5분**이다. 슬롯 영수증은 원자적 잠금이 아니라서 정각에 외부 크론과
-    // 동시에 때리면 둘 다 발행될 수 있다(홈즈 판정 07-26). 5분 늦게 가면 먼저 온 쪽의
-    // 영수증이 보인다. 외부 크론 해촉(①) 후에도 유지 — 경합 상대가 없어도 무해하다.
-    //
-    // +20 · +50 재시도 (08-09 신설): 메타 일시 장애(code 2)로 08:05 발행이 실패했는데
-    // 다음 기회가 18:05라 아침 발행이 10시간 늦을 뻔했다. 영수증이 있으면 재시도는
-    // slot_duplicate no-op이라 무해하고, 없으면(=실패했으면) 그때 다시 쏜다.
-    // 45분 넘게 이어지는 장애는 다음 슬롯의 보충(reconcile)이 그대로 받는다.
-    "crons": ["5,20,50 23,9,13 * * *"]
+  "compatibility_date": "2026-08-13",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "BYEOLI_SOCIAL_DIRECTOR",
+        "class_name": "ByeoliSocialDirector"
+      }
+    ]
   },
+  "migrations": [
+    {
+      "tag": "social-director-v1",
+      "new_sqlite_classes": ["ByeoliSocialDirector"]
+    }
+  ],
   "observability": { "enabled": true }
 }

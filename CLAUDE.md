@@ -42,7 +42,13 @@ npm run build
   순서는 **Philosophy → Story → Episode**. 생성용이 아니라 판정용이다.
 - 행성 맵은 의도적으로 비어 있음 — 하드코딩 금지.
 - 별이 상호작용은 editor-placed props(`SP.props`) 기반 drive/disposition으로만 — 스크립트 조합 금지.
-- **자율 시스템 건드리지 말 것**: Threads 봇(크론 실발행 중) · Authority DO(관찰자 무지 유지가 설계 원칙).
+- **Authority DO는 건드리지 말 것**: 관찰자 무지 유지가 설계 원칙이다.
+- **Threads 정본은 `docs/BYEOLI_THREADS_SOCIAL_DIRECTOR_20260814.md`**다. 옛 08·18·22시
+  고정 크론과 사람 답글 승인은 폐기되었다. `@byeoli_log`의 게시·댓글·받은 댓글 답글은
+  Social Director 한 실행선에서 별이가 직접 결정한다. 고정 시각·일/계정/게시물 수량 상한·사람 승인
+  상태를 되살리지 말 것. 외부 계정 `@byeol.toon`은 소유·게시 대상이 아니라 읽기 전용이다.
+  다만 Crawl4AI가 실제 읽은 공개 글과 Meta의 실제 ID가 일치하면, 별이가 자기 계정
+  `@byeoli_log` 이름으로 그 글 아래 댓글을 남길지는 고를 수 있다.
 - 🔒 **Authority 시간 모델 동결** (Vase 2026-07-20, DO 실측 후 확정): `TICK_MS` ·
   `MAX_DT_SECONDS` · `sequence`의 RNG 시드 역할 · persist 주기 — 이 넷은 서로 묶여 있어
   하나만 바꿔도 별이가 **무엇을 만나는지**가 달라진다.

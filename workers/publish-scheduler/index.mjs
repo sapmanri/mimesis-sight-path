@@ -1,110 +1,148 @@
-// byeoli-publish-scheduler — 자동발행 서버측 스케줄러 (홈즈 처방 ②+④, 판정 2026-07-26)
+// byeoli-publish-scheduler — 별이 Social Director.
 //
-// 왜 존재하나: 07-25에 자동발행이 21시간 죽었다. 원인은 01:34 PUBLISH_KEY 회전 후
-// **cron-job.org(배포 경계 밖)의 키가 안 맞은 것**이었다. 키가 내 배포 밖에 있으면
-// 회전할 때마다 같은 사고가 난다. 이 Worker는 그 소비자를 배포 안으로 들여온다.
-//
-// 홈즈 판정(B안): "키 자체 제거는 목표가 아니라 수단이었소. 실제 장애 원인은 배포 경계 밖
-// 소비자였고, B는 키를 Worker·Pages의 관리되는 시크릿으로 묶어 그 원인을 제거하면서
-// 429/431-M 발행 두뇌를 보존하오."
-//   → Service Binding으로 키를 없애는 건 불가능하다. Cloudflare의 Service Binding은
-//     `Pages Function → Worker` 한 방향뿐이고 `Worker → Pages`는 없다. 발행 두뇌가
-//     Pages에 있는 한 HTTP+키다. 대신 그 키가 **배포로 관리되는 시크릿**이 된다.
-//
-// 계약
-//   - Pages는 그대로. 이 Worker는 기존 POST /api/autopost를 호출만 한다.
-//   - **의도한 슬롯을 명시한다** (`?scheduledFor=`). Pages가 검증한다 —
-//     허용된 08/18/22 KST 슬롯인가 · 미래가 아닌가 · 보충 허용 기간 안인가.
-//     현재 시각으로만 부르면 늦은 보충이 과거 슬롯을 채울 수 없다(홈즈).
-//   - 중복은 Pages의 슬롯 영수증이 막는다. 이미 발행된 슬롯은 `slot_duplicate`로 되돌아온다.
-//     ⚠ 그 영수증은 **원자적 잠금이 아니다.** 동시 호출은 못 막는다. 그래서 크론을 정각이
-//       아니라 **+5분**에 둔다 — 외부 크론이 먼저 발행하고 그 영수증을 이 Worker가 보게.
-//       외부 크론 해촉(①) 후에도 +5분을 유지한다(정각 경합 상대가 없어도 무해).
-//   - publishDueSlot / reconcileMissedSlots를 나눈다. 단 **같은 Worker·같은 배포**다 —
-//     쪼개면 독립 감시자 둘과 계약 불일치가 다시 생긴다(홈즈).
-//
-// 배포:  이 폴더에서 `npx wrangler deploy`
-// 시크릿: `npx wrangler secret put PUBLISH_KEY` (Pages 프로젝트와 동일 값)
-// 관측:  `npx wrangler tail byeoli-publish-scheduler`
+// 2026-08-13 이전: 08/18/22 고정 Cron으로 /api/autopost를 호출했다.
+// 2026-08-13 이후: 고정 시각표를 폐기했다. Durable Object의 단 한 번짜리 alarm만 쓰고,
+// Pages의 별이 편집 판단이 돌려준 nextLookAt을 다음 알람으로 삼는다. null이면 새 사건까지 쉰다.
+// 게시·댓글 판단·Meta 쓰기는 Pages 한 실행선(/api/radio/social-agent)에만 있다.
 
-const ENDPOINT = 'https://mimesis-sight-path.pages.dev/api/autopost';
-const SLOT_HOURS_KST = [8, 18, 22];        // Pages `SLOT_HOURS_KST`·워치독 `SLOTS`와 같은 값
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-const PER_CALL_MS = 60_000;
-/** 보충 대상 — 직전 슬롯 하나만. Pages의 보충 허용 기간(13h) 안에서만 유효하다. */
-const RECONCILE_BACK = 1;
+import { DurableObject } from 'cloudflare:workers';
 
-export default {
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(run(env, event.scheduledTime ?? Date.now()));
-  },
+const NAME = 'byeoli-social-director';
+const STATE_KEY = 'social-director-v1';
+const ENDPOINT = 'https://mimesis-sight-path.pages.dev/api/radio/social-agent';
+const REQUEST_TIMEOUT_MS = 120_000;
+
+const headers = {
+  'content-type': 'application/json; charset=utf-8',
+  'cache-control': 'no-store',
 };
+const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers });
 
-/** KST 슬롯 표기 — Pages `kstIso()`와 같은 형식이어야 한다(문자열이 곧 계약이다). */
-function kstIso(utcMs) {
-  const k = new Date(utcMs + KST_OFFSET_MS);
-  const p = (n) => String(n).padStart(2, '0');
-  return `${k.getUTCFullYear()}-${p(k.getUTCMonth() + 1)}-${p(k.getUTCDate())}T${p(k.getUTCHours())}:${p(k.getUTCMinutes())}:00+09:00`;
+function eventId(kind, now) {
+  return `${kind}:${now}:${crypto.randomUUID().slice(0, 12)}`;
 }
 
-/** now 이전(포함) 슬롯들을 최신순으로. [0]이 지금 채워야 할 슬롯. */
-function recentSlots(now, count) {
-  const out = [];
-  const kst = new Date(now + KST_OFFSET_MS);
-  for (let dayBack = 0; dayBack <= 1 && out.length < count + 3; dayBack++) {
-    const b = new Date(kst);
-    b.setUTCDate(b.getUTCDate() - dayBack);
-    for (const h of SLOT_HOURS_KST) {
-      const utc = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate(), h, 0, 0) - KST_OFFSET_MS;
-      if (utc <= now) out.push(utc);
+export class ByeoliSocialDirector extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.state = {
+      version: 'social-director-v1', lastWakeAt: null, lastFinishedAt: null,
+      lastStatus: 'idle', lastRunId: null, nextLookAt: null, lastError: null,
+    };
+    this.queue = Promise.resolve();
+    ctx.blockConcurrencyWhile(async () => {
+      this.state = (await ctx.storage.get(STATE_KEY)) ?? this.state;
+    });
+  }
+
+  async persist() {
+    await this.ctx.storage.put(STATE_KEY, this.state);
+  }
+
+  async wake(trigger) {
+    const now = Date.now();
+    const requested = trigger && typeof trigger === 'object' ? trigger : {};
+    const kind = typeof requested.kind === 'string' ? requested.kind : 'curiosity';
+    const normalizedTrigger = {
+      kind,
+      eventId: typeof requested.eventId === 'string' && requested.eventId
+        ? requested.eventId.slice(0, 180)
+        : eventId(kind, now),
+      occurredAt: Number.isFinite(Number(requested.occurredAt)) ? Number(requested.occurredAt) : now,
+      refId: requested.refId == null ? null : String(requested.refId).slice(0, 120),
+    };
+    this.state = { ...this.state, lastWakeAt: now, lastStatus: 'running', lastError: null };
+    await this.persist();
+    let payload;
+    try {
+      const response = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Pulse-Key': this.env.PULSE_KEY },
+        body: JSON.stringify({ trigger: normalizedTrigger }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      payload = await response.json().catch(() => null);
+      if (!response.ok && response.status !== 207) {
+        throw new Error(`pages_http_${response.status}:${payload?.error ?? 'unknown'}`);
+      }
+      const next = Number(payload?.nextLookAt);
+      this.state = {
+        ...this.state, lastFinishedAt: Date.now(), lastStatus: payload?.ok ? 'ok' : 'partial',
+        lastRunId: payload?.runId ?? null,
+        nextLookAt: Number.isFinite(next) && next > Date.now() ? Math.trunc(next) : null,
+        lastError: payload?.error ?? payload?.replies?.errors?.[0] ?? null,
+      };
+      await this.ctx.storage.deleteAlarm();
+      if (this.state.nextLookAt) await this.ctx.storage.setAlarm(this.state.nextLookAt);
+      await this.persist();
+      return payload;
+    } catch (error) {
+      const message = String(error?.message ?? error).slice(0, 240);
+      // 실행 장애는 별이의 편집 선택이 아니다. 유실 방지용 기술 재시도만 10분 뒤 한 번 예약한다.
+      const retryAt = Date.now() + 10 * 60_000;
+      this.state = {
+        ...this.state, lastFinishedAt: Date.now(), lastStatus: 'failed',
+        nextLookAt: retryAt, lastError: message,
+      };
+      await this.ctx.storage.setAlarm(retryAt);
+      await this.persist();
+      throw error;
     }
   }
-  return out.sort((a, b) => b - a).slice(0, count);
-}
 
-async function callSlot(env, slotUtc) {
-  const slot = kstIso(slotUtc);
-  const url = `${ENDPOINT}?scheduledFor=${encodeURIComponent(slot)}`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'X-Publish-Key': env.PUBLISH_KEY },
-      signal: AbortSignal.timeout(PER_CALL_MS),
-    });
-    const body = await res.json().catch(() => null);
-    // 침묵이 버그다 — 건너뛴 것도 왜 건너뛰었는지 남긴다.
-    return `${slot} ${res.status} ${body?.skipped ?? (body?.ok ? 'published' : body?.error ?? 'unknown')}`;
-  } catch (e) {
-    return `${slot} fetch_error: ${String((e && e.message) || e).slice(0, 120)}`;
+  enqueue(trigger) {
+    const run = this.queue.then(() => this.wake(trigger));
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  async alarm() {
+    await this.enqueue({ kind: 'curiosity', eventId: eventId('curiosity', Date.now()), occurredAt: Date.now() });
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/state') {
+      return json({ ok: true, ...this.state, alarmAt: await this.ctx.storage.getAlarm() });
+    }
+    if (request.method === 'POST' && url.pathname === '/start') {
+      const result = await this.enqueue({ kind: 'manual_start', eventId: eventId('manual_start', Date.now()), occurredAt: Date.now() });
+      return json(result, result?.ok ? 200 : 207);
+    }
+    if (request.method === 'POST' && url.pathname === '/wake') {
+      const body = await request.json().catch(() => ({}));
+      const trigger = body?.trigger ?? body;
+      this.state = { ...this.state, lastWakeAt: Date.now(), lastStatus: 'queued', lastError: null };
+      await this.persist();
+      this.ctx.waitUntil(this.enqueue(trigger));
+      return json({ ok: true, accepted: true, trigger });
+    }
+    return json({ ok: false, error: 'not_found' }, 404);
   }
 }
 
-/** 지금 채워야 할 슬롯 하나. */
-async function publishDueSlot(env, now) {
-  const [due] = recentSlots(now, 1);
-  if (due === undefined) return 'due: none';
-  return `due: ${await callSlot(env, due)}`;
-}
-
-/**
- * 누락 보충 — 지난 슬롯을 다시 때린다.
- * 별도의 "누락 목록"을 묻지 않는다: **영수증이 정본이다.** 이미 발행됐으면 Pages가
- * `slot_duplicate`로 돌려보내므로 이 호출은 무해한 no-op이 된다. 비었으면 그때 채워진다.
- */
-async function reconcileMissedSlots(env, now) {
-  const slots = recentSlots(now, 1 + RECONCILE_BACK).slice(1);
-  if (!slots.length) return 'reconcile: none';
-  const out = [];
-  for (const s of slots) out.push(await callSlot(env, s));
-  return `reconcile: ${out.join(' ; ')}`;
-}
-
-async function run(env, now) {
-  if (!env.PUBLISH_KEY) { console.log('publish-scheduler: PUBLISH_KEY 미설정 — 아무것도 하지 않음'); return; }
-  const due = await publishDueSlot(env, now);
-  const rec = await reconcileMissedSlots(env, now);
-  console.log(`publish-scheduler: ${due} | ${rec}`);
-}
-
-// 테스트용 노출 (순수 함수만)
-export { kstIso, recentSlots };
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/health') {
+      return json({ ok: true, service: NAME, mode: 'event_and_byeoli_chosen_wake' });
+    }
+    if (request.method === 'GET' && url.pathname === '/state') {
+      if (!env.PULSE_KEY || request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) {
+        return json({ ok: false, error: 'forbidden' }, 403);
+      }
+      const stub = env.BYEOLI_SOCIAL_DIRECTOR.getByName(NAME);
+      return stub.fetch('https://social-director.internal/state');
+    }
+    if (request.method !== 'POST' || (url.pathname !== '/start' && url.pathname !== '/wake')) {
+      return json({ ok: false, error: 'not_found' }, 404);
+    }
+    if (!env.PULSE_KEY || request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) {
+      return json({ ok: false, error: 'forbidden' }, 403);
+    }
+    const stub = env.BYEOLI_SOCIAL_DIRECTOR.getByName(NAME);
+    return stub.fetch(`https://social-director.internal${url.pathname}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: await request.text(),
+    });
+  },
+};

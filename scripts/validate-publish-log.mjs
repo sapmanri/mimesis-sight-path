@@ -19,6 +19,7 @@ const errors = [];
 const stripComments = (src) => src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 const logLib = stripComments(read('functions/api/_publish-log.ts'));
 const autopost = stripComments(read('functions/api/autopost.ts'));
+const threadsClient = stripComments(read('functions/api/_threads-client.ts'));
 const opsApi = stripComments(read('functions/api/ops/publish-log.ts'));
 const mw = stripComments(read('functions/_middleware.ts'));
 
@@ -26,17 +27,13 @@ const mw = stripComments(read('functions/_middleware.ts'));
 if (/access_token|env\.PUBLISH_KEY/.test(logLib)) errors.push('_publish-log.ts must not reference access_token/env.PUBLISH_KEY');
 // appendPublishLog 호출 인자에 threads.detail(원문)을 넣으면 안 됨
 if (/appendPublishLog\([^)]*detail/s.test(autopost)) errors.push('autopost: raw threads.detail must not be passed into appendPublishLog');
-// 로그에 넣는 threads 요약은 errorCode/requestId만
-if (!/errorCode: threads\.errorCode/.test(autopost)) errors.push('autopost: publish log must record structured errorCode');
+if (/appendPublishLog\([^)]*detail/s.test(threadsClient)) errors.push('_threads-client: raw Meta detail must not be logged');
 
-// 2. 401 경로 — appendPublishLog 금지, bump401Bucket만
-const key401 = autopost.indexOf("!== env.PUBLISH_KEY");
-const block401 = key401 >= 0 ? autopost.slice(key401, key401 + 400) : '';
-if (!block401) errors.push('autopost: could not locate 401 key-mismatch block');
-if (/appendPublishLog/.test(block401)) errors.push('autopost: 401 path must NOT append a per-request log record');
-if (!/bump401Bucket/.test(block401)) errors.push('autopost: 401 path must bump the 10-min bucket counter');
-// 버킷은 TTL과 함께 저장, IP/헤더 저장 금지
-if (!/expirationTtl/.test(logLib)) errors.push('_publish-log.ts: 401 bucket must use expirationTtl');
+// 2. 옛 고정 시간 입구는 어떤 호출에도 발행하지 않는다.
+if (!autopost.includes('fixed_schedule_retired')) errors.push('autopost: fixed schedule route is not retired');
+if (autopost.includes('dispatchToThreads')) errors.push('autopost: retired route still reaches Threads publishing');
+if (!autopost.includes('legacy_schedule_retired')) errors.push('autopost: valid legacy calls have no retirement receipt');
+// IP/헤더 저장 금지
 if (/CF-Connecting-IP|User-Agent|headers\.get\(['"]x-publish-key/i.test(logLib)) errors.push('_publish-log.ts must not read IP/UA/key');
 
 // 3. Ops 호스트 가드
@@ -56,35 +53,13 @@ for (const f of ['httpStatus', 'threads', 'textIndex', 'imageKey', 'missedSlots'
   if (!opsApi.includes(f)) errors.push(`ops/publish-log.ts response missing: ${f}`);
 }
 
-// 6. 슬롯 영수증 배선 (홈즈 처방 ③, 2026-07-26) — 순서가 계약이다.
-//    ⚠ 시간차 중복만 막는다. 동시 호출은 못 막는다(원자적 잠금 아님) — `_publish-log.ts` 주석 참조.
-//    같은 슬롯이 두 번 들어오면 두 번째는 발행하면 안 된다. 외부 크론과 새 스케줄러 Worker를
-//    병행 검증하려면 이 멱등이 먼저 서 있어야 한다 — 없으면 별이가 한 슬롯에 두 번 말한다.
-//    런타임 검증은 정시(08/18/22 KST)에만 발동하므로, 배선 순서는 여기서 정적으로 잠근다.
-// ⚠ `await`를 포함해 찾는다 — 이름만 찾으면 상단 import 줄에 걸려 검사가 공허해진다
-//   (2026-07-26 음성 테스트에서 실제로 걸렸다: 검증기가 import를 보고 통과시키고 있었다).
-// ⚠ 범위를 POST 본문으로 좁힌다 — GET 핸들러(미리보기)도 RECENT_KEY를 읽으므로
-//   파일 전체에서 indexOf하면 그쪽이 먼저 잡혀 순서 검사가 뒤집힌다 (2026-07-26 음성 테스트에서 확인).
-// ⚠ `await`를 포함해 찾는다 — 이름만 찾으면 상단 import 줄에 걸려 검사가 공허해진다 (같은 날 확인).
-const iPost = autopost.indexOf('export const onRequestPost');
-const postBody = iPost >= 0 ? autopost.slice(iPost) : autopost;
-if (iPost < 0) errors.push('autopost: could not locate onRequestPost');
-const iReceiptRead = postBody.indexOf('await readSlotReceipt(');
-const iPickWork = postBody.indexOf('env.PLANET.get(RECENT_KEY)');
-if (iReceiptRead < 0) errors.push('autopost: slot idempotency check (await readSlotReceipt) is missing');
-else if (iPickWork >= 0 && iReceiptRead > iPickWork) {
-  errors.push('autopost: slot receipt must be checked BEFORE picking/publishing work');
-}
-// 영수증은 실제 발행 성공에만 — 실패 슬롯에 남기면 재시도·자동 보충이 영영 막힌다
-const iWrite = postBody.indexOf('await writeSlotReceipt(');
-if (iWrite < 0) errors.push('autopost: writeSlotReceipt is missing — 성공한 슬롯이 기록되지 않는다');
-else if (!/threads\.ok\s*\)/.test(postBody.slice(Math.max(0, iWrite - 200), iWrite))) {
-  errors.push('autopost: writeSlotReceipt must be guarded by threads.ok (실패 슬롯에 영수증 금지)');
-}
+// 6. 실제 발행 공통 클라이언트는 계정을 검증하고 Meta 오류 원문을 영구 로그에 넣지 않는다.
+if (!threadsClient.includes("'byeoli_log'")) errors.push('_threads-client: expected @byeoli_log account guard is missing');
+if (!threadsClient.includes('auth_or_account_mismatch')) errors.push('_threads-client: account mismatch fails closed without receipt');
 
 if (errors.length) {
   console.error('publish_log contract validation FAILED:');
   for (const e of errors) console.error('  - ' + e);
   process.exit(1);
 }
-console.log('publish_log validation passed: two-layer, 401-bucketed, ops-host-gated, no secrets');
+console.log('publish_log validation passed: fixed schedule retired, ops-host-gated, no secrets');

@@ -1,0 +1,117 @@
+name: Deploy Byeoli Social Director
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/publish-scheduler/**'
+      - '.github/workflows/deploy-byeoli-social-director.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+
+      - name: Deploy Social Director without fixed cron triggers
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config workers/publish-scheduler/wrangler.jsonc --keep-vars
+
+      - name: Preserve Authority and add Social Director service bindings to Pages
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/pages-social-binding.json
+          import json
+          services = {
+            "BYEOLI_AUTHORITY": {
+              "service": "mimesis-byeoli-authority",
+              "environment": "production"
+            },
+            "BYEOLI_SOCIAL_DIRECTOR": {
+              "service": "byeoli-publish-scheduler",
+              "environment": "production"
+            }
+          }
+          print(json.dumps({
+            "deployment_configs": {
+              "production": {"services": services},
+              "preview": {"services": services}
+            }
+          }))
+          PY
+          response=$(curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/mimesis-sight-path" \
+            --header "Authorization: Bearer ${CF_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data @/tmp/pages-social-binding.json)
+          python - "$response" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          if not data.get('success'):
+              raise SystemExit('Pages service binding update failed: '+json.dumps(data.get('errors', data)))
+          print('Authority preserved; Social Director binding added')
+          PY
+
+      - name: Retry latest Pages production deployment with both service bindings
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          deployments=$(curl --fail-with-body --silent --show-error \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/mimesis-sight-path/deployments?env=production&per_page=1" \
+            --header "Authorization: Bearer ${CF_API_TOKEN}")
+          deployment_id=$(python - "$deployments" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          if not data.get('success') or not (data.get('result') or []):
+              raise SystemExit('Could not find production Pages deployment')
+          print(data['result'][0]['id'])
+          PY
+          )
+          retry=$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/mimesis-sight-path/deployments/${deployment_id}/retry" \
+            --header "Authorization: Bearer ${CF_API_TOKEN}" \
+            --header "Content-Type: application/json")
+          python - "$retry" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          if not data.get('success'):
+              raise SystemExit('Pages deployment retry failed: '+json.dumps(data.get('errors', data)))
+          print('Pages redeployment started:', (data.get('result') or {}).get('id', 'unknown'))
+          PY
+
+      - name: Verify retired schedule and protected autonomy endpoints
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 50); do
+            retired=$(curl -sS -o /tmp/autopost.json -w '%{http_code}' -X POST https://mimesis-sight-path.pages.dev/api/autopost || true)
+            director=$(curl -sS -o /tmp/director.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/radio/social-director || true)
+            agent=$(curl -sS -o /tmp/agent.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/radio/social-agent || true)
+            health=$(curl -sS -o /tmp/worker.json -w '%{http_code}' https://byeoli-publish-scheduler.byulsarang.workers.dev/health || true)
+            if [ "$retired" = "410" ] && [ "$director" = "403" ] && [ "$agent" = "403" ] && [ "$health" = "200" ]; then
+              cat /tmp/worker.json
+              exit 0
+            fi
+            sleep 6
+          done
+          echo 'autopost:'; cat /tmp/autopost.json || true
+          echo 'director:'; cat /tmp/director.json || true
+          echo 'agent:'; cat /tmp/agent.json || true
+          echo 'worker:'; cat /tmp/worker.json || true
+          exit 1

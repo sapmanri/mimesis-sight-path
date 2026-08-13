@@ -28,13 +28,13 @@ for (const [pattern, why] of [
 ]) {
   if (pattern.test(html)) errors.push(`쓰기 경로 금지 위반: ${why}`);
 }
-// 쓰기 표면 목록(고정): 1호 예약(423) · 2호 엽서(425-A) · 3호 즉시 발행 · 4호 답글(425-B/C).
+// 쓰기 표면 목록(고정): 1호 예약(423) · 2호 엽서(425-A) · 3호 즉시 발행.
+// Threads 댓글은 별이의 자율 실행선이 맡으므로 관제실에는 사람 승인 POST가 없다.
 // 이 목록 밖 쓰기는 빌드 실패.
 const WRITE_SURFACES = [
   ['postEventSchedule', /fetch\(API\.eventSchedule,\s*\{\s*\n?\s*method:\s*'POST'/],
   ['postCapture', /fetch\(API\.capture,\s*\{\s*\n?\s*method:\s*'POST'/],
   ['postPublishNow', /fetch\(API\.publishNow,\s*\{\s*\n?\s*method:\s*'POST'/],
-  ['postThreadsReplies', /fetch\(API\.threadsReplies,\s*\{\s*\n?\s*method:\s*'POST'/],
 ];
 const methodUses = [...html.matchAll(/method\s*:\s*['"]([A-Z]+)['"]/g)];
 if (methodUses.length !== WRITE_SURFACES.length || methodUses.some((m) => m[1] !== 'POST')) {
@@ -57,7 +57,7 @@ const ALLOWED_APIS = new Set([
   '/api/world-event/active',
   '/api/ops/capture',        // 쓰기 예외 2호
   '/api/ops/publish-now',    // 쓰기 예외 3호
-  '/api/ops/threads-replies', // 쓰기 예외 4호 (답글 — 승인 발행)
+  '/api/ops/threads-replies', // 읽기: 별이의 자율 답글 영수증
   '/api/ops/presence',       // 422-OPS-D 읽기
   '/api/ops/collective',     // 422-OPS-E 읽기 (k-익명 적용 후)
 ]);
@@ -169,7 +169,7 @@ if (/method\s*:|XMLHttpRequest|sendBeacon/.test(syncJs)) {
   errors.push('world-event-sync.js는 읽기 전용이어야 한다 (쓰기 수단 발견)');
 }
 // 감사 하드룰: 쓰기 API는 Access 이메일을 기록해야 한다
-for (const rel of ['../functions/api/ops/event-schedule.ts', '../functions/api/ops/capture.ts', '../functions/api/ops/publish-now.ts', '../functions/api/ops/threads-replies.ts']) {
+for (const rel of ['../functions/api/ops/event-schedule.ts', '../functions/api/ops/capture.ts', '../functions/api/ops/publish-now.ts']) {
   const src = await readFile(new URL(rel, import.meta.url), 'utf8').catch(() => '');
   if (!src.includes('cf-access-authenticated-user-email')) {
     errors.push(`${rel.replace('../', '')}에 감사 기록(Access 이메일)이 없다`);
@@ -224,16 +224,17 @@ if (!walkHtml.includes('buildCollectiveSnapshot')) errors.push('걷기 앱에 co
 const opsCollective = await readFile(new URL('../functions/api/ops/collective.ts', import.meta.url), 'utf8').catch(() => '');
 if (!opsCollective.includes('kAnonView')) errors.push('ops/collective.ts가 k-익명 필터를 거치지 않는다');
 
-// ── 11. 425-B/C 답글 계약 (승인 발행 단계) ─────────────────
-// 2026-08-13 Vase 판정: 답글 비율·숙성·계정당·게시물당·카테고리 상한은 없다.
-// 별이가 댓글마다 답/무응답/기억을 고른다. 공개 쓰기는 아직 Access 승인 버튼만 허용한다.
+// ── 11. 425-B/C 답글 계약 (별이 자율 판단·즉시 발행) ────────
+// 2026-08-13 Vase 판정: 답글 비율·숙성·계정당·게시물당·카테고리 상한과 사람 승인은 없다.
 const repliesTs = await readFile(new URL('../functions/api/ops/threads-replies.ts', import.meta.url), 'utf8').catch(() => '');
 if (!repliesTs) {
   errors.push('threads-replies.ts가 없다');
 } else {
   if (!repliesTs.includes('pepperHash')) errors.push('답글: username 해시 저장이 아니다');
-  if (!repliesTs.includes('draftEligibility')) errors.push('답글: 정책 판정(draftEligibility)을 거치지 않는다');
-  if (!repliesTs.includes("decision !== 'drafted'")) errors.push('답글: 승인은 drafted 상태에서만 가능해야 한다');
+  if (!repliesTs.includes('processCollectedReplies')) errors.push('답글: 별이 자율 실행 함수가 없다');
+  if (!repliesTs.includes('await publishReply')) errors.push('답글: 별이 판단 직후 실제 발행선이 없다');
+  if (!repliesTs.includes('operator_reply_controls_retired')) errors.push('답글: 사람 승인 조작 API가 폐기되지 않았다');
+  if (/body\.action\s*===\s*['"]approve['"]/.test(repliesTs)) errors.push('답글: 사람 approve 경로가 남아 있다');
 }
 const repliesLogic = await readFile(new URL('../functions/api/_replies.ts', import.meta.url), 'utf8').catch(() => '');
 for (const removed of ['REPLY_RATIO', 'AGING_MS', 'PER_ACCOUNT_MS', 'PER_POST_MAX', 'dailyReplyCap']) {
@@ -244,9 +245,7 @@ if (!/if \(rec\.decision !== 'collected'\) return 'already_handled'/.test(replie
 }
 if (!repliesLogic.includes('replyBoundary')) errors.push('답글: 연락처·링크 외부 노출 경계가 없다');
 if (!repliesTs.includes('account_mismatch_expected_@')) errors.push('답글: @byeoli_log 계정 오발행 방지가 없다');
-if (repliesTs.includes('runAutonomousReplyCycle') || repliesTs.includes('BYEOLI_SOCIAL_AUTONOMY')) {
-  errors.push('답글: 최종 승인 전 자동 공개 발행 경로가 열려 있다');
-}
+if (!repliesTs.includes('decisionSource = \'byeoli\'')) errors.push('답글: 별이 판단 영수증이 없다');
 
 // ── 12. 425-D 별이 문장 작가 — 폴백 안전 계약 ─────────────
 const autopostTs = await readFile(new URL('../functions/api/autopost.ts', import.meta.url), 'utf8').catch(() => '');

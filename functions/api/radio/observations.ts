@@ -7,8 +7,9 @@ import {
   validateWebObservation, validateWebObservationFailureReceipt,
   WEB_OBSERVATIONS_KEY, WEB_OBSERVATIONS_RECEIPT_KEY, WEB_OBSERVATIONS_RECEIPTS_KEY,
 } from '../_radio-observations.ts';
+import { deferSocialWake, type SocialWakeEnv } from '../_byeoli-social-wake.ts';
 
-interface Env { PLANET: KVNamespace; PULSE_KEY?: string }
+interface Env extends SocialWakeEnv { PULSE_KEY?: string }
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
@@ -29,7 +30,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   return json(200, { ok: true, ownership: 'read_only', shelf, receipts, lastRead });
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
   if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
 
@@ -89,6 +91,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ];
     if (hasSuccess) writes.push(env.PLANET.put(WEB_OBSERVATIONS_KEY, JSON.stringify(shelf)));
     await Promise.all(writes);
+    if (hasSuccess) {
+      const successIds = checkedBatch.filter((entry) => entry.type === 'success')
+        .map((entry) => entry.type === 'success' ? `${entry.source.source.id}:${entry.source.source.fetchedAt}` : '')
+        .filter(Boolean).join(':');
+      deferSocialWake(context, env, {
+        kind: 'observation_arrived',
+        eventId: `observation-batch:${successIds}`.slice(0, 180),
+        occurredAt: now,
+        refId: successIds.slice(0, 120),
+      }, 'observation batch');
+    }
     return json(200, { ok: true, batch: true, results });
   }
 
@@ -128,5 +141,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.PLANET.put(WEB_OBSERVATIONS_RECEIPTS_KEY, JSON.stringify(mergedReceipts)),
     env.PLANET.put(WEB_OBSERVATIONS_RECEIPT_KEY, JSON.stringify(receipt)),
   ]);
+  deferSocialWake(context, env, {
+    kind: 'observation_arrived',
+    eventId: `observation:${checked.source.id}:${checked.source.fetchedAt}`,
+    occurredAt: now,
+    refId: checked.source.id,
+  }, 'observation');
   return json(200, receipt);
 };

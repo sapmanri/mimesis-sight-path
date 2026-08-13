@@ -2,10 +2,10 @@
 //
 // 사용법:
 //   1) GET /api/threads-auth?key=<PUBLISH_KEY>
-//      → threads.net 인증 화면으로 리다이렉트. @mimesis_op로 승인.
+//      → threads.net 인증 화면으로 리다이렉트. @byeoli_log로 승인.
 //   2) Meta가 이 엔드포인트로 다시 리다이렉트 (?code=...&state=...)
 //      → 서버가 코드→단기토큰→60일 장기토큰 교환 후 KV에 저장.
-//      → 완료 화면에 만료일 표시. 이후 발급 절차 없음 — autopost가 자동 갱신.
+//      → 완료 화면에 만료일 표시. 이후 실제 사용 때 공통 클라이언트가 자동 갱신.
 //
 // 필요한 env (Cloudflare Pages, 암호화):
 //   THREADS_APP_ID / THREADS_APP_SECRET — Meta 앱 대시보드 > 설정 > 기본
@@ -20,6 +20,7 @@ interface Env {
   PUBLISH_KEY?: string;
   THREADS_APP_ID?: string;
   THREADS_APP_SECRET?: string;
+  BYEOLI_THREADS_HANDLE?: string;
 }
 
 export const THREADS_AUTH_KEY = 'threads_auth';
@@ -48,7 +49,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const auth = new URL('https://threads.net/oauth/authorize');
     auth.searchParams.set('client_id', env.THREADS_APP_ID);
     auth.searchParams.set('redirect_uri', redirectUri);
-    auth.searchParams.set('scope', 'threads_basic,threads_content_publish');
+    auth.searchParams.set(
+      'scope',
+      'threads_basic,threads_content_publish,threads_read_replies,threads_manage_replies,threads_profile_discovery',
+    );
     auth.searchParams.set('response_type', 'code');
     auth.searchParams.set('state', env.PUBLISH_KEY);
     return Response.redirect(auth.toString(), 302);
@@ -83,19 +87,39 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return page('장기 토큰 교환 실패', `<pre>${JSON.stringify(longJson).slice(0, 400)}</pre>`, false);
   }
 
+  // 성공 화면을 먼저 보여 주지 않는다. 장기 토큰으로 실제 계정까지 확인하고,
+  // 정확히 @byeoli_log일 때만 저장한다.
+  const profileUrl = new URL('https://graph.threads.net/v1.0/me');
+  profileUrl.searchParams.set('fields', 'id,username');
+  profileUrl.searchParams.set('access_token', longJson.access_token);
+  const profileRes = await fetch(profileUrl.toString());
+  const profile = (await profileRes.json()) as { id?: string; username?: string; error?: { code?: number } };
+  const expected = (env.BYEOLI_THREADS_HANDLE ?? 'byeoli_log').replace(/^@/, '').toLowerCase();
+  const actual = String(profile.username ?? '').replace(/^@/, '').toLowerCase();
+  if (!profileRes.ok || !profile.id || !actual) {
+    return page('Threads 계정 확인 실패', `<p>장기 토큰은 받았지만 /me 확인에 실패했습니다 (${profile.error?.code ?? profileRes.status}). 저장하지 않았습니다.</p>`, false);
+  }
+  if (actual !== expected) {
+    return page('다른 Threads 계정입니다', `<p>@${actual}로 승인되었습니다. @${expected}로 다시 승인해야 합니다. 토큰은 저장하지 않았습니다.</p>`, false);
+  }
+  if (shortJson.user_id && String(shortJson.user_id) !== String(profile.id)) {
+    return page('Threads 사용자 ID 불일치', '<p>토큰 교환 결과와 /me 사용자가 다릅니다. 저장하지 않았습니다.</p>', false);
+  }
+
   const record = {
     token: longJson.access_token,
-    userId: String(shortJson.user_id ?? ''),
+    userId: String(profile.id),
+    username: profile.username,
     refreshedAt: Date.now(),
   };
   await env.PLANET.put(THREADS_AUTH_KEY, JSON.stringify(record));
 
   const days = Math.round((longJson.expires_in ?? 5184000) / 86400);
   return page(
-    '별리 Threads 연결 완료',
-    `<p>@mimesis_op 발행 준비가 끝났습니다.</p>
-     <p>토큰 만료: 약 <b>${days}일</b> 후 — 크론이 돌 때마다 자동 갱신되므로 다시 발급할 일은 없습니다.</p>
-     <p>테스트: <code>POST /api/autopost?draft=1</code> (X-Publish-Key 헤더) → 컨테이너 생성까지만 확인.</p>`,
+    '별이 Threads 연결 완료',
+    `<p>@byeoli_log 게시·댓글 읽기·답글 관리·읽은 공개글 확인 권한 연결이 끝났습니다.</p>
+     <p>토큰 만료: 약 <b>${days}일</b> 후 — 실제 사용 시 안전 범위에서 자동 갱신합니다.</p>
+     <p>고정 시간 발행은 폐기되었고, Social Director가 별이의 판단을 실행합니다.</p>`,
     true,
   );
 };

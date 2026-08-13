@@ -1,7 +1,7 @@
 // /api/ops/music-publish — 그날 밤 고른 음악을 스레드에 올린다 (Ops 호스트 전용 · Access 뒤)
 //
-// ⛔ 크론과 연결점 없음. 사람이 눌러야만 돈다. 자율 발행 경로(autopost)는 건드리지 않는다.
-//    autopost 의 export(dispatchToThreads)만 재사용한다 — sketch-publish 와 같은 선례.
+// ⛔ Social Director와 연결점 없음. 사람이 눌러야만 돈다.
+//    공통 Threads 클라이언트만 재사용한다 — sketch-publish 와 같은 선례.
 //
 //   GET  ?date=YYYY-MM-DD      나갈 문장을 **보여주기만** 한다. 아무것도 안 나간다
 //   POST {date, confirm:true}  실제로 올린다
@@ -14,12 +14,12 @@
 // ⚠ 2026-07-30 이전에는 이 파일이 없었다. _music-night 이 threadText 를 만들어 돌려주는데
 //   아무도 받지 않아서, 파이프라인이 「재생목록까지」에서 끊겨 있었다.
 
-import { dispatchToThreads, type Env as AutopostEnv } from '../autopost';
+import { dispatchToThreads, type ThreadsEnv } from '../_threads-client.ts';
 import { appendPublishLog } from '../_publish-log.ts';
 import { readNight, type NightEnv, type NightReceipt } from '../_music-night.ts';
 import { kstDate } from '../_memory-event.ts';
 
-type Env = AutopostEnv & NightEnv;
+type Env = ThreadsEnv & NightEnv;
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>

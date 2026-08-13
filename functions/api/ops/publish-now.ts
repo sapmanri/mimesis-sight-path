@@ -1,17 +1,21 @@
 // BUILD 425-A+ — POST /api/ops/publish-now (Ops 호스트 전용 · Access 뒤)
 // 콘솔 쓰기 예외 3호: 선택한 엽서로 지금 즉시 Threads 발행 (Vase 요청 2026-07-18).
 //
-// 크론 발행과 같은 파이프를 탄다: 문장 풀(최근 제외 랜덤) → 내부 feed →
+// 명시적 운영 도구: 문장 풀(최근 제외 랜덤) → 내부 feed →
 // dispatchToThreads → publish_log(수동 실행은 scheduledFor=null → 콘솔 "(수동)" 표기).
-// 자율 크론 경로는 무변경 — autopost의 export만 재사용한다. 감사: Access 이메일.
+// Social Director와 같은 Threads 클라이언트만 재사용한다. 감사: Access 이메일.
 
 import byeolliPosts from '../byeolli_posts.json';
-import { dispatchToThreads, type Env as AutopostEnv } from '../autopost';
+import { dispatchToThreads, type ThreadsEnv } from '../_threads-client.ts';
 import { appendPublishLog } from '../_publish-log';
 import { writeByeoliPost } from '../_byeoli-writer';
 import type { CaptureMeta } from './capture';
 
-type Env = AutopostEnv;
+interface Env extends ThreadsEnv {
+  CAPTURES?: R2Bucket;
+  CAPTURES_PUBLIC_BASE?: string;
+  ANTHROPIC_API_KEY?: string;
+}
 
 const POSTS: { text: string }[] = (byeolliPosts as { posts: { text: string }[] }).posts;
 const FEED_KEY = 'feed';

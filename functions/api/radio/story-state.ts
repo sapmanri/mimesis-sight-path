@@ -3,8 +3,9 @@
 
 import { RADIO_QUEUE_KEY, markStoryAired, type RadioStory } from '../_radio.ts';
 import { DAY_KEY, PROGRAM_KEY, kstDayOf, type ProgramSegment } from '../_station.ts';
+import { deferSocialWake, type SocialWakeEnv } from '../_byeoli-social-wake.ts';
 
-interface Env { PLANET: KVNamespace; PULSE_KEY?: string }
+interface Env extends SocialWakeEnv { PULSE_KEY?: string }
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
@@ -20,7 +21,8 @@ interface AirEvent {
   engine?: string;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
   if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
 
@@ -70,5 +72,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       expirationTtl: 90 * 86_400,
     }),
   ]);
+  deferSocialWake(context, env, {
+    kind: 'story_aired',
+    eventId: `story-air:${storyId}:${segmentId}:${Math.trunc(startAt)}`,
+    occurredAt: now,
+    refId: storyId,
+  }, 'story-air');
   return json(200, { ok: true, status: story.status, receipt });
 };

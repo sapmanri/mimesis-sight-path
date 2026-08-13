@@ -7,6 +7,7 @@ import {
   RADIO_TIME_LABELS, type ProgramSegment, type SegmentKind, type RadioTimeLabel,
 } from '../_station.ts';
 import { RADIO_QUEUE_KEY, markStoryRegistered, type RadioStory } from '../_radio.ts';
+import { deferSocialWake, type SocialWakeEnv } from '../_byeoli-social-wake.ts';
 
 /** 날짜별 보관소 이중 기록 — upsert(id+startAt 일치 시 갱신, 아니면 추가) */
 async function archiveWrite(env: { PLANET: KVNamespace }, seg: ProgramSegment): Promise<void> {
@@ -24,7 +25,7 @@ async function archiveWrite(env: { PLANET: KVNamespace }, seg: ProgramSegment): 
   ]);
 }
 
-interface Env { PLANET: KVNamespace; PULSE_KEY?: string }
+interface Env extends SocialWakeEnv { PULSE_KEY?: string }
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) =>
@@ -59,7 +60,8 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   return json(200, { ok: true, removed: segments.length - next.length, count: next.length });
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
   if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
 
@@ -126,6 +128,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     await env.PLANET.put(PROGRAM_KEY, JSON.stringify(segments));
     await archiveWrite(env, existing);
     const storyStatus = await recordRegistered(existing);
+    deferSocialWake(context, env, {
+      kind: 'program_registered',
+      eventId: `program:${existing.id}:${Math.trunc(existing.startAt)}:merge:${now}`,
+      occurredAt: now,
+      refId: existing.id,
+    }, 'program merge');
     return json(200, { ok: true, id: existing.id, merged: true, startAt: existing.startAt, count: segments.length, storyStatus });
   }
 
@@ -148,5 +156,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await env.PLANET.put(PROGRAM_KEY, JSON.stringify(next));
   await archiveWrite(env, seg);
   const storyStatus = await recordRegistered(seg);
+  deferSocialWake(context, env, {
+    kind: 'program_registered',
+    eventId: `program:${seg.id}:${Math.trunc(seg.startAt)}`,
+    occurredAt: now,
+    refId: seg.id,
+  }, 'program');
   return json(200, { ok: true, id: seg.id, startAt: seg.startAt, liveEdge: seg.startAt + seg.dur * 1000, count: next.length, storyStatus });
 };

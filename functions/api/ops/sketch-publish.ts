@@ -8,15 +8,18 @@
 //   ⑥ publish_log에 감사 기록 (수동 = scheduledFor null → 관측소 "(수동)" 표기)
 //   ⑦ 자동 발행(Phase 2)은 채택 병행 운전으로 신뢰를 쌓은 뒤 별도 판정
 //
-// 자율 크론 경로는 무변경 — autopost의 export(dispatchToThreads)만 재사용한다 (3호 선례).
+// Social Director와 독립이며 공통 Threads 클라이언트만 재사용한다 (3호 선례).
 
-import { dispatchToThreads, type Env as AutopostEnv } from '../autopost';
+import { dispatchToThreads, type ThreadsEnv } from '../_threads-client.ts';
 import { appendPublishLog } from '../_publish-log';
 import { memoryKey, type DayMemory } from '../_memory-event.ts';
 import { TRIAL_R2_PREFIX } from '../_image-provider.ts';
 import { alreadyPublished, type SketchPubRecord } from '../_sketch-pub.ts';
 
-type Env = AutopostEnv;
+interface Env extends ThreadsEnv {
+  CAPTURES?: R2Bucket;
+  CAPTURES_PUBLIC_BASE?: string;
+}
 
 const FEED_KEY = 'feed';
 const MAX_POSTS = 60;

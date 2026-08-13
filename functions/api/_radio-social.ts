@@ -1,11 +1,11 @@
 // 별이가 선택적으로 참고하는 자기 Threads와 감성찾아삽만리 YouTube 선반.
 // 읽기는 각 플랫폼의 공식 API만 사용한다. 실패하면 기존 선반을 지우지 않고 영수증만 갱신한다.
 
-import { getThreadsAuth, type Env as ThreadsEnv } from './autopost';
+import { getThreadsAuth, type ThreadsEnv } from './_threads-client.ts';
 import {
   THREADS_RECEIPT_KEY, THREADS_SHELF_KEY, YOUTUBE_RECEIPT_KEY, YOUTUBE_SHELF_KEY,
   type SocialRefreshReceipt, type ThreadsShelf, type YoutubeShelf,
-} from './_radio-social-types';
+} from './_radio-social-types.ts';
 
 const THREADS_API = 'https://graph.threads.net/v1.0';
 const YOUTUBE_API = 'https://www.googleapis.com/youtube/v3';
@@ -17,6 +17,37 @@ export interface RadioSocialEnv extends ThreadsEnv {
 }
 
 const handle = (value: string) => value.trim().replace(/^@/, '').toLowerCase();
+
+interface ThreadsPage<T> {
+  data?: T[];
+  paging?: { next?: string };
+  error?: { code?: number };
+}
+
+/**
+ * 자기 계정 글을 임의 개수로 자르지 않는다. Meta가 주는 다음 페이지를 끝까지 읽되,
+ * 같은 next URL이 되풀이되면 멈춰 API 이상으로 인한 무한 순환만 차단한다.
+ */
+async function collectThreadsPages<T>(first: URL): Promise<T[]> {
+  const rows: T[] = [];
+  const seen = new Set<string>();
+  let next: string | null = first.toString();
+  while (next && !seen.has(next)) {
+    seen.add(next);
+    const url = new URL(next);
+    if (url.protocol !== 'https:' || url.hostname !== 'graph.threads.net') {
+      throw new Error('posts_paging_host_invalid');
+    }
+    const response = await fetch(url.toString());
+    const payload = await response.json() as ThreadsPage<T>;
+    if (!response.ok) throw new Error(`posts_${payload.error?.code ?? response.status}`);
+    rows.push(...(payload.data ?? []));
+    next = typeof payload.paging?.next === 'string' && payload.paging.next
+      ? payload.paging.next
+      : null;
+  }
+  return rows;
+}
 
 async function saveReceipt(env: RadioSocialEnv, key: string, receipt: SocialRefreshReceipt) {
   await env.PLANET.put(key, JSON.stringify(receipt));
@@ -46,17 +77,15 @@ export async function refreshThreadsShelf(env: RadioSocialEnv): Promise<SocialRe
     }
 
     const postsUrl = new URL(`${THREADS_API}/me/threads`);
-    postsUrl.searchParams.set('fields', 'id,text,timestamp,permalink,media_type');
-    postsUrl.searchParams.set('limit', '12');
+    postsUrl.searchParams.set('fields', 'id,text,timestamp,permalink,media_type,is_reply');
+    postsUrl.searchParams.set('limit', '100');
     postsUrl.searchParams.set('access_token', auth.token);
-    const postsRes = await fetch(postsUrl.toString());
-    const payload = (await postsRes.json()) as {
-      data?: Array<{ id?: string; text?: string; timestamp?: string; permalink?: string }>;
-      error?: { code?: number };
-    };
-    if (!postsRes.ok) throw new Error(`posts_${payload.error?.code ?? postsRes.status}`);
-    const posts = (payload.data ?? []).filter((p) => p.id && p.text).map((p) => ({
-      id: p.id!, text: p.text!.slice(0, 500), timestamp: p.timestamp ?? '', permalink: p.permalink ?? '',
+    const allPosts = await collectThreadsPages<{
+      id?: string; text?: string; timestamp?: string; permalink?: string; is_reply?: boolean;
+    }>(postsUrl);
+    const posts = allPosts.filter((p) => p.id && p.text).map((p) => ({
+      id: p.id!, text: p.text!.slice(0, 500), timestamp: p.timestamp ?? '',
+      permalink: p.permalink ?? '', isReply: p.is_reply === true,
     }));
     const shelf: ThreadsShelf = {
       username: `@${actual}`,

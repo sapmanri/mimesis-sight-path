@@ -1,21 +1,18 @@
 // BUILD 425-B/C — /api/ops/threads-replies (Ops 호스트 전용 · Access 뒤)
 // 2026-08-13: 답글 상한·숙성·계정/게시물 제한 폐기. 댓글마다 별이가 직접 답/무응답/기억을 고른다.
 //
-// GET  — 댓글 목록. 마지막 수집 후 25분 지났으면 lazy 수집(관측소가 열려 있는 동안).
-// POST — 쓰기 예외 4호. action:
-//   draft   : 정책 통과한 댓글의 답글 후보를 Claude로 생성 (+⭐ 기억해둠 판정)
-//   approve : Vase 승인 → 그 자리에서 Threads reply 발행 (Phase 1 — 승인 없이는 아무 말도 없다)
-//   reject  : 후보 폐기 (이유 기록)
-//   bookmark: ⭐ 토글 (발행 없음, 별이 내부 행위)
+// GET  — 댓글과 별이의 실제 판단/발행 영수증. 화면을 열어야만 움직이는 실행기는 아니다.
+// POST — 410. 사람의 draft/approve/reject/bookmark 조작 경로는 폐기했다.
+// 정상 실행선은 processCollectedReplies가 판단 직후 공개 답글 또는 무응답으로 끝낸다.
 // 저장 금지: 토큰 · username 원문 · IP · UA (해시+마스크만).
 
-import { getThreadsAuth, type Env as AutopostEnv } from '../autopost';
+import { dispatchToThreads, getThreadsAuth, type ThreadsEnv } from '../_threads-client.ts';
 import {
   categorize, maskUsername, mergeReplies, draftEligibility,
   replyBoundary, repliesConfig, WORLD_FACTS, type ReplyRecord,
 } from '../_replies';
 
-export interface Env extends AutopostEnv {
+export interface Env extends ThreadsEnv {
   ANTHROPIC_API_KEY?: string;
   BYEOLI_THREADS_HANDLE?: string;
 }
@@ -35,10 +32,61 @@ async function pepperHash(kv: KVNamespace, username: string): Promise<string> {
 
 export async function loadLog(kv: KVNamespace): Promise<ReplyRecord[]> {
   const raw = await kv.get(repliesConfig.LOG_KEY);
-  return raw ? (JSON.parse(raw) as ReplyRecord[]) : [];
+  if (!raw) return [];
+  const parsed = JSON.parse(raw) as Array<ReplyRecord & {
+    decision?: ReplyRecord['decision'] | 'drafted';
+    decisionSource?: ReplyRecord['decisionSource'] | 'operator_legacy';
+    approvedAt?: number | null;
+  }>;
+  // 옛 사람이 만든 draft도 승인 대기 상태로 남기지 않는다. 원문 댓글만 보존하고 별이가 다시 판단한다.
+  return parsed.map((record) => record.decision === 'drafted'
+    ? {
+      ...record,
+      decision: 'collected',
+      generatedText: null,
+      reason: '옛 승인 대기 기록을 별이의 판단 대기로 이관',
+      decisionSource: null,
+      decidedAt: null,
+      publishedAt: null,
+      approvedAt: undefined,
+    } as ReplyRecord
+    : {
+      ...record,
+      decisionSource: record.decisionSource === 'byeoli' ? 'byeoli' : null,
+      approvedAt: undefined,
+    } as ReplyRecord);
 }
 export const saveLog = (kv: KVNamespace, log: ReplyRecord[]) =>
   kv.put(repliesConfig.LOG_KEY, JSON.stringify(log));
+
+interface ThreadsPage<T> {
+  data?: T[];
+  paging?: { next?: string; cursors?: { after?: string } };
+  error?: { code?: number };
+}
+
+/** Meta cursor가 끝날 때까지 읽는다. 별도의 글/댓글 개수 상한은 두지 않는다. */
+async function collectThreadsPages<T>(firstUrl: URL): Promise<{ ok: boolean; data: T[]; error: string | null }> {
+  const data: T[] = [];
+  let next: string | null = firstUrl.toString();
+  const seen = new Set<string>();
+  while (next) {
+    if (seen.has(next)) return { ok: false, data, error: 'paging_cycle' };
+    seen.add(next);
+    const pageUrl = new URL(next);
+    if (pageUrl.protocol !== 'https:' || pageUrl.hostname !== 'graph.threads.net') {
+      return { ok: false, data, error: 'paging_host_mismatch' };
+    }
+    let response: Response;
+    try { response = await fetch(pageUrl.toString()); }
+    catch { return { ok: false, data, error: 'network' }; }
+    const page = await response.json().catch(() => ({})) as ThreadsPage<T>;
+    if (!response.ok) return { ok: false, data, error: `threads_${page.error?.code ?? response.status}` };
+    data.push(...(page.data ?? []));
+    next = typeof page.paging?.next === 'string' && page.paging.next ? page.paging.next : null;
+  }
+  return { ok: true, data, error: null };
+}
 
 /* ── 수집 — 최근 발행물의 top-level 댓글 (Threads /replies) ── */
 export async function runIngest(env: Env): Promise<{ ok: boolean; error: string | null; added: number }> {
@@ -60,35 +108,48 @@ export async function runIngest(env: Env): Promise<{ ok: boolean; error: string 
 
   // 현재 계정의 실제 최근 Threads를 우선한다. 시스템 밖에서 직접 올린 글의 댓글도 별이가 본다.
   let mediaIds: string[] = [];
+  let postListError: string | null = null;
   try {
     const u = new URL(`${THREADS_API}/me/threads`);
-    u.searchParams.set('fields', 'id');
-    u.searchParams.set('limit', String(repliesConfig.POSTS_TO_CHECK));
+    u.searchParams.set('fields', 'id,is_reply');
+    u.searchParams.set('limit', '100');
     u.searchParams.set('access_token', auth.token);
-    const res = await fetch(u.toString());
-    const data = (await res.json()) as { data?: { id?: string }[] };
-    if (res.ok) mediaIds = (data.data ?? []).map((p) => p.id).filter((id): id is string => !!id);
-  } catch { /* publish_log 폴백 */ }
+    const pages = await collectThreadsPages<{ id?: string; is_reply?: boolean }>(u);
+    mediaIds = pages.data.filter((p) => p.is_reply !== true)
+      .map((p) => p.id).filter((id): id is string => !!id);
+    postListError = pages.error;
+  } catch { postListError = 'post_list_failed'; }
   if (!mediaIds.length) {
     const publishRaw = await env.PLANET.get('publish_log');
     const runs = publishRaw ? (JSON.parse(publishRaw) as { threads?: { ok?: boolean; requestId?: string | null } }[]) : [];
     mediaIds = [...new Set(
       runs.filter((r) => r.threads?.ok && r.threads.requestId).map((r) => r.threads!.requestId as string),
-    )].slice(0, repliesConfig.POSTS_TO_CHECK);
+    )];
   }
 
   const incoming: ReplyRecord[] = [];
   const now = Date.now();
+  const ingestErrors: string[] = [];
+  if (postListError) ingestErrors.push(postListError);
   for (const mediaId of mediaIds) {
     try {
-      const u = new URL(`${THREADS_API}/${mediaId}/replies`);
-      u.searchParams.set('fields', 'id,text,timestamp,username');
-      u.searchParams.set('reverse', 'true');
-      u.searchParams.set('access_token', auth.token);
-      const res = await fetch(u.toString());
-      if (!res.ok) continue;
-      const data = (await res.json()) as { data?: { id: string; text?: string; timestamp?: string; username?: string }[] };
-      for (const reply of data.data ?? []) {
+      // conversation은 답글 가지 전체를 준다. 권한/버전 차이로 거절되면 top-level replies로 폴백한다.
+      let first = new URL(`${THREADS_API}/${mediaId}/conversation`);
+      first.searchParams.set('fields', 'id,text,timestamp,username');
+      first.searchParams.set('reverse', 'true');
+      first.searchParams.set('limit', '100');
+      first.searchParams.set('access_token', auth.token);
+      let pages = await collectThreadsPages<{ id: string; text?: string; timestamp?: string; username?: string }>(first);
+      if (!pages.ok && pages.data.length === 0) {
+        first = new URL(`${THREADS_API}/${mediaId}/replies`);
+        first.searchParams.set('fields', 'id,text,timestamp,username');
+        first.searchParams.set('reverse', 'true');
+        first.searchParams.set('limit', '100');
+        first.searchParams.set('access_token', auth.token);
+        pages = await collectThreadsPages(first);
+      }
+      if (!pages.ok) ingestErrors.push(`${mediaId}:${pages.error ?? 'conversation_failed'}`);
+      for (const reply of pages.data) {
         if (!reply.id || !reply.username) continue;
         if (myUsername && reply.username === myUsername) continue; // 별이 자신의 답글
         const text = (reply.text ?? '').slice(0, 500);
@@ -103,18 +164,25 @@ export async function runIngest(env: Env): Promise<{ ok: boolean; error: string 
           category: categorize(text),
           decision: 'collected',
           reason: null, generatedText: null, bookmarked: false,
-          approvedAt: null, publishedAt: null,
+          decisionSource: null, decidedAt: null,
+          publishedAt: null,
           threads: { errorCode: null, requestId: null }, modelVersion: null,
         });
       }
-    } catch { /* 게시물 하나 실패는 전체를 막지 않는다 */ }
+    } catch { ingestErrors.push(`${mediaId}:conversation_exception`); }
   }
 
   const log = await loadLog(env.PLANET);
   const merged = mergeReplies(log, incoming);
   await saveLog(env.PLANET, merged.log);
-  await env.PLANET.put(repliesConfig.INGEST_META_KEY, JSON.stringify({ lastIngestAt: now, added: merged.added, checked: mediaIds.length }));
-  return { ok: true, error: null, added: merged.added };
+  await env.PLANET.put(repliesConfig.INGEST_META_KEY, JSON.stringify({
+    lastIngestAt: now, added: merged.added, checked: mediaIds.length, errors: ingestErrors.slice(0, 30),
+  }));
+  return {
+    ok: postListError === null && ingestErrors.length === 0,
+    error: ingestErrors.length ? ingestErrors.slice(0, 3).join(';') : null,
+    added: merged.added,
+  };
 }
 
 /* ── 후보 생성 — 별이 문체 계약 (지시서 D) ── */
@@ -183,7 +251,7 @@ export async function generateDraft(
 
   let out = await callClaude(env, [{ role: 'user', content: context }]);
   if ('error' in out) return out;
-  // 존댓말 가드 — 걸리면 한 번 더, 그래도 존댓말이면 실패 처리(승인 전 단계라 안전)
+  // 존댓말 가드 — 걸리면 한 번 더, 그래도 존댓말이면 공개하지 않고 실패 영수증으로 남긴다.
   if (out.reply && isHonorific(out.reply)) {
     const retry = await callClaude(env, [
       { role: 'user', content: context },
@@ -200,54 +268,129 @@ export async function generateDraft(
 /* ── 답글 발행 — reply_to_id 컨테이너 → 발행 (30초 대기 권장 규격은 재시도로 흡수) ── */
 export async function publishReply(env: Env, replyToId: string, text: string):
   Promise<{ ok: boolean; errorCode: string | null; requestId: string | null }> {
-  const auth = await getThreadsAuth(env);
-  if (!auth) return { ok: false, errorCode: 'auth_missing', requestId: null };
-  const create = new URL(`${THREADS_API}/me/threads`);
-  create.searchParams.set('media_type', 'TEXT');
-  create.searchParams.set('text', text.slice(0, 500));
-  create.searchParams.set('reply_to_id', replyToId);
-  create.searchParams.set('access_token', auth.token);
-  let containerId = '';
-  try {
-    const r = await fetch(create.toString(), { method: 'POST' });
-    const j = (await r.json()) as { id?: string; error?: { code?: number; fbtrace_id?: string } };
-    if (!r.ok || !j.id) return { ok: false, errorCode: String(j.error?.code ?? `http_${r.status}`), requestId: j.error?.fbtrace_id ?? null };
-    containerId = j.id;
-  } catch { return { ok: false, errorCode: 'network', requestId: null }; }
-  const publish = new URL(`${THREADS_API}/${auth.userId}/threads_publish`);
-  publish.searchParams.set('creation_id', containerId);
-  publish.searchParams.set('access_token', auth.token);
-  let last: { ok: boolean; errorCode: string | null; requestId: string | null } = { ok: false, errorCode: 'unknown', requestId: null };
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, 5000));
-    try {
-      const r = await fetch(publish.toString(), { method: 'POST' });
-      const j = (await r.json()) as { id?: string; error?: { code?: number; fbtrace_id?: string } };
-      if (r.ok && j.id) return { ok: true, errorCode: null, requestId: j.id };
-      last = { ok: false, errorCode: String(j.error?.code ?? `http_${r.status}`), requestId: j.error?.fbtrace_id ?? null };
-    } catch { last = { ok: false, errorCode: 'network', requestId: null }; }
-  }
-  return last;
+  const result = await dispatchToThreads(env, text, null, false, replyToId);
+  return { ok: result.ok, errorCode: result.errorCode, requestId: result.requestId };
 }
 
-/* ── GET — 목록 + lazy 수집 ── */
+export interface AutonomousReplyRun {
+  ingest: { ok: boolean; error: string | null; added: number };
+  examined: number;
+  published: number;
+  ignored: number;
+  bookmarked: number;
+  failed: number;
+  publishedIds: string[];
+  errors: string[];
+}
+
+async function originalPostText(env: Env, sourcePostId: string): Promise<string | null> {
+  try {
+    const shelf = await env.PLANET.get('radio:social:threads', 'json') as
+      | { posts?: Array<{ id?: string; text?: string }> }
+      | null;
+    const direct = shelf?.posts?.find((post) => post.id === sourcePostId)?.text;
+    if (direct) return direct.slice(0, 500);
+    return null;
+  } catch { return null; }
+}
+
+/**
+ * 새로 들어온 모든 댓글을 별이가 하나씩 판단한다. 수량·시각·주제 상한은 없다.
+ * 답하기로 했으면 이 함수 안에서 곧바로 Threads에 발행하고, 사람 승인 상태를 만들지 않는다.
+ * 한 댓글의 최종 영수증을 저장한 뒤 다음 댓글로 넘어가므로 중간 장애에도 이미 한 답을 되풀이하지 않는다.
+ */
+export async function processCollectedReplies(env: Env): Promise<AutonomousReplyRun> {
+  const ingest = await runIngest(env);
+  const log = await loadLog(env.PLANET);
+  const pending = log.filter((record) => record.decision === 'collected');
+  const summary: AutonomousReplyRun = {
+    ingest, examined: 0, published: 0, ignored: 0, bookmarked: 0, failed: 0,
+    publishedIds: [], errors: [],
+  };
+
+  for (const rec of pending) {
+    summary.examined += 1;
+    const postText = await originalPostText(env, rec.sourcePostId);
+    const out = await generateDraft(env, rec, postText, []);
+    if ('error' in out) {
+      // 모델/API의 일시 실패는 별이의 무응답 판단이 아니다. 다음 사건에서 다시 볼 수 있게 둔다.
+      rec.reason = `판단 실행 실패: ${out.error}`;
+      summary.failed += 1;
+      summary.errors.push(`${rec.sourceCommentId}:${out.error}`);
+      await saveLog(env.PLANET, log);
+      continue;
+    }
+
+    const now = Date.now();
+    rec.bookmarked = rec.bookmarked || out.bookmark;
+    rec.modelVersion = out.model;
+    rec.decisionSource = 'byeoli';
+    rec.decidedAt = now;
+    if (out.bookmark) summary.bookmarked += 1;
+    if (out.reply === null) {
+      rec.decision = 'ignored';
+      rec.reason = `별이의 무응답 판단: ${out.reason}`;
+      rec.generatedText = null;
+      summary.ignored += 1;
+      await saveLog(env.PLANET, log);
+      continue;
+    }
+
+    const boundary = replyBoundary(out.reply);
+    if (boundary) {
+      rec.decision = 'failed';
+      rec.reason = `외부 노출 경계: ${boundary}`;
+      rec.generatedText = out.reply;
+      summary.failed += 1;
+      summary.errors.push(`${rec.sourceCommentId}:boundary_${boundary}`);
+      await saveLog(env.PLANET, log);
+      continue;
+    }
+
+    rec.generatedText = out.reply;
+    rec.reason = out.reason;
+    const result = await publishReply(env, rec.sourceCommentId, out.reply);
+    rec.threads = { errorCode: result.errorCode, requestId: result.requestId };
+    if (result.ok) {
+      rec.decision = 'published';
+      rec.publishedAt = Date.now();
+      summary.published += 1;
+      if (result.requestId) summary.publishedIds.push(result.requestId);
+    } else {
+      // 마지막 Meta 결과가 모호할 수 있어 자동 재발행하지 않는다. 운영 영수증으로 드러낸다.
+      rec.decision = 'failed';
+      rec.reason = `발행 실패 ${result.errorCode ?? 'unknown'}`;
+      summary.failed += 1;
+      summary.errors.push(`${rec.sourceCommentId}:publish_${result.errorCode ?? 'unknown'}`);
+    }
+    await saveLog(env.PLANET, log);
+  }
+  return summary;
+}
+
+/* ── GET — 목록/영수증 조회. 실행은 별이 자율 경로가 담당한다. ── */
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const now = Date.now();
   const metaRaw = await env.PLANET.get(repliesConfig.INGEST_META_KEY);
   const meta = metaRaw ? (JSON.parse(metaRaw) as { lastIngestAt?: number }) : {};
-  const force = new URL(request.url).searchParams.get('force') === '1';
-  let ingest: { ranNow: boolean; error: string | null; added: number } = { ranNow: false, error: null, added: 0 };
-  if (force || now - (meta.lastIngestAt ?? 0) > repliesConfig.INGEST_MIN_MS) {
-    const r = await runIngest(env);
-    ingest = { ranNow: true, error: r.error, added: r.added };
-  }
   const log = await loadLog(env.PLANET);
+  const today = new Date(now + 9 * 3_600_000).toISOString().slice(0, 10);
+  const todayRecords = log.filter((record) =>
+    new Date(record.commentCreatedAt + 9 * 3_600_000).toISOString().slice(0, 10) === today,
+  );
   return json(200, {
     ok: true,
     generatedAt: now,
-    lastIngestAt: ingest.ranNow ? now : (meta.lastIngestAt ?? null),
-    ingest,
+    lastIngestAt: meta.lastIngestAt ?? null,
     replyPolicy: 'byeoli_decides_each_comment',
+    approvalRequired: false,
+    summary: {
+      todayNew: todayRecords.length,
+      decided: todayRecords.filter((record) => record.decision !== 'collected').length,
+      published: todayRecords.filter((record) => record.decision === 'published').length,
+      ignored: todayRecords.filter((record) => record.decision === 'ignored').length,
+      failed: todayRecords.filter((record) => record.decision === 'failed').length,
+    },
     claudeReady: !!env.ANTHROPIC_API_KEY,
     replies: log.slice(0, 60).map((r) => ({
       ...r,
@@ -256,80 +399,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   });
 };
 
-/* ── POST — draft / approve / reject / bookmark (쓰기 예외 4호, Access 감사) ── */
-interface PostBody { action?: string; sourceCommentId?: string; reason?: string; force?: boolean }
-
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const requestedBy = request.headers.get('cf-access-authenticated-user-email') ?? 'unknown';
-  let body: PostBody;
-  try { body = (await request.json()) as PostBody; } catch { return json(400, { ok: false, error: 'bad_json' }); }
-  const log = await loadLog(env.PLANET);
-  const rec = log.find((r) => r.sourceCommentId === body.sourceCommentId);
-  if (!rec) return json(404, { ok: false, error: 'not_found' });
-  const now = Date.now();
-
-  if (body.action === 'draft') {
-    const blocked = draftEligibility(rec, log, now);
-    if (blocked) return json(409, { ok: false, error: blocked });
-    // 문맥: 원 게시물 텍스트(feed) + 엽서 일기(capture_meta)
-    let postText: string | null = null;
-    let diaryLines: string[] = [];
-    try {
-      const feedRaw = await env.PLANET.get('feed');
-      const feed = feedRaw ? (JSON.parse(feedRaw) as { text?: string; img?: string; t?: number }[]) : [];
-      const publishRaw = await env.PLANET.get('publish_log');
-      const runs = publishRaw ? (JSON.parse(publishRaw) as { threads?: { requestId?: string | null }; invokedAt?: number; imageKey?: string | null }[]) : [];
-      const run = runs.find((r) => r.threads?.requestId === rec.sourcePostId);
-      if (run) {
-        const post = feed.find((p) => Math.abs((p.t ?? 0) - (run.invokedAt ?? 0)) < 120000);
-        postText = post?.text ?? null;
-        if (run.imageKey) {
-          const cmRaw = await env.PLANET.get('capture_meta');
-          const cms = cmRaw ? (JSON.parse(cmRaw) as { r2Key: string; diaryLines?: string[] }[]) : [];
-          diaryLines = cms.find((c) => c.r2Key === run.imageKey)?.diaryLines ?? [];
-        }
-      }
-    } catch { /* 문맥 없이도 생성 가능 */ }
-    const out = await generateDraft(env, rec, postText, diaryLines, body.force === true);
-    if ('error' in out) return json(502, { ok: false, error: out.error });
-    rec.bookmarked = rec.bookmarked || out.bookmark;
-    rec.modelVersion = out.model;
-    if (out.reply === null) {
-      rec.decision = 'ignored'; rec.reason = `무응답 판단: ${out.reason}`;
-    } else {
-      const boundary = replyBoundary(out.reply);
-      if (boundary) return json(422, { ok: false, error: `reply_boundary_${boundary}` });
-      rec.decision = 'drafted'; rec.generatedText = out.reply; rec.reason = out.reason;
-    }
-    await saveLog(env.PLANET, log);
-    return json(200, { ok: true, record: rec });
-  }
-
-  if (body.action === 'approve') {
-    if (rec.decision !== 'drafted' || !rec.generatedText) return json(409, { ok: false, error: 'not_drafted' });
-    const result = await publishReply(env, rec.sourceCommentId, rec.generatedText);
-    rec.approvedAt = now;
-    rec.threads = { errorCode: result.errorCode, requestId: result.requestId };
-    if (result.ok) { rec.decision = 'published'; rec.publishedAt = Date.now(); }
-    else { rec.decision = 'failed'; rec.reason = `발행 실패 ${result.errorCode}`; }
-    await saveLog(env.PLANET, log);
-    console.log(`ops/reply-approve by=${requestedBy} comment=${rec.sourceCommentId} ok=${result.ok}`);
-    return json(200, { ok: result.ok, record: rec, error: result.ok ? null : result.errorCode });
-  }
-
-  if (body.action === 'reject') {
-    if (rec.decision !== 'drafted' && rec.decision !== 'collected') return json(409, { ok: false, error: 'not_rejectable' });
-    rec.decision = 'ignored';
-    rec.reason = (body.reason ?? '운영자 거절').slice(0, 200);
-    await saveLog(env.PLANET, log);
-    return json(200, { ok: true, record: rec });
-  }
-
-  if (body.action === 'bookmark') {
-    rec.bookmarked = !rec.bookmarked;
-    await saveLog(env.PLANET, log);
-    return json(200, { ok: true, record: rec });
-  }
-
-  return json(400, { ok: false, error: 'unknown_action' });
-};
+/* 사람의 draft/approve/reject/bookmark 조작은 폐기했다. GET은 영수증만 읽는다. */
+export const onRequestPost: PagesFunction<Env> = async () => json(410, {
+  ok: false,
+  retired: true,
+  error: 'operator_reply_controls_retired',
+  policy: 'byeoli_decides_and_publishes_without_human_approval',
+});

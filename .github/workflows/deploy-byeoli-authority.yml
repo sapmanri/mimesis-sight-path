@@ -61,6 +61,10 @@ jobs:
                   "BYEOLI_AUTHORITY": {
                     "service": "mimesis-byeoli-authority",
                     "environment": "production"
+                  },
+                  "BYEOLI_SOCIAL_DIRECTOR": {
+                    "service": "byeoli-publish-scheduler",
+                    "environment": "production"
                   }
                 }
               },
@@ -68,6 +72,10 @@ jobs:
                 "services": {
                   "BYEOLI_AUTHORITY": {
                     "service": "mimesis-byeoli-authority",
+                    "environment": "production"
+                  },
+                  "BYEOLI_SOCIAL_DIRECTOR": {
+                    "service": "byeoli-publish-scheduler",
                     "environment": "production"
                   }
                 }

@@ -11,6 +11,8 @@ export interface ThreadsShelfPost {
   text: string;
   timestamp: string;
   permalink: string;
+  /** true면 자기 계정이 다른 글 아래 남긴 답글이다. 새 댓글의 루트 대상으로 쓰지 않는다. */
+  isReply: boolean;
 }
 
 export interface ThreadsShelf {

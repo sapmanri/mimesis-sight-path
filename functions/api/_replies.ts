@@ -1,10 +1,8 @@
 // BUILD 425-B/C — Threads 댓글 수집·답글 정책 순수 로직
 // 2026-08-13 Vase 판정: 수량·숙성·계정·게시물 상한은 전부 폐기한다.
 // 댓글마다 별이가 답할지/지나갈지/기억할지를 직접 정한다. 기계는 중복 실행만 막는다.
-export const LOG_KEEP = 200;
-
 export type ReplyCategory = 'observation' | 'question' | 'greeting' | 'light' | 'spam' | 'sensitive';
-export type ReplyDecision = 'collected' | 'drafted' | 'published' | 'ignored' | 'failed';
+export type ReplyDecision = 'collected' | 'published' | 'ignored' | 'failed';
 
 export interface ReplyRecord {
   sourceCommentId: string;
@@ -19,7 +17,9 @@ export interface ReplyRecord {
   reason: string | null;
   generatedText: string | null;
   bookmarked: boolean;          // ⭐ 기억해둠 (발행 없음, 내부 행위)
-  approvedAt: number | null;
+  /** null=아직 판단 전, byeoli=별이의 자율 판단 */
+  decisionSource?: 'byeoli' | null;
+  decidedAt?: number | null;
   publishedAt: number | null;
   threads: { errorCode: string | null; requestId: string | null };
   modelVersion: string | null;
@@ -43,13 +43,12 @@ export function categorize(text: string): ReplyCategory {
   return 'observation';
 }
 
-/** 새로 가져온 댓글을 로그에 병합 — sourceCommentId 멱등, 최신순, LOG_KEEP 유지 */
+/** 새로 가져온 댓글을 로그에 병합 — sourceCommentId 멱등, 최신순. 수량으로 버리지 않는다. */
 export function mergeReplies(log: ReplyRecord[], incoming: ReplyRecord[]): { log: ReplyRecord[]; added: number } {
   const known = new Set(log.map((r) => r.sourceCommentId));
   const fresh = incoming.filter((r) => !known.has(r.sourceCommentId));
   const next = [...fresh, ...log]
-    .sort((a, b) => b.commentCreatedAt - a.commentCreatedAt)
-    .slice(0, LOG_KEEP);
+    .sort((a, b) => b.commentCreatedAt - a.commentCreatedAt);
   return { log: next, added: fresh.length };
 }
 
@@ -77,8 +76,6 @@ export const repliesConfig = {
   LOG_KEY: 'reply_log',
   INGEST_META_KEY: 'reply_ingest_meta',
   PEPPER_KEY: 'reply_pepper',
-  INGEST_MIN_MS: 25 * 60 * 1000, // 콘솔 폴링이 이보다 자주 와도 실제 수집은 25분 간격
-  POSTS_TO_CHECK: 12,
 };
 
 /* ── 답글 판단에 제공하는 확인된 세계 사실 (threads-replies가 사용) ── */

@@ -5,8 +5,9 @@ import { refreshThreadsShelf, refreshYoutubeShelf, type RadioSocialEnv } from '.
 import {
   THREADS_RECEIPT_KEY, THREADS_SHELF_KEY, YOUTUBE_RECEIPT_KEY, YOUTUBE_SHELF_KEY,
 } from '../_radio-social-types';
+import { deferSocialWake, type SocialWakeEnv } from '../_byeoli-social-wake.ts';
 
-interface Env extends RadioSocialEnv { PULSE_KEY?: string }
+interface Env extends RadioSocialEnv, SocialWakeEnv { PULSE_KEY?: string }
 const FRESH_MS = 30 * 60 * 1000;
 const HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: HEADERS });
@@ -21,7 +22,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   return json(200, { ok: true, threads, youtube, receipts: { threads: threadsReceipt, youtube: youtubeReceipt } });
 };
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<Env> = async (context) => {
+  const { request, env } = context;
   if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
   if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
   let source = 'all';
@@ -40,5 +42,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const youtube = wantsYoutube
     ? (fresh(youtubeRaw) ? { ...youtubeRaw, skipped: 'fresh' } : await refreshYoutubeShelf(env))
     : null;
+  deferSocialWake(context, env, {
+    kind: 'social_refreshed',
+    eventId: `social-refresh:${source}:${Date.now()}`,
+    occurredAt: Date.now(),
+    refId: source,
+  }, 'social refresh');
   return json(200, { ok: (!threads || threads.ok) && (!youtube || youtube.ok), threads, youtube, freshnessMs: FRESH_MS });
 };

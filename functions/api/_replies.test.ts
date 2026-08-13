@@ -15,7 +15,8 @@ function rec(over: Partial<ReplyRecord> = {}): ReplyRecord {
     detectedAt: NOW, authorIdHash: 'h1', authorMask: 'u***e',
     category: 'observation', decision: 'collected', reason: null,
     generatedText: null, bookmarked: false,
-    approvedAt: null, publishedAt: null,
+    decisionSource: null, decidedAt: null,
+    publishedAt: null,
     threads: { errorCode: null, requestId: null }, modelVersion: null,
     ...over,
   };
