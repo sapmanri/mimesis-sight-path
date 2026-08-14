@@ -143,7 +143,7 @@ export async function moderateStory(env: { ANTHROPIC_API_KEY?: string }, story: 
         messages: [{ role: 'user', content: `<사연>\n${story}\n</사연>` }],
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return fail(`api_${res.status}`, await res.text().then((t) => t.slice(0, 300)).catch(() => ''));
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const text = data.content?.find((c) => c.type === 'text')?.text ?? '';
     return parseModeration(text);
@@ -570,9 +570,15 @@ export function pickBookcasePiece(
 export async function writeRadioScript(
   env: { ANTHROPIC_API_KEY?: string }, situation: RadioSituation,
 ): Promise<RadioScriptResult | null> {
-  if (!env.ANTHROPIC_API_KEY) return null;
+  // 08-14 실사고: 하루 종일 writer_failed 1,634회가 났는데 **왜 실패했는지 아무 데도 안 남았다**.
+  // 절대 규칙 5(실패는 침묵하지 않는다) 위반이었다. 이제 사유를 로그에 남긴다 — 진단이 몇 분에 끝난다.
+  const fail = (why: string, extra?: unknown) => {
+    console.log(`writer_failed: ${why}`, extra === undefined ? '' : JSON.stringify(extra).slice(0, 300));
+    return null;
+  };
+  if (!env.ANTHROPIC_API_KEY) return fail('no_api_key');
   const sys = radioSystemPrompt();
-  if (!sys.prompt) return null;
+  if (!sys.prompt) return fail('genome_contract', sys.warnings);
   try {
     const userMessage = situationMessage(situation);
     const res = await fetch(API, {
@@ -594,14 +600,14 @@ export async function writeRadioScript(
     const { script, stageCues } = extractStageCues(fixed.script);
     const { voiceNote, songTitle, musicTransition } = parsed;
     const check = validateRadioScript(script, situation.story);
-    if (!check.pass) return null;
+    if (!check.pass) return fail('validate', { errors: check.errors, head: script.slice(0, 120) });
     return {
       script, voiceNote, songTitle, musicTransition, stageCues,
       promptChars: userMessage.length + (sys.prompt?.length ?? 0),
       provenance: provenance('genome-live', true),
       warnings: [...sys.warnings, ...check.warnings, ...(fixed.broken ? ['truncated_tag_stripped'] : [])],
     };
-  } catch { return null; }
+  } catch (e) { return fail('exception', String(e).slice(0, 300)); }
 }
 
 /** 검증 — 낭독했다면 원문 그대로인가 + 별이 자신의 말이 게놈 계약을 지키는가.
