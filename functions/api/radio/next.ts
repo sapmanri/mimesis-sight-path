@@ -9,7 +9,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript, pickBookcasePiece,
-  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner, trimSituationForCorner,
+  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner, trimSituationForCorner, lastWriterFailure,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
@@ -182,7 +182,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sent = trimSituationForCorner(situation);
 
   const written = await writeRadioScript(env, sent);
-  if (!written) return json(502, { ok: false, error: 'writer_failed' });
+  if (!written) return json(502, { ok: false, error: 'writer_failed', reason: lastWriterFailure });
 
   const storyRead = !!story && !written.warnings.some((w) => w.startsWith('story_not_read'));
   // 원고를 썼다는 이유로 사연을 소비하지 않는다. station.sh가 R2 실물을 확인하고

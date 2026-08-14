@@ -566,6 +566,10 @@ export function pickBookcasePiece(
   return { title: p.title, text: p.text! };
 }
 
+/** 마지막 원고 생성 실패 사유. 침묵하는 실패를 없애기 위한 진단 창구다(08-14 실사고: 하루 종일
+    writer_failed 1,634회인데 이유가 어디에도 없었다). 값은 마지막 실패 것만 남는다. */
+export let lastWriterFailure = '';
+
 /** 실패(키 없음·계약 실패·검증 실패) 시 null — 폴백 없음. 라디오는 게놈 아니면 침묵한다. */
 export async function writeRadioScript(
   env: { ANTHROPIC_API_KEY?: string }, situation: RadioSituation,
@@ -573,7 +577,9 @@ export async function writeRadioScript(
   // 08-14 실사고: 하루 종일 writer_failed 1,634회가 났는데 **왜 실패했는지 아무 데도 안 남았다**.
   // 절대 규칙 5(실패는 침묵하지 않는다) 위반이었다. 이제 사유를 로그에 남긴다 — 진단이 몇 분에 끝난다.
   const fail = (why: string, extra?: unknown) => {
-    console.log(`writer_failed: ${why}`, extra === undefined ? '' : JSON.stringify(extra).slice(0, 300));
+    const line = `${why}${extra === undefined ? '' : ' · ' + JSON.stringify(extra).slice(0, 300)}`;
+    console.log(`writer_failed: ${line}`);
+    lastWriterFailure = line;   // 응답에도 실어 보낸다 — 로그 tail이 못 잡는 환경이 있다(08-14 실측)
     return null;
   };
   if (!env.ANTHROPIC_API_KEY) return fail('no_api_key');
