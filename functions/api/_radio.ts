@@ -598,7 +598,7 @@ export async function writeRadioScript(
         messages: [{ role: 'user', content: userMessage }],
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return fail(`api_${res.status}`, (await res.text().catch(() => '')).slice(0, 300));
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const raw = (data.content?.find((c) => c.type === 'text')?.text ?? '').trim();
     const parsed = parseTrailingTags(raw);
