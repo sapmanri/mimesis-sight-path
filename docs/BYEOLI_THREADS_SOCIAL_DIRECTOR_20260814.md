@@ -96,16 +96,20 @@ Meta Threads 공식 API에서 댓글 Webhook이 확인되지 않았기 때문에
      -> 별이가 원할 때만 다음 한 번의 alarm
 ```
 
-옛 `/api/autopost`는 유효한 옛 키가 있어도 HTTP 410을 반환하며 Threads에 접근하지 않는다.
-과거 호출 사실은 `legacy_schedule_retired` 감사 영수증만 남긴다.
+별이의 자유 판단과 별개로, 사용자가 유지하기로 한 미디어 예약선 두 개만 동작한다.
+
+- `/api/autopost`: 08·18·22 KST에 2D Walk/관측소 스크린샷을 발행한다. 명시 슬롯 검증과
+  성공 영수증으로 재시도 중복을 막고, Social Director는 깨우지 않는다.
+- `/api/sketch-daily`: 밤 그림 3장 판정이 끝나면 추천 1장을 자동 채택·발행한다. 이미 사람이
+  채택한 그림은 덮지 않고, 날짜별 성공 영수증으로 하루 1장만 허용한다.
 
 ## 7. 증거 계약
 
 완료 보고는 아래가 모두 있어야 한다.
 
-1. 로컬: 자율성·계정 경계·옛 크론 폐기 테스트와 전체 빌드가 exit 0.
+1. 로컬: 자율성·계정 경계·예약 미디어 슬롯/하루 1장 테스트와 전체 빌드가 exit 0.
 2. 배포: Social Director Worker, Pages Functions, 두 서비스 바인딩이 현재 커밋으로 배포됨.
-3. 공개 경계: `/api/autopost` 410, 무인증 agent/director 403, Worker health 200.
+3. 공개 경계: 무인증 `/api/autopost` 401, 무인증 agent/director 403, Worker health 200.
 4. 실계정: `/me`가 `@byeoli_log`임을 확인하고 댓글 읽기 권한 성공.
 5. 실실행: 한 번의 감독 실행에서 post/comment/silence 판단과 댓글 답글 영수증을 확보.
    - 별이가 `silence`를 골랐다면 게시물이 없는 것이 정상이다. 이 경우에도 판단 이유와 실행 ID가 있어야 한다.

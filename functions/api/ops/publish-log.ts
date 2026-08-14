@@ -5,7 +5,7 @@
 // Cloudflare Access가 인증을 앞단에서 처리한다(422-OPS-B). 이 함수는 read-only.
 // CORS를 public 앱에 열지 않는다 — Ops 응답에 Access-Control-Allow-Origin: * 금지.
 
-import { publishLogConfig, type PublishLogRecord } from '../_publish-log';
+import { computeMissedSlots, publishLogConfig, type PublishLogRecord } from '../_publish-log';
 
 interface Env {
   PLANET: KVNamespace;
@@ -36,9 +36,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   return new Response(JSON.stringify({
     ok: true,
     generatedAt: now,
-    mode: 'event_and_byeoli_chosen_wake',
-    schedule: [],
+    mode: 'byeoli_chosen_wake_plus_scheduled_media',
+    schedule: [...publishLogConfig.SLOT_HOURS_KST],
     runs,
-    missedSlots: [],
+    missedSlots: computeMissedSlots(log, now),
   }), { status: 200, headers: JSON_HEADERS });
 };

@@ -11,7 +11,7 @@
     "validate:card": "node scripts/validate-share-card.mjs",
     "validate:observer": "node scripts/validate-observer-contract.mjs && node --experimental-strip-types --test observer-registry/tests/logic.test.ts",
     "validate:brand": "node scripts/validate-brand.mjs",
-    "validate:publish-log": "node scripts/validate-publish-log.mjs && node --experimental-strip-types --test functions/api/_publish-log.test.ts",
+    "validate:publish-log": "node scripts/validate-publish-log.mjs && node --experimental-strip-types --test functions/api/_publish-log.test.ts functions/api/_sketch-pub.test.ts",
     "validate:social": "node scripts/validate-social-autonomy.mjs && node --experimental-strip-types --test functions/api/_threads-client.test.ts functions/api/_byeoli-editorial.test.ts functions/api/_byeoli-social-agent.test.ts",
     "validate:zone": "node scripts/validate-zone-system.mjs",
     "validate:parallel": "node scripts/validate-parallel-lives.mjs",

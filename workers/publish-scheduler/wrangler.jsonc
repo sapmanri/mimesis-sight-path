@@ -17,5 +17,9 @@
       "new_sqlite_classes": ["ByeoliSocialDirector"]
     }
   ],
+  "triggers": {
+    // KST 08:05/18:05/22:05 + 15분·45분 재시도. 성공 슬롯은 Pages 영수증에서 no-op.
+    "crons": ["5,20,50 23,9,13 * * *"]
+  },
   "observability": { "enabled": true }
 }

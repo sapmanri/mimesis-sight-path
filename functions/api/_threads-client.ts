@@ -1,8 +1,8 @@
 // Meta Threads 공식 API 클라이언트.
 //
 // 발행 시간표나 편집 판단을 모른다. 인증 계정이 정확히 @byeoli_log인지 확인하고,
-// 호출자가 이미 결정한 글/답글을 Meta에 전달하는 일만 맡는다. 이 분리 덕분에 폐기된
-// /api/autopost 고정 슬롯 경로를 다시 열지 않고도 모든 실제 발행선이 같은 안전장치를 쓴다.
+// 호출자가 이미 결정한 글/답글을 Meta에 전달하는 일만 맡는다. 별이 자유 판단, 예약
+// 스크린샷, 밤 추천 그림, Ops 수동 발행 모두 이 계정 검증과 Meta 오류 경계를 공유한다.
 
 export interface ThreadsEnv {
   PLANET: KVNamespace;

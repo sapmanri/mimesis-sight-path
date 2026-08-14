@@ -1,9 +1,12 @@
-// byeoli-publish-scheduler — 별이 Social Director.
+// byeoli-publish-scheduler — 별이 Social Director + 예약 미디어 배달부.
 //
 // 2026-08-13 이전: 08/18/22 고정 Cron으로 /api/autopost를 호출했다.
 // 2026-08-13 이후: 고정 시각표를 폐기했다. Durable Object의 단 한 번짜리 alarm만 쓰고,
 // Pages의 별이 편집 판단이 돌려준 nextLookAt을 다음 알람으로 삼는다. null이면 새 사건까지 쉰다.
 // 게시·댓글 판단·Meta 쓰기는 Pages 한 실행선(/api/radio/social-agent)에만 있다.
+// 단, 사용자가 명시적으로 유지한 스크린샷 엽서 08/18/22 KST 예약선은 별도 scheduled
+// 이벤트로 /api/autopost만 호출한다. 이 예약선은 Social Director를 깨우거나 편집 판단을
+// 대신하지 않는다.
 
 import { DurableObject } from 'cloudflare:workers';
 
@@ -12,7 +15,11 @@ const NAME = 'byeoli-social-director';
 // event/backlog chain and must never be inherited when outbound access reopens.
 const STATE_KEY = 'social-director-v2';
 const ENDPOINT = 'https://mimesis-sight-path.pages.dev/api/radio/social-agent';
+const MEDIA_ENDPOINT = 'https://mimesis-sight-path.pages.dev/api/autopost';
 const REQUEST_TIMEOUT_MS = 120_000;
+const MEDIA_TIMEOUT_MS = 60_000;
+const SLOT_HOURS_KST = [8, 18, 22];
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 const headers = {
   'content-type': 'application/json; charset=utf-8',
@@ -22,6 +29,55 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), { status
 
 function eventId(kind, now) {
   return `${kind}:${now}:${crypto.randomUUID().slice(0, 12)}`;
+}
+
+function kstIso(utcMs) {
+  const k = new Date(utcMs + KST_OFFSET_MS);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${k.getUTCFullYear()}-${p(k.getUTCMonth() + 1)}-${p(k.getUTCDate())}T${p(k.getUTCHours())}:${p(k.getUTCMinutes())}:00+09:00`;
+}
+
+/** now 이전 예약 슬롯을 최신순으로 반환한다. */
+export function recentMediaSlots(now, count) {
+  const out = [];
+  const kst = new Date(now + KST_OFFSET_MS);
+  for (let dayBack = 0; dayBack <= 1 && out.length < count + 3; dayBack += 1) {
+    const base = new Date(kst);
+    base.setUTCDate(base.getUTCDate() - dayBack);
+    for (const hour of SLOT_HOURS_KST) {
+      const utc = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hour) - KST_OFFSET_MS;
+      if (utc <= now) out.push(utc);
+    }
+  }
+  return out.sort((a, b) => b - a).slice(0, count);
+}
+
+async function callMediaSlot(env, slotUtc) {
+  const slot = kstIso(slotUtc);
+  try {
+    const response = await fetch(`${MEDIA_ENDPOINT}?scheduledFor=${encodeURIComponent(slot)}`, {
+      method: 'POST',
+      headers: { 'X-Publish-Key': env.PUBLISH_KEY },
+      signal: AbortSignal.timeout(MEDIA_TIMEOUT_MS),
+    });
+    const body = await response.json().catch(() => null);
+    return `${slot} ${response.status} ${body?.skipped ?? (body?.ok ? 'published' : body?.error ?? 'unknown')}`;
+  } catch (error) {
+    return `${slot} fetch_error:${String(error?.message ?? error).slice(0, 120)}`;
+  }
+}
+
+async function runScheduledMedia(env, now) {
+  if (!env.PUBLISH_KEY) {
+    console.error('scheduled-media: PUBLISH_KEY missing; no call made');
+    return;
+  }
+  // 현재 슬롯과 직전 슬롯을 함께 호출한다. 성공 영수증이 있으면 둘 다 무해한 no-op이고,
+  // 장애로 비었던 직전 슬롯만 13시간 안에서 보충된다.
+  const slots = recentMediaSlots(now, 2);
+  const results = [];
+  for (const slot of slots) results.push(await callMediaSlot(env, slot));
+  console.log(`scheduled-media: ${results.join(' | ')}`);
 }
 
 export class ByeoliSocialDirector extends DurableObject {
@@ -148,10 +204,16 @@ export class ByeoliSocialDirector extends DurableObject {
 }
 
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runScheduledMedia(env, event.scheduledTime ?? Date.now()));
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/health') {
-      return json({ ok: true, service: NAME, mode: 'byeoli_chosen_wake_only' });
+      return json({
+        ok: true, service: NAME, mode: 'byeoli_chosen_wake_plus_scheduled_media',
+        scheduledMediaKst: SLOT_HOURS_KST,
+      });
     }
     if (request.method === 'GET' && url.pathname === '/state') {
       if (!env.PULSE_KEY || request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) {

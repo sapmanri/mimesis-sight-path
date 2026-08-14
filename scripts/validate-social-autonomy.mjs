@@ -14,12 +14,17 @@ const wake = read('functions/api/_byeoli-social-wake.ts');
 const auth = read('functions/api/threads-auth.ts');
 const ops = read('public/ops/index.html');
 
-check('Worker에는 고정 scheduled 핸들러가 없다', !/async\s+scheduled\s*\(/.test(worker));
-check('Worker 설정에는 Cron triggers가 없다', !/"triggers"\s*:/.test(config) && !/crons/.test(config));
-check('폐기된 autopost POST는 410이다',
-  /const retired = \(status = 410\)/.test(autopost)
-    && /onRequestPost[\s\S]*return retired\(\)/.test(autopost)
-    && /fixed_schedule_retired/.test(autopost));
+check('자유 판단과 분리된 예약 미디어 scheduled 핸들러가 있다',
+  /async\s+scheduled\s*\(/.test(worker)
+    && /runScheduledMedia/.test(worker)
+    && /MEDIA_ENDPOINT/.test(worker));
+check('Worker Cron은 08·18·22 KST 미디어 슬롯만 깨운다',
+  /"triggers"\s*:/.test(config) && /5,20,50 23,9,13/.test(config));
+check('autopost는 예약 스크린샷만 발행하고 자유 판단기를 호출하지 않는다',
+  /scheduled_screenshot_media/.test(autopost)
+    && /validateSlotIso/.test(autopost)
+    && /dispatchToThreads/.test(autopost)
+    && !/social-agent/.test(autopost));
 check('사람 답글 조작 POST는 410이다', /operator_reply_controls_retired/.test(replies) && /onRequestPost[\s\S]*json\(410/.test(replies));
 check('별이가 글 댓글 침묵을 직접 고른다', /'post'\s*\|\s*'comment'\s*\|\s*'silence'/.test(editorial));
 check('외부 사건은 별이에게 Threads 임무를 배정하지 않는다',

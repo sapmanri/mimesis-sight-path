@@ -21,7 +21,7 @@ jobs:
           node-version: 24
       - run: npm ci
 
-      - name: Deploy Social Director without fixed cron triggers
+      - name: Deploy Social Director and scheduled media lane
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -96,15 +96,15 @@ jobs:
           print('Pages redeployment started:', (data.get('result') or {}).get('id', 'unknown'))
           PY
 
-      - name: Verify retired schedule and protected autonomy endpoints
+      - name: Verify protected scheduled media and autonomy endpoints
         run: |
           set -euo pipefail
           for i in $(seq 1 50); do
-            retired=$(curl -sS -o /tmp/autopost.json -w '%{http_code}' -X POST https://mimesis-sight-path.pages.dev/api/autopost || true)
+            media=$(curl -sS -o /tmp/autopost.json -w '%{http_code}' -X POST https://mimesis-sight-path.pages.dev/api/autopost || true)
             director=$(curl -sS -o /tmp/director.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/radio/social-director || true)
             agent=$(curl -sS -o /tmp/agent.json -w '%{http_code}' https://mimesis-sight-path.pages.dev/api/radio/social-agent || true)
             health=$(curl -sS -o /tmp/worker.json -w '%{http_code}' https://byeoli-publish-scheduler.byulsarang.workers.dev/health || true)
-            if [ "$retired" = "410" ] && [ "$director" = "403" ] && [ "$agent" = "403" ] && [ "$health" = "200" ]; then
+            if [ "$media" = "401" ] && [ "$director" = "403" ] && [ "$agent" = "403" ] && [ "$health" = "200" ]; then
               cat /tmp/worker.json
               exit 0
             fi

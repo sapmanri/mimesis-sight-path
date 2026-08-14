@@ -1,17 +1,17 @@
 // BUILD 431-AUTO — POST /api/sketch-daily (외부 Cron · X-Publish-Key — autopost와 같은 보호)
 //
-// 그림일기 반자동 파이프라인, Vase 승인 조건표 A+B (2026-07-22 오후):
+// 그림일기 예약 파이프라인. 생성·판정 뒤 추천 1장을 기존 하루 1장 계약으로 발행한다.
 //   ① 크론 23:30 KST — 그날 발행 영수증이 다 쌓인 뒤 하루를 접는다
 //   ② 사람 우선 — 그날 사람이 이미 하루를 접었으면 자동은 건드리지 않는다
 //   ③ 관찰이 없는 날은 접지 않는다 — 빈 기억을 지어내지 않는다
 //   ④ seed는 날짜에서 파생 — 같은 날은 같은 3장 (재현 가능)
-//   ⑤ 생성까지만 자동 — 채택·발행은 사람 (아침의 두 클릭)
-//   ⑥ 판정기(vision) 추천은 기록만 — 발행 권한 없음 (병행 운전 데이터)
+//   ⑤ 판정기(vision)가 추천한 1장을 자동 채택·발행 — 사람의 기존 채택은 덮지 않음
+//   ⑥ 성공 영수증이 있는 날짜는 다시 발행하지 않음
 //   ⑦ 비용 상한: 3장 + vision 판정 1회/일
-//   ⑧ 완전 자동(C)은 병행 운전 일치율을 보고 별도 판정 — 이 파일은 그 문이 아니다
+//   ⑧ Threads 실패 시 생성 결과는 보존하고 심야 재시도에서 발행만 다시 시도
 //
-// 산출물은 기존 시험 경로(sketch-trials/·sketch_trial_meta)에 쌓인다 —
-// 아침의 채택·발행은 실험실의 기존 UI(최근 생성 → 📌 → 🕊)를 그대로 쓴다.
+// 산출물은 기존 시험 경로(sketch-trials/·sketch_trial_meta)에 쌓이고,
+// 수동 실험실 버튼도 동일한 채택·발행 함수를 사용한다.
 
 import {
   buildDayMemory, validateDayMemory, memoryKey, kstDate,
@@ -31,9 +31,11 @@ import { translateScene, translateSubjects, hashPrompt, orderCharacterRefs, type
 //   하루를 접은 뒤 이 지점에서 ReferenceError → Cloudflare 1101. reco를 못 남기고 죽으니
 //   다음 호출이 「사람이 접은 하루」로 오인해 물러났고, 크래시가 정중한 건너뜀으로 위장됐다.
 import { readRefRoles, refsWithRole } from './ops/sketch-reference.ts';
+import {
+  autoPublishRecommendedSketch, type SketchPublishEnv, type SketchPublishResult,
+} from './_sketch-pub.ts';
 
-interface Env extends ImageProviderEnv {
-  PLANET: KVNamespace;
+interface Env extends ImageProviderEnv, SketchPublishEnv {
   CAPTURES: R2Bucket;
   PUBLISH_KEY?: string;
   PULSE_KEY?: string;
@@ -401,24 +403,41 @@ async function handleDaily(
   // 즉시 기록한다 — 도중에 끊겨도 부분 결과가 남는다.
   trace.stage = 'generate';
   const summary = await generateDaily(env, date, day, resetParam && pulseRetryOk);
+  let autoPublish: SketchPublishResult | null = null;
+  if (summary.done) {
+    trace.stage = 'publish_recommended';
+    autoPublish = await autoPublishRecommendedSketch(env, date);
+  }
+  const pipelineDone = summary.done && !!autoPublish?.ok;
+  const requestOk = summary.made > 0 || pipelineDone;
   const now = Date.now();
   const currentRunRaw = await env.PLANET.get(RUN_KEY(date));
   const currentRun = currentRunRaw ? JSON.parse(currentRunRaw) as DailyRun : run;
   if (currentRun) {
     await env.PLANET.put(RUN_KEY(date), JSON.stringify({
       ...currentRun,
-      status: summary.done ? 'done' : 'generating',
-      stage: summary.done ? 'complete' : summary.phase === 'images_ready' ? 'judge_next' : summary.phase,
+      status: pipelineDone ? 'done' : 'generating',
+      stage: pipelineDone
+        ? 'complete'
+        : summary.done ? 'publish_retry' : summary.phase === 'images_ready' ? 'judge_next' : summary.phase,
       updatedAt: now,
     }));
   }
-  return json(summary.made > 0 || summary.done ? 200 : 502, {
-    ok: summary.made > 0 || summary.done, date, memoryEventId: day.memoryEventId,
-    generatedNow: summary.made, totalImages: summary.total, done: summary.done,
+  return json(requestOk ? 200 : 502, {
+    ok: requestOk, date, memoryEventId: day.memoryEventId,
+    generatedNow: summary.made, totalImages: summary.total, done: pipelineDone,
+    artDone: summary.done,
     trialId: summary.trialId, errors: summary.errors,
     phase: summary.phase,
-    next: summary.done
-      ? '3장 판정까지 완성 — 아침에 📌 → 🕊'
+    autoPublish,
+    next: pipelineDone
+      ? (autoPublish?.skipped === 'no_recommended_pick'
+          ? '3장 모두 불합격 — 자동 발행하지 않았다'
+          : autoPublish?.skipped === 'already_published'
+            ? '오늘 그림은 이미 발행됐다 — 중복하지 않았다'
+            : '추천 그림 1장 자동 채택·발행 완료')
+      : summary.done
+        ? `판정 완료·발행 대기 — 심야 재시도 (${autoPublish?.error ?? 'unknown'})`
       : summary.phase === 'images_ready'
         ? '3장 완성 — 같은 호출을 한 번 더 해 판정을 기록한다'
         : summary.phase === 'judge_retry'
@@ -568,7 +587,7 @@ async function generateDaily(
   const record: TrialRecord = {
     trialId, createdAt: Date.now(), providerId: 'workers-ai', model: DAILY_MODEL,
     params: { steps: DAILY_STEPS, width: 1024, height: 1024 }, seed: base + n, r2Key,
-    promptHash, sketchVersion: SKETCH_VERSION, note: 'daily-auto (조건표 A — 채택·발행은 사람)',
+    promptHash, sketchVersion: SKETCH_VERSION, note: 'daily-auto (판정 추천작 1장 예약 발행)',
     referenceApplied: usedRefs, role: usedRefs ? 'candidate' : 'control',
     sceneLabel: null, refKeys: usedRefs ? refKeys : [],
   };
