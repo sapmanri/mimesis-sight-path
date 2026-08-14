@@ -9,7 +9,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript, pickBookcasePiece,
-  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner, trimSituationForCorner, lastWriterFailure,
+  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner, trimSituationForCorner, lastWriterFailure, radioSystemPrompt, situationMessage,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
@@ -182,7 +182,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const sent = trimSituationForCorner(situation);
 
   const written = await writeRadioScript(env, sent);
-  if (!written) return json(502, { ok: false, error: 'writer_failed', reason: lastWriterFailure });
+  if (!written) {
+    // 08-14: 부르는 쪽에서 직접 재본다 — 모듈 사이로 넘어오는 값이 비어 오는 일이 있었다.
+    const sysProbe = radioSystemPrompt();
+    return json(502, {
+      ok: false, error: 'writer_failed', reason: lastWriterFailure,
+      probe: {
+        hasKey: !!env.ANTHROPIC_API_KEY,
+        sysOk: !!sysProbe.prompt,
+        sysWarn: sysProbe.warnings?.slice(0, 3),
+        corner: situation.corner?.key ?? null,
+        promptLen: situationMessage(sent).length,
+      },
+    });
+  }
 
   const storyRead = !!story && !written.warnings.some((w) => w.startsWith('story_not_read'));
   // 원고를 썼다는 이유로 사연을 소비하지 않는다. station.sh가 R2 실물을 확인하고
