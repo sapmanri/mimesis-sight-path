@@ -365,9 +365,19 @@ export function parseScriptAndVoice(text: string): { script: string; voiceNote: 
   return { script: cut.script, voiceNote, stageCues: cut.stageCues };
 }
 
+/** 반쪽 이모지를 지운다 — 08-14 실사고의 직접 원인.
+    이모지는 UTF-16에서 두 칸(서로게이트 쌍)을 차지하는데, 재료를 `slice(0, n)`으로 자르다
+    그 한가운데를 끊으면 **짝 잃은 반쪽**이 남는다. 그 문자열이 프롬프트에 실리면 JSON이 깨지고
+    Anthropic이 400(`no low surrogate in string`)을 돌려준다 → writer_failed.
+    하루 종일 방송이 안 나간 이유가 이 한 글자였다(실패 1,634회).
+    자르는 자리를 전부 고치는 대신 **나가는 문 앞에서 한 번** 걸러 낸다 — 새 재료가 늘어도 안전하다. */
+export function stripLoneSurrogates(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '').replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
 /** 상황 → user 메시지. 사연은 데이터 블록으로만 — 주입 방어 유지. */
 export function situationMessage(s: RadioSituation): string {
-  return [
+  const out = [
     `지금은 ${s.timeLabel}이다.`,
     s.todayLines.length
       ? `오늘 네가 남긴 관찰:\n${s.todayLines.map((l) => `- ${l.replace(/\n/g, ' / ')}`).join('\n')}`
@@ -460,6 +470,7 @@ export function situationMessage(s: RadioSituation): string {
       ? `최근 방송에서 한 말들 (네가 방금 한 얘기다):\n${s.recentScripts.map((t) => `- ${t.replace(/\n/g, ' / ').slice(0, 110)}`).join('\n')}`
       : null,
   ].filter(Boolean).join('\n\n');
+  return stripLoneSurrogates(out);
 }
 
 

@@ -8,6 +8,7 @@ import {
   pickCorner,
   stripBrokenTag,
   trimSituationForCorner,
+  stripLoneSurrogates,
 } from './_radio.ts';
 import { onRequestGet as getRadioDraftSummary, storyPreview, timeLabelOf } from './radio/draft.ts';
 
@@ -179,6 +180,22 @@ test('입력 다이어트 — 이번 자리만 펼치고 나머지는 목차로 
   assert.ok(situationMessage(cut).length < situationMessage(base).length, '보내는 양이 줄어야 한다');
   // 자리가 없으면 아무것도 접지 않는다
   assert.deepEqual(trimSituationForCorner({ ...base, corner: undefined }), { ...base, corner: undefined });
+});
+
+// 08-14 실사고: 재료를 slice로 자르다 이모지 한가운데를 끊어 **반쪽 이모지**가 남았고,
+// 그 문자열이 프롬프트에 실려 Anthropic이 400(no low surrogate)을 던졌다 → 하루 종일 방송 정지.
+test('반쪽 이모지 — 나가는 문 앞에서 걸러 낸다', () => {
+  const broken = '오늘은 보리밥 \uD83D';                 // 😊의 앞쪽 반만 남은 꼴
+  assert.equal(stripLoneSurrogates(broken), '오늘은 보리밥 ');
+  assert.equal(stripLoneSurrogates('\uDE0A 뒤쪽만'), ' 뒤쪽만');
+  assert.equal(stripLoneSurrogates('멀쩡한 😊 이모지'), '멀쩡한 😊 이모지', '온전한 것은 건드리지 않는다');
+  // 실제 경로: 웹툰 글이 목차로 접히며 잘려도 프롬프트는 성해야 한다
+  const msg = situationMessage({
+    timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
+    webtoonPosts: [{ text: '청국장 먹었다 \uD83D', when: '4시간 전' }],
+    corner: { key: 'toon', label: '웹툰', hint: '' },
+  });
+  assert.equal(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(msg), false);
 });
 
 // R3: 기분→목소리 — 별이가 원고 끝에 정하는 셀프 연출 한 줄
