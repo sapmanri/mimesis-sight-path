@@ -17,8 +17,14 @@ const READINGS_KEY = 'radio:readings';
 const READINGS_MAX = 60;
 // program.ts·songs.ts와 같은 잣대 — 서가가 남의 주소를 트는 일은 없어야 한다
 const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\//;
-// 낭독해도 되는 갈래만. 미발표·출품 중 원고는 이름부터 여기 못 들어온다.
+// 낭독해도 되는 갈래만.
 const KIND_OK = new Set(['잠깐멈춰']);
+// 🔴 잠긴 원고는 **제목으로도 막는다** — kind만으로는 못 막는다.
+//   08-16 실사고: 채우는 손(readings-sync.sh)이 profile_data.json examples에서
+//   「소고기 김밥」을 그대로 집어 왔다. 모든 원고에 kind='잠깐멈춰'가 붙으므로
+//   여기 kind 검사는 그때 아무 일도 하지 못했다. TTS가 우연히 실패해 안 올라갔을 뿐이다.
+//   방벽이 둘 다 같은 것을 보면 방벽이 하나인 것과 같다 — 그래서 여기는 이름을 본다.
+const LOCKED = ['소고기 김밥', '남겨둔 것'];
 
 interface RadioReading {
   title: string;
@@ -56,6 +62,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const kind = String(r.kind ?? '').trim().slice(0, 20);
     const dur = Number(r.dur);
     if (!title) return json(400, { ok: false, error: 'bad_title' });
+    if (LOCKED.some((k) => title.includes(k))) return json(400, { ok: false, error: `locked_manuscript: ${title}` });
     if (!KIND_OK.has(kind)) return json(400, { ok: false, error: `kind_not_allowed: ${title}` });
     if (typeof r.url !== 'string' || !URL_OK.test(r.url)) return json(400, { ok: false, error: `bad_url: ${title}` });
     if (!Number.isFinite(dur) || dur <= 0 || dur > 1800) return json(400, { ok: false, error: `bad_dur: ${title}` });
