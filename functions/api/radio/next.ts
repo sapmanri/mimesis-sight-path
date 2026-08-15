@@ -9,7 +9,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript, pickBookcasePiece,
-  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, pickCorner, trimSituationForCorner, lastWriterFailure, radioSystemPrompt, situationMessage,
+  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, foldOverusedMemory, pickCorner, trimSituationForCorner, lastWriterFailure, radioSystemPrompt, situationMessage,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
@@ -132,7 +132,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   } : undefined;
 
   const hour = Number(new Date(Date.now() + 9 * 3_600_000).toISOString().slice(11, 13));
-  const situation: RadioSituation = {
+  const situation = foldOverusedMemory({
     timeLabel: timeLabelOf(hour),
     todayLines,
     story: story?.text ?? null,
@@ -164,7 +164,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         })),
       })),
     broadcastTrail: trail.slice(-4).map((d) => ({ date: d.date.slice(5), items: d.items.slice(-10) })),
-  };
+  } satisfies RadioSituation);
 
   // 이번 판의 자리 — 재료가 있는 코너 중 가장 오래 안 쓴 것. 같은 질문을 3분마다 던지지 않기 위해서다.
   const available = new Set<string>();
@@ -178,7 +178,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   available.add('observe');
   situation.corner = pickCorner(available, recentCorners);
   // 입력 다이어트 — 이번 자리 재료만 펼치고 나머지는 목차로 접는다(08-14 사장 지시).
-  // 저장은 접기 **전** 상황으로 한다: 재현·검증에는 무엇을 가졌었는지가 필요하다.
+  // 저장은 코너별 접기 **전** 상황으로 한다. 과잉 기억은 이미 접힌 상태가 실제 입력 환경이다.
   const sent = trimSituationForCorner(situation);
 
   const written = await writeRadioScript(env, sent);

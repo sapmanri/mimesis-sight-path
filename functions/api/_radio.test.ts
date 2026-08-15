@@ -5,6 +5,7 @@ import {
   parseScriptAndVoice, parseTrailingTags, pickBookcasePiece, markStoryRegistered, markStoryAired,
   type RadioSituation, type RadioStory,
   buildAirMirror,
+  foldOverusedMemory,
   pickCorner,
   stripBrokenTag,
   trimSituationForCorner,
@@ -116,6 +117,47 @@ test('방송 거울 — 반복을 세어 보여 주되 금지하지 않는다', 
   });
   assert.match(msg, /이렇게 나가고 있어/);
   assert.match(msg, /금지가 아니다/);
+});
+
+test('과잉 소재 접기 — 거울이 찾은 과거 기억만 빼고 새 재료와 선택권은 남긴다', () => {
+  const source: RadioSituation = {
+    timeLabel: '밤',
+    todayLines: ['오늘 유리병에 새 빛이 비쳤다.'],
+    story: '유리병을 보다가 떠오른 새로운 사연입니다.',
+    waitingCount: 0,
+    recentScripts: [
+      '유리병이 오늘도 창가에 있었다.',
+      '정류장 의자 아래 젖은 표가 붙어 있었다.',
+    ],
+    airMirror: {
+      total: 4,
+      openings: [],
+      overused: [{ word: '유리병', docs: 3 }],
+    },
+    broadcastTrail: [
+      { date: '08-14', items: ['이야기: 유리병이 다시 보였다'] },
+      { date: '08-15', items: ['「저녁 기차」를 소개하고 틀었다'] },
+    ],
+  };
+
+  const folded = foldOverusedMemory(source);
+  assert.deepEqual(folded.recentScripts, ['정류장 의자 아래 젖은 표가 붙어 있었다.']);
+  assert.deepEqual(folded.broadcastTrail, [
+    { date: '08-15', items: ['「저녁 기차」를 소개하고 틀었다'] },
+  ]);
+  assert.equal(folded.todayLines[0], source.todayLines[0], '새 관찰은 같은 말이 있어도 접지 않는다');
+  assert.equal(folded.story, source.story, '새 사연도 접지 않는다');
+  assert.equal(folded.airMirror, source.airMirror, '거울과 선택권은 그대로 보여 준다');
+  assert.equal(source.recentScripts.length, 2, '원본 상황을 변형하지 않는다');
+  assert.equal(source.broadcastTrail?.length, 2, '원본 자취를 변형하지 않는다');
+
+  const msg = situationMessage(folded);
+  assert.match(msg, /오늘 유리병에 새 빛이 비쳤다/);
+  assert.match(msg, /금지가 아니다/);
+  assert.doesNotMatch(msg, /유리병이 오늘도 창가에 있었다/);
+
+  const noMirror = { ...source, airMirror: undefined };
+  assert.strictEqual(foldOverusedMemory(noMirror), noMirror, '과잉 판정이 없으면 아무것도 접지 않는다');
 });
 
 // 자리(코너)는 편성이 정하고, 무슨 말을 할지는 별이가 정한다

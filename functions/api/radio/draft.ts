@@ -13,7 +13,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript,
-  type RadioStory, type RadioDraft, type RadioSituation, buildAirMirror,
+  type RadioStory, type RadioDraft, type RadioSituation, buildAirMirror, foldOverusedMemory,
 } from '../_radio.ts';
 
 interface Env { PLANET: KVNamespace; PULSE_KEY?: string; ANTHROPIC_API_KEY?: string }
@@ -146,7 +146,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
   const airMirror = buildAirMirror(recentScripts);
 
-  const situation: RadioSituation = {
+  const situation = foldOverusedMemory({
     timeLabel: timeLabelOf(kstHour()),
     todayLines,
     story: story.text,
@@ -154,7 +154,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     recentScripts: recentScripts.slice(0, 4),
     airMirror,
     corner: { key: 'story', label: '사연', hint: '기다리는 사연을 읽고, 거기에 네 얘기를 하나만 보탠다' },
-  };
+  } satisfies RadioSituation);
 
   const written = await writeRadioScript(env, situation);
   if (!written) return json(502, { ok: false, error: 'writer_failed', id: story.id });

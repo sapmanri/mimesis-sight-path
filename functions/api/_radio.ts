@@ -505,6 +505,28 @@ export function buildAirMirror(scripts: string[]): { total: number; openings: { 
   };
 }
 
+/** 거울이 이미 과잉으로 보여 준 소재를 과거 기억에서만 접는다.
+    금칙어 목록이 아니다: 오늘 관찰·새 사연·서재 등 새 재료와 거울 자체는 그대로 두고,
+    직전 대본과 방송 자취가 같은 소재를 다시 밀어 넣는 순환만 끊는다. */
+export function foldOverusedMemory(s: RadioSituation): RadioSituation {
+  const words = (s.airMirror?.overused ?? [])
+    .map((entry) => String(entry.word).trim())
+    .filter(Boolean);
+  if (!words.length) return s;
+
+  const repeatsOverused = (text: string) => words.some((word) => String(text).includes(word));
+  const recentScripts = s.recentScripts.filter((script) => !repeatsOverused(script));
+  const broadcastTrail = s.broadcastTrail
+    ?.map((day) => ({ ...day, items: day.items.filter((item) => !repeatsOverused(item)) }))
+    .filter((day) => day.items.length > 0);
+
+  return {
+    ...s,
+    recentScripts,
+    broadcastTrail: broadcastTrail?.length ? broadcastTrail : undefined,
+  };
+}
+
 /** 코너 — 매 판 같은 것을 묻지 않기 위한 자리. 재료가 있는 코너 중 가장 오래 안 쓴 것을 고른다.
     사장 08-14 새벽: "별이가 계속 새로운 얘기를 하게끔 유도를 해야지." */
 export const RADIO_CORNERS: { key: string; label: string; hint: string }[] = [
