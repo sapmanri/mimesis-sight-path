@@ -288,21 +288,30 @@ let currentSeg = null;
 const LIVE_URL = '/api/radio/stream';
 const LIVE_LAT_MS = 3500;   // 32KB harbor burst + 터널 왕복. HLS의 18초 지연은 사라졌다.
 const BAR_MAX = 100000;     // 48시간 눈금에서도 초 단위 목적지를 잡을 수 있는 해상도
-let usingStream = false;
+let usingStream = false, streamRecovering = false;
 let streamRetryTimer = null, streamRetryDelay = 1500;
 /* 지금 나가는 것 — 생성기의 진실(/api/radio/now). 라벨·[다시 듣기]·자막이 전부 여기서 나온다.
    재방송은 편성표에 없으므로 편성표 추측(segAt)으로는 화면이 거짓말을 하게 된다 (사장 08-13). */
-let nowData = null, nowFetchedAt = 0;
+let nowData = null, nowFetchedAt = 0, nowMisses = 0;
+let lastAirMode = 'live';
 async function fetchNow() {
   try {
     const r = await fetch('/api/radio/now', { cache: 'no-store' });
-    nowData = await r.json();
-  } catch {}
-  nowFetchedAt = Date.now();
+    if (!r.ok) throw new Error('now_' + r.status);
+    const next = await r.json();
+    if (!next || next.available === false || next.stale) throw new Error('now_unavailable');
+    nowData = next;
+    nowMisses = 0;
+  } catch {
+    nowMisses += 1;
+    // 한 번의 패킷 손실로 라벨을 뒤집지 않는다. 연속 실패만 중립 상태로
+    // 바꾸고, 결코 실패를 「라이브」라는 사실로 꾸미지 않는다.
+    if (nowMisses >= 2) nowData = { kind:'bed', available:false, stale:true };
+  } finally { nowFetchedAt = Date.now(); }
 }
 function streamStart() {
   if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
-  usingStream = true; live = true; anchor = null; currentSeg = null;
+  usingStream = true; streamRecovering = true; live = true; anchor = null; currentSeg = null;
   amb.pause();
   au.src = LIVE_URL + '?connect=' + Date.now();
   tryPlay(au);
@@ -329,13 +338,14 @@ function tryPlay(el) {
 }
 au.addEventListener('playing', () => {
   amb.pause();
-  if (usingStream) streamRetryDelay = 1500;
+  if (usingStream) { streamRecovering = false; streamRetryDelay = 1500; }
 }); // 목소리가 나오면 방 소리는 쉰다
 au.addEventListener('error', () => {
   // 원점이 잠깐 죽어도 과거 파일 붙이기 엔진으로 되돌아가지 않는다. 방 소리를 깔고
   // 하나의 연속 줄기에 지수 백오프로 다시 붙는다. Tunnel 주소 변경도 여기서 회복한다.
   if (usingStream) {
     usingStream = false;
+    streamRecovering = true;
     au.removeAttribute('src');
     if (playing && live) { amb.currentTime = 0; tryPlay(amb); scheduleStreamRetry(); }
   }
@@ -351,12 +361,12 @@ amb.addEventListener('pause', () => {
 });
 document.addEventListener('pointerdown', () => {   // 손이 오면 그 김에 — 요구하진 않는다
   if (!playing) return;
-  if (usingStream) { if (au.paused) streamStart(); }
+  if (usingStream || streamRecovering) { if (au.paused) streamStart(); }
   else if (au.paused && amb.paused) liveAdvance();
 });
 document.addEventListener('visibilitychange', () => {  // 화면으로 돌아온 순간 = 라이브로 재접속
   if (document.hidden || !playing) return;
-  if (usingStream) { if (au.paused) streamStart(); }
+  if (usingStream || streamRecovering) { if (au.paused) streamStart(); }
   else liveAdvance();
 });
 if ('mediaSession' in navigator) {
@@ -437,9 +447,10 @@ function attachSeg(s, p) {
 }
 
 function tick() {
-  if (usingStream) {
+  if (usingStream || streamRecovering) {
     // 연속 MP3 라이브 — 붙이기는 운영체제 몫. 여기선 소생·타임라인·화면 진실만.
-    if (playing && au.paused) tryPlay(au);
+    if (usingStream && playing && au.paused) tryPlay(au);
+    if (streamRecovering && playing && amb.paused) { amb.currentTime = 0; tryPlay(amb); }
     if (playing && Date.now() - nowFetchedAt > 6000) fetchNow();
     const a = spanStart(), b = Math.max(liveP(), a + 60000);
     const p = liveP() - LIVE_LAT_MS;
@@ -448,11 +459,14 @@ function tick() {
     const nd = nowData;
     // 라이브 알약의 정직 (사장 00:35 "계속 라이브라고 되있는 건 내 핸폰이 삐꾸냐"):
     // 재방송이 나가는 동안은 「재방송」— 방송 줄기는 라이브지만 내용은 다시 듣기다.
-    const replaying = !!(nd && nd.isReplay && nd.kind !== 'bed');
-    $('liveBtn').textContent = replaying ? '● 재방송' : '● 라이브';
-    $('liveBtn').classList.toggle('on', !replaying);
-    $('dot').classList.toggle('live', playing);
-    if (nd && nd.kind !== 'bed' && nd.startedAt) {
+    const unavailable = !!(nd && (nd.available === false || nd.stale));
+    if (nd && !unavailable && nd.kind !== 'bed') lastAirMode = nd.isReplay ? 'replay' : 'live';
+    const replaying = lastAirMode === 'replay';
+    $('liveBtn').textContent = (streamRecovering || unavailable)
+      ? '● 연결 중' : replaying ? '● 재방송' : '● 라이브';
+    $('liveBtn').classList.toggle('on', !streamRecovering && !unavailable && !replaying);
+    $('dot').classList.toggle('live', playing && usingStream && !streamRecovering);
+    if (!unavailable && nd && nd.kind !== 'bed' && nd.startedAt) {
       $('now').textContent = nd.title || '별리의 방';
       $('state').textContent = nd.isReplay
         ? (nd.kind === 'song' ? '노래 다시 듣기 — ' + (nd.title || '') : '지난 방송 다시 듣기')
@@ -463,6 +477,10 @@ function tick() {
       const cur = nd.script ? { id: 'now:' + nd.startedAt, script: nd.script,
         startAt: nd.startedAt + LIVE_LAT_MS, dur: nd.dur || 1 } : null;
       renderScript(cur, cur ? Math.max(0, elapsed / ((nd.dur || 1) * 1000)) : 0);
+    } else if (unavailable || streamRecovering) {
+      $('now').textContent = '별리의 방 — 다시 연결하는 중';
+      $('state').textContent = '';
+      renderScript(null, 0);
     } else {
       $('now').textContent = '별리의 방 — 방송 중';
       $('state').textContent = '';
@@ -569,7 +587,7 @@ function renderScript(cur, frac) {
    모든 소리가 죽어 심장박동 자체가 멎었다. 이제 이벤트 문맥 **안에서** 방 소리부터 즉시 살리고
    (소리가 살아 있으면 세션이 유지돼 뒤의 play()도 허락된다), 그다음에 편성표를 읽는다. */
 async function liveAdvance() {
-  if (!playing || usingStream) return;   // 연속 스트림 중엔 붙이기·방 소리 전부 Liquidsoap 몫
+  if (!playing || usingStream || streamRecovering) return; // 스트림 복구 중에도 옛 토막으로 새지 않는다
   if ((au.paused || au.ended) && amb.paused) { amb.currentTime = 0; tryPlay(amb); }
   if (!live) return;
   await loadProgram();
@@ -596,6 +614,7 @@ $('play').onclick = () => {
     if (live) streamStart();             // 라이브는 연속 MP3 — 잠가도 나온다
   } else {
     usingStream = false;
+    streamRecovering = false;
     if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     au.pause(); au.removeAttribute('src'); amb.pause(); currentSeg = null; $('state').textContent = '';
     checkVersion();   // 멈춘 김에 — 새 판이 나와 있으면 이 참에 갈아입는다
@@ -668,6 +687,8 @@ function commitTunerPosition(p, b) {
     live = true; anchor = null;
   } else {
     usingStream = false;
+    streamRecovering = false;
+    if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     if (playing) { au.pause(); au.removeAttribute('src'); }
     live = false; anchor = { P0:p, t0:Date.now() };
   }
@@ -711,7 +732,7 @@ $('prevSession').onclick = () => jumpTuner(-1);
 $('nextSession').onclick = () => jumpTuner(1);
 $('liveBtn').onclick = () => {
   if (playing) { streamStart(); return; }
-  live = true; anchor = null; currentSeg = null;
+  live = true; anchor = null; currentSeg = null; streamRecovering = false;
   updateTunerStepButtons();
 };
 
