@@ -198,6 +198,8 @@ export interface RadioSituation {
   /** 곡 서가 — 방송국에 실재하는 노래들 (Vase 08-12 밤: "15분에 한마디가 라디오냐" — 노래 편성).
       제목만 준다. 틀지 말지·언제 틀지는 별이가 정한다 — 각본 금지 원칙 그대로. */
   songShelf?: { title: string }[];
+  /** 낭독 서가 — 미리 구워 둔 우리 원고. 별이가 제목을 보고 고른다 (사장 지시 08-15) */
+  readingShelf?: { title: string; opening?: string }[];
   /** 서재 산책 발견 — 별이가 웹에서 직접 찾아 읽고 서가에 둔 책들 (Vase 08-12 밤: 인터넷 개방 1분야).
       실물은 KV(radio:library:shelf), 산책은 /api/radio/library. 방송에서 꺼낼지는 별이가 정한다. */
   libraryFinds?: { title: string; author: string; note: string; ago: string }[];
@@ -278,9 +280,12 @@ ${style}
 }
 
 export interface RadioScriptResult {
+  /** 별이가 [낭독: …]로 고른 글 — 서가 대조는 next.ts 몫 */
+  readingTitle?: string | null;
   script: string;           // 방송 토막 전체 (사연 원문 포함 가능)
   voiceNote: string | null; // 별이가 정한 그날 목소리 연출 한 줄 (기분→목소리, 사장 지시 08-12)
   songTitle: string | null; // 별이가 [노래: …]로 고른 곡 제목 — 서가 대조는 호출자(next.ts) 몫
+  readingTitle: string | null; // 별이가 [낭독: …]로 고른 글 제목 — 대조는 마찬가지로 호출자 몫
   musicTransition: MusicTransition | null;
   /** 별이가 스스로 쓴 지문 — 본문에서 떼어냈고 그 자리는 숨(문단 경계)으로 남는다.
       버리지 않고 남기는 이유: 시킨 적 없는 연출이라 기록할 값어치가 있다(사장 08-14: "대견해"). */
@@ -296,13 +301,15 @@ export interface RadioScriptResult {
     별이가 지시 순서를 뒤집어 적어도 방송이 죽을 이유는 아니다. 없으면 그대로. */
 export function parseTrailingTags(text: string): {
   script: string; voiceNote: string | null; songTitle: string | null; musicTransition: MusicTransition | null;
+  readingTitle: string | null;
 } {
   let script = text.trim();
   let voiceNote: string | null = null;
   let songTitle: string | null = null;
   let musicTransition: MusicTransition | null = null;
   let spokenSongIntro: string | null = null;
-  for (let i = 0; i < 2; i++) {
+  let readingTitle: string | null = null;
+  for (let i = 0; i < 3; i++) {
     const v = script.match(/\n?\s*\[목소리:\s*([^\]]{1,60})\]\s*$/);
     if (v && voiceNote === null) {
       const note = v[1].trim();
@@ -324,10 +331,17 @@ export function parseTrailingTags(text: string): {
       script = script.slice(0, s.index).trim();
       continue;
     }
+    // [낭독: 제목] — 곡과 같은 자리, 같은 규칙. 본문은 별이가 옮겨 적지 않는다.
+    const r = script.match(/\n?\s*\[낭독:\s*([^\]]{1,60})\]\s*$/);
+    if (r && readingTitle === null) {
+      readingTitle = r[1].trim() || null;
+      script = script.slice(0, r.index).trim();
+      continue;
+    }
     break;
   }
   if (spokenSongIntro) script = [script, spokenSongIntro].filter(Boolean).join('\n\n');
-  return { script, voiceNote, songTitle, musicTransition };
+  return { script, voiceNote, songTitle, musicTransition, readingTitle };
 }
 
 /** 옛 이름 — [목소리:]만 떼던 시절의 창구. 기존 호출·검사 호환용, 속은 공용 파서다. */
@@ -391,6 +405,18 @@ export function situationMessage(s: RadioSituation): string {
       : null,
     s.songShelf?.length
       ? `방송국 곡 서가 (틀 수 있는 노래들 — 틀지 말지는 네가 정한다):\n${s.songShelf.map((g) => `- ${g.title}`).join('\n')}`
+      : null,
+    /* 낭독 서가 — 곡과 같은 자리, 같은 말투다. 제목을 보여 주는 이유는 별이가
+       "글 하나 읽어볼게" 하고 **제목을 말하며** 건너가라는 것이다 (사장 지시 08-15).
+       첫 줄을 함께 주는 건 무슨 글인지 알고 고르라는 뜻이지 전문을 주는 게 아니다. */
+    s.readingShelf?.length
+      ? [
+          `방송국 낭독 서가 (읽어 줄 수 있는 우리 글들 — 읽을지 말지는 네가 정한다):`,
+          ...s.readingShelf.map((r) => `- ${r.title}${r.opening ? ` — ${r.opening}` : ''}`),
+          `읽고 싶으면 **원고 끝에** [낭독: 제목] 한 줄을 놓아라. 곡을 고를 때와 같다.`,
+          `본문은 네가 옮겨 적지 마라 — 이미 네 목소리로 구워 둔 게 붙는다.`,
+          `대신 그 앞에 네 말로 건너가라. 제목을 말해 주고, 왜 이 글인지 한 마디만.`,
+        ].join('\n')
       : null,
     s.libraryFinds?.length
       ? `요즘 서재에서 네가 찾아 읽어 둔 책들 (네가 직접 고른 것이다 — 방송에서 꺼낼지는 네 마음):\n${s.libraryFinds.map((b) => `- 「${b.title}」${b.author ? ` (${b.author})` : ''} — ${b.note} (${b.ago})`).join('\n')}`
@@ -556,6 +582,9 @@ export const RADIO_CORNERS: { key: string; label: string; hint: string }[] = [
   { key: 'song',     label: '곡 소개',     hint: '곡 하나를 골라 왜 지금 이 곡인지 한마디 얹고 튼다' },
   { key: 'library',  label: '서재',        hint: '요즘 읽은 책에서 한 대목만 꺼낸다' },
   { key: 'bookcase', label: '책장 낭독',   hint: '책장에 펼쳐진 원고를 소리 내어 읽는다' },
+  // 낭독 서가 (08-15) — 책장 낭독과 다르다. 책장은 네가 그 자리에서 읽는 것이고,
+  // 이건 **미리 구워 둔 낭독**이라 너는 앞에서 건너가는 말만 하면 된다.
+  { key: 'reading',  label: '글 하나',     hint: '낭독 서가에서 한 편을 골라 제목을 말해 주고 건너간다' },
   { key: 'web',      label: '오늘 본 것',  hint: '하늘·그림·사진·옛 글에서 하나' },
   { key: 'toon',     label: '웹툰',        hint: '@byeol.toon 최근 편을 보고 든 생각' },
   { key: 'trail',    label: '지난 방송',   hint: '며칠 전 방송에서 한 얘기를 다시 꺼내 이어 본다' },
@@ -660,11 +689,11 @@ export async function writeRadioScript(
     const parsed = parseTrailingTags(raw);
     const fixed = stripBrokenTag(parsed.script);
     const { script, stageCues } = extractStageCues(fixed.script);
-    const { voiceNote, songTitle, musicTransition } = parsed;
+    const { voiceNote, songTitle, musicTransition, readingTitle } = parsed;
     const check = validateRadioScript(script, situation.story);
     if (!check.pass) return fail('validate', { errors: check.errors, head: script.slice(0, 120) });
     return {
-      script, voiceNote, songTitle, musicTransition, stageCues,
+      script, voiceNote, songTitle, musicTransition, readingTitle, stageCues,
       promptChars: userMessage.length + (sys.prompt?.length ?? 0),
       provenance: provenance('genome-live', true),
       warnings: [...sys.warnings, ...check.warnings, ...(fixed.broken ? ['truncated_tag_stripped'] : [])],

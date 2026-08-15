@@ -29,7 +29,11 @@ const RECALL_DAYS = 7;
 const RECALL_ITEMS_MAX = 16;
 // 곡 서가 (노래 편성, 08-12 밤) — 정본은 KV. 채우는 손은 byeol-radio/songs-sync.sh.
 const SONGS_KEY = 'radio:songs';
+// 낭독 서가 (사장 지시 08-15) — 미리 구워 둔 우리 원고. 채우는 손은 byeol-radio/readings-sync.sh.
+//   곡과 같은 꼴이다: 별이는 제목만 고르고, 실물은 조립기가 토막 뒤에 잇는다.
+const READINGS_KEY = 'radio:readings';
 interface RadioSong { title: string; url: string; dur: number; lyrics?: string }
+interface RadioReading { title: string; url: string; dur: number; kind: string; opening?: string }
 /** 제목 대조용 — 공백 차이로 곡을 놓치지 않는다 (별이가 제목을 새로 짓는 건 못 막지만, 그건 warning으로 남는다) */
 const songKey = (t: string) => t.replace(/\s+/g, '').trim();
 
@@ -58,12 +62,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw, recallRaw, threadsRaw, youtubeRaw, observationsRaw] = await Promise.all([
+  const [feedRaw, indexRaw, comicsRaw, songsRaw, shelfRaw, bookcaseRaw, toonRaw, recallRaw, threadsRaw, youtubeRaw, observationsRaw, readingsRaw] = await Promise.all([
     env.PLANET.get(FEED_KEY), env.PLANET.get(DRAFT_INDEX_KEY), env.PLANET.get('comic_scenario_log'),
     env.PLANET.get(SONGS_KEY), env.PLANET.get(LIBRARY_SHELF_KEY), env.PLANET.get('radio:bookcase'),
     env.PLANET.get(TOON_KEY), env.PLANET.get(RECALL_KEY),
     env.PLANET.get(THREADS_SHELF_KEY), env.PLANET.get(YOUTUBE_SHELF_KEY),
-    env.PLANET.get(WEB_OBSERVATIONS_KEY),
+    env.PLANET.get(WEB_OBSERVATIONS_KEY), env.PLANET.get(READINGS_KEY),
   ]);
   const trail: { date: string; items: string[] }[] = recallRaw ? JSON.parse(recallRaw) : [];
   const feed: { icon?: string; t?: number; text?: string }[] = feedRaw ? JSON.parse(feedRaw) : [];
@@ -106,6 +110,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }));
 
   const songs: RadioSong[] = songsRaw ? JSON.parse(songsRaw) : [];
+  const readings: RadioReading[] = readingsRaw ? JSON.parse(readingsRaw) : [];
 
   // 서재 산책 발견 (책 분야 개방, 08-12 밤) — 최근 두 권만 상황에. 시점은 사람 말로.
   const shelf: LibraryFind[] = shelfRaw ? JSON.parse(shelfRaw) : [];
@@ -142,6 +147,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     airMirror,
     comicBits,
     songShelf: songs.map((g) => ({ title: g.title })),
+    // 제목과 첫 줄만 — 본문은 안 준다. 별이는 무슨 글인지 알고 고르기만 하면 된다.
+    readingShelf: readings.map((r) => ({ title: r.title, opening: r.opening })),
     libraryFinds,
     bookcase,
     // @byeol.toon — 계정 접근은 읽기 전용, 작품은 별이가 직접 그린 자기 웹툰. 최근 3편만.
@@ -176,6 +183,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const available = new Set<string>();
   if (situation.story) available.add('story');
   if (situation.songShelf?.length) available.add('song');
+  if (situation.readingShelf?.length) available.add('reading');
   if (situation.libraryFinds?.length) available.add('library');
   if (situation.bookcase?.open) available.add('bookcase');
   if (situation.webObservations?.length) available.add('web');
@@ -216,6 +224,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const warnings = [...written.warnings];
   if (written.songTitle && !picked) warnings.push(`song_not_found: ${written.songTitle}`);
 
+  // 별이가 고른 낭독을 서가와 대조 — 곡과 같은 규칙. 서가에 없는 제목은 방송에 못 나간다.
+  const pickedReading = written.readingTitle
+    ? readings.find((r) => songKey(r.title) === songKey(written.readingTitle!)) ?? null
+    : null;
+  if (written.readingTitle && !pickedReading) warnings.push(`reading_not_found: ${written.readingTitle}`);
+
   // 방송 자취 적기 — 강제가 아니라 기억이다 (사장 판정 08-12 밤: "게놈으로 다시 보게끔 해서
   // 알아서 하게 두라고. 그래도 또 읽는다? 그럼 그게 별이인 거야"). 무엇을 낭독했고 틀었고
   // 답했는지를 날짜별로 적어 다음 상황에 실어 준다 — 다시 읽을지는 별이가 알고 고른다.
@@ -254,6 +268,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     song: picked ? {
       title: picked.title, url: picked.url, dur: picked.dur, lyrics: picked.lyrics ?? '',
       transition: written.musicTransition ?? 'intro',
+    } : null,
+    // 낭독 편성 (08-15): 별이가 앞에서 제목을 말하며 건너가고, 그 뒤에 미리 구운 낭독이 붙는다
+    reading: pickedReading ? {
+      title: pickedReading.title, url: pickedReading.url, dur: pickedReading.dur, kind: pickedReading.kind,
     } : null,
     title: written.script.split('\n')[0].slice(0, 60),
     warnings,
