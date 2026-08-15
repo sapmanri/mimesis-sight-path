@@ -96,9 +96,17 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       ? rawActive.filter((v): v is string => typeof v === 'string')
       : null;
     if (hasSuccess && activeIds && activeIds.length) {
+      // 소관 밖(감각 수집기가 채운 소스)은 건드리지 않는다 — 단일 경로 주석 참조
       const keep = new Set(activeIds);
-      shelf = { ...shelf, sources: shelf.sources.filter((s) => keep.has(s.id)) };
-      receipts = { ...receipts, receipts: receipts.receipts.filter((r) => keep.has(r.sourceId)) };
+      const CRAWLER_KINDS = new Set(['threads_profile', 'youtube_channel', 'web_page']);
+      shelf = {
+        ...shelf,
+        sources: shelf.sources.filter((s) => !CRAWLER_KINDS.has(s.kind) || keep.has(s.id)),
+      };
+      receipts = {
+        ...receipts,
+        receipts: receipts.receipts.filter((r) => !CRAWLER_KINDS.has(r.kind) || keep.has(r.sourceId)),
+      };
     }
 
     const writes = [
@@ -159,10 +167,25 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const activeOne = Array.isArray(rawActiveOne)
     ? rawActiveOne.filter((v): v is string => typeof v === 'string')
     : null;
+  /* 🔴 소관 밖은 건드리지 않는다 (08-15 실사고).
+     서가는 **두 수집기가 함께 쓴다** — crawl_observations.py(웹·유튜브·스레드)와
+     sensory_observations.py(하늘·사진·미술관·문헌). 크롤러가 보내는 activeIds에는
+     제 것만 들어 있는데, 그것만 남기고 지웠더니 **감각 소스 넷이 통째로 날아갔다**
+     (하늘·우리 사진·시카고·위키문헌 → 서가 8개가 3개로). 즉시 복구했지만
+     같은 실수를 코드가 막아야 한다.
+     그래서 **크롤러가 만드는 kind에 한해서만** 정리한다. */
   if (activeOne && activeOne.length) {
     const keep = new Set(activeOne);
-    merged = { ...merged, sources: merged.sources.filter((s) => keep.has(s.id)) };
-    mergedReceipts = { ...mergedReceipts, receipts: mergedReceipts.receipts.filter((r) => keep.has(r.sourceId)) };
+    const CRAWLER_KINDS = new Set(['threads_profile', 'youtube_channel', 'web_page']);
+    const inScope = (kind: string) => CRAWLER_KINDS.has(kind);
+    merged = {
+      ...merged,
+      sources: merged.sources.filter((s) => !inScope(s.kind) || keep.has(s.id)),
+    };
+    mergedReceipts = {
+      ...mergedReceipts,
+      receipts: mergedReceipts.receipts.filter((r) => !inScope(r.kind) || keep.has(r.sourceId)),
+    };
   }
   await Promise.all([
     env.PLANET.put(WEB_OBSERVATIONS_KEY, JSON.stringify(merged)),
