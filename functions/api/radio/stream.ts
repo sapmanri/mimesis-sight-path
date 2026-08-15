@@ -25,12 +25,17 @@ const unavailable = (error: string) => new Response(JSON.stringify({ ok: false, 
 });
 
 async function liveStream(request: Request): Promise<Response | null> {
+  const controller = new AbortController();
+  // A dead Tunnel must not hold the listener forever. The timer is cleared as
+  // soon as response headers arrive, so it never cuts a healthy MP3 body later.
+  const deadline = setTimeout(() => controller.abort(), 5000);
   try {
     const upstream = await fetch(STREAM_URL, {
       headers: {
         'user-agent': 'byeoli-station/continuous-2',
         'icy-metadata': request.headers.get('icy-metadata') ?? '0',
       },
+      signal: controller.signal,
       cf: { cacheTtl: 0, cacheEverything: false },
     } as RequestInit);
     if (!upstream.ok || !upstream.body) {
@@ -50,6 +55,8 @@ async function liveStream(request: Request): Promise<Response | null> {
     });
   } catch {
     return null;
+  } finally {
+    clearTimeout(deadline);
   }
 }
 
