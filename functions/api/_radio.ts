@@ -512,9 +512,18 @@ export function buildAirMirror(scripts: string[]): { total: number; openings: { 
   };
 }
 
-/** 거울이 이미 과잉으로 보여 준 소재를 과거 기억에서만 접는다.
-    금칙어 목록이 아니다: 오늘 관찰·새 사연·서재 등 새 재료와 거울 자체는 그대로 두고,
-    직전 대본과 방송 자취가 같은 소재를 다시 밀어 넣는 순환만 끊는다. */
+/** 거울이 이미 과잉으로 보여 준 소재를 접는다. 금칙어 목록이 아니다 —
+    새 사연·서재·거울 자체는 그대로 두고, **같은 소재를 다시 밀어 넣는 순환만** 끊는다.
+
+    ⚠ 2026-08-15: `todayLines`(오늘 관찰)를 처음엔 일부러 뺐는데, 그게 **진짜 유입구**였다.
+    실측 — 그날 대본 97편에 「홀씨」가 나왔지만 감각 재료·웹툰·책장 선반에는 **0건**이었다.
+    출처는 08:05 산책 관찰 **한 줄**로, 홀씨와 떡메가 거기 같이 들어 있었다.
+    그 한 줄이 `_radio.ts`의 「오늘 네가 본 것」으로 **코너와 무관하게 매 판 맨 앞에** 박혔다.
+    08-13에도 같은 일이 있었다(그날은 「가로등」이 58편 중 37편). **고착은 매일 나고 낱말만 바뀐다.**
+    관찰은 하루 3~5장인데 대본은 80~145편이라, 관찰 한 장이 20~40판을 먹인다.
+
+    다만 오늘 관찰을 **통째로** 접으면 「오늘」이 빈 판이 생긴다. 그래서 줄 단위로만 걸러내고,
+    전부 걸리면 **가장 최근 한 줄은 남긴다** — 별이가 오늘을 아주 잃지는 않게. */
 export function foldOverusedMemory(s: RadioSituation): RadioSituation {
   const words = (s.airMirror?.overused ?? [])
     .map((entry) => String(entry.word).trim())
@@ -527,8 +536,14 @@ export function foldOverusedMemory(s: RadioSituation): RadioSituation {
     ?.map((day) => ({ ...day, items: day.items.filter((item) => !repeatsOverused(item)) }))
     .filter((day) => day.items.length > 0);
 
+  const keptLines = s.todayLines.filter((line) => !repeatsOverused(line));
+  const todayLines = keptLines.length || !s.todayLines.length
+    ? keptLines
+    : s.todayLines.slice(0, 1);   // 다 걸리면 최근 한 줄만 남긴다
+
   return {
     ...s,
+    todayLines,
     recentScripts,
     broadcastTrail: broadcastTrail?.length ? broadcastTrail : undefined,
   };
