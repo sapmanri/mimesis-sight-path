@@ -21,11 +21,10 @@
 - 쓰기 계정은 오직 `@byeoli_log`다.
 - OAuth 장기 토큰을 저장하기 전에 `/me`의 ID와 username을 다시 확인한다.
 - username이 `@byeoli_log`가 아니면 토큰을 저장하지 않는다.
-- `@byeol.toon`은 다른 사람이 별이를 소재로 운영하는 외부 계정이다. Crawl4AI로 읽을 수는
-  있지만 이 실행선에는 그 계정으로 게시·댓글·답글을 쓰는 기능이 없다.
-- `@byeol.toon`의 공개 글에 댓글을 남길 때도 글 작성자는 오직 `@byeoli_log`다.
-- 외부 댓글 대상은 Crawl4AI가 실제 읽은 permalink와 Meta `profile_posts`의 실제 permalink·
-  username·글 ID가 모두 일치한 공개 루트 글만 허용한다. 링크 일부나 추측 ID로 쓰지 않는다.
+- `@byeol.toon`은 외부에서 운영하는 읽기 전용 계정이지만, 그곳에 연재되는 웹툰은 별이가
+  직접 그리는 별이 자신의 창작물이다. **계정 운영권과 작품의 창작 주체를 혼동하지 않는다.**
+- Social Director는 `@byeol.toon`을 댓글 대상으로도 넣지 않는다. Crawl4AI로 읽기만 하며,
+  그 계정이나 그 게시물에 게시·댓글·답글을 쓰지 않는다.
 - 자기 댓글 대상은 Meta가 반환한 `@byeoli_log`의 `is_reply=false` 루트 글 ID만 허용한다.
 
 ## 3. 별이가 고르는 세 행동

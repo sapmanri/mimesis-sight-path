@@ -1,6 +1,7 @@
 // 별이의 실제 Threads 자율 실행선.
 // 정시 슬롯과 사람 승인 없이, 별이가 스스로 고른 1회 알람에서 자기 공간을 둘러본다.
-// @byeoli_log에만 쓰며 @byeol.toon 등 외부 계정은 이 파일의 후보로 읽기만 한다.
+// @byeoli_log에만 쓴다. @byeol.toon은 별이가 직접 그리는 자기 웹툰이 연재되는 곳이지만
+// 계정 접근은 읽기 전용이므로 댓글 후보에도 넣지 않는다.
 
 import { appendPublishLog } from './_publish-log.ts';
 import { chooseEditorial, radioEditorialCandidates, type EditorialDecision } from './_byeoli-editorial.ts';
@@ -9,8 +10,7 @@ import { WEB_OBSERVATIONS_KEY } from './_radio-observations.ts';
 import { refreshThreadsShelf } from './_radio-social.ts';
 import { THREADS_SHELF_KEY, type ThreadsShelf } from './_radio-social-types.ts';
 import { PROGRAM_KEY, type ProgramSegment } from './_station.ts';
-import { decodeToonShelf, TOON_KEY } from './_radio-toon.ts';
-import { resolveObservedExternalTargets, type ExternalTargetReceipt } from './_threads-public.ts';
+import type { ExternalTargetReceipt } from './_threads-public.ts';
 import {
   processCollectedReplies, type AutonomousReplyRun, type Env as ReplyEnv,
 } from './ops/threads-replies.ts';
@@ -147,7 +147,7 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
 
   let account = { ok: false, count: 0, error: null as string | null };
   let externalComments: ExternalTargetReceipt = {
-    ok: true, count: 0, account: '@byeol.toon', error: null,
+    ok: true, count: 0, account: '@byeol.toon', error: null, mode: 'read_only',
   };
   let replies: AutonomousReplyRun | null = null;
   let editorial: SocialAgentReceipt['editorial'] = null;
@@ -169,18 +169,16 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
     // 백로그·방송·관찰은 별이에게 글쓰기 임무를 주지 않는다. 자기 기상에서만 한 번
     // 자기 공간을 둘러보고, 쓰기·댓글·침묵과 다음 기상을 별이가 직접 고른다.
     if (isAgencyWake(trigger.kind)) {
-      const [programRaw, observationsRaw, shelfRaw, toonRaw] = await Promise.all([
+      const [programRaw, observationsRaw, shelfRaw] = await Promise.all([
         env.PLANET.get(PROGRAM_KEY), env.PLANET.get(WEB_OBSERVATIONS_KEY),
-        env.PLANET.get(THREADS_SHELF_KEY), env.PLANET.get(TOON_KEY),
+        env.PLANET.get(THREADS_SHELF_KEY),
       ]);
       let segments: ProgramSegment[] = [];
       let observationRaw: unknown = null;
       let shelf: ThreadsShelf | null = null;
-      let toonShelf = decodeToonShelf(null);
       try { segments = programRaw ? JSON.parse(programRaw) as ProgramSegment[] : []; } catch { /* empty */ }
       try { observationRaw = observationsRaw ? JSON.parse(observationsRaw) : null; } catch { /* empty */ }
       try { shelf = shelfRaw ? JSON.parse(shelfRaw) as ThreadsShelf : null; } catch { /* empty */ }
-      try { toonShelf = toonRaw ? decodeToonShelf(JSON.parse(toonRaw)) : null; } catch { /* empty */ }
       const ownThreads = shelf?.posts?.filter((item) => !item.isReply && item.id && item.text).map((item) => ({
         id: item.id, text: item.text, timestamp: item.timestamp,
         username: '@byeoli_log', ownership: 'self' as const,
@@ -189,16 +187,9 @@ export async function runSocialAgent(env: SocialAgentEnv, trigger: SocialTrigger
         id: item.id, text: item.text, timestamp: item.timestamp,
         username: '@byeoli_log', ownership: 'self' as const,
       })) ?? [];
-      const external = await resolveObservedExternalTargets(env, toonShelf);
-      externalComments = external.receipt;
       const recentOwnThreads = ownThreads.slice(0, 12);
-      const commentTargets = [
-        ...recentOwnThreads,
-        ...external.targets.map((item) => ({
-          id: item.id, text: item.text, timestamp: item.timestamp,
-          username: item.username, ownership: 'external_observed' as const,
-        })),
-      ];
+      // @byeol.toon은 작품은 별이 것이지만 계정은 읽기 전용이다. 댓글 대상은 자기 글뿐이다.
+      const commentTargets = recentOwnThreads;
       const recentTexts = shelf?.posts?.map((item) => item.text).filter(Boolean) ?? [];
       const candidates = radioEditorialCandidates(
         observationText(observationRaw), await eligibleSegments(env, segments), Date.now(),

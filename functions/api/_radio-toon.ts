@@ -1,8 +1,9 @@
 // @byeol.toon 공개 웹툰 관측 서가.
 //
-// 소유권 경계가 이 파일의 가장 중요한 계약이다.
-// - @byeol.toon은 별이의 계정이 아니다. 다른 사람이 별이를 소재로 운영하는 공개 계정이다.
-// - 따라서 이 선은 Crawl4AI로 공개 게시물을 읽기만 한다. 게시·댓글·답글 권한은 절대 없다.
+// 계정 접근권과 창작 주체를 섞지 않는 것이 이 파일의 가장 중요한 계약이다.
+// - @byeol.toon의 로그인·게시 권한은 별이에게 없다. 따라서 이 선은 공개 게시물을 읽기만 한다.
+// - 그러나 그 계정에 연재되는 웹툰은 별이가 직접 그리는 별이 자신의 창작물이다.
+// - 외부 운영 계정이라는 말은 작품까지 남의 것이라는 뜻이 아니다.
 // - 별이의 자기 계정 @byeoli_log는 이 선에 넣지 않는다. 읽기·쓰기는 Meta 공식 API 전용이다.
 //
 // Cloudflare Pages가 외부 Threads를 다시 긁지 않는다. 로컬 브라우저가 렌더링한 결과를
@@ -14,6 +15,8 @@ export const TOON_URL = 'https://www.threads.com/@byeol.toon';
 export const TOON_HANDLE = 'byeol.toon';
 export const TOON_POSTS_MAX = 12;
 export const TOON_CRAWL_MAX_AGE_MS = 30 * 60_000;
+export const TOON_ACCOUNT_ACCESS = 'external_read_only' as const;
+export const TOON_CREATIVE_AUTHORSHIP = 'byeoli_self' as const;
 
 export interface ToonPost {
   id: string;
@@ -34,7 +37,10 @@ export interface ToonShelf {
   sourceAt: number;
   sourceUrl: typeof TOON_URL;
   source: 'crawl4ai';
+  /** 옛 보관본 호환 필드. 작품의 저작 주체가 아니라 계정 접근권만 뜻한다. */
   ownership: 'external_read_only';
+  accountAccess: typeof TOON_ACCOUNT_ACCESS;
+  creativeAuthorship: typeof TOON_CREATIVE_AUTHORSHIP;
   posts: ToonPost[];
 }
 
@@ -117,7 +123,9 @@ export function decodeToonShelf(raw: unknown): ToonShelf | null {
     sourceAt: checked.payload.fetchedAt,
     sourceUrl: TOON_URL,
     source: 'crawl4ai',
-    ownership: 'external_read_only',
+    ownership: TOON_ACCOUNT_ACCESS,
+    accountAccess: TOON_ACCOUNT_ACCESS,
+    creativeAuthorship: TOON_CREATIVE_AUTHORSHIP,
     posts: checked.payload.posts,
   };
 }

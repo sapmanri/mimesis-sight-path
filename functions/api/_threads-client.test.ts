@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { dispatchToThreads } from './_threads-client.ts';
 import { refreshThreadsShelf } from './_radio-social.ts';
 import { resolveObservedExternalTargets, threadsPublicInternals } from './_threads-public.ts';
-import type { ToonShelf } from './_radio-toon.ts';
+import {
+  TOON_ACCOUNT_ACCESS, TOON_CREATIVE_AUTHORSHIP, type ToonShelf,
+} from './_radio-toon.ts';
 
 function kvStub(username = 'byeoli_log') {
   const store = new Map<string, string>();
@@ -111,45 +113,27 @@ test('자기 Threads 선반은 임의 12개 제한 없이 Meta 다음 페이지�
   }
 });
 
-test('외부 댓글 대상은 Crawl4AI가 읽은 링크와 Meta 실제 permalink가 일치해야 한다', async () => {
+test('@byeol.toon은 자기 웹툰이어도 읽기 전용이라 외부 댓글 대상으로 만들지 않는다', async () => {
   const kv = kvStub();
   const shelf: ToonShelf = {
     at: Date.now(), sourceAt: Date.now(), sourceUrl: 'https://www.threads.com/@byeol.toon',
-    source: 'crawl4ai', ownership: 'external_read_only',
+    source: 'crawl4ai', ownership: TOON_ACCOUNT_ACCESS,
+    accountAccess: TOON_ACCOUNT_ACCESS, creativeAuthorship: TOON_CREATIVE_AUTHORSHIP,
     posts: [{
       id: 'ABC12345', text: '읽은 글', when: '방금',
       permalink: 'https://www.threads.com/@byeol.toon/post/ABC12345',
     }],
   };
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input) => {
-    const url = new URL(String(input));
-    if (url.pathname.endsWith('/me')) {
-      return Response.json({ id: 'byeoli-user-1', username: 'byeoli_log' });
-    }
-    if (url.pathname.endsWith('/profile_posts')) {
-      return Response.json({ data: [
-        {
-          id: 'meta-target-1', text: '읽은 글', username: 'byeol.toon', is_reply: false,
-          permalink: 'https://www.threads.net/@byeol.toon/post/ABC12345', timestamp: '',
-        },
-        {
-          id: 'meta-unseen-2', text: '읽지 않은 글', username: 'byeol.toon', is_reply: false,
-          permalink: 'https://www.threads.net/@byeol.toon/post/UNSEEN999', timestamp: '',
-        },
-        {
-          id: 'wrong-owner-3', text: '다른 계정 글', username: 'someone_else', is_reply: false,
-          permalink: 'https://www.threads.net/@byeol.toon/post/ABC12345', timestamp: '',
-        },
-      ] });
-    }
-    return Response.json({ error: { code: 404 } }, { status: 404 });
-  };
+  let fetchCalled = false;
+  globalThis.fetch = async () => { fetchCalled = true; return Response.json({}); };
   try {
     const result = await resolveObservedExternalTargets(kv.env, shelf);
     assert.equal(result.receipt.ok, true);
-    assert.equal(result.receipt.count, 1);
-    assert.deepEqual(result.targets.map((target) => target.id), ['meta-target-1']);
+    assert.equal(result.receipt.mode, 'read_only');
+    assert.equal(result.receipt.count, 0);
+    assert.deepEqual(result.targets, []);
+    assert.equal(fetchCalled, false);
   } finally {
     globalThis.fetch = originalFetch;
   }

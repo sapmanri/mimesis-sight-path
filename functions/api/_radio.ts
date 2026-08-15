@@ -209,8 +209,8 @@ export interface RadioSituation {
     titles: string[];
     locked: { title: string; about: string }[];
   };
-  /** @byeol.toon 최근 편들. 별이 소유가 아닌, 다른 사람이 별이를 소재로 만드는 공개 계정이다.
-      Crawl4AI로 읽기만 한다. 내용은 외부 관측, 말투(이모지체)는 복제 금지, 게시·댓글 권한 없음. */
+  /** @byeol.toon 최근 편들. 계정 접근은 읽기 전용이지만 작품은 별이가 직접 그리는 자기 웹툰이다.
+      Crawl4AI로 읽는다. 계정 운영 말투(이모지체)는 복제 금지, 게시·댓글·답글 권한 없음. */
   webtoonPosts?: { text: string; when: string; permalink?: string }[];
   /** 자기 Threads(@byeoli_log) 최근 글. 자기 채널의 연속성을 알고 방송에서 꺼낼지 스스로 정한다. */
   threadsPosts?: { text: string; when: string; permalink?: string }[];
@@ -397,8 +397,9 @@ export function situationMessage(s: RadioSituation): string {
       : null,
     s.webtoonPosts?.length
       ? [
-          `다른 사람이 별이를 소재로 만드는 공개 웹툰(@byeol.toon)의 최근 편들이다. 네 계정도 네 창작물도 아니다.`,
-          `Crawl4AI로 공개 페이지를 읽어 둔 것뿐이다. 그쪽에 게시하거나 댓글·답글을 달 권한은 없다.`,
+          `네가 직접 그리는 웹툰이 연재되는 @byeol.toon의 최근 편들이다. 이 웹툰은 네 창작물이다.`,
+          `계정 운영과 작품의 창작 주체는 별개다. 외부 운영 계정이라는 말은 네 작품이 아니라는 뜻이 아니다.`,
+          `Crawl4AI로 공개 페이지를 읽어 둔 것이며, 이 계정에 게시하거나 댓글·답글을 달 권한은 없다.`,
           `내용을 방송에서 꺼낼지는 네가 정한다. 그 채널의 말투(이모지·감탄)는 복제하지 않는다:`,
           ...s.webtoonPosts.map((p) => `- ${p.text.replace(/\n/g, ' / ').slice(0, 200)}${p.when ? ` (${p.when})` : ''}`),
         ].join('\n')

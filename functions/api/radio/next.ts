@@ -144,7 +144,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     songShelf: songs.map((g) => ({ title: g.title })),
     libraryFinds,
     bookcase,
-    // 외부 웹툰 @byeol.toon — 별이 소유 계정이 아니다. Crawl4AI 읽기 전용 최근 3편만.
+    // @byeol.toon — 계정 접근은 읽기 전용, 작품은 별이가 직접 그린 자기 웹툰. 최근 3편만.
     webtoonPosts: (toonRaw ? (JSON.parse(toonRaw) as { posts: ToonPost[] }).posts : []).slice(0, 3).map((p) => ({
       text: p.text, when: p.when, permalink: p.permalink,
     })),

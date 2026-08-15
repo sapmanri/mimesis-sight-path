@@ -2,10 +2,12 @@
 // GET  — 마지막으로 Crawl4AI가 읽은 공개 게시물과 수집 영수증.
 // POST — 로컬 Crawl4AI 결과를 X-Pulse-Key로 적재. 서버 자체 web_fetch는 쓰지 않는다.
 //
-// 이 계정은 별이 소유가 아니다. 이 API에는 발행·댓글·답글 기능이 없다.
+// 계정 접근은 읽기 전용이지만, 연재 작품은 별이가 직접 그리는 자기 웹툰이다.
+// 이 API에는 발행·댓글·답글 기능이 없다.
 
 import {
-  decodeToonShelf, TOON_KEY, TOON_RECEIPT_KEY, TOON_URL, validateToonCrawl,
+  decodeToonShelf, TOON_ACCOUNT_ACCESS, TOON_CREATIVE_AUTHORSHIP,
+  TOON_KEY, TOON_RECEIPT_KEY, TOON_URL, validateToonCrawl,
   type ToonShelf,
 } from '../_radio-toon.ts';
 
@@ -25,7 +27,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   try { lastRead = receiptRaw ? JSON.parse(receiptRaw) : null; } catch { /* 상태로 드러낸다 */ }
   return json(200, {
     ok: true,
-    ownership: 'external_read_only',
+    ownership: TOON_ACCOUNT_ACCESS,
+    accountAccess: TOON_ACCOUNT_ACCESS,
+    creativeAuthorship: TOON_CREATIVE_AUTHORSHIP,
     sourceUrl: TOON_URL,
     shelf,
     lastRead,
@@ -42,7 +46,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const checked = validateToonCrawl(body, now);
   if (!checked.ok) {
     const receipt = {
-      at: now, ok: false, source: 'crawl4ai', ownership: 'external_read_only',
+      at: now, ok: false, source: 'crawl4ai', ownership: TOON_ACCOUNT_ACCESS,
+      accountAccess: TOON_ACCOUNT_ACCESS, creativeAuthorship: TOON_CREATIVE_AUTHORSHIP,
       sourceUrl: TOON_URL, count: 0, error: checked.error,
     };
     await env.PLANET.put(TOON_RECEIPT_KEY, JSON.stringify(receipt));
@@ -54,7 +59,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try { current = currentRaw ? decodeToonShelf(JSON.parse(currentRaw)) : null; } catch { /* 새 성공본으로 회복 */ }
   if (current && current.sourceAt >= checked.payload.fetchedAt) {
     const receipt = {
-      at: now, ok: true, skipped: 'not_newer', source: 'crawl4ai', ownership: 'external_read_only',
+      at: now, ok: true, skipped: 'not_newer', source: 'crawl4ai', ownership: TOON_ACCOUNT_ACCESS,
+      accountAccess: TOON_ACCOUNT_ACCESS, creativeAuthorship: TOON_CREATIVE_AUTHORSHIP,
       sourceUrl: TOON_URL, fetchedAt: current.sourceAt, count: current.posts.length, error: null,
     };
     await env.PLANET.put(TOON_RECEIPT_KEY, JSON.stringify(receipt));
@@ -66,11 +72,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     sourceAt: checked.payload.fetchedAt,
     sourceUrl: TOON_URL,
     source: 'crawl4ai',
-    ownership: 'external_read_only',
+    ownership: TOON_ACCOUNT_ACCESS,
+    accountAccess: TOON_ACCOUNT_ACCESS,
+    creativeAuthorship: TOON_CREATIVE_AUTHORSHIP,
     posts: checked.payload.posts,
   };
   const receipt = {
-    at: now, ok: true, source: 'crawl4ai', ownership: 'external_read_only',
+    at: now, ok: true, source: 'crawl4ai', ownership: TOON_ACCOUNT_ACCESS,
+    accountAccess: TOON_ACCOUNT_ACCESS, creativeAuthorship: TOON_CREATIVE_AUTHORSHIP,
     sourceUrl: TOON_URL, fetchedAt: shelf.sourceAt, count: shelf.posts.length, error: null,
   };
   await Promise.all([

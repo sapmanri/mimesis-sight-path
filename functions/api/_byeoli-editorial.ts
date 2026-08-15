@@ -15,7 +15,7 @@ export interface ThreadCommentTarget {
   text: string;
   timestamp?: string;
   username: string;
-  ownership: 'self' | 'external_observed';
+  ownership: 'self';
 }
 export interface EditorialDecision {
   source: EditorialSource;
@@ -103,8 +103,9 @@ export async function chooseEditorial(
 - comment: 아래에 따로 제공된 실제 글 하나를 골라 그 아래에 댓글을 단다.
 - silence: 아무것도 쓰지 않는다.
 comment는 반드시 제공된 글 ID 중 하나만 targetPostId로 써라.
-ownership=self는 네 자기 글이고, external_observed는 네가 실제 읽은 외부 공개 글이다.
-external_observed에 댓글을 골라도 발신자는 언제나 네 계정 @byeoli_log다. 외부 계정인 척하지 않는다.
+ownership=self는 네 자기 글이다. 외부 계정의 글은 댓글 대상으로 제공되지 않는다.
+@byeol.toon은 네가 직접 그리는 자기 웹툰이 연재되는 곳이지만 계정 접근은 읽기 전용이다.
+계정 운영권과 작품의 창작 주체를 혼동하지 말고, 그곳에는 게시·댓글·답글을 쓰지 않는다.
 
 네가 먼저 보는 것: ${focus}
 네 말투:

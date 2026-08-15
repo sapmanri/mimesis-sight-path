@@ -33,18 +33,11 @@ test('자기 글 아래 댓글은 자기 루트 글 ID에만 허용한다', () =
   ), null);
 });
 
-test('실제로 읽고 Meta ID가 확인된 외부 글에는 @byeoli_log 댓글을 고를 수 있다', () => {
-  const targets = [{
-    id: 'external-1', text: '오늘의 웹툰', username: '@byeol.toon', ownership: 'external_observed' as const,
-  }];
-  const valid = parseEditorialDecision(
-    '{"source":"observation","action":"comment","text":"마지막 칸에 오래 머물렀어.","targetPostId":"external-1","reason":"읽고 한마디 남기고 싶다","nextLookInMinutes":null}',
-    candidates, targets,
-  );
-  assert.equal(valid?.targetPostId, 'external-1');
+test('@byeol.toon은 자기 창작물이어도 읽기 전용이므로 댓글 대상에 없으면 쓰지 않는다', () => {
+  const own = [{ id: 'own-1', text: '창가에 빛이 남았다.', username: '@byeoli_log', ownership: 'self' as const }];
   assert.equal(parseEditorialDecision(
-    '{"source":"observation","action":"comment","text":"읽지 않은 곳엔 쓰지 않아.","targetPostId":"unseen","reason":"x","nextLookInMinutes":null}',
-    candidates, targets,
+    '{"source":"observation","action":"comment","text":"마지막 칸에 오래 머물렀어.","targetPostId":"byeol-toon-post","reason":"읽고 한마디 남기고 싶다","nextLookInMinutes":null}',
+    candidates, own,
   ), null);
 });
 

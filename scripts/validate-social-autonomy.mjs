@@ -11,6 +11,7 @@ const autopost = read('functions/api/autopost.ts');
 const replies = read('functions/api/ops/threads-replies.ts');
 const editorial = read('functions/api/_byeoli-editorial.ts');
 const agent = read('functions/api/_byeoli-social-agent.ts');
+const toon = read('functions/api/_radio-toon.ts');
 const wake = read('functions/api/_byeoli-social-wake.ts');
 const auth = read('functions/api/threads-auth.ts');
 const ops = read('public/ops/index.html');
@@ -44,6 +45,14 @@ check('다음 확인 없음은 게시 강제 없는 생존 알람으로만 복�
     && /liveness_guard/.test(schedule));
 check('최근 자기 활동의 시각과 내용을 판단 앞에 둔다',
   /최근 네 Threads 활동/.test(editorial) && /recentActivity/.test(editorial));
+check('@byeol.toon은 계정 접근권과 별이 창작자 정체성을 분리한다',
+  /TOON_ACCOUNT_ACCESS = 'external_read_only'/.test(toon)
+    && /TOON_CREATIVE_AUTHORSHIP = 'byeoli_self'/.test(toon)
+    && /네가 직접 그리는 자기 웹툰/.test(editorial));
+check('@byeol.toon은 Social Director 댓글 후보에 넣지 않는다',
+  /const commentTargets = recentOwnThreads/.test(agent)
+    && !/resolveObservedExternalTargets/.test(agent)
+    && /외부 계정의 글은 댓글 대상으로 제공되지 않는다/.test(editorial));
 check('댓글 답글 발행은 사람 승인 없이 즉시 실행된다', /processCollectedReplies/.test(replies) && /publishReply\(env, rec\.sourceCommentId/.test(replies));
 check('OAuth에는 읽기 답글 관리와 공개글 확인 권한이 있다',
   /threads_read_replies/.test(auth) && /threads_manage_replies/.test(auth)
