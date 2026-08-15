@@ -286,11 +286,48 @@ let currentSeg = null;
    HLS의 6초 조각·재생목록·배달·캐시 층을 걷어냈다. 라이브는 하나로 이어진 MP3 줄기를
    운영체제가 계속 받고, 과거 튜닝만 기존 영구 파일을 쓴다. */
 const LIVE_URL = '/api/radio/stream';
+const AUDIENCE_URL = '/api/radio/audience';
+const AUDIENCE_STORAGE_KEY = 'byeol-radio-listener-v1';
 const LIVE_LAT_MS = 3500;   // 32KB harbor burst + 터널 왕복. HLS의 18초 지연은 사라졌다.
 const BAR_MAX = 100000;     // 48시간 눈금에서도 초 단위 목적지를 잡을 수 있는 해상도
 let usingStream = false, streamRecovering = false;
 let cloudReplayActive = false;
 let streamRetryTimer = null, streamRetryDelay = 1500;
+let audienceSession = null;
+
+function listenerSession() {
+  if (audienceSession) return audienceSession;
+  try {
+    const stored = localStorage.getItem(AUDIENCE_STORAGE_KEY);
+    if (/^[a-f0-9-]{32,64}$/i.test(stored || '')) audienceSession = stored;
+  } catch {}
+  if (!audienceSession) {
+    if (crypto.randomUUID) audienceSession = crypto.randomUUID();
+    else {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      audienceSession = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+    }
+    try { localStorage.setItem(AUDIENCE_STORAGE_KEY, audienceSession); } catch {}
+  }
+  return audienceSession;
+}
+
+function audienceSignal(active, beacon = false) {
+  const body = JSON.stringify({ session: listenerSession(), active });
+  if (beacon && navigator.sendBeacon) {
+    navigator.sendBeacon(AUDIENCE_URL, new Blob([body], { type:'application/json' }));
+    return;
+  }
+  void fetch(AUDIENCE_URL, {
+    method:'POST', cache:'no-store', keepalive:true,
+    headers:{ 'content-type':'application/json' }, body,
+  }).catch(() => {});
+}
+
+function pulseAudience() {
+  if (playing && (!au.paused || !amb.paused)) audienceSignal(true);
+}
 /* 지금 나가는 것 — 생성기의 진실(/api/radio/now). 라벨·[다시 듣기]·자막이 전부 여기서 나온다.
    재방송은 편성표에 없으므로 편성표 추측(segAt)으로는 화면이 거짓말을 하게 된다 (사장 08-13). */
 let nowData = null, nowFetchedAt = 0, nowMisses = 0;
@@ -341,7 +378,9 @@ function tryPlay(el) {
 au.addEventListener('playing', () => {
   amb.pause();
   if (usingStream) { streamRecovering = false; streamRetryDelay = 1500; }
+  pulseAudience();
 }); // 목소리가 나오면 방 소리는 쉰다
+amb.addEventListener('playing', pulseAudience);
 function detectCloudReplay() {
   if (!usingStream) return;
   if (Number.isFinite(au.duration) && au.duration > 0) {
@@ -649,6 +688,7 @@ $('play').onclick = () => {
     cloudReplayActive = false;
     if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     au.pause(); au.removeAttribute('src'); amb.pause(); currentSeg = null; $('state').textContent = '';
+    audienceSignal(false);
     checkVersion();   // 멈춘 김에 — 새 판이 나와 있으면 이 참에 갈아입는다
   }
 };
@@ -922,6 +962,11 @@ async function checkVersion() {
 }
 setInterval(checkVersion, 60000);
 checkVersion();
+
+setInterval(pulseAudience, 15000);
+window.addEventListener('pagehide', () => {
+  if (playing) audienceSignal(false, true);
+});
 
 loadProgram();
 setInterval(loadProgram, 60000);
