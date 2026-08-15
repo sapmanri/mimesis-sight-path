@@ -11,7 +11,7 @@ const PUBLIC_WALK_HOST = 'byeoli.sapmanri.com';
 const OPS_HOST = 'byeoli-ops.sapmanri.com';
 /**
  * 별리라됴 전용 호스트 (2026-08-15, 사장 지시). 421-B와 같은 internal rewrite —
- * 루트(/)에서 /radio를 내주고 주소는 radio.sapmanri.com 그대로 유지된다.
+ * 루트(/)에서 /station을 내주고 주소는 radio.sapmanri.com 그대로 유지된다.
  * byeoli.sapmanri.com/radio 는 그대로 살아 있다(옛 주소를 끊지 않는다).
  * DNS는 Bluehost CNAME → mimesis-sight-path.pages.dev. sapmanri.com은 아직 Cloudflare가 아니다.
  */
@@ -119,11 +119,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     });
   }
 
-  // 별리라됴 전용 호스트의 루트 = 라디오 화면. 원본은 public/radio.html 하나뿐(파일 이동 없음).
-  // 나머지 경로(/station, /api/*, 정적 자산)는 손대지 않는다 — radio.html의 링크가 절대경로라
-  // 이 호스트에서도 그대로 닿는다.
+  // 별리라됴 전용 호스트의 루트 = 스테이션의 기본 방송 화면.
+  // 옛 /radio 주소는 사연 화면으로 보내는 호환 링크이므로 그대로 보존하고,
+  // 전용 호스트의 루트만 /station을 내부에서 직접 내준다. 해시가 없으므로 기본값은 radio다.
   if (host === RADIO_HOST && url.pathname === '/') {
-    const asset = await context.env.ASSETS.fetch(new URL('/radio', url));
+    const asset = await context.env.ASSETS.fetch(new URL('/station', url));
     if (!asset.ok) return asset;
     return htmlResponse(await asset.text(), asset);
   }
