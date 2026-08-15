@@ -149,9 +149,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   let receipts = decodeWebObservationReceipts(null);
   try { shelf = raw ? decodeWebObservationShelf(JSON.parse(raw)) : shelf; } catch { /* 새 성공본으로 회복 */ }
   try { receipts = receiptsRaw ? decodeWebObservationReceipts(JSON.parse(receiptsRaw)) : receipts; } catch { /* 새 성공본으로 회복 */ }
-  const merged = mergeWebObservation(shelf, checked.source, now);
+  let merged = mergeWebObservation(shelf, checked.source, now);
   const receipt = receiptForWebObservation(checked.source, now);
-  const mergedReceipts = mergeWebObservationReceipt(receipts, receipt, now);
+  let mergedReceipts = mergeWebObservationReceipt(receipts, receipt, now);
+  /* 설정에서 뺀 소스를 서가에서도 뺀다 — batch 경로와 같은 규칙.
+     ⚠ 크롤러는 소스마다 **개별 POST**를 하므로 이 단일 경로가 실제로 도는 자리다.
+     08-15에 batch 쪽에만 넣었다가 안 걸려서 국립중앙도서관 잔재가 계속 남았다. */
+  const rawActiveOne = (body as { activeIds?: unknown } | null)?.activeIds;
+  const activeOne = Array.isArray(rawActiveOne)
+    ? rawActiveOne.filter((v): v is string => typeof v === 'string')
+    : null;
+  if (activeOne && activeOne.length) {
+    const keep = new Set(activeOne);
+    merged = { ...merged, sources: merged.sources.filter((s) => keep.has(s.id)) };
+    mergedReceipts = { ...mergedReceipts, receipts: mergedReceipts.receipts.filter((r) => keep.has(r.sourceId)) };
+  }
   await Promise.all([
     env.PLANET.put(WEB_OBSERVATIONS_KEY, JSON.stringify(merged)),
     env.PLANET.put(WEB_OBSERVATIONS_RECEIPTS_KEY, JSON.stringify(mergedReceipts)),
