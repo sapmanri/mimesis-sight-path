@@ -462,8 +462,15 @@ export function situationMessage(s: RadioSituation): string {
           `지금 네 방송이 이렇게 나가고 있어 (최근 ${s.airMirror.total}판을 세어 본 것이다):`,
           ...(s.airMirror.openings.length
             ? [`- 첫마디: ${s.airMirror.openings.map((o) => `「${o.text}」 ${o.count}번`).join(' · ')}`] : []),
+          /* ⚠ 여기서 **낱말을 말하지 않는다** (사장 판정 2026-08-15).
+             08-15 실측: 하루 대본의 84%가 「홀씨」, 70%가 「떡메」였다. foldOverusedMemory()로
+             그 낱말이 든 기억을 뺐는데도 75%·71%밖에 안 줄었다. 원인이 여기였다 —
+             기억에서 빼놓고 **거울이 낱말을 프롬프트에 도로 넣고 있었다.**
+             반복을 알려주려던 자리가 소재를 상기시킨 것이다(대본에 「같은 홀씨 얘기를 또 하게 되네」).
+             그래서 셈은 그대로 하되(overused는 foldOverusedMemory가 쓴다) 말할 때만 낱말을 감춘다.
+             ⚠ 「오늘은 다른 데를 봐라」처럼 쓰지 말 것 — 「오늘은」이 붙으면 그날만 걸린다. */
           ...(s.airMirror.overused.length
-            ? [`- 자주 나온 것: ${s.airMirror.overused.map((w) => `${w.word}(${w.docs}판)`).join(' · ')}`] : []),
+            ? [`- 일정 낱말이 계속 반복되고 있다 (${s.airMirror.overused[0].docs}/${s.airMirror.total}판). 그 반복되는 것 외의 것을 좀 봐라.`] : []),
           `금지가 아니다. 알고 하는 것과 모르고 하는 것은 다르다 — 보고 나서 네가 정해라.`,
         ].join('\n')
       : null,
