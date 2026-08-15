@@ -460,7 +460,10 @@ function tick() {
     // 라이브 알약의 정직 (사장 00:35 "계속 라이브라고 되있는 건 내 핸폰이 삐꾸냐"):
     // 재방송이 나가는 동안은 「재방송」— 방송 줄기는 라이브지만 내용은 다시 듣기다.
     const unavailable = !!(nd && (nd.available === false || nd.stale));
-    if (nd && !unavailable && nd.kind !== 'bed') lastAirMode = nd.isReplay ? 'replay' : 'live';
+    if (nd && !unavailable) {
+      if (nd.mode === 'replay' || nd.mode === 'live') lastAirMode = nd.mode;
+      else if (nd.kind !== 'bed') lastAirMode = nd.isReplay ? 'replay' : 'live';
+    }
     const replaying = lastAirMode === 'replay';
     $('liveBtn').textContent = (streamRecovering || unavailable)
       ? '● 연결 중' : replaying ? '● 재방송' : '● 라이브';
