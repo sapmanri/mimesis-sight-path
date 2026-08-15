@@ -289,6 +289,7 @@ const LIVE_URL = '/api/radio/stream';
 const LIVE_LAT_MS = 3500;   // 32KB harbor burst + 터널 왕복. HLS의 18초 지연은 사라졌다.
 const BAR_MAX = 100000;     // 48시간 눈금에서도 초 단위 목적지를 잡을 수 있는 해상도
 let usingStream = false, streamRecovering = false;
+let cloudReplayActive = false;
 let streamRetryTimer = null, streamRetryDelay = 1500;
 /* 지금 나가는 것 — 생성기의 진실(/api/radio/now). 라벨·[다시 듣기]·자막이 전부 여기서 나온다.
    재방송은 편성표에 없으므로 편성표 추측(segAt)으로는 화면이 거짓말을 하게 된다 (사장 08-13). */
@@ -311,6 +312,7 @@ async function fetchNow() {
 }
 function streamStart() {
   if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
+  cloudReplayActive = false;
   usingStream = true; streamRecovering = true; live = true; anchor = null; currentSeg = null;
   amb.pause();
   au.src = LIVE_URL + '?connect=' + Date.now();
@@ -340,11 +342,22 @@ au.addEventListener('playing', () => {
   amb.pause();
   if (usingStream) { streamRecovering = false; streamRetryDelay = 1500; }
 }); // 목소리가 나오면 방 소리는 쉰다
+function detectCloudReplay() {
+  if (!usingStream) return;
+  if (Number.isFinite(au.duration) && au.duration > 0) {
+    cloudReplayActive = true;
+    streamRecovering = false;
+    fetchNow();
+  }
+}
+au.addEventListener('loadedmetadata', detectCloudReplay);
+au.addEventListener('durationchange', detectCloudReplay);
 au.addEventListener('error', () => {
   // 원점이 잠깐 죽어도 과거 파일 붙이기 엔진으로 되돌아가지 않는다. 방 소리를 깔고
   // 하나의 연속 줄기에 지수 백오프로 다시 붙는다. Tunnel 주소 변경도 여기서 회복한다.
   if (usingStream) {
     usingStream = false;
+    cloudReplayActive = false;
     streamRecovering = true;
     au.removeAttribute('src');
     if (playing && live) { amb.currentTime = 0; tryPlay(amb); scheduleStreamRetry(); }
@@ -464,12 +477,18 @@ function tick() {
       if (nd.mode === 'replay' || nd.mode === 'live') lastAirMode = nd.mode;
       else if (nd.kind !== 'bed') lastAirMode = nd.isReplay ? 'replay' : 'live';
     }
-    const replaying = lastAirMode === 'replay';
-    $('liveBtn').textContent = (streamRecovering || unavailable)
+    const replaying = cloudReplayActive || lastAirMode === 'replay';
+    $('liveBtn').textContent = cloudReplayActive
+      ? '● 재방송' : (streamRecovering || unavailable)
       ? '● 연결 중' : replaying ? '● 재방송' : '● 라이브';
     $('liveBtn').classList.toggle('on', !streamRecovering && !unavailable && !replaying);
     $('dot').classList.toggle('live', playing && usingStream && !streamRecovering);
-    if (!unavailable && nd && nd.kind !== 'bed' && nd.startedAt) {
+    if (cloudReplayActive) {
+      $('now').textContent = nd && nd.cloudFallback
+        ? (nd.title || '가장 최근 방송') : '별리의 방 — 최근 방송 다시 듣는 중';
+      $('state').textContent = '생방송이 쉬는 동안 가장 최근 방송을 자동 재생합니다.';
+      renderScript(null, 0);
+    } else if (!unavailable && nd && nd.kind !== 'bed' && nd.startedAt) {
       $('now').textContent = nd.title || '별리의 방';
       $('state').textContent = nd.isReplay
         ? (nd.kind === 'song' ? '노래 다시 듣기 — ' + (nd.title || '') : '지난 방송 다시 듣기')
@@ -608,7 +627,16 @@ async function liveAdvance() {
   }
 }
 amb.onended = liveAdvance;
-au.addEventListener('ended', liveAdvance);
+au.addEventListener('ended', () => {
+  if (usingStream && live) {
+    // 클라우드 재방송 한 편이 끝날 때마다 라이브를 먼저 다시 확인한다. 맥이
+    // 여전히 꺼져 있으면 /stream이 같은 최신 파일을 돌려주므로 자연스럽게 반복된다.
+    cloudReplayActive = false;
+    streamStart();
+    return;
+  }
+  liveAdvance();
+});
 
 $('play').onclick = () => {
   playing = !playing;
@@ -618,6 +646,7 @@ $('play').onclick = () => {
   } else {
     usingStream = false;
     streamRecovering = false;
+    cloudReplayActive = false;
     if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     au.pause(); au.removeAttribute('src'); amb.pause(); currentSeg = null; $('state').textContent = '';
     checkVersion();   // 멈춘 김에 — 새 판이 나와 있으면 이 참에 갈아입는다
@@ -691,6 +720,7 @@ function commitTunerPosition(p, b) {
   } else {
     usingStream = false;
     streamRecovering = false;
+    cloudReplayActive = false;
     if (streamRetryTimer) { clearTimeout(streamRetryTimer); streamRetryTimer = null; }
     if (playing) { au.pause(); au.removeAttribute('src'); }
     live = false; anchor = { P0:p, t0:Date.now() };
