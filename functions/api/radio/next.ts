@@ -13,7 +13,7 @@ import {
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
-import { WEB_OBSERVATIONS_KEY, type WebObservationShelf } from '../_radio-observations.ts';
+import { WEB_OBSERVATIONS_KEY, WEB_OBSERVATIONS_SOURCE_MAX, type WebObservationShelf } from '../_radio-observations.ts';
 import { THREADS_SHELF_KEY, YOUTUBE_SHELF_KEY, type ThreadsShelf, type YoutubeShelf } from '../_radio-social-types.ts';
 import { timeLabelOf } from './draft.ts';
 
@@ -154,10 +154,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     youtubeVideos: (youtubeRaw ? (JSON.parse(youtubeRaw) as YoutubeShelf).videos : []).slice(0, 5).map((v) => ({
       title: v.title, publishedAt: v.publishedAt, url: v.url, description: v.description,
     })),
-    // 읽기 전용 감각 재료. engine은 브라우저/API/로컬 인덱스의 실제 통로를 숨기지 않는다.
+    /* 읽기 전용 감각 재료. engine은 브라우저/API/로컬 인덱스의 실제 통로를 숨기지 않는다.
+       ⚠ 2026-08-15: 상한을 8 → WEB_OBSERVATIONS_SOURCE_MAX(12)로 맞췄다 (사장 지시).
+       8일 때 소스가 정확히 8개로 차 있었고, 서가가 fetchedAt 내림차순이라 새 채널이 붙으면
+       **가장 오래 안 받은 감각 소스부터 잘려 나갔다** — today-sky → 우리 사진 → 시카고 → 위키문헌 순.
+       즉 「채널을 넓혔다」고 믿으면서 실제로는 하늘과 그림을 버리고 있었다.
+       서가 자체가 12개까지만 담으므로(_radio-observations.ts) 여기를 12로 두면 잘림이 사라진다.
+       프롬프트 길이는 코너 접기(trimSituationForCorner)가 잡는다 — 관찰은 'web' 자리에서만 펼쳐진다. */
     webObservations: (observationsRaw
       ? (JSON.parse(observationsRaw) as WebObservationShelf).sources
-      : []).slice(0, 8).map((source) => ({
+      : []).slice(0, WEB_OBSERVATIONS_SOURCE_MAX).map((source) => ({
         id: source.id, label: source.label, kind: source.kind, engine: source.engine, sourceUrl: source.sourceUrl,
         items: source.items.slice(0, 5).map((item) => ({
           title: item.title, text: item.text, when: item.when, url: item.url,
