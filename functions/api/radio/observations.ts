@@ -85,6 +85,22 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }
     }
 
+    /* 2026-08-15: 설정에서 뺀 소스를 서가에서도 뺀다.
+       서가는 병합(mergeWebObservation)이라 소스를 갈아끼워도 옛것이 남는다 —
+       실사고: 도서 소스를 국립중앙도서관 → 알라딘으로 바꿨더니 국중도의 검색 UI 안내문
+       10건이 서가에 남아 별이 대본 재료로 계속 들어갔다.
+       크롤러가 보내주는 activeIds(지금 설정에 있는 소스 전체)가 있을 때만 정리한다 —
+       안 보내면 예전처럼 병합만 하므로 옛 크롤러와도 함께 돈다. */
+    const rawActive = (body as { activeIds?: unknown } | null)?.activeIds;
+    const activeIds = Array.isArray(rawActive)
+      ? rawActive.filter((v): v is string => typeof v === 'string')
+      : null;
+    if (hasSuccess && activeIds && activeIds.length) {
+      const keep = new Set(activeIds);
+      shelf = { ...shelf, sources: shelf.sources.filter((s) => keep.has(s.id)) };
+      receipts = { ...receipts, receipts: receipts.receipts.filter((r) => keep.has(r.sourceId)) };
+    }
+
     const writes = [
       env.PLANET.put(WEB_OBSERVATIONS_RECEIPTS_KEY, JSON.stringify(receipts)),
       env.PLANET.put(WEB_OBSERVATIONS_RECEIPT_KEY, JSON.stringify(lastReceipt)),
