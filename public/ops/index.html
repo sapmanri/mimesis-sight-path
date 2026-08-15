@@ -905,6 +905,11 @@ async function pollPublishLog(){
       // 이미 나간 슬롯이라 다시 보내지 않은 것이다. 새 result를 만들고 화면을 안 고쳐서 생긴 결함.
       // 아래 서사(문장을 골랐다·사진·발행)는 일어나지 않은 일이므로 아예 그리지 않는다.
       lines.push('이 시간대는 이미 나갔다 — 다시 보내지 않았다. ⏭');
+    } else if (r.result === 'editorial_skip') {
+      // 별이가 silence를 고른 정상 판단이다. Meta 호출이 없는 것이 맞으며 실패가 아니다.
+      lines.push('별이가 Threads를 둘러보고 왔다.');
+      lines.push('이번에는 아무 말도 남기지 않기로 했다. ✓');
+      if (r.editorial?.reason) lines.push(`별이의 이유 · ${String(r.editorial.reason).slice(0, 180)}`);
     } else {
       {
         const post = feed.find(p => Math.abs((p.t ?? 0) - r.invokedAt) < 120000);

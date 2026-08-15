@@ -1,14 +1,18 @@
 // byeoli-publish-scheduler — 별이 Social Director + 예약 미디어 배달부.
 //
 // 2026-08-13 이전: 08/18/22 고정 Cron으로 /api/autopost를 호출했다.
-// 2026-08-13 이후: 고정 시각표를 폐기했다. Durable Object의 단 한 번짜리 alarm만 쓰고,
-// Pages의 별이 편집 판단이 돌려준 nextLookAt을 다음 알람으로 삼는다. null이면 새 사건까지 쉰다.
+// 2026-08-13 이후: 고정 게시 시각표를 폐기했다. Durable Object의 단 한 번짜리 alarm만 쓰고,
+// Pages의 별이 편집 판단이 돌려준 nextLookAt을 우선한다. null이면 실제 사건을 기다리되,
+// 무기한 휴면만 막는 12시간 생존 알람이 판단 기회를 한 번 다시 연다. 게시를 강제하지 않는다.
 // 게시·댓글 판단·Meta 쓰기는 Pages 한 실행선(/api/radio/social-agent)에만 있다.
 // 단, 사용자가 명시적으로 유지한 스크린샷 엽서 08/18/22 KST 예약선은 별도 scheduled
 // 이벤트로 /api/autopost만 호출한다. 이 예약선은 Social Director를 깨우거나 편집 판단을
 // 대신하지 않는다.
 
 import { DurableObject } from 'cloudflare:workers';
+import {
+  LIVENESS_GUARD_MS, alarmTriggerKind, planDirectorWake,
+} from './schedule.mjs';
 
 const NAME = 'byeoli-social-director';
 // v2 starts from a clean one-shot state. The v1 alarm belonged to the faulty
@@ -86,18 +90,28 @@ export class ByeoliSocialDirector extends DurableObject {
     this.state = {
       version: 'social-director-v2', lastWakeAt: null, lastFinishedAt: null,
       lastStatus: 'idle', lastRunId: null, nextLookAt: null, lastError: null,
-      continuationPending: false, selfWakeAt: null,
+      continuationPending: false, selfWakeAt: null, livenessWakeAt: null,
+      lastTriggerKind: null,
     };
     this.queue = Promise.resolve();
     ctx.blockConcurrencyWhile(async () => {
       const stored = await ctx.storage.get(STATE_KEY);
-      if (stored) {
-        this.state = { ...this.state, ...stored };
-        return;
+      if (stored) this.state = { ...this.state, ...stored };
+      else {
+        // A stale v1 alarm may still be retrying while publishing is locked.
+        await ctx.storage.deleteAlarm();
       }
-      // A stale v1 alarm may still be retrying while publishing is locked.
-      // Clear it once, then wait for the explicit one-time start below.
-      await ctx.storage.deleteAlarm();
+      const alarmAt = await ctx.storage.getAlarm();
+      if (alarmAt == null) {
+        const schedule = planDirectorWake({
+          now: Date.now(), triggerKind: 'state_recovery', editorialNext: null,
+          continuationPending: this.state.continuationPending, continuationDelayMs: 1_000,
+          existingSelfWakeAt: this.state.selfWakeAt,
+          existingLivenessWakeAt: this.state.livenessWakeAt,
+        });
+        this.state = { ...this.state, ...schedule };
+        await ctx.storage.setAlarm(schedule.nextLookAt);
+      }
       await ctx.storage.put(STATE_KEY, this.state);
     });
   }
@@ -133,28 +147,23 @@ export class ByeoliSocialDirector extends DurableObject {
         throw new Error(`pages_http_${response.status}:${payload?.error ?? 'unknown'}`);
       }
       const continuationPending = payload?.continuationNeeded === true;
-      const requestedDelay = Number(payload?.continuationDelayMs);
-      const continuationDelay = Number.isFinite(requestedDelay)
-        ? Math.min(10 * 60_000, Math.max(1_000, Math.trunc(requestedDelay)))
-        : 1_000;
-      const agencyWake = normalizedTrigger.kind === 'curiosity' || normalizedTrigger.kind === 'manual_start';
-      const editorialNext = Number(payload?.nextLookAt);
-      const chosenSelfWake = agencyWake
-        ? Number.isFinite(editorialNext) && editorialNext > Date.now() ? Math.trunc(editorialNext) : null
-        : this.state.selfWakeAt;
-      const overdueSelfWake = Number.isFinite(chosenSelfWake) && chosenSelfWake <= Date.now();
-      const next = continuationPending
-        ? Date.now() + continuationDelay
-        : overdueSelfWake ? Date.now() + 1_000 : chosenSelfWake;
+      const schedule = planDirectorWake({
+        now: Date.now(), triggerKind: normalizedTrigger.kind,
+        editorialNext: payload?.nextLookAt,
+        continuationPending, continuationDelayMs: payload?.continuationDelayMs,
+        existingSelfWakeAt: this.state.selfWakeAt,
+        existingLivenessWakeAt: this.state.livenessWakeAt,
+      });
       this.state = {
         ...this.state, lastFinishedAt: Date.now(), lastStatus: payload?.ok ? 'ok' : 'partial',
         lastRunId: payload?.runId ?? null,
-        nextLookAt: Number.isFinite(next) && next > Date.now() ? Math.trunc(next) : null,
+        nextLookAt: schedule.nextLookAt,
         lastError: payload?.error ?? payload?.replies?.errors?.[0] ?? null,
-        continuationPending, selfWakeAt: chosenSelfWake,
+        continuationPending, selfWakeAt: schedule.selfWakeAt,
+        livenessWakeAt: schedule.livenessWakeAt, lastTriggerKind: normalizedTrigger.kind,
       };
       await this.ctx.storage.deleteAlarm();
-      if (this.state.nextLookAt) await this.ctx.storage.setAlarm(this.state.nextLookAt);
+      await this.ctx.storage.setAlarm(this.state.nextLookAt);
       await this.persist();
       return payload;
     } catch (error) {
@@ -164,6 +173,7 @@ export class ByeoliSocialDirector extends DurableObject {
       this.state = {
         ...this.state, lastFinishedAt: Date.now(), lastStatus: 'failed',
         nextLookAt: retryAt, lastError: message, continuationPending: true,
+        lastTriggerKind: normalizedTrigger.kind,
       };
       await this.ctx.storage.setAlarm(retryAt);
       await this.persist();
@@ -178,7 +188,7 @@ export class ByeoliSocialDirector extends DurableObject {
   }
 
   async alarm() {
-    const kind = this.state.continuationPending ? 'backlog_continue' : 'curiosity';
+    const kind = alarmTriggerKind(this.state);
     await this.enqueue({ kind, eventId: eventId(kind, Date.now()), occurredAt: Date.now() });
   }
 
@@ -213,6 +223,7 @@ export default {
       return json({
         ok: true, service: NAME, mode: 'byeoli_chosen_wake_plus_scheduled_media',
         scheduledMediaKst: SLOT_HOURS_KST,
+        livenessGuardHours: LIVENESS_GUARD_MS / 3_600_000,
       });
     }
     if (request.method === 'GET' && url.pathname === '/state') {

@@ -27,10 +27,15 @@ export function deferSocialWake(
   trigger: SocialTrigger,
   label: string,
 ): void {
-  // 방송·관찰·사연은 별이에게 Threads 임무를 배정하지 않는다. 호출부는 기존 방송
-  // 계통과의 호환을 위해 남아 있지만, 별이 자신의 알람 외에는 감독을 깨우지 않는다.
-  void context;
-  void env;
-  void trigger;
-  void label;
+  // 방송·관찰·사연은 별이에게 Threads 임무를 배정하지 않는다.
+  // 실제 사건은 답글 수집과 선반 갱신 기회만 연다.
+  // isAgencyWake가 false인 사건이므로 post/comment/silence 편집 판단은 열리지 않는다.
+  if (!context.waitUntil || !env.PULSE_KEY || !env.BYEOLI_SOCIAL_DIRECTOR) return;
+  const task = wakeSocialDirector(env, trigger).catch((error) => {
+    console.error(JSON.stringify({
+      message: 'social director event wake failed', label, kind: trigger.kind,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  });
+  context.waitUntil(task);
 }

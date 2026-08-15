@@ -7,6 +7,7 @@ export type SocialTriggerKind =
   | 'social_refreshed'
   | 'backlog_continue'
   | 'curiosity'
+  | 'liveness_guard'
   | 'manual_start';
 
 export interface SocialTrigger {
@@ -18,7 +19,7 @@ export interface SocialTrigger {
 
 const VALID_TRIGGERS = new Set<SocialTriggerKind>([
   'program_registered', 'story_aired', 'observation_arrived',
-  'social_refreshed', 'backlog_continue', 'curiosity', 'manual_start',
+  'social_refreshed', 'backlog_continue', 'curiosity', 'liveness_guard', 'manual_start',
 ]);
 
 export function parseSocialTrigger(raw: unknown, now = Date.now()): SocialTrigger | null {
@@ -37,7 +38,7 @@ export function parseSocialTrigger(raw: unknown, now = Date.now()): SocialTrigge
  * 방송·관찰 사건과 댓글 수집 이어달리기는 자료를 갱신할 뿐, 별이에게 일을 배정하지 않는다.
  */
 export function isAgencyWake(kind: SocialTriggerKind): boolean {
-  return kind === 'curiosity' || kind === 'manual_start';
+  return kind === 'curiosity' || kind === 'liveness_guard' || kind === 'manual_start';
 }
 
 export function observationText(raw: unknown): string {
