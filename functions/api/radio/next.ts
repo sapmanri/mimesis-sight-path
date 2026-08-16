@@ -126,7 +126,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // 제목이 너무 많으면 상황이 게시판이 된다 — 등 보이는 건 8권만 무작위로.
   // 재낭독은 막지 않는다(사장 판정) — 낭독 기록은 방송 자취(trail)로 별이에게 보인다.
   const bookcasePieces: BookcasePiece[] = bookcaseRaw ? JSON.parse(bookcaseRaw) : [];
-  const openPiece = pickBookcasePiece(bookcasePieces);
+
+  // 🔴 08-16 실사고 — 이미 구워 둔 글의 **전문을 주지 않는다.**
+  //   책장이 전문을 주니 별이가 그걸 옮겨 적었고 TTS가 그 자리에서 통째로 구웠다.
+  //   한 판에 10분이 걸려 생성이 소비를 못 따라갔고, 관제실은 LIVE인데 재방이 나갔다.
+  //   낭독 재고(readings)는 바로 이걸 없애려고 어젯밤 미리 구운 것이다 —
+  //   **서가에 있으면 그건 서가에서 꺼내 쓴다. 새로 읽지 않는다.**
+  //   전문 없이 제목만 남기면 별이는 그 글을 이야기하거나 [낭독: 제목]으로 걸 수 있다.
+  const bakedTitles = new Set(readings.map((r) => r.title.trim()));
+  const bookcaseFresh = bookcasePieces.filter((p) => !bakedTitles.has((p.title ?? '').trim()));
+  const openPiece = pickBookcasePiece(bookcaseFresh);
   const bookcase = bookcasePieces.length ? {
     open: openPiece,
     titles: bookcasePieces
