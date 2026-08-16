@@ -577,8 +577,10 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     var key = t && t.getAttribute ? t.getAttribute('data-attach') : null;
     if (!key) return;
     // 실사고 2026-07-26: 어젯밤 23:30에 나온 그림을 아침에 붙이려 하면 날짜 선택기가
-    // **오늘**이라 no_memory로 튕겼다("눌러도 안 된다"). 그림은 자기가 만들어진 날의
-    // 기억에 붙어야 한다 — 정본은 선택기가 아니라 **그림 자신의 createdAt**이다.
+    // **오늘**이라 no_memory로 튕겼다("눌러도 안 된다"). 그림은 자기 하루의 기억에 붙어야 한다.
+    // ⚠ 그때 정본을 **createdAt**으로 잡은 것이 2026-08-16 실사고를 낳았다 — 자정을 넘겨
+    //   그려진 그림이 다음 날 딱지를 달았다. 지금 정본은 야간 trialId 앞머리다(renderRecent 참조).
+    //   data-date가 없으면(수동 시험) 불러온 날을 따른다.
     var date = t.getAttribute('data-date') || $('date').value;
     if (!confirm('이 그림을 ' + date + ' 기억의 그림 갈래(sketchDiary)로 붙인다.\\n하루의 그림은 한 장 — 이미 있으면 교체된다.')) return;
     t.disabled = true;
@@ -605,13 +607,31 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     var cards = '';
     records.forEach(function (r) {
       if (!r.r2Key) return;
-      // 그림이 만들어진 KST 날짜 — 붙일 때 이 날짜의 기억으로 간다(선택기 값이 아니라).
-      var d = r.createdAt ? new Date(r.createdAt + 9 * 3600 * 1000).toISOString().slice(0, 10) : '';
+      // 이 그림이 **어느 하루의 것인가**. 정본은 야간 trialId의 앞머리다.
+      //
+      // ⚠ 실사고 2026-08-16: 예전엔 createdAt(만들어진 시각)으로 매겼다. 그런데 야간 생성은
+      //   23:30에 시작해 **자정을 넘기는 일이 잦다** — 08-15 그림 두 장이 08-16 01:42에
+      //   만들어지는 바람에 「08-16」 딱지가 붙었다. 사장이 08-15를 불러와 붙이기를 눌렀는데
+      //   대화상자가 08-16이라고 떴다. 그대로 눌렸으면 **오늘 밤 그림 자리를 덮어썼다.**
+      //   (같은 날 감시자도 같은 데서 미끄러졌다 — 발행 시각으로 하루를 판정하고 있었다.
+      //    「만들어진/올라간 시각」은 하루의 이름이 아니다. 자정을 넘기면 바로 어긋난다.)
+      //
+      //   야간 trialId는 sketch-daily가 「그 하루 + 해시」로 만들고 이어지는 호출이 계승한다
+      //   — 몇 시에 그려졌든 흔들리지 않는다.
+      //   ⚠ 이 스크립트는 템플릿 문자열 안이다. 달러+중괄호는 **주석에도** 쓰지 말 것 —
+      //     보간으로 읽혀 게이트가 깨진다(08-16에 여기서 한 번 깨뜨렸다).
+      //   수동 시험(ops/sketch-trial)의 trialId는 **UTC 오늘**이라 하루가 아니다. 그건 딱지를
+      //   달지 않고 불러온 날(선택기)을 따르게 둔다 — 실험 그림은 지금 보는 하루에 붙는 게 맞다.
+      var nightly = /^\d{4}-\d{2}-\d{2}-/.test(String(r.trialId || '')) &&
+        String(r.note || '').indexOf('daily-auto') === 0;
+      var made = r.createdAt ? new Date(r.createdAt + 9 * 3600 * 1000).toISOString().slice(0, 10) : '';
+      var d = nightly ? String(r.trialId).slice(0, 10) : '';
+      var shown = d || made;   // 딱지가 없는 수동 시험도 만들어진 날은 보여 준다
       var today = kstToday();
       cards += '<div class="refcard">' +
         '<img src="/api/ops/sketch-image?key=' + encodeURIComponent(r.r2Key) + '" loading="lazy">' +
         '<div class="nm">seed ' + esc(r.seed ?? '—') +
-        (d ? ' <span class="muted">· ' + esc(d.slice(5)) + (d !== today ? ' (지난날)' : '') + '</span>' : '') +
+        (shown ? ' <span class="muted">· ' + esc(shown.slice(5)) + (shown !== today ? ' (지난날)' : '') + '</span>' : '') +
         '</div>' +
         '<button class="del" data-attach="' + esc(r.r2Key) + '"' +
         (d ? ' data-date="' + esc(d) + '"' : '') + '>📌 붙이기</button></div>';

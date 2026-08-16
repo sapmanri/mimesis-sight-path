@@ -286,21 +286,56 @@ async function handleDaily(
     const priorRaw = await env.PLANET.get(RUN_KEY(date));
     const prior = priorRaw ? JSON.parse(priorRaw) as DailyRun : null;
     const runId = prior?.runId ?? `${date}-${now.toString(36)}`;
+
+    // ⚠ 실사고 2026-08-15: 2장에서 멈췄는데 영수증에 사유가 없었다. 여기가 원인이었다 —
+    //   무엇 때문에 멈췄든 **항상 max_calls_exhausted라고 적었다.** 시간예산으로 멈춰도,
+    //   호출이 되풀이 실패해도 같은 문장이 나갔다. 침묵보다 나쁜 건 **틀린 이름**이다.
+    //   이제 스케줄러가 몸통에 진짜 사유를 실어 보낸다(없으면 옛 문구로 떨어진다).
+    const sent = await request.json().catch(() => null) as {
+      reason?: string; detail?: string; fetchErrors?: number; elapsedMs?: number;
+    } | null;
+    const REASONS: Record<string, { name: string; msg: string }> = {
+      time_budget_exhausted: {
+        name: 'SchedulerTimeBudget',
+        msg: '스케줄러 시간예산(12분)을 다 써서 멈췄다 — 콜은 남아 있었다',
+      },
+      fetch_errors: {
+        name: 'SchedulerFetchErrors',
+        msg: '생성 엔드포인트 호출이 되풀이 실패해 멈췄다 (타임아웃·네트워크)',
+      },
+      not_folded: {
+        name: 'SchedulerNotFolded',
+        msg: '접힌 적 없는 하루라 재시도가 살릴 수 없다 — 본진이 안 돌았다',
+      },
+      max_calls_exhausted: {
+        name: 'SchedulerExhausted',
+        msg: 'scheduler exhausted MAX_CALLS without done or a valid terminal skip',
+      },
+    };
+    const picked = REASONS[String(sent?.reason ?? '')] ?? REASONS.max_calls_exhausted;
+    const errorCode = String(sent?.reason ?? 'max_calls_exhausted');
+
     const failed: DailyRun = {
       runId, date, owner: 'nightly-auto', status: 'failed', stage: 'scheduler_exhausted',
       startedAt: prior?.startedAt ?? now, updatedAt: now,
-      errorCode: 'max_calls_exhausted', errorName: 'SchedulerExhausted',
-      errorMessage: 'scheduler exhausted MAX_CALLS without done or a valid terminal skip',
+      errorCode, errorName: picked.name, errorMessage: picked.msg,
     };
+    // ⚠ 옛 판은 여기서 영수증을 통째로 갈아끼워 **picks·errors·trialId를 지웠다.**
+    //   08-11 영수증에 몇 장까지 갔는지·AI가 뭐라 했는지가 하나도 안 남은 이유가 이것이다.
+    //   실패했다는 사실을 적는 것과 거기까지의 기록을 지우는 것은 다른 일이다.
+    const kept = (prevReco ?? {}) as Record<string, unknown>;
     await Promise.all([
       env.PLANET.put(RUN_KEY(date), JSON.stringify(failed)),
       env.PLANET.put(RECO_KEY(date), JSON.stringify({
+        ...kept,
         date, at: now, status: 'failed', failed: true, stage: failed.stage,
-        errorCode: failed.errorCode, errorName: failed.errorName,
-        errorMessage: failed.errorMessage, runId,
+        errorCode, errorName: failed.errorName, errorMessage: failed.errorMessage, runId,
+        schedulerDetail: typeof sent?.detail === 'string' ? sent.detail.slice(0, 900) : null,
+        schedulerFetchErrors: typeof sent?.fetchErrors === 'number' ? sent.fetchErrors : null,
+        schedulerElapsedMs: typeof sent?.elapsedMs === 'number' ? sent.elapsedMs : null,
       })),
     ]);
-    return json(200, { ok: true, receipt: 'failed', runId });
+    return json(200, { ok: true, receipt: 'failed', runId, reason: errorCode });
   }
 
   // 건너뛰어도 기록은 남긴다 — 아침 실험실이 "왜 없는지"를 말할 수 있게 (침묵이 버그다).

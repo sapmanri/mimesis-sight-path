@@ -62,8 +62,18 @@ async function run(env, scheduledTime) {
   const log = [`mission=${mission.kind}${mission.dateParam}`];
   const t0 = Date.now();
   let terminal = false;
+  // ⚠ 실사고 2026-08-15: 2장에서 멈췄는데 **영수증에 사유가 한 줄도 없었다.** 멈춘 이유는
+  //   여기 console.log에만 남고 KV 영수증에는 안 갔다 — 아침에 아무도 왜인지 못 봤다.
+  //   서버는 사유를 하드코딩(max_calls_exhausted)해서, 시간예산으로 멈춰도 콜 소진이라 적었다.
+  //   그래서 소진 영수증에 **실제 사유와 콜 기록**을 실어 보낸다 (사장 지시 08-16).
+  let stopReason = 'max_calls_exhausted';
+  let fetchErrors = 0;
   for (let call = 1; call <= MAX_CALLS; call++) {
-    if (Date.now() - t0 > TIME_BUDGET_MS) { log.push('time_budget_exhausted'); break; }
+    if (Date.now() - t0 > TIME_BUDGET_MS) {
+      log.push('time_budget_exhausted');
+      stopReason = 'time_budget_exhausted';
+      break;
+    }
     let body = null, status = 0;
     try {
       const res = await fetch(url, {
@@ -74,7 +84,9 @@ async function run(env, scheduledTime) {
       status = res.status;
       body = await res.json().catch(() => null);
     } catch (e) {
+      fetchErrors += 1;
       log.push(`#${call} fetch_error: ${String(e && e.message || e).slice(0, 120)}`);
+      stopReason = 'fetch_errors';                // 더 진행하면 뒤에서 덮어쓴다
       await sleep(backoffMs(call));
       continue;                                   // 일시 오류는 다음 콜이 이어받는다 (멱등)
     }
@@ -94,8 +106,10 @@ async function run(env, scheduledTime) {
     // 이미 있으면 서버 가드가 지켜준다(sketch-daily 영수증 핸들러 참조).
     if (terminalResultKind === 'not_folded') {
       log.push('not_folded_terminal');
+      stopReason = 'not_folded';
       break;
     }
+    stopReason = 'max_calls_exhausted';           // 여기까지 왔으면 콜을 정상으로 다 쓰는 중
     // 5xx·비JSON·failed·ownership_unknown·partial은 상한까지 재시도한다.
     await sleep(backoffMs(call));
   }
@@ -107,11 +121,20 @@ async function run(env, scheduledTime) {
         headers: {
           'X-Publish-Key': env.PUBLISH_KEY,
           'X-Scheduler-Receipt': 'failed',
+          'content-type': 'application/json',
         },
+        // 사유를 몸통에 실어 보낸다 — 헤더는 한글·긴 로그를 못 담는다.
+        // 서버가 이 값을 영수증에 적는다(없으면 옛 하드코딩 문구로 떨어진다).
+        body: JSON.stringify({
+          reason: stopReason,
+          fetchErrors,
+          elapsedMs: Date.now() - t0,
+          detail: log.join(' | ').slice(0, 900),
+        }),
         signal: AbortSignal.timeout(PER_CALL_MS),
       });
       const body = await res.json().catch(() => null);
-      log.push(`receipt ${res.status} saved=${body?.receipt === 'failed'}`);
+      log.push(`receipt ${res.status} saved=${body?.receipt === 'failed'} reason=${stopReason}`);
     } catch (e) {
       log.push(`receipt_error: ${String(e && e.message || e).slice(0, 120)}`);
     }
