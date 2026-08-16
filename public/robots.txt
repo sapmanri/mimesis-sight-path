@@ -1,32 +1,53 @@
 # 별리라됴는 공개 방송이다. AI 답변에 인용되는 것을 환영한다.
+# 다만 API(/api/)는 닫는다 — 사연은 청취자가 보낸 남의 글이다.
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: GPTBot
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: OAI-SearchBot
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: ChatGPT-User
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: ClaudeBot
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: Claude-User
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: PerplexityBot
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: Google-Extended
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: Applebot-Extended
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 User-agent: CCBot
 Allow: /
+Disallow: /api/
+Disallow: /admin
 
 Sitemap: https://radio.sapmanri.com/sitemap.xml
