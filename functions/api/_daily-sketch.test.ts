@@ -604,6 +604,34 @@ test('⚠ 사진이 달라도 그날의 글이면 붙인다 (Vase 판정 C, 2026
   assert.equal(noPhoto.day.event.selectedPhoto, undefined, '없는 사진을 승격하지 않는다');
 });
 
+test('⚠ 그날 글이 여럿이면 사건에 가장 가까운 시각의 글이다 (실사고 2026-08-15)', async () => {
+  // 08-15 실물: 사건은 「떨어진 장갑」 KST 20:04, 그날 글은 20:05(장갑)과 22:05(종이배)였다.
+  // 마지막 것을 집는 바람에 스레드에 **장갑 그림 + 종이배 글**이 나갔다.
+  const 사건 = Date.parse('2026-08-15T11:04:22Z');
+  const day = {
+    version: '431M-v1', memoryEventId: 'ev-glove', sourceCaptureIds: [], date: '2026-08-15',
+    builtAt: 1, momentCount: 7, photoKey: 'captures/walk/none.jpg', density: 'normal',
+    event: { lines: ['ㄱ'], targetLabel: '떨어진 장갑', momentAt: 사건 },
+  } as never;
+  const r = _link(day, [
+    { at: Date.parse('2026-08-15T11:05:00Z'), imageKey: 'captures/walk/X.jpg', text: '빗물에 젖은 장갑 한 짝' },
+    { at: Date.parse('2026-08-15T13:05:00Z'), imageKey: 'captures/walk/Y.jpg', text: '종이배 하나, 새벽 물 위에' },
+  ]);
+  assert.equal(r.result, 'linked_by_date', '판정 C 유지 — 사진이 달라도 그날 글이면 붙인다');
+  assert.equal(r.day.event.diaryText, '빗물에 젖은 장갑 한 짝',
+    '하나의 기억에서 나온 글과 그림이 다른 사건을 말하면 안 된다');
+});
+
+test('사건 시각이 없으면 옛 규칙대로 마지막 글', async () => {
+  const day = {
+    version: '431M-v1', memoryEventId: 'ev0', sourceCaptureIds: [], date: '2026-07-27',
+    builtAt: 1, momentCount: 1, photoKey: null, density: 'normal',
+    event: { lines: ['ㄱ'], targetLabel: null },
+  } as never;
+  const r = _link(day, [{ at: 1, imageKey: null, text: '먼저' }, { at: 2, imageKey: null, text: '나중' }]);
+  assert.equal(r.day.event.diaryText, '나중', '고를 근거가 없으면 가장 늦게 말한 글');
+});
+
 test('이미 붙어 있으면 덮지 않는다 · 붙일 글이 없으면 사유를 남긴다', async () => {
   assert.equal(_link(dayFor('captures/walk/A.jpg', '이미 있음'), [{ at: 1, imageKey: 'captures/walk/A.jpg', text: '새 글' }]).result, 'already');
   assert.equal(_link(dayFor('captures/walk/A.jpg'), []).result, 'no_pending');

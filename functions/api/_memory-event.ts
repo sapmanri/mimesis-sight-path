@@ -316,7 +316,21 @@ export function linkPendingDiary(
   const exact = day.photoKey
     ? [...usable].reverse().find((p) => p.imageKey && p.imageKey === day.photoKey)
     : undefined;
-  const pick = exact ?? usable[usable.length - 1];
+  // ⚠ 실사고 2026-08-16: 사진이 안 맞을 때 **그날의 마지막 글**을 집었다.
+  //   08-15는 사건이 「떨어진 장갑」(KST 20:04)인데, 22:05에 쓴 「종이배」 글이 붙었다.
+  //   그래서 스레드에 **장갑 그림 + 종이배 글**이 나갔다 — 하나의 기억에서 나온 셋이
+  //   서로 다른 사건을 말한 것이다(431-M이 금지하는 바로 그것).
+  //   그날 글이 여럿이면 마지막이 아니라 **사건 시각에 가장 가까운 글**이 그 사건의 짝이다.
+  //   momentAt(사건)과 at(글)은 원래부터 둘 다 있었다 — 안 쓰고 있었을 뿐이다.
+  //   ⚖ Vase 판정 C(2026-07-28)는 그대로다 — 사진이 달라도 **그날의 글이면 붙인다.**
+  //     바뀐 것은 "붙이느냐"가 아니라 "그날 여럿 중 어느 것이냐"뿐이다.
+  const momentAt = day.event?.momentAt;
+  const nearest = typeof momentAt === 'number' && Number.isFinite(momentAt)
+    ? usable.reduce((best, p) => (
+      Math.abs((p.at ?? 0) - momentAt) < Math.abs((best.at ?? 0) - momentAt) ? p : best
+    ))
+    : usable[usable.length - 1];
+  const pick = exact ?? nearest;
 
   let next = attachBranch(day, 'diaryText', pick.text);
   if (!next.event.selectedPhoto && day.photoKey) next = attachBranch(next, 'selectedPhoto', day.photoKey);
