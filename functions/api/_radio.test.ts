@@ -302,8 +302,11 @@ test('[노래:] 곡 선택 분리 — 순서 무관·중간 태그는 무시·�
   assert.deepEqual([none.songTitle, none.voiceNote], [null, null]);
 });
 
-// 우리 책장 (Vase 08-12 밤): 우리 원고는 낭독이 허락 — 잠긴 원고는 제목만
-test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독 허락 문구', () => {
+// 우리 책장 (Vase 08-12 밤) — 잠긴 원고는 제목만.
+// 🔴 08-16 변경: 「소리 내어 읽어도 된다」를 뺐다. 그 문구 때문에 별이가 원고를 그 자리에서
+//   옮겨 적었고 TTS가 통째로 구워 한 판에 10분이 걸렸다 — 생성이 소비를 못 따라가
+//   관제실은 LIVE인데 재방이 나갔다. 통째 낭독은 미리 구운 낭독 서가로만 간다.
+test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·옮겨 적기 금지', () => {
   const pieces = [
     { title: '봄바람', kind: '잠깐멈춰', text: '봄바람은 꽃보다 먼저 와서 마음을 흔들고 간다. 그래서 계절이 온다.' },
     { title: '존댓말 편', kind: '잠깐멈춰', text: '마음이 놓입니다. 그렇게 살아요.' },
@@ -316,7 +319,7 @@ test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독
   assert.equal(picked?.title, '봄바람');
   // 음성: 전부 부적격이면 안 펼친다 — 억지로 펼치지 않는다
   assert.equal(pickBookcasePiece(pieces.slice(1), () => 0), null);
-  // 상황 메시지: 낭독 허락이 명시되고, 잠긴 원고는 제목·소개만 나온다 (본문 노출 없음)
+  // 상황 메시지: 옮겨 적기 금지가 명시되고, 잠긴 원고는 제목·소개만 나온다 (본문 노출 없음)
   const s: RadioSituation = {
     timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
     bookcase: {
@@ -326,7 +329,9 @@ test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독
     },
   };
   const msg = situationMessage(s);
-  assert.match(msg, /낭독이 허락/);
+  assert.match(msg, /본문을 원고에 옮겨 적지 마라/);   // 그 자리에서 새로 굽지 않게
+  assert.match(msg, /낭독 서가/);                      // 통째로 읽을 땐 구워 둔 것으로
+  assert.doesNotMatch(msg, /소리 내어 읽어도 된다/);   // 옛 문구가 되살아나면 재방이 또 난다
   assert.match(msg, /「봄바람」 전문/);
   assert.match(msg, /「질투」 · 「미니멀」/);
   assert.match(msg, /아직 못 꺼내는 원고.*「남겨둔 것들」 — 아직 안 나온 장편/);
