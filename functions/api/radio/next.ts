@@ -9,7 +9,7 @@
 
 import {
   RADIO_QUEUE_KEY, RADIO_DRAFT_KEY, moderateStory, writeRadioScript, pickBookcasePiece,
-  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, foldOverusedMemory, pickCorner, trimSituationForCorner, lastWriterFailure, radioSystemPrompt, situationMessage, hasReadingHandoff, hasExactClockClaim,
+  type RadioStory, type RadioDraft, type RadioSituation, type BookcasePiece, buildAirMirror, foldOverusedMemory, pickCorner, pickFormatSlot, trimSituationForCorner, lastWriterFailure, radioSystemPrompt, situationMessage, hasReadingHandoff, hasExactClockClaim,
 } from '../_radio.ts';
 import { LIBRARY_SHELF_KEY, type LibraryFind } from '../_radio-library.ts';
 import { TOON_KEY, type ToonPost } from '../_radio-toon.ts';
@@ -84,14 +84,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const RECALL_DRAFTS = 12;
   const recentScripts: string[] = [];
   const recentCorners: string[] = [];
+  const recentFormatSlots: string[] = [];
   for (const did of draftIds.slice(0, RECALL_DRAFTS)) {
     const dRaw = await env.PLANET.get(RADIO_DRAFT_KEY(did));
     if (!dRaw) continue;
-    const d = JSON.parse(dRaw) as { script?: string; situation?: { corner?: { key?: string } } };
+    const d = JSON.parse(dRaw) as {
+      script?: string;
+      situation?: { corner?: { key?: string }; formatSlot?: { key?: string } };
+    };
     // 정확한 시각을 단정한 옛 대본은 새 판의 기억 재료로도 쓰지 않는다.
     if (d.script && !hasExactClockClaim(d.script)) recentScripts.push(d.script);
     const ck = d.situation?.corner?.key;
     if (ck) recentCorners.push(ck);
+    const fk = d.situation?.formatSlot?.key;
+    if (fk) recentFormatSlots.push(fk);
   }
   const airMirror = buildAirMirror(recentScripts);
 
@@ -180,17 +186,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     broadcastTrail: trail.slice(-4).map((d) => ({ date: d.date.slice(5), items: d.items.slice(-10) })),
   } satisfies RadioSituation);
 
-  // 이번 판의 자리 — 재료가 있는 코너 중 가장 오래 안 쓴 것. 같은 질문을 3분마다 던지지 않기 위해서다.
+  // 포맷 클록은 말의 역할·길이를, 코너는 소재를 정한다. 둘을 분리해야 곡·낭독이
+  // 코너 하나를 빼앗지 않고 어느 판에도 자연스럽게 붙을 수 있다.
+  situation.formatSlot = pickFormatSlot(recentFormatSlots);
+
+  // 이번 판의 자리 — 최근 분리와 daypart를 함께 본다. 같은 질문을 3분마다 던지지 않기 위해서다.
   const available = new Set<string>();
   if (situation.story) available.add('story');
-  if (situation.songShelf?.length) available.add('song');
   if (situation.libraryFinds?.length) available.add('library');
   if (situation.bookcase?.open) available.add('bookcase');
   if (situation.webObservations?.length) available.add('web');
   if (situation.webtoonPosts?.length) available.add('toon');
+  if (situation.comicBits?.length) available.add('studio');
   if (situation.broadcastTrail?.length) available.add('trail');
   available.add('observe');
-  situation.corner = pickCorner(available, recentCorners);
+  situation.corner = pickCorner(available, recentCorners, situation.timeLabel);
 
   // 곡과 미리 구운 낭독은 코너가 아니다. 둘은 어느 판에나 독립적으로 붙을 수 있는
   // 방송 자산이다. 코너 하나를 고르는 회전표에 넣으면 서로의 자리를 빼앗아 버퍼가 줄어든다.
@@ -245,13 +255,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // 알아서 하게 두라고. 그래도 또 읽는다? 그럼 그게 별이인 거야"). 무엇을 낭독했고 틀었고
   // 답했는지를 날짜별로 적어 다음 상황에 실어 준다 — 다시 읽을지는 별이가 알고 고른다.
   const squash = (x: string) => x.replace(/\s+/g, '');
-  const readAloud = !!openPiece && squash(written.script).includes(squash(openPiece.text).slice(0, 24));
+  const quotedBookcase = !!openPiece && squash(written.script).includes(squash(openPiece.text).slice(0, 24));
   const today = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
   const acts: string[] = [];
   if (storyRead) acts.push('사연 하나에 답했다');
   if (pickedReading) acts.push(`「${pickedReading.title}」(낭독 서가)을 소개하고 틀었다`);
   if (picked) acts.push(`「${picked.title}」를 ${written.musicTransition === 'direct' ? '말없이 바로 틀었다' : '소개하고 틀었다'}`);
-  if (readAloud) acts.push(`「${openPiece!.title}」(책장 원고)을 낭독했다`);
+  if (quotedBookcase) acts.push(`「${openPiece!.title}」(책장 원고)에서 한 문장을 꺼냈다`);
   if (!acts.length) acts.push(`이야기: ${written.script.split('\n')[0].slice(0, 24)}`);
   let day = trail.find((d) => d.date === today);
   if (!day) { day = { date: today, items: [] }; trail.push(day); }
@@ -276,6 +286,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     ok: true, id, dj: 'byeoli', kind: storyRead ? 'story' : 'talk', storyRead,
     storyId: storyRead && story ? story.id : null,
     timeLabel: situation.timeLabel,
+    formatSlot: situation.formatSlot?.key ?? null,
     script: written.script, voiceNote: written.voiceNote,
     // 노래 편성 (08-12 밤): 별이가 고른 곡의 실물 — 조립기(station.sh)가 토막 뒤에 잇는다
     song: picked ? {

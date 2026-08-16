@@ -7,6 +7,8 @@ import {
   buildAirMirror,
   foldOverusedMemory,
   pickCorner,
+  pickFormatSlot,
+  RADIO_FORMAT_CLOCK,
   stripBrokenTag,
   trimSituationForCorner,
   stripLoneSurrogates,
@@ -164,16 +166,32 @@ test('과잉 소재 접기 — 거울이 찾은 과거 기억만 빼고 새 재�
 
 // 자리(코너)는 편성이 정하고, 무슨 말을 할지는 별이가 정한다
 test('코너 회전 — 재료가 있는 자리 중 가장 오래 안 쓴 것', () => {
-  const avail = new Set(['story', 'song', 'observe']);
-  assert.equal(pickCorner(avail, ['story', 'song', 'observe']).key, 'observe');
-  assert.equal(pickCorner(avail, ['observe', 'story']).key, 'song', '한 번도 안 쓴 자리가 먼저다');
+  const avail = new Set(['story', 'web', 'observe']);
+  assert.equal(pickCorner(avail, ['story', 'web', 'observe']).key, 'observe');
+  assert.equal(pickCorner(avail, ['observe', 'story'], '낮').key, 'web', '안 쓴 자리와 낮 daypart가 먼저다');
   assert.equal(pickCorner(new Set(['observe']), ['observe']).key, 'observe', '재료가 하나뿐이면 그것');
   const msg = situationMessage({
     timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
-    corner: { key: 'song', label: '곡 소개', hint: '왜 지금 이 곡인지 한마디' },
+    corner: { key: 'studio', label: '별이의 작업실', hint: '네가 만든 것을 돌아본다' },
   });
   assert.match(msg, /이번 판의 자리/);
-  assert.match(msg, /곡 소개/);
+  assert.match(msg, /별이의 작업실/);
+});
+
+test('유연한 방송 시계 — 성공 판 다음 자리로 돌고 곡·낭독은 코너가 아니다', () => {
+  assert.equal(pickFormatSlot([]).key, 'arrival');
+  assert.equal(pickFormatSlot(['arrival']).key, 'feature-a');
+  assert.equal(pickFormatSlot(['bridge-a']).key, 'feature-b');
+  assert.equal(pickFormatSlot(['continuity']).key, 'arrival');
+  assert.equal(RADIO_FORMAT_CLOCK.length, 6);
+  const msg = situationMessage({
+    timeLabel: '저녁', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
+    formatSlot: pickFormatSlot(['feature-a']),
+  });
+  assert.match(msg, /짧은 연결/);
+  assert.match(msg, /15~30초/);
+  assert.match(msg, /저녁 편성/);
+  assert.doesNotMatch(msg, /지금 몇 시인지/);
 });
 
 // 08-14 새벽: 별이가 시킨 적 없는 지문을 스스로 썼다 — 「(작게 숨 고르는 소리)」.
@@ -206,14 +224,14 @@ test('잘린 태그 조각 — 본문에서 떼어내고 경고로 남긴다', (
 test('입력 다이어트 — 이번 자리만 펼치고 나머지는 목차로 접는다', () => {
   const base: RadioSituation = {
     timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
-    corner: { key: 'bookcase', label: '책장 낭독', hint: '펼쳐진 원고를 읽는다' },
+    corner: { key: 'bookcase', label: '책장 이야기', hint: '펼쳐진 원고를 이야기한다' },
     bookcase: { open: { title: '멈춰 선 자리', text: '본문 전문…' }, titles: ['다른 원고'], locked: [] },
     libraryFinds: [{ title: '곤충 인문학', author: '', note: '풀숲', ago: '어제' }],
     youtubeVideos: [{ title: '삽만리 새 영상', publishedAt: '', url: '' }],
     webObservations: [{ id: 'sky', label: '오늘의 하늘', kind: 'fact', engine: 'api', sourceUrl: '', items: [] }],
   };
   const cut = trimSituationForCorner(base);
-  assert.ok(cut.bookcase?.open, '이번 자리 재료는 전문 그대로');
+  assert.ok(cut.bookcase?.open, '이번 자리 재료는 열린 상태로 남는다');
   assert.equal(cut.libraryFinds, undefined, '다른 자리 재료는 접힌다');
   assert.equal(cut.youtubeVideos, undefined);
   assert.equal(cut.webObservations, undefined);
@@ -343,7 +361,7 @@ test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독
   assert.equal(picked?.title, '봄바람');
   // 음성: 전부 부적격이면 안 펼친다 — 억지로 펼치지 않는다
   assert.equal(pickBookcasePiece(pieces.slice(1), () => 0), null);
-  // 상황 메시지: 낭독 허락이 명시되고, 잠긴 원고는 제목·소개만 나온다 (본문 노출 없음)
+  // 상황 메시지: 현장 전문 낭독을 막고, 잠긴 원고는 제목·소개만 나온다 (본문 노출 없음)
   const s: RadioSituation = {
     timeLabel: '밤', todayLines: [], story: null, waitingCount: 0, recentScripts: [],
     bookcase: {
@@ -353,8 +371,8 @@ test('우리 책장 — 펼침 후보 필터·잠금 원고는 제목만·낭독
     },
   };
   const msg = situationMessage(s);
-  assert.match(msg, /낭독이 허락/);
-  assert.match(msg, /「봄바람」 전문/);
+  assert.match(msg, /전문 낭독은 미리 구운 낭독 서가/);
+  assert.match(msg, /「봄바람」 앞부분/);
   assert.match(msg, /「질투」 · 「미니멀」/);
   assert.match(msg, /아직 못 꺼내는 원고.*「남겨둔 것들」 — 아직 안 나온 장편/);
 });

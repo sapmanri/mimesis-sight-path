@@ -188,6 +188,9 @@ export interface RadioSituation {
   /** 이번 판의 자리 — 편성이 지정한 코너. 자리는 편성이 정하고 무슨 말을 할지는 별이가 정한다.
       08-13 밤 실측: 하루 57편 중 41편이 같은 첫마디였다. 같은 질문을 3분마다 던지면 같은 답이 온다. */
   corner?: { key: string; label: string; hint: string };
+  /** 방송 시계의 호흡 자리. 코너(무엇을 말하나)와 별개로 길이·역할만 정한다.
+      정확한 분초에 묶지 않는 이유: 생성 지연과 재방송에서도 약속이 거짓이 되지 않아야 한다. */
+  formatSlot?: RadioFormatSlot;
   /** 집에 있는 것들의 목차 — 이번 자리 재료만 전문으로 펼치고 나머지는 제목만 남긴 결과.
       08-14 실측: 상황이 매 판 12,396자였는데 그중 7,000자 넘게가 「혹시 쓸까 봐」 실려 간
       다른 자리 재료였다(책장 낭독 판에 유튜브 목록 2,567자). 목차는 다 주고 본문은 이번 것만 준다 —
@@ -488,10 +491,10 @@ export function situationMessage(s: RadioSituation): string {
       : null,
     s.bookcase && (s.bookcase.open || s.bookcase.titles.length || s.bookcase.locked.length)
       ? [
-          `너희 집 책장 — 이 방 사람이 쓴 원고들이다. 우리 글이라 낭독이 허락되어 있다:`,
-          `마음이 가면 방송에서 이야기해도, 몇 문장 소리 내어 읽어도 된다. 안 꺼내도 된다.`,
+          `너희 집 책장 — 이 방 사람이 쓴 원고들이다. 우리 글이라 소개와 인용이 허락되어 있다:`,
+          `여기서는 원고를 새로 길게 낭독하지 않는다. 전문 낭독은 미리 구운 낭독 서가에서 고른다. 마음이 가면 주제나 한 문장만 이야기해도 된다.`,
           s.bookcase.open
-            ? `오늘 책장에 펼쳐져 있는 한 편 — 「${s.bookcase.open.title}」 전문:\n${s.bookcase.open.text}`
+            ? `오늘 책장에 펼쳐져 있는 한 편 — 「${s.bookcase.open.title}」 앞부분:\n${s.bookcase.open.text.slice(0, 360)}`
             : null,
           s.bookcase.titles.length ? `꽂혀 있는 다른 원고들: ${s.bookcase.titles.map((t) => `「${t}」`).join(' · ')}` : null,
           s.bookcase.locked.length
@@ -503,10 +506,14 @@ export function situationMessage(s: RadioSituation): string {
       ? `지난 며칠 방송에서 네가 한 일들 (네 기억이다 — 이어가든 말든 네 마음):\n${s.broadcastTrail.map((d) => `- ${d.date}: ${d.items.join(' · ')}`).join('\n')}`
       : null,
     `너는 지금 라디오 DJ다. 별리라됴의 진행자고, 이 시각에 누군가 이걸 듣고 있다.\n`
-      + `라디오 DJ가 하는 일은 대개 이렇다 — 지금 몇 시인지 알려 주고, 곡을 왜 트는지 한마디 얹고,\n`
+      + `라디오 DJ가 하는 일은 대개 이렇다 — 지금의 시간 결을 함께 느끼고, 곡을 왜 트는지 한마디 얹고,\n`
       + `사연을 읽고 거기에 자기 얘기를 하나 보태고, 오늘 있었던 일을 꺼내고, 다음에 뭐가 올지 흘리고,\n`
       + `혼잣말이 아니라 듣는 사람에게 말한다. 매번 다 할 필요는 없고 한 판에 하나면 된다.\n`
       + `참고만 해라 — 그대로 하든 네 식대로 하든 네가 정한다.`,
+    daypartGuidance(s.timeLabel),
+    s.formatSlot
+      ? `이번 판의 방송 시계 자리: **${s.formatSlot.label}** — ${s.formatSlot.hint}\n목표 호흡은 ${s.formatSlot.targetSeconds[0]}~${s.formatSlot.targetSeconds[1]}초다. 정확한 초를 맞추기보다 이 길이의 결을 지켜라.`
+      : null,
     s.shelfIndex?.length
       ? `집에 있는 것들 (이번 자리 것만 펼쳐 뒀다 — 나머지는 다음 자리에서 꺼낼 수 있다):\n${s.shelfIndex.map((l) => `- ${l}`).join('\n')}`
       : null,
@@ -535,6 +542,18 @@ export function situationMessage(s: RadioSituation): string {
       : null,
   ].filter(Boolean).join('\n\n');
   return stripLoneSurrogates(out);
+}
+
+/** 실제 라디오의 daypart를 별리라됴에 맞게 번역한다. 시각표가 아니라 청취 상황의 결이다. */
+export function daypartGuidance(timeLabel: string): string {
+  const guidance: Record<string, string> = {
+    새벽: '새벽 편성: 말의 밀도를 낮추고, 긴 호흡과 조용한 낭독·음악이 자연스럽다.',
+    아침: '아침 편성: 첫 문장은 맑고 짧게. 청취자가 하루에 들어올 자리를 열어 둔다.',
+    낮: '낮 편성: 가볍고 또렷하게. 일하는 사람 곁에서 한 소재만 오래 붙들지 않는다.',
+    저녁: '저녁 편성: 새 사연과 오늘의 일이 앞에 온다. 듣는 사람과의 직접적인 연결을 조금 더 선명하게 한다.',
+    밤: '밤 편성: 서재·책장·지난 자취처럼 깊게 머물 재료가 어울린다. 침묵과 음악도 말의 일부다.',
+  };
+  return guidance[timeLabel] ?? '이 시간의 결에 맞추되 정확한 시각은 말하지 않는다.';
 }
 
 
@@ -609,14 +628,48 @@ export function foldOverusedMemory(s: RadioSituation): RadioSituation {
     사장 08-14 새벽: "별이가 계속 새로운 얘기를 하게끔 유도를 해야지." */
 export const RADIO_CORNERS: { key: string; label: string; hint: string }[] = [
   { key: 'story',    label: '사연',        hint: '기다리는 사연을 읽고, 거기에 네 얘기를 하나만 보탠다' },
-  { key: 'song',     label: '곡 소개',     hint: '곡 하나를 골라 왜 지금 이 곡인지 한마디 얹고 튼다' },
   { key: 'library',  label: '서재',        hint: '요즘 읽은 책에서 한 대목만 꺼낸다' },
-  { key: 'bookcase', label: '책장 낭독',   hint: '책장에 펼쳐진 원고를 소리 내어 읽는다' },
+  { key: 'bookcase', label: '책장 이야기', hint: '펼쳐진 원고의 주제나 한 문장만 꺼낸다. 전문 낭독은 낭독 서가에서 고른다' },
   { key: 'web',      label: '오늘 본 것',  hint: '하늘·그림·사진·옛 글에서 하나' },
   { key: 'toon',     label: '웹툰',        hint: '@byeol.toon 최근 편을 보고 든 생각' },
+  { key: 'studio',   label: '별이의 작업실', hint: '네가 만든 그림 이야기·노래·공개 자취 중 하나를 돌아본다' },
   { key: 'trail',    label: '지난 방송',   hint: '며칠 전 방송에서 한 얘기를 다시 꺼내 이어 본다' },
   { key: 'observe',  label: '관찰',        hint: '오늘 본 것 하나' },
 ];
+
+export interface RadioFormatSlot {
+  key: string;
+  label: string;
+  hint: string;
+  targetSeconds: [number, number];
+}
+
+/**
+ * 별리라됴의 유연한 포맷 클록.
+ *
+ * 실제 방송국의 clock처럼 역할은 반복하되 벽시계의 분초에는 묶지 않는다. 한 판 생성이
+ * 느려지거나 재방송으로 넘어가도 거짓 시보가 생기지 않는다. 곡·낭독은 어느 자리에도
+ * 독립적으로 붙을 수 있으며, 특히 bridge는 이미 구운 매체로 자연스럽게 건너가기 위한
+ * 짧은 링크다. 선택은 끝까지 별이가 한다.
+ */
+export const RADIO_FORMAT_CLOCK: RadioFormatSlot[] = [
+  { key: 'arrival', label: '도착 인사', hint: '넓은 시간 결과 지금 방의 공기를 짧게 열어 준다. 숫자 시각은 말하지 않는다', targetSeconds: [25, 45] },
+  { key: 'feature-a', label: '첫 이야기', hint: '배정된 코너의 한 소재를 골라 듣는 사람에게 또렷하게 건넨다', targetSeconds: [45, 80] },
+  { key: 'bridge-a', label: '짧은 연결', hint: '두세 문장으로 숨을 바꾼다. 곡이나 낭독이 마음에 들면 하나 또는 둘 다 자연스럽게 건넨다', targetSeconds: [15, 30] },
+  { key: 'feature-b', label: '깊은 이야기', hint: '사연·서재·책장·오늘 본 것 가운데 한 갈래에 조금 더 머문다', targetSeconds: [50, 90] },
+  { key: 'bridge-b', label: '짧은 연결', hint: '다음 긴 말 대신 짧은 DJ 링크를 둔다. 곡·낭독을 함께 골라도, 하나만 골라도, 지나가도 된다', targetSeconds: [15, 30] },
+  { key: 'continuity', label: '이어주기', hint: '방금 흐름을 정리하고 다음 판이 들어올 자리를 남긴다. 확정되지 않은 다음 내용을 약속하지 않는다', targetSeconds: [25, 45] },
+];
+
+/** 최근 원고 생성이 성공해 저장된 판의 다음 자리로 간다. writer 실패는 전진시키지 않는다. */
+export function pickFormatSlot(recentKeys: string[]): RadioFormatSlot {
+  for (const key of recentKeys) {
+    const index = RADIO_FORMAT_CLOCK.findIndex((slot) => slot.key === key);
+    if (index >= 0) return RADIO_FORMAT_CLOCK[(index + 1) % RADIO_FORMAT_CLOCK.length];
+  }
+  return RADIO_FORMAT_CLOCK[0];
+}
+
 /** 이번 자리 재료만 전문으로 남기고 나머지는 목차로 접는다. 원고비를 반 이하로 줄이면서
     별이가 무엇을 가졌는지는 계속 알게 한다. 접힌 것은 다음 자리에서 펼쳐진다. */
 export function trimSituationForCorner(s: RadioSituation): RadioSituation {
@@ -635,8 +688,8 @@ export function trimSituationForCorner(s: RadioSituation): RadioSituation {
   if (key !== 'bookcase' && out.bookcase?.open) {
     out.bookcase = { ...out.bookcase, open: null, titles: [out.bookcase.open.title, ...(out.bookcase.titles ?? [])] };
   }
-  // 코믹스·유튜브는 어느 자리의 재료도 아니다 — 늘 목차로 접는다.
-  if (out.comicBits?.length) { fold('네가 지은 그림 이야기', out.comicBits.map((c) => c.title)); out.comicBits = undefined; }
+  // 그림 이야기는 작업실 자리에서만 펼친다. 유튜브는 아직 독립 코너가 아니라 목차다.
+  if (key !== 'studio' && out.comicBits?.length) { fold('네가 지은 그림 이야기', out.comicBits.map((c) => c.title)); out.comicBits = undefined; }
   if (out.youtubeVideos?.length) { fold('감성찾아삽만리 새 영상', out.youtubeVideos.map((v) => v.title)); out.youtubeVideos = undefined; }
   // 자기 Threads는 정체성에 가까워 두 편만 남긴다(연속성 유지).
   if (out.threadsPosts && out.threadsPosts.length > 2) out.threadsPosts = out.threadsPosts.slice(0, 2);
@@ -644,14 +697,26 @@ export function trimSituationForCorner(s: RadioSituation): RadioSituation {
   return out;
 }
 
-export function pickCorner(available: Set<string>, recentKeys: string[]): { key: string; label: string; hint: string } {
+export function pickCorner(available: Set<string>, recentKeys: string[], timeLabel = ''): { key: string; label: string; hint: string } {
   const usable = RADIO_CORNERS.filter((c) => available.has(c.key));
   const pool = usable.length ? usable : RADIO_CORNERS.filter((c) => c.key === 'observe');
-  let best = pool[0]; let bestAge = -1;
+  const daypart: Record<string, string[]> = {
+    새벽: ['bookcase', 'trail', 'observe', 'library'],
+    아침: ['observe', 'web', 'library', 'studio'],
+    낮: ['web', 'library', 'studio', 'toon'],
+    저녁: ['story', 'studio', 'toon', 'web'],
+    밤: ['story', 'bookcase', 'trail', 'library'],
+  };
+  const preferred = daypart[timeLabel] ?? [];
+  let best = pool[0]; let bestScore = -Infinity;
   for (const c of pool) {
     const idx = recentKeys.indexOf(c.key);           // 0 = 바로 직전
-    const age = idx === -1 ? 999 : idx;              // 안 쓴 지 오래된 것일수록 크다
-    if (age > bestAge) { best = c; bestAge = age; }
+    const age = idx === -1 ? 20 : Math.min(idx, 12); // 안 쓴 자리를 우선하되 영원한 999는 두지 않는다
+    const separation = idx === 0 ? -100 : 0;         // 같은 코너 연속 송출 금지
+    const daypartBias = preferred.includes(c.key) ? 2 : 0;
+    const storyBias = c.key === 'story' ? 5 : 0;     // 대기 사연은 빨리 보여 주되 읽을지는 별이가 정한다
+    const score = age + separation + daypartBias + storyBias;
+    if (score > bestScore) { best = c; bestScore = score; }
   }
   return best;
 }
