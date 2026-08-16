@@ -218,17 +218,33 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const id = storyRead && story ? story.id : `solo-${Date.now().toString(36)}`;
 
   // 별이가 고른 곡을 서가와 대조 — 서가에 없는 제목은 방송에 못 나간다 (경고만 남긴다)
-  const picked = written.songTitle
+  let picked = written.songTitle
     ? songs.find((g) => songKey(g.title) === songKey(written.songTitle!)) ?? null
     : null;
   const warnings = [...written.warnings];
-  if (written.songTitle && !picked) warnings.push(`song_not_found: ${written.songTitle}`);
+
+  // 🔴 08-16 실사고 — 별이가 **낭독 서가의 제목을 [노래:]로** 걸었다
+  //   (song_not_found: 「여름엔 그늘마저 푸르고」 — 그건 글이지 곡이 아니다).
+  //   곡 서가와 낭독 서가가 나란히 놓이면서 생긴 혼동이다. 그때마다 곡이 통째로 빠져
+  //   그 판이 말만 남고, 버퍼가 곡 길이만큼 덜 찬다.
+  //   고른 제목이 낭독 서가에 있으면 **낭독으로 받아 준다** — 별이 뜻은 「이 글을 읽겠다」였다.
+  let readingTitle = written.readingTitle;
+  if (written.songTitle && !picked) {
+    const asReading = readings.find((r) => songKey(r.title) === songKey(written.songTitle!));
+    if (asReading && !readingTitle) {
+      readingTitle = asReading.title;
+      warnings.push(`song_was_reading: ${written.songTitle}`);
+    } else {
+      warnings.push(`song_not_found: ${written.songTitle}`);
+    }
+  }
 
   // 별이가 고른 낭독을 서가와 대조 — 곡과 같은 규칙. 서가에 없는 제목은 방송에 못 나간다.
-  const pickedReading = written.readingTitle
-    ? readings.find((r) => songKey(r.title) === songKey(written.readingTitle!)) ?? null
+  // readingTitle은 위에서 교정됐을 수 있다(곡으로 잘못 건 낭독) — 교정본을 쓴다.
+  const pickedReading = readingTitle
+    ? readings.find((r) => songKey(r.title) === songKey(readingTitle!)) ?? null
     : null;
-  if (written.readingTitle && !pickedReading) warnings.push(`reading_not_found: ${written.readingTitle}`);
+  if (readingTitle && !pickedReading) warnings.push(`reading_not_found: ${readingTitle}`);
 
   // 방송 자취 적기 — 강제가 아니라 기억이다 (사장 판정 08-12 밤: "게놈으로 다시 보게끔 해서
   // 알아서 하게 두라고. 그래도 또 읽는다? 그럼 그게 별이인 거야"). 무엇을 낭독했고 틀었고
