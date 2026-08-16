@@ -207,7 +207,8 @@ export interface RadioSituation {
       있게 열어줘야 해". 우리 글이라 낭독이 허락되어 있다). open은 이번 틱에 펼쳐진 한 편(전문),
       titles는 꽂혀 있는 나머지, locked는 아직 못 꺼내는 원고(제목·소개만 — 미발표작 보호). */
   bookcase?: {
-    open: { title: string; text: string } | null;
+    /** baked=true 면 이미 낭독 서가에 구워 둔 글이다 — 통째로 읽을 땐 그걸 쓴다 (08-16) */
+    open: { title: string; text: string; baked?: boolean } | null;
     titles: string[];
     locked: { title: string; about: string }[];
   };
@@ -460,15 +461,17 @@ export function situationMessage(s: RadioSituation): string {
       : null,
     s.bookcase && (s.bookcase.open || s.bookcase.titles.length || s.bookcase.locked.length)
       ? [
-          `너희 집 책장 — 이 방 사람이 쓴 원고들이다.`,
-          `마음이 가면 방송에서 **이야기해도** 된다. 안 꺼내도 된다.`,
-          // 🔴 08-16 실사고: 여기서 「몇 문장 소리 내어 읽어도 된다」고 했더니 별이가 원고를
-          //   그 자리에서 옮겨 적었고, TTS가 그걸 통째로 구웠다. 한 판에 10분이 걸려
-          //   생성이 소비를 못 따라가고 **관제실은 LIVE인데 재방이 나갔다.**
-          //   낭독은 미리 구운 재고가 있다(readingShelf) — 그게 이 문제를 없애려고 만든 것이다.
-          `⚠ 본문을 원고에 옮겨 적지 마라. 통째로 읽어야겠으면 위 **낭독 서가**에서 골라`,
-          `[낭독: 제목]으로 걸어라 — 이미 네 목소리로 구워 둔 것이 붙는다. 그게 훨씬 빠르다.`,
-          `여기서는 그 글을 **네 말로 이야기**하는 것까지만 한다.`,
+          `너희 집 책장 — 이 방 사람이 쓴 원고들이다. 우리 글이라 낭독이 허락되어 있다:`,
+          `마음이 가면 방송에서 이야기해도, 몇 문장 소리 내어 읽어도 된다. 안 꺼내도 된다.`,
+          // 🔴 08-16 실사고: 별이가 이 전문을 **통째로 옮겨 적어** TTS가 그 자리에서 구웠다.
+          //   한 판에 10분이 걸려 생성이 소비를 못 따라갔고 관제실은 LIVE인데 재방이 나갔다.
+          //   사장 판정: 전문은 그대로 준다(이야기하려면 본문이 있어야 한다).
+          //   다만 **이미 구워 둔 글이면 통째로 읽을 때 그걸 쓴다** — 두 번 구울 이유가 없다.
+          s.bookcase.open?.baked
+            ? `⚠ 「${s.bookcase.open.title}」은 이미 네 목소리로 구워 둔 글이다.`
+              + ` 통째로 읽고 싶으면 본문을 옮겨 적지 말고 **[낭독: ${s.bookcase.open.title}]**으로 걸어라 —`
+              + ` 구워 둔 것이 그대로 붙는다. 몇 문장만 인용하는 건 지금처럼 해도 된다.`
+            : null,
           s.bookcase.open
             ? `오늘 책장에 펼쳐져 있는 한 편 — 「${s.bookcase.open.title}」 전문:\n${s.bookcase.open.text}`
             : null,
