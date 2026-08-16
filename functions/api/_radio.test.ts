@@ -10,6 +10,8 @@ import {
   stripBrokenTag,
   trimSituationForCorner,
   stripLoneSurrogates,
+  hasReadingHandoff,
+  hasExactClockClaim,
 } from './_radio.ts';
 import { onRequestGet as getRadioDraftSummary, storyPreview, timeLabelOf } from './radio/draft.ts';
 
@@ -300,6 +302,31 @@ test('[노래:] 곡 선택 분리 — 순서 무관·중간 태그는 무시·�
   // 음성: 태그가 없으면 전부 기본값
   const none = parseTrailingTags('그냥 본문.');
   assert.deepEqual([none.songTitle, none.voiceNote], [null, null]);
+});
+
+test('낭독 선택 — 곡과 함께 파싱되고 제목을 말하며 건너간 판만 통과한다', () => {
+  const both = parseTrailingTags([
+    '「멈춰 선 자리」라는 글이야. 현관 앞에 남은 신발 이야기라서 오늘 읽어볼게.',
+    '[노래: 아직 거기 있었다 | 소개]',
+    '[낭독: 멈춰 선 자리]',
+    '[목소리: 낮고 천천히]',
+  ].join('\n'));
+  assert.equal(both.readingTitle, '멈춰 선 자리');
+  assert.equal(both.songTitle, '아직 거기 있었다');
+  assert.equal(hasReadingHandoff(both.script, '멈춰 선 자리'), true);
+  assert.equal(hasReadingHandoff('글 하나 읽어줄게.', '멈춰 선 자리'), false, '제목 없는 예고는 편성하지 않는다');
+  assert.equal(hasReadingHandoff('「멈춰 선 자리」가 책상 위에 있었어.', '멈춰 선 자리'), false, '제목만 우연히 말한 것도 부족하다');
+});
+
+test('정확한 시각 금지 — 넓은 시간 결은 남기고 지금 몇 시라는 단정은 거부한다', () => {
+  assert.equal(hasExactClockClaim('지금은 1시야.'), true);
+  assert.equal(hasExactClockClaim('지금은 오후 4시 20분이야.'), true);
+  assert.equal(hasExactClockClaim('벌써 열한 시네.'), true);
+  assert.equal(hasExactClockClaim('지금은 낮이야.'), false);
+  assert.equal(hasExactClockClaim('한 시간쯤 걸었어.'), false);
+  const invalid = validateRadioScript('지금은 1시야. 창밖이 밝아. 빼콩이는 그늘에 누워 있고, 창틀에는 볕이 남아 있어.', null);
+  assert.equal(invalid.pass, false);
+  assert.ok(invalid.errors.some((error) => error.startsWith('exact_clock_claim')));
 });
 
 // 우리 책장 (Vase 08-12 밤): 우리 원고는 낭독이 허락 — 잠긴 원고는 제목만

@@ -452,7 +452,7 @@ function fmtSeconds(ms) {
   return d.toISOString().slice(11, 19);
 }
 function tunerKind(kind) {
-  return ({ talk:'이야기', story:'사연', song:'노래', ambient:'쉼' })[kind] || '방송';
+  return ({ talk:'이야기', story:'사연', reading:'낭독', song:'노래', ambient:'쉼' })[kind] || '방송';
 }
 function setTunerReadout(p, moving=false) {
   const el = $('t0');
@@ -530,9 +530,9 @@ function tick() {
     } else if (!unavailable && nd && nd.kind !== 'bed' && nd.startedAt) {
       $('now').textContent = nd.title || '별리의 방';
       $('state').textContent = nd.isReplay
-        ? (nd.kind === 'song' ? '노래 다시 듣기 — ' + (nd.title || '') : '지난 방송 다시 듣기')
+        ? (nd.kind === 'song' ? '노래 다시 듣기 — ' + (nd.title || '') : nd.kind === 'reading' ? '낭독 다시 듣기 — ' + (nd.title || '') : '지난 방송 다시 듣기')
         : nd.kind === 'story' ? '사연을 읽는 중'
-        : nd.kind === 'song' ? '노래 — ' + (nd.title || '')
+        : nd.kind === 'song' ? '노래 — ' + (nd.title || '') : nd.kind === 'reading' ? '낭독 — ' + (nd.title || '')
         : nd.voiceNote ? '목소리 — ' + nd.voiceNote : '';
       const elapsed = serverNow() - nd.startedAt - LIVE_LAT_MS;
       const cur = nd.script ? { id: 'now:' + nd.startedAt, script: nd.script,
@@ -589,7 +589,7 @@ function tick() {
       tryPlay(au);
       $('now').textContent = s.title;
       $('state').textContent = s.kind === 'story' ? '사연을 읽는 중'
-        : s.kind === 'song' ? '노래 — ' + (s.title || '') : s.voiceNote ? '목소리 — ' + s.voiceNote : '';
+        : s.kind === 'song' ? '노래 — ' + (s.title || '') : s.kind === 'reading' ? '낭독 — ' + (s.title || '') : s.voiceNote ? '목소리 — ' + s.voiceNote : '';
       au.onerror = () => setTimeout(() => { if (currentSeg === s.id) { au.load(); tryPlay(au); } }, 1200);
     } else {
       // 거부 회복 (08-12 밤 교착의 두 번째 축): "이미 트는 중" 도장 때문에 재시도가 없었다 —
@@ -821,7 +821,7 @@ function applyView() {
 window.addEventListener('hashchange', applyView);
 
 /* 지난 방송 — 날짜 목록 → 그날 내용 → 다시 듣기 (라이브와 스피커를 나눠 쓴다: 하나 켜면 하나 쉼) */
-const KIND_KO = { talk: '이야기', story: '사연', song: '노래', ambient: '쉼' };
+const KIND_KO = { talk: '이야기', story: '사연', reading: '낭독', song: '노래', ambient: '쉼' };
 const arch = $('arch');
 function hhmm(ms) { return new Date(ms + 9 * 3600000).toISOString().slice(11, 16); }
 async function loadArchive() {

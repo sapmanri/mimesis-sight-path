@@ -41,7 +41,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const stored: ProgramSegment[] = raw ? JSON.parse(raw) : [];
     const ids = new Set(stored.map((s) => `${s.id}|${s.startAt}`));
     for (const s of program) if (kstDayOf(s.startAt) === d && !ids.has(`${s.id}|${s.startAt}`)) ids.add(`${s.id}|${s.startAt}`);
-    const kinds = { talk: 0, story: 0, song: 0 };
+    const kinds = { talk: 0, story: 0, reading: 0, song: 0 };
     const all = [...stored, ...program.filter((s) => kstDayOf(s.startAt) === d && !stored.some((x) => x.id === s.id && x.startAt === s.startAt))];
     for (const s of all) if (s.kind in kinds) (kinds as Record<string, number>)[s.kind]++;
     out.push({ day: d, count: ids.size, kinds });

@@ -75,6 +75,7 @@ export interface RadioDraft {
   script: string;               // 방송 토막 전체 — 구성은 별이가 정했다 (R2)
   voiceNote: string | null;     // 별이가 정한 그날 목소리 연출 (R3 — 기분→목소리)
   songTitle?: string | null;    // 별이가 고른 곡 (노래 편성, 08-12 밤)
+  readingTitle?: string | null; // 별이가 고른 미리 구운 낭독
   stageCues?: string[];         // 별이가 스스로 쓴 지문 — 본문에선 떼어냈고 그 자리는 숨이 됐다 (08-14)
   promptChars?: number;         // 이번 판에 실제로 보낸 프롬프트 크기 (다이어트 실측용, 08-14)
   musicTransition?: MusicTransition | null; // 소개하고 틀지, 말없이 바로 틀지 — 별이의 편집 판단
@@ -198,10 +199,6 @@ export interface RadioSituation {
   /** 곡 서가 — 방송국에 실재하는 노래들 (Vase 08-12 밤: "15분에 한마디가 라디오냐" — 노래 편성).
       제목만 준다. 틀지 말지·언제 틀지는 별이가 정한다 — 각본 금지 원칙 그대로. */
   songShelf?: { title: string }[];
-  /** 이번 판은 곡 자리인데 낭독을 곁들여도 되나 (08-16 사장 지시: 둘 다 들어갈 수 있어야) */
-  mayAddReading?: boolean;
-  /** 이번 판은 낭독 자리인데 곡을 곁들여도 되나 */
-  mayAddSong?: boolean;
   /** 낭독 서가 — 미리 구워 둔 우리 원고. 별이가 제목을 보고 고른다 (사장 지시 08-15) */
   readingShelf?: { title: string; opening?: string }[];
   /** 서재 산책 발견 — 별이가 웹에서 직접 찾아 읽고 서가에 둔 책들 (Vase 08-12 밤: 인터넷 개방 1분야).
@@ -260,6 +257,7 @@ export function radioSystemPrompt(): { prompt: string | null; warnings: string[]
 - Crawl4AI로 페이지 글을 읽었다고 영상의 화면을 봤거나 음성을 들었다고 말하지 않는다.
 - 조언하거나 해결해 주지 않는다. 네가 본 것을 옆에 놓을 뿐이다.
 - 상황에 주어진 사실만 쓴다. 오늘 안 본 것을 봤다고 하지 않는다.
+- 정확한 시각을 말하지 않는다. "지금은 1시야"처럼 숫자·시·분을 단정하지 말고 새벽·아침·낮·저녁·밤의 넓은 결만 쓴다.
 
 네가 세상에서 먼저 보는 것 (이 순서로 본다):
 ${focus}
@@ -276,16 +274,20 @@ ${style}
 곡 제목은 서가의 제목 그대로 쓴다. 소개는 의무가 아니다 — 네가 지금 방송에 맞다고 느낄 때만 한다.
 노래 태그의 | 뒤에는 반드시 '소개' 또는 '바로' 둘 중 하나만 쓴다. 네가 실제로 말할 소개 문장은 태그 안이 아니라 본문에 쓴다.
 
+낭독 서가가 주어진 날은 미리 구워 둔 글 한 편을 이 토막 뒤에 붙일 수 있다. 낭독은 노래와 서로 다른 선택이다.
+- 읽고 싶으면 본문에서 반드시 글 제목을 말하고, 무엇에 관한 글인지 또는 왜 지금 읽는지 한마디로 건넨 뒤 [낭독: 글 제목]
+- 낭독에는 '바로'가 없다. 갑자기 재생하지 않는다. 이미 구운 글이 붙으므로 본문을 다시 옮겨 적지 않는다.
+- 노래와 낭독을 같은 판에 함께 골라도 된다. 함께 고르면 소개 본문 뒤에 낭독이 먼저, 노래가 그다음 재생된다.
+- 마음이 가지 않으면 낭독 태그를 쓰지 않는다. 글 제목은 서가의 제목 그대로 쓴다.
+
 맨 마지막 줄에 하나만 덧붙인다 — 오늘 이 토막을 읽을 네 목소리를 네가 정한다:
 [목소리: 짧은 연출 한 줄] (예: 조금 가라앉아서, 평소보다 느리게 / 반 박자 빠르게, 살짝 들떠서. 30자 이내)
 
-출력: 방송에서 말할 것 전체 + 끝의 [노래: 곡 제목 | 소개/바로](선택)와 [목소리: …]. 따옴표·설명·JSON 없이.`;
+출력: 방송에서 말할 것 전체 + 끝의 [낭독: 글 제목](선택), [노래: 곡 제목 | 소개/바로](선택), [목소리: …]. 꼬리 태그들의 순서는 상관없다. 따옴표·설명·JSON 없이.`;
   return { prompt, warnings: result.warnings };
 }
 
 export interface RadioScriptResult {
-  /** 별이가 [낭독: …]로 고른 글 — 서가 대조는 next.ts 몫 */
-  readingTitle?: string | null;
   script: string;           // 방송 토막 전체 (사연 원문 포함 가능)
   voiceNote: string | null; // 별이가 정한 그날 목소리 연출 한 줄 (기분→목소리, 사장 지시 08-12)
   songTitle: string | null; // 별이가 [노래: …]로 고른 곡 제목 — 서가 대조는 호출자(next.ts) 몫
@@ -346,6 +348,28 @@ export function parseTrailingTags(text: string): {
   }
   if (spokenSongIntro) script = [script, spokenSongIntro].filter(Boolean).join('\n\n');
   return { script, voiceNote, songTitle, musicTransition, readingTitle };
+}
+
+/** 낭독이 선택된 판은 제목과 건너가는 말이 모두 있어야 한다.
+    이 계약이 없으면 모델이 [낭독:]만 달거나 "읽어줄게"만 말한 뒤 매체가 빠졌을 때
+    소개 음성만 방송되는 사고를 구분할 수 없다. */
+export function hasReadingHandoff(script: string, title: string): boolean {
+  const compact = (value: string) => value.normalize('NFKC').replace(/[^0-9A-Za-z가-힣]/g, '').toLowerCase();
+  const body = compact(script);
+  const selected = compact(title);
+  return selected.length > 0
+    && body.includes(selected)
+    && /(읽어|낭독|글|원고|문장|이야기)/.test(script);
+}
+
+const EXACT_CLOCK_CLAIM = new RegExp(
+  String.raw`(?:지금(?:은|이)?|현재(?:는)?|벌써|오전|오후|새벽|아침|낮|저녁|밤)(?:\s*(?:오전|오후|새벽|아침|낮|저녁|밤))?\s*(?:[01]?\d|2[0-3]|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|열한|열두)\s*시(?:\s*(?:반|[0-5]?\d\s*분))?(?=\s*(?:야|이야|다|이다|네|쯤|경|가|에|부터|까지|이고|인데|[,.!?]|$))`,
+  'u',
+);
+
+/** 정확한 시각은 생성 직후에도 금방 거짓이 되고 재방송에서는 더 크게 어긋난다. */
+export function hasExactClockClaim(text: string): boolean {
+  return EXACT_CLOCK_CLAIM.test(text.normalize('NFKC'));
 }
 
 /** 옛 이름 — [목소리:]만 떼던 시절의 창구. 기존 호출·검사 호환용, 속은 공용 파서다. */
@@ -417,17 +441,11 @@ export function situationMessage(s: RadioSituation): string {
       ? [
           `방송국 낭독 서가 (읽어 줄 수 있는 우리 글들 — 읽을지 말지는 네가 정한다):`,
           ...s.readingShelf.map((r) => `- ${r.title}${r.opening ? ` — ${r.opening}` : ''}`),
-          `읽고 싶으면 **원고 끝에** [낭독: 제목] 한 줄을 놓아라. 곡을 고를 때와 같다.`,
+          `읽고 싶으면 **원고 끝에** [낭독: 제목] 한 줄을 놓아라.`,
           `본문은 네가 옮겨 적지 마라 — 이미 네 목소리로 구워 둔 게 붙는다.`,
-          `대신 그 앞에 네 말로 건너가라. 제목을 말해 주고, 왜 이 글인지 한 마디만.`,
-          // 08-16: 곡과 낭독은 **다른 자리다.** 한 판에 둘 다 놓아도 된다
-          //   (편성설계-20260813.md — 곡은 시간당 2곡, 낭독은 시간당 하나).
-          s.mayAddReading
-            ? `이번 판은 곡 자리지만, 마음이 가면 **곡과 낭독을 함께 놓아도 된다.** 둘 다 걸든 하나만 걸든 네가 정한다.`
-            : null,
-          s.mayAddSong
-            ? `이번 판은 글 자리지만, 마음이 가면 **곡도 함께 걸어도 된다.** 둘 다 걸든 하나만 걸든 네가 정한다.`
-            : null,
+          `대신 그 앞에 네 말로 건너가라. 제목을 말하고, 무엇에 관한 글인지 또는 왜 지금 이 글인지 한 마디만.`,
+          `곡과 낭독은 서로 다른 선택이다. 어느 자리에서든 둘 다 골라도, 하나만 골라도, 둘 다 고르지 않아도 된다.`,
+          `둘 다 고르면 네 소개 뒤에 낭독이 먼저, 곡이 그다음 붙는다.`,
         ].filter(Boolean).join('\n')
       : null,
     s.libraryFinds?.length
@@ -594,9 +612,6 @@ export const RADIO_CORNERS: { key: string; label: string; hint: string }[] = [
   { key: 'song',     label: '곡 소개',     hint: '곡 하나를 골라 왜 지금 이 곡인지 한마디 얹고 튼다' },
   { key: 'library',  label: '서재',        hint: '요즘 읽은 책에서 한 대목만 꺼낸다' },
   { key: 'bookcase', label: '책장 낭독',   hint: '책장에 펼쳐진 원고를 소리 내어 읽는다' },
-  // 낭독 서가 (08-15) — 책장 낭독과 다르다. 책장은 네가 그 자리에서 읽는 것이고,
-  // 이건 **미리 구워 둔 낭독**이라 너는 앞에서 건너가는 말만 하면 된다.
-  { key: 'reading',  label: '글 하나',     hint: '낭독 서가에서 한 편을 골라 제목을 말해 주고 건너간다' },
   { key: 'web',      label: '오늘 본 것',  hint: '하늘·그림·사진·옛 글에서 하나' },
   { key: 'toon',     label: '웹툰',        hint: '@byeol.toon 최근 편을 보고 든 생각' },
   { key: 'trail',    label: '지난 방송',   hint: '며칠 전 방송에서 한 얘기를 다시 꺼내 이어 본다' },
@@ -743,6 +758,7 @@ export function validateRadioScript(script: string, story: string | null): {
   if (context.identity.selfPresence === 'none' && selfCount > 0) errors.push('self none 위반');
   else if (context.identity.selfPresence === 'rare' && selfCount > 4) errors.push(`self rare 위반 (${selfCount}회) — 방송 한 토막 기준 완화 상한 4`);
   if (META_LEAK.test(own)) errors.push('메타·해시태그·이모지 누출');
+  if (hasExactClockClaim(own)) errors.push('exact_clock_claim: 정확한 시각 대신 새벽·아침·낮·저녁·밤만 쓴다');
 
   return { pass: errors.length === 0, errors, warnings };
 }

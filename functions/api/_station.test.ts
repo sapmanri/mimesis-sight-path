@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  placeSegment, lastEndOf, pruneProgram, PROGRAM_KEEP, RADIO_TIME_LABELS,
+  placeSegment, placeSegmentBatch, lastEndOf, pruneProgram, PROGRAM_KEEP, RADIO_TIME_LABELS,
   type ProgramSegment,
 } from './_station.ts';
 import { validateRadioScript, situationMessage } from './_radio.ts';
@@ -15,6 +15,11 @@ test('편성 자리 — 버퍼 뒤에 붙거나, 90초 예고 후 시작 (즉시
   // 방송이 비어 있었다 → 지금+90초 예고 (등록 즉시 시작은 청취자가 발견 전에 지나간다 — 08-12 실사고)
   assert.equal(placeSegment(500, 1000), 91_000);
   assert.equal(placeSegment(null, 1000), 91_000);
+});
+
+test('한 판 원자 편성 — 소개 뒤 낭독과 곡이 같은 시간축에 연속으로 놓인다', () => {
+  assert.deepEqual(placeSegmentBatch(200_000, 1_000, [30, 65, 180]), [200_000, 230_000, 295_000]);
+  assert.deepEqual(placeSegmentBatch(null, 1_000, [30, 65]), [91_000, 121_000]);
 });
 
 test('lastEnd — 토막 끝의 최댓값 (등록 순서와 무관)', () => {

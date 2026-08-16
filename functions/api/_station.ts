@@ -16,7 +16,7 @@ export function kstDayOf(ms: number): string {
 export const PROGRAM_KEEP = 300;                    // 토막 수 상한
 export const PROGRAM_WINDOW_MS = 48 * 3_600_000;    // 이틀치만 남긴다 — 당기기 한계
 
-export type SegmentKind = 'talk' | 'story' | 'song' | 'ambient';
+export type SegmentKind = 'talk' | 'story' | 'reading' | 'song' | 'ambient';
 export type RadioTimeLabel = '새벽' | '아침' | '낮' | '저녁' | '밤';
 export const RADIO_TIME_LABELS: RadioTimeLabel[] = ['새벽', '아침', '낮', '저녁', '밤'];
 
@@ -51,6 +51,19 @@ export const LIVE_LEAD_MS = 90_000;
  */
 export function placeSegment(lastEnd: number | null, now: number): number {
   return Math.max(lastEnd ?? 0, now + LIVE_LEAD_MS);
+}
+
+/** 한 판의 음성·낭독·곡을 같은 시간축에 끊김 없이 놓는다.
+    등록 API가 배열 전체를 검증한 뒤 한 번만 PROGRAM_KEY를 쓰므로, 앞말만 등록되고
+    낭독이 빠지는 반쪽 편성을 만들지 않는다. */
+export function placeSegmentBatch(lastEnd: number | null, now: number, durations: number[]): number[] {
+  const starts: number[] = [];
+  let cursor = placeSegment(lastEnd, now);
+  for (const duration of durations) {
+    starts.push(cursor);
+    cursor += duration * 1000;
+  }
+  return starts;
 }
 
 export function lastEndOf(segments: ProgramSegment[]): number | null {

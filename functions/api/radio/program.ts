@@ -3,27 +3,39 @@
 // POST /api/radio/program  (키 인증): 구운 토막 등록 — 자리는 서버가 정한다 (시간축 연속성)
 
 import {
-  PROGRAM_KEY, DAYS_KEY, DAY_KEY, kstDayOf, placeSegment, lastEndOf, pruneProgram,
+  PROGRAM_KEY, DAYS_KEY, DAY_KEY, kstDayOf, placeSegment, placeSegmentBatch, lastEndOf, pruneProgram,
   RADIO_TIME_LABELS, type ProgramSegment, type SegmentKind, type RadioTimeLabel,
 } from '../_station.ts';
 import { RADIO_QUEUE_KEY, markStoryRegistered, type RadioStory } from '../_radio.ts';
 import { deferSocialWake, type SocialWakeEnv } from '../_byeoli-social-wake.ts';
 
-/** 날짜별 보관소 이중 기록 — upsert(id+startAt 일치 시 갱신, 아니면 추가) */
-async function archiveWrite(env: { PLANET: KVNamespace }, seg: ProgramSegment): Promise<void> {
-  const day = kstDayOf(seg.startAt);
-  const [dayRaw, daysRaw] = await Promise.all([env.PLANET.get(DAY_KEY(day)), env.PLANET.get(DAYS_KEY)]);
-  const daySegs: ProgramSegment[] = dayRaw ? JSON.parse(dayRaw) : [];
-  const i = daySegs.findIndex((s) => s.id === seg.id && s.startAt === seg.startAt);
-  if (i >= 0) daySegs[i] = seg; else daySegs.push(seg);
-  daySegs.sort((a, b) => a.startAt - b.startAt);
+/** 날짜별 보관소 이중 기록 — 같은 판의 여러 토막을 같은 날에 병렬로 쓰면 마지막 한 건만
+    남을 수 있으므로, 날짜마다 한 번 읽고 한 번 쓴다. */
+async function archiveWriteMany(env: { PLANET: KVNamespace }, incoming: ProgramSegment[]): Promise<void> {
+  const grouped = new Map<string, ProgramSegment[]>();
+  for (const seg of incoming) {
+    const day = kstDayOf(seg.startAt);
+    grouped.set(day, [...(grouped.get(day) ?? []), seg]);
+  }
+  const daysRaw = await env.PLANET.get(DAYS_KEY);
   const days: string[] = daysRaw ? JSON.parse(daysRaw) : [];
-  if (!days.includes(day)) days.push(day);
-  await Promise.all([
-    env.PLANET.put(DAY_KEY(day), JSON.stringify(daySegs)),
-    env.PLANET.put(DAYS_KEY, JSON.stringify(days.sort())),
-  ]);
+  const writes: Promise<void>[] = [];
+  for (const [day, segments] of grouped) {
+    const dayRaw = await env.PLANET.get(DAY_KEY(day));
+    const daySegs: ProgramSegment[] = dayRaw ? JSON.parse(dayRaw) : [];
+    for (const seg of segments) {
+      const index = daySegs.findIndex((item) => item.id === seg.id && item.startAt === seg.startAt);
+      if (index >= 0) daySegs[index] = seg; else daySegs.push(seg);
+    }
+    daySegs.sort((a, b) => a.startAt - b.startAt);
+    if (!days.includes(day)) days.push(day);
+    writes.push(env.PLANET.put(DAY_KEY(day), JSON.stringify(daySegs)));
+  }
+  writes.push(env.PLANET.put(DAYS_KEY, JSON.stringify(days.sort())));
+  await Promise.all(writes);
 }
+
+const archiveWrite = (env: { PLANET: KVNamespace }, seg: ProgramSegment) => archiveWriteMany(env, [seg]);
 
 interface Env extends SocialWakeEnv { PULSE_KEY?: string }
 
@@ -31,7 +43,7 @@ const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8', 'cache
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 
-const KINDS: SegmentKind[] = ['talk', 'story', 'song', 'ambient'];
+const KINDS: SegmentKind[] = ['talk', 'story', 'reading', 'song', 'ambient'];
 const timeLabel = (value: unknown): RadioTimeLabel | null =>
   typeof value === 'string' && RADIO_TIME_LABELS.includes(value as RadioTimeLabel)
     ? value as RadioTimeLabel : null;
@@ -41,7 +53,7 @@ const URL_OK = /^https:\/\/pub-8ec6440aae5545379fcfdd50a243847a\.r2\.dev\/radio\
 export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const raw = await env.PLANET.get(PROGRAM_KEY);
   const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
-  return json(200, { ok: true, rev: 'r14', now: Date.now(), segments });
+  return json(200, { ok: true, rev: 'r15-reading-batch', now: Date.now(), segments });
 };
 
 /** 키 인증 삭제 — id+startAt로 정확히 하나만 (같은 id가 사고로 둘일 수 있다 — 08-12 전파 반절 실사고) */
@@ -65,8 +77,113 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!env.PULSE_KEY) return json(500, { ok: false, error: 'PULSE_KEY not configured' });
   if (request.headers.get('X-Pulse-Key') !== env.PULSE_KEY) return json(403, { ok: false, error: 'forbidden' });
 
-  let body: Partial<ProgramSegment>;
-  try { body = (await request.json()) as Partial<ProgramSegment>; } catch { return json(400, { ok: false, error: 'bad_json' }); }
+  let payload: Partial<ProgramSegment> & { segments?: Partial<ProgramSegment>[] };
+  try { payload = (await request.json()) as typeof payload; } catch { return json(400, { ok: false, error: 'bad_json' }); }
+
+  // 새 조립기는 한 판(소개 음성 + 선택한 낭독 + 선택한 곡)을 배열 하나로 보낸다.
+  // 전부 검증되기 전에는 PROGRAM_KEY를 쓰지 않는다. 이 경계가 "읽어줄게"만 먼저
+  // 전파되고 낭독이 사라지는 반쪽 성공을 막는다. 단일 등록은 옛 조립기 호환으로 남긴다.
+  if (Array.isArray(payload.segments)) {
+    const requested = payload.segments;
+    if (requested.length < 1 || requested.length > 3) {
+      return json(400, { ok: false, error: 'bad_batch_size' });
+    }
+    const requestedKinds = requested.map((body) => body.kind);
+    const expectedFeatureOrder = requestedKinds.slice(1).join(',');
+    if (!['talk', 'story'].includes(String(requestedKinds[0]))
+      || !['', 'reading', 'song', 'reading,song'].includes(expectedFeatureOrder)) {
+      return json(400, { ok: false, error: 'bad_batch_order' });
+    }
+    for (let index = 0; index < requested.length; index++) {
+      const body = requested[index];
+      const dur = Number(body.dur);
+      if (!KINDS.includes(body.kind as SegmentKind)) return json(400, { ok: false, error: 'bad_kind', index });
+      if (!Number.isFinite(dur) || dur <= 0 || dur > 1800) return json(400, { ok: false, error: 'bad_dur', index });
+      if (typeof body.url !== 'string' || !URL_OK.test(body.url)) return json(400, { ok: false, error: 'bad_url', index });
+    }
+
+    const now = Date.now();
+    const [raw, queueRaw] = await Promise.all([
+      env.PLANET.get(PROGRAM_KEY), env.PLANET.get(RADIO_QUEUE_KEY),
+    ]);
+    const segments: ProgramSegment[] = raw ? JSON.parse(raw) : [];
+    const queue: RadioStory[] = queueRaw ? JSON.parse(queueRaw) : [];
+    const ids = requested.map((body, index) =>
+      typeof body.id === 'string' && body.id ? body.id.slice(0, 40) : `seg-${now.toString(36)}-${index}`,
+    );
+    if (new Set(ids).size !== ids.length) return json(409, { ok: false, error: 'duplicate_batch_id' });
+    if (ids.some((id) => segments.some((segment) => segment.id === id))) {
+      return json(409, { ok: false, error: 'batch_id_conflict' });
+    }
+    if (requested.length > 1) {
+      const pairId = ids[0];
+      if (requested.some((body) => body.pairId !== pairId)) {
+        return json(400, { ok: false, error: 'bad_batch_pair' });
+      }
+    }
+
+    const storyIdFor = (body: Partial<ProgramSegment>, index: number): string | null =>
+      body.kind === 'story'
+        ? (typeof body.storyId === 'string' && body.storyId ? body.storyId.slice(0, 40) : ids[index])
+        : null;
+    for (let index = 0; index < requested.length; index++) {
+      const storyId = storyIdFor(requested[index], index);
+      if (!storyId) continue;
+      const story = queue.find((item) => item.id === storyId);
+      if (!story) return json(409, { ok: false, error: 'story_not_found', index });
+      if (story.status === 'rejected') return json(409, { ok: false, error: 'story_rejected', index });
+    }
+
+    const starts = placeSegmentBatch(lastEndOf(segments), now, requested.map((body) => Number(body.dur)));
+    const batch: ProgramSegment[] = requested.map((body, index) => {
+      const requestedStoryId = storyIdFor(body, index);
+      return {
+        id: ids[index],
+        kind: body.kind as SegmentKind,
+        startAt: starts[index],
+        dur: Number(body.dur),
+        url: body.url!,
+        title: String(body.title ?? '').slice(0, 60) || '…',
+        voiceNote: typeof body.voiceNote === 'string' ? body.voiceNote.slice(0, 60) : null,
+        storyId: requestedStoryId,
+        timeLabel: timeLabel(body.timeLabel),
+        dj: typeof body.dj === 'string' && body.dj ? body.dj.slice(0, 20) : 'byeoli',
+        script: typeof body.script === 'string' ? body.script.slice(0, 2000) : undefined,
+        musicTransition: body.musicTransition === 'intro' || body.musicTransition === 'direct' ? body.musicTransition : null,
+        pairId: typeof body.pairId === 'string' && body.pairId ? body.pairId.slice(0, 40) : null,
+      };
+    });
+
+    for (const segment of batch) {
+      if (!segment.storyId || segment.kind !== 'story') continue;
+      if (!markStoryRegistered(queue, segment.storyId, segment.id, now)) {
+        return json(409, { ok: false, error: 'story_transition_failed' });
+      }
+    }
+    const next = pruneProgram([...segments, ...batch], now);
+    // 보관소가 먼저 온전한 판을 받은 뒤, 공개 편성표를 한 번만 교체한다.
+    await archiveWriteMany(env, batch);
+    await env.PLANET.put(PROGRAM_KEY, JSON.stringify(next));
+    if (batch.some((segment) => segment.storyId)) {
+      await env.PLANET.put(RADIO_QUEUE_KEY, JSON.stringify(queue));
+    }
+    deferSocialWake(context, env, {
+      kind: 'program_registered',
+      eventId: `program-batch:${ids.join(',')}:${Math.trunc(starts[0])}`,
+      occurredAt: now,
+      refId: ids[0],
+    }, 'program batch');
+    return json(200, {
+      ok: true, batch: true,
+      segments: batch.map((segment) => ({
+        id: segment.id, kind: segment.kind, startAt: segment.startAt, dur: segment.dur,
+      })),
+      liveEdge: batch.at(-1)!.startAt + batch.at(-1)!.dur * 1000,
+      count: next.length,
+    });
+  }
+
+  const body: Partial<ProgramSegment> = payload;
   const dur = Number(body.dur);
   if (!KINDS.includes(body.kind as SegmentKind)) return json(400, { ok: false, error: 'bad_kind' });
   if (!Number.isFinite(dur) || dur <= 0 || dur > 1800) return json(400, { ok: false, error: 'bad_dur' });
