@@ -198,6 +198,10 @@ export interface RadioSituation {
   /** 곡 서가 — 방송국에 실재하는 노래들 (Vase 08-12 밤: "15분에 한마디가 라디오냐" — 노래 편성).
       제목만 준다. 틀지 말지·언제 틀지는 별이가 정한다 — 각본 금지 원칙 그대로. */
   songShelf?: { title: string }[];
+  /** 이번 판은 곡 자리인데 낭독을 곁들여도 되나 (08-16 사장 지시: 둘 다 들어갈 수 있어야) */
+  mayAddReading?: boolean;
+  /** 이번 판은 낭독 자리인데 곡을 곁들여도 되나 */
+  mayAddSong?: boolean;
   /** 낭독 서가 — 미리 구워 둔 우리 원고. 별이가 제목을 보고 고른다 (사장 지시 08-15) */
   readingShelf?: { title: string; opening?: string }[];
   /** 서재 산책 발견 — 별이가 웹에서 직접 찾아 읽고 서가에 둔 책들 (Vase 08-12 밤: 인터넷 개방 1분야).
@@ -416,7 +420,15 @@ export function situationMessage(s: RadioSituation): string {
           `읽고 싶으면 **원고 끝에** [낭독: 제목] 한 줄을 놓아라. 곡을 고를 때와 같다.`,
           `본문은 네가 옮겨 적지 마라 — 이미 네 목소리로 구워 둔 게 붙는다.`,
           `대신 그 앞에 네 말로 건너가라. 제목을 말해 주고, 왜 이 글인지 한 마디만.`,
-        ].join('\n')
+          // 08-16: 곡과 낭독은 **다른 자리다.** 한 판에 둘 다 놓아도 된다
+          //   (편성설계-20260813.md — 곡은 시간당 2곡, 낭독은 시간당 하나).
+          s.mayAddReading
+            ? `이번 판은 곡 자리지만, 마음이 가면 **곡과 낭독을 함께 놓아도 된다.** 둘 다 걸든 하나만 걸든 네가 정한다.`
+            : null,
+          s.mayAddSong
+            ? `이번 판은 글 자리지만, 마음이 가면 **곡도 함께 걸어도 된다.** 둘 다 걸든 하나만 걸든 네가 정한다.`
+            : null,
+        ].filter(Boolean).join('\n')
       : null,
     s.libraryFinds?.length
       ? `요즘 서재에서 네가 찾아 읽어 둔 책들 (네가 직접 고른 것이다 — 방송에서 꺼낼지는 네 마음):\n${s.libraryFinds.map((b) => `- 「${b.title}」${b.author ? ` (${b.author})` : ''} — ${b.note} (${b.ago})`).join('\n')}`

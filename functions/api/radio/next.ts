@@ -191,6 +191,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (situation.broadcastTrail?.length) available.add('trail');
   available.add('observe');
   situation.corner = pickCorner(available, recentCorners);
+
+  // 🔴 08-16 사장 판정 — 「낭독하고 곡하고 둘 중에 하나만 들어가니까 그런 거잖아.
+  //    두 개 다 한 번에 들어갈 수도 있다가 돼야지」
+  //
+  //    코너를 하나만 고르니 곡과 낭독이 **같은 자리를 다퉜다.** 낭독을 넣은 뒤
+  //    곡 비율이 69%→41%로 떨어졌고, 곡은 한 판에 180초를 굽지 않고 버는데
+  //    낭독은 65초뿐이라 **판당 123초→91초**로 버퍼가 오히려 얇아졌다.
+  //    (버퍼를 벌려고 넣은 낭독이 곡 자리를 빼앗아 버퍼를 깎고 있었다)
+  //
+  //    편성설계-20260813.md도 둘을 다른 자리로 둔다 — 곡은 시간당 2곡, 낭독은 시간당 하나.
+  //    그래서 코너가 곡이어도 **낭독을 곁들일 수 있게** 열어 준다. 걸지 말지는 별이가 정한다.
+  const corner = situation.corner?.key;
+  situation.mayAddReading = corner === 'song' && !!situation.readingShelf?.length;
+  situation.mayAddSong = corner === 'reading' && !!situation.songShelf?.length;
   // 입력 다이어트 — 이번 자리 재료만 펼치고 나머지는 목차로 접는다(08-14 사장 지시).
   // 저장은 코너별 접기 **전** 상황으로 한다. 과잉 기억은 이미 접힌 상태가 실제 입력 환경이다.
   const sent = trimSituationForCorner(situation);
