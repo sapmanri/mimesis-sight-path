@@ -43,6 +43,10 @@ check('다음 확인 없음은 게시 강제 없는 생존 알람으로만 복�
   /LIVENESS_GUARD_MS/.test(schedule)
     && /livenessWakeAt/.test(worker)
     && /liveness_guard/.test(schedule));
+check('편집 판단기 실패만 짧게 재시도하고 별이의 침묵은 그대로 둔다',
+  /socialTechnicalRetryAt/.test(worker)
+    && /error === 'editorial_decision_unavailable'/.test(schedule)
+    && /SOCIAL_TECHNICAL_RETRY_MS/.test(schedule));
 check('최근 자기 활동의 시각과 내용을 판단 앞에 둔다',
   /최근 네 Threads 활동/.test(editorial) && /recentActivity/.test(editorial));
 check('@byeol.toon은 계정 접근권과 별이 창작자 정체성을 분리한다',

@@ -11,7 +11,8 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import {
-  LIVENESS_GUARD_MS, alarmTriggerKind, planDirectorWake,
+  LIVENESS_GUARD_MS, alarmTriggerKind, isAgencyDirectorWake, isDueSocialTechnicalRetry,
+  planDirectorWake, socialTechnicalRetryAt,
 } from './schedule.mjs';
 
 const NAME = 'byeoli-social-director';
@@ -91,7 +92,7 @@ export class ByeoliSocialDirector extends DurableObject {
       version: 'social-director-v2', lastWakeAt: null, lastFinishedAt: null,
       lastStatus: 'idle', lastRunId: null, nextLookAt: null, lastError: null,
       continuationPending: false, selfWakeAt: null, livenessWakeAt: null,
-      lastTriggerKind: null,
+      technicalRetryAt: null, lastTriggerKind: null,
     };
     this.queue = Promise.resolve();
     ctx.blockConcurrencyWhile(async () => {
@@ -147,9 +148,18 @@ export class ByeoliSocialDirector extends DurableObject {
         throw new Error(`pages_http_${response.status}:${payload?.error ?? 'unknown'}`);
       }
       const continuationPending = payload?.continuationNeeded === true;
+      const scheduleNow = Date.now();
+      // silence는 별이의 선택이라 재시도하지 않는다. 판단기 자체가 답을 만들지 못한 경우만
+      // 기술 복구 알람을 한 번만 둔다. 댓글 백로그가 있으면 먼저 비우고 이 시각을 보존한다.
+      const retryAlreadyUsed = isAgencyDirectorWake(normalizedTrigger.kind)
+        && isDueSocialTechnicalRetry(this.state.technicalRetryAt, scheduleNow);
+      const technicalRetryAt = isAgencyDirectorWake(normalizedTrigger.kind)
+        ? socialTechnicalRetryAt(payload?.error, scheduleNow, retryAlreadyUsed)
+        : this.state.technicalRetryAt;
       const schedule = planDirectorWake({
-        now: Date.now(), triggerKind: normalizedTrigger.kind,
+        now: scheduleNow, triggerKind: normalizedTrigger.kind,
         editorialNext: payload?.nextLookAt,
+        technicalRetryAt,
         continuationPending, continuationDelayMs: payload?.continuationDelayMs,
         existingSelfWakeAt: this.state.selfWakeAt,
         existingLivenessWakeAt: this.state.livenessWakeAt,
@@ -160,7 +170,8 @@ export class ByeoliSocialDirector extends DurableObject {
         nextLookAt: schedule.nextLookAt,
         lastError: payload?.error ?? payload?.replies?.errors?.[0] ?? null,
         continuationPending, selfWakeAt: schedule.selfWakeAt,
-        livenessWakeAt: schedule.livenessWakeAt, lastTriggerKind: normalizedTrigger.kind,
+        livenessWakeAt: schedule.livenessWakeAt, technicalRetryAt,
+        lastTriggerKind: normalizedTrigger.kind,
       };
       await this.ctx.storage.deleteAlarm();
       await this.ctx.storage.setAlarm(this.state.nextLookAt);

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LIVENESS_GUARD_MS, alarmTriggerKind, planDirectorWake,
+  LIVENESS_GUARD_MS, SOCIAL_TECHNICAL_RETRY_MS,
+  alarmTriggerKind, isDueSocialTechnicalRetry, planDirectorWake, socialTechnicalRetryAt,
 } from './schedule.mjs';
 
 const NOW = Date.parse('2026-08-15T00:00:00Z');
@@ -18,6 +19,7 @@ test('별이가 다음 확인을 고르면 그 한 번만 예약하고 생존 �
 });
 
 test('다음 확인을 고르지 않으면 게시 강제 없는 12시간 생존 알람만 둔다', () => {
+  assert.equal(socialTechnicalRetryAt(null, NOW), null);
   const got = planDirectorWake({
     now: NOW, triggerKind: 'curiosity', editorialNext: null,
     continuationPending: false, continuationDelayMs: null,
@@ -27,6 +29,34 @@ test('다음 확인을 고르지 않으면 게시 강제 없는 12시간 생존 
   assert.equal(got.livenessWakeAt, NOW + LIVENESS_GUARD_MS);
   assert.equal(got.nextLookAt, NOW + LIVENESS_GUARD_MS);
   assert.equal(alarmTriggerKind({ ...got, continuationPending: false }), 'liveness_guard');
+});
+
+test('편집 판단기 실패는 침묵으로 보지 않고 10분 뒤 다시 판단한다', () => {
+  const retryAt = socialTechnicalRetryAt('editorial_decision_unavailable', NOW);
+  assert.equal(retryAt, NOW + SOCIAL_TECHNICAL_RETRY_MS);
+  assert.equal(socialTechnicalRetryAt('editorial_decision_unavailable', NOW, true), null);
+  assert.equal(socialTechnicalRetryAt('editorial_candidates_empty', NOW), null);
+  assert.equal(isDueSocialTechnicalRetry(null, NOW), false);
+  assert.equal(isDueSocialTechnicalRetry(retryAt, NOW), false);
+  assert.equal(isDueSocialTechnicalRetry(retryAt, retryAt), true);
+
+  const withBacklog = planDirectorWake({
+    now: NOW, triggerKind: 'curiosity', editorialNext: null, technicalRetryAt: retryAt,
+    continuationPending: true, continuationDelayMs: 25_000,
+    existingSelfWakeAt: null, existingLivenessWakeAt: null,
+  });
+  assert.equal(withBacklog.selfWakeAt, null);
+  assert.equal(withBacklog.livenessWakeAt, retryAt);
+  assert.equal(withBacklog.nextLookAt, NOW + 25_000);
+
+  const afterBacklog = planDirectorWake({
+    now: NOW + 25_000, triggerKind: 'backlog_continue', editorialNext: null,
+    continuationPending: false, continuationDelayMs: null,
+    existingSelfWakeAt: withBacklog.selfWakeAt,
+    existingLivenessWakeAt: withBacklog.livenessWakeAt,
+  });
+  assert.equal(afterBacklog.nextLookAt, retryAt);
+  assert.equal(alarmTriggerKind({ ...afterBacklog, continuationPending: false }), 'liveness_guard');
 });
 
 test('방송·관찰 사건은 별이가 고른 다음 확인을 덮어쓰지 않는다', () => {

@@ -1,11 +1,24 @@
 export const LIVENESS_GUARD_MS = 12 * 60 * 60 * 1000;
 export const MIN_WAKE_DELAY_MS = 1_000;
 export const MAX_CONTINUATION_DELAY_MS = 10 * 60 * 1000;
+export const SOCIAL_TECHNICAL_RETRY_MS = 10 * 60 * 1000;
+
+/** 별이의 선택이 아니라 편집 판단기 자체가 실패한 경우만 짧게 다시 연다. */
+export function socialTechnicalRetryAt(error, now, retryAlreadyUsed = false) {
+  return error === 'editorial_decision_unavailable' && !retryAlreadyUsed
+    ? now + SOCIAL_TECHNICAL_RETRY_MS
+    : null;
+}
 
 function timestamp(value) {
   if (value == null || value === '') return null;
   const at = Number(value);
   return Number.isFinite(at) ? at : null;
+}
+
+export function isDueSocialTechnicalRetry(value, now) {
+  const at = timestamp(value);
+  return at !== null && at <= now;
 }
 
 function futureChosenWake(value, now) {
@@ -32,6 +45,7 @@ export function planDirectorWake({
   now,
   triggerKind,
   editorialNext,
+  technicalRetryAt = null,
   continuationPending,
   continuationDelayMs,
   existingSelfWakeAt,
@@ -42,6 +56,8 @@ export function planDirectorWake({
     ? futureChosenWake(editorialNext, now)
     : preservedWake(existingSelfWakeAt, now);
   let livenessWakeAt = agencyWake ? null : preservedWake(existingLivenessWakeAt, now);
+  const technicalWakeAt = futureChosenWake(technicalRetryAt, now);
+  if (technicalWakeAt !== null) livenessWakeAt = technicalWakeAt;
   if (!selfWakeAt && !livenessWakeAt) livenessWakeAt = now + LIVENESS_GUARD_MS;
 
   const requestedDelay = Number(continuationDelayMs);
