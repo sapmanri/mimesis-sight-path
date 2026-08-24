@@ -1101,7 +1101,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
    * ⚠ 첫 판은 카드 안에 그렸는데 카드 폭이 150px이라 **너무 작아 아무것도 안 보였다.**
    *   보여주려고 만든 것이 안 보이면 없는 것과 같다 — 겹창으로 바꿨다.
    */
-  function previewPanels(key, panelCount) {
+  function previewPanels(key, panelCount, titleForRecut) {
     banner('칸 경계를 찾는 중…');
     var img = new Image();
     img.crossOrigin = 'anonymous';
@@ -1130,11 +1130,14 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       ov.innerHTML = '<div style="color:' + (ok ? '#A7B49A' : '#e2483d') + ';font-size:14px;text-align:center">'
         + '붉은 칸이 <b>잘릴 자리</b>다 · 칸 ' + panelCount + '개 → <b>' + boxes.length + '개 감지</b>'
         + (ok ? '' : ' ⚠ 어긋난다')
-        + '<div style="color:#9aa;font-size:12px;margin-top:4px">캡션이 붉은 칸 밖에 있으면 그 글이 잘린다 · 아무 데나 눌러 닫기</div></div>'
+        + '<div style="color:#9aa;font-size:12px;margin-top:4px">캡션이 붉은 칸 밖에 있으면 그 글이 잘린다 · 아무 데나 눌러 닫기</div>'
+        + '<div style="margin-top:8px"><button id="pvRecut">✂ 다시 자르기</button></div></div>'
         + '<img src="' + cv.toDataURL('image/png') + '" style="max-width:96vw;max-height:82vh;'
         + 'object-fit:contain;background:#fff;border-radius:4px">';
       ov.onclick = function () { ov.remove(); };
       document.body.appendChild(ov);
+      var pr = document.getElementById('pvRecut');
+      if (pr) pr.onclick = function (e) { e.stopPropagation(); ov.remove(); recutEditor(key, titleForRecut || '', panelCount); };
       banner(ok ? '경계 ' + boxes.length + '개 — 컷 수와 맞소'
                 : '경계 ' + boxes.length + '개 — 컷 ' + panelCount + '개와 어긋나오', ok ? '' : 'err');
     };
@@ -1142,19 +1145,179 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
     img.src = fileUrl(key) + '&v=' + Date.now();
   }
 
-  function downloadInstatoon(key, title, panelCount, shape) {
-    var W = 1080, H = (shape === 'square') ? 1080 : 1350;   // 인스타 기본 두 규격
-    banner('칸 경계를 찾는 중…');
+  /**
+   * ✂ 다시 자르기 — 감지가 틀렸을 때 사람 손으로 칸을 바로잡는 편집기.
+   *
+   * ⚠ 2026-08-24 신설(사장): 통짜 판이 자주 나오는데 경계 보기는 「어긋난다」 경고까지만 하고
+   *   고칠 길이 없었다 — 「그게 없으니 통짜로 새로 그려야 하는 상황밖에 안 된다」.
+   *   감지 상자를 손으로 옮기고·늘리고·더하고·지운 뒤 **그 상자대로** 자른다.
+   *   등분으로 때우지 않는다(등분 사고의 교훈) — 시작점은 감지 결과, 감지가 0이면 2단 격자 씨앗.
+   *   자르는 실행부는 자동 경로와 같은 sliceToZip이다 — 길이 갈리면 한쪽만 고쳐진다.
+   */
+  function seedGrid(W, H, n) {
+    // 페이지 문법(2단 격자 · 위 제호 띠)을 비율로 흉내 낸 씨앗 — 어디까지나 출발점이다
+    var padX = Math.round(W * 0.045), top = Math.round(H * 0.12), padB = Math.round(H * 0.04);
+    var gut = Math.round(W * 0.02), rows = Math.ceil(n / 2);
+    var cw = Math.floor((W - padX * 2 - gut) / 2);
+    var ch = Math.floor((H - top - padB - gut * (rows - 1)) / rows);
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      var r = Math.floor(i / 2), c = i % 2;
+      var last = (i === n - 1) && (n % 2 === 1);
+      var x = last ? Math.round((W - cw) / 2) : padX + c * (cw + gut);
+      out.push({ x: x, y: top + r * (ch + gut), w: cw, h: ch });
+    }
+    return out;
+  }
+  function readingOrder(boxes) {
+    var a = boxes.slice().sort(function (p, q) { return (p.y + p.h / 2) - (q.y + q.h / 2); });
+    var rows = [];
+    a.forEach(function (b) {
+      var cy = b.y + b.h / 2;
+      var row = null;
+      for (var i = 0; i < rows.length; i++) {
+        var r0 = rows[i][0];
+        if (Math.abs((r0.y + r0.h / 2) - cy) < Math.max(r0.h, b.h) * 0.5) { row = rows[i]; break; }
+      }
+      if (row) row.push(b); else rows.push([b]);
+    });
+    var out = [];
+    rows.forEach(function (r) { r.sort(function (p, q) { return p.x - q.x; }).forEach(function (b) { out.push(b); }); });
+    return out;
+  }
+  function recutEditor(key, title, panelCount, shape) {
+    banner('다시 자르기 여는 중…');
     var img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = function () {
+      var W = img.naturalWidth, H = img.naturalHeight;
       var boxes = detectPanels(img, panelCount);
-      // 정직하게 실패한다 — 못 찾았으면 엉뚱하게 자르느니 알린다 (등분 사고의 교훈)
-      if (!boxes.length) { banner('칸 경계를 못 찾았다 — 통짜로 받아서 직접 자르시오', 'err'); return; }
-      var wantSlides = igSlidesOf(panelCount);   // 한 장에 한 칸
-      if (boxes.length !== wantSlides) {
-        banner('경고: 칸 ' + panelCount + '개인데 ' + boxes.length + '개로 감지됨 — 아래 칸이나 캡션이 빠졌을 수 있소. 통짜로도 받아 대조하시오', 'err');
+      if (!boxes.length) boxes = seedGrid(W, H, panelCount);
+      var sel = -1, mode = null, start = null, orig = null;
+      var prev = document.getElementById('cropOverlay');
+      if (prev) prev.remove();
+      var ov = document.createElement('div');
+      ov.id = 'cropOverlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);' +
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px';
+      ov.innerHTML = '<div style="color:#e7dcc4;font-size:13px;text-align:center">✂ <b>다시 자르기</b> — 상자를 끌어 옮기고, 모서리·변을 끌어 늘린다' +
+        '<div class="muted" style="font-size:11px;margin-top:2px">번호가 읽는 차례다(위→아래, 왼→오른) · <span id="rcCount"></span></div></div>' +
+        '<canvas id="rcCv" style="max-width:96vw;max-height:74vh;touch-action:none;background:#fff;border-radius:4px;cursor:crosshair"></canvas>' +
+        '<div class="row" style="justify-content:center">' +
+        '<button id="rcAdd">+ 칸</button><button id="rcDel" disabled>선택 칸 지우기</button>' +
+        '<button id="rcReset">감지로 되돌리기</button><button id="rcGrid">격자로 새로</button>' +
+        '<button id="rcV" class="primary">⬇ 4:5 자르기</button><button id="rcS" class="primary">⬇ 1:1 자르기</button>' +
+        '<button id="rcX">닫기</button></div>';
+      document.body.appendChild(ov);
+      var cv = document.getElementById('rcCv');
+      cv.width = W; cv.height = H;
+      var cx = cv.getContext('2d');
+      function scaleOf() { return cv.getBoundingClientRect().width / W; }
+      function draw() {
+        cx.drawImage(img, 0, 0);
+        var ord = readingOrder(boxes);
+        var lw = Math.max(3, Math.round(W / 260));
+        ord.forEach(function (b, i) {
+          var isSel = boxes.indexOf(b) === sel;
+          cx.strokeStyle = isSel ? '#f0c040' : '#e2483d'; cx.lineWidth = isSel ? lw + 2 : lw;
+          cx.strokeRect(b.x + lw / 2, b.y + lw / 2, b.w - lw, b.h - lw);
+          var fs = Math.round(W / 26);
+          cx.fillStyle = isSel ? '#f0c040' : '#e2483d'; cx.fillRect(b.x, b.y, fs * 1.4, fs * 1.3);
+          cx.fillStyle = isSel ? '#000' : '#fff'; cx.font = 'bold ' + fs + 'px sans-serif';
+          cx.fillText(String(i + 1), b.x + fs * 0.4, b.y + fs);
+          if (isSel) {   // 모서리 손잡이
+            cx.fillStyle = '#f0c040';
+            [[b.x, b.y], [b.x + b.w, b.y], [b.x, b.y + b.h], [b.x + b.w, b.y + b.h]].forEach(function (p) {
+              cx.fillRect(p[0] - fs * 0.35, p[1] - fs * 0.35, fs * 0.7, fs * 0.7);
+            });
+          }
+        });
+        var n = boxes.length, el = document.getElementById('rcCount');
+        if (el) el.innerHTML = '칸 ' + n + '개 / 컷 ' + panelCount +
+          (n === panelCount ? ' <span class="ok">맞소</span>' : ' <span style="color:#e2483d">어긋나오</span>');
+        var del = document.getElementById('rcDel');
+        if (del) del.disabled = sel < 0;
       }
+      function pos(e) {
+        var r = cv.getBoundingClientRect();
+        return { x: (e.clientX - r.left) / scaleOf(), y: (e.clientY - r.top) / scaleOf() };
+      }
+      function hit(p) {
+        var tol = 16 / scaleOf();
+        for (var i = boxes.length - 1; i >= 0; i--) {
+          var b = boxes[i];
+          var L = Math.abs(p.x - b.x) < tol, R = Math.abs(p.x - (b.x + b.w)) < tol;
+          var T = Math.abs(p.y - b.y) < tol, B = Math.abs(p.y - (b.y + b.h)) < tol;
+          var inX = p.x > b.x - tol && p.x < b.x + b.w + tol;
+          var inY = p.y > b.y - tol && p.y < b.y + b.h + tol;
+          if ((L || R) && inY || (T || B) && inX) {
+            if ((L || R) && inY && (T || B) && inX) return { i: i, m: { l: L, r: R, t: T, b: B } };
+            if ((L || R) && inY) return { i: i, m: { l: L, r: R, t: false, b: false } };
+            return { i: i, m: { l: false, r: false, t: T, b: B } };
+          }
+          if (p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h) return { i: i, m: 'move' };
+        }
+        return null;
+      }
+      cv.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        var p = pos(e), h = hit(p);
+        sel = h ? h.i : -1;
+        mode = h ? h.m : null;
+        start = p;
+        orig = h ? { x: boxes[h.i].x, y: boxes[h.i].y, w: boxes[h.i].w, h: boxes[h.i].h } : null;
+        cv.setPointerCapture(e.pointerId);
+        draw();
+      });
+      cv.addEventListener('pointermove', function (e) {
+        if (!mode || sel < 0) return;
+        var p = pos(e), dx = p.x - start.x, dy = p.y - start.y, b = boxes[sel];
+        var MIN = Math.round(W * 0.06);
+        if (mode === 'move') {
+          b.x = Math.max(0, Math.min(W - b.w, orig.x + dx));
+          b.y = Math.max(0, Math.min(H - b.h, orig.y + dy));
+        } else {
+          var x0 = orig.x, y0 = orig.y, x1 = orig.x + orig.w, y1 = orig.y + orig.h;
+          if (mode.l) x0 = Math.max(0, Math.min(x1 - MIN, orig.x + dx));
+          if (mode.r) x1 = Math.min(W, Math.max(x0 + MIN, orig.x + orig.w + dx));
+          if (mode.t) y0 = Math.max(0, Math.min(y1 - MIN, orig.y + dy));
+          if (mode.b) y1 = Math.min(H, Math.max(y0 + MIN, orig.y + orig.h + dy));
+          b.x = x0; b.y = y0; b.w = x1 - x0; b.h = y1 - y0;
+        }
+        draw();
+      });
+      cv.addEventListener('pointerup', function () { mode = null; });
+      document.getElementById('rcAdd').onclick = function () {
+        boxes.push({ x: Math.round(W * 0.3), y: Math.round(H * 0.38), w: Math.round(W * 0.4), h: Math.round(H * 0.24) });
+        sel = boxes.length - 1; draw();
+      };
+      document.getElementById('rcDel').onclick = function () {
+        if (sel >= 0) { boxes.splice(sel, 1); sel = -1; draw(); }
+      };
+      document.getElementById('rcReset').onclick = function () {
+        boxes = detectPanels(img, panelCount);
+        if (!boxes.length) { boxes = seedGrid(W, H, panelCount); banner('감지 0개 — 격자 씨앗으로 대신 놓았소', 'err'); }
+        sel = -1; draw();
+      };
+      document.getElementById('rcGrid').onclick = function () { boxes = seedGrid(W, H, panelCount); sel = -1; draw(); };
+      function go(sh) {
+        if (!boxes.length) { banner('상자가 없다 — 칸을 놓고 자르시오', 'err'); return; }
+        sliceToZip(img, readingOrder(boxes), title, sh);
+      }
+      document.getElementById('rcV').onclick = function () { go('portrait'); };
+      document.getElementById('rcS').onclick = function () { go('square'); };
+      document.getElementById('rcX').onclick = function () { ov.remove(); };
+      draw();
+      banner('다시 자르기 — 상자 ' + boxes.length + '개로 시작');
+      if (shape) { /* 실패 경로에서 넘어온 목표 규격 — 사람이 고친 뒤 그 단추를 누르면 된다 */ }
+    };
+    img.onerror = function () { banner('이미지를 못 읽었다', 'err'); };
+    img.src = fileUrl(key) + '&v=' + Date.now();
+  }
+
+  /** 주어진 상자대로 잘라 zip으로 내린다 — 자동 감지와 손 편집(다시 자르기)이 같은 길을 쓴다. */
+  function sliceToZip(img, boxes, title, shape) {
+      var W = 1080, H = (shape === 'square') ? 1080 : 1350;   // 인스타 기본 두 규격
       var pad = Math.round(W * 0.04);
       var jobs = boxes.map(function (b, i) {
         return new Promise(function (resolve) {
@@ -1177,6 +1340,21 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         downloadBlob(zipStore(files), safeName(title) + '_instatoon_' + W + 'x' + H + '_' + files.length + 'p.zip');
         banner('인스타툰 ' + files.length + '장 저장됨 (' + W + '×' + H + ', 한 장에 한 칸)');
       }).catch(function (e) { banner('분절 실패: ' + e, 'err'); });
+  }
+
+  function downloadInstatoon(key, title, panelCount, shape) {
+    banner('칸 경계를 찾는 중…');
+    var img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      var boxes = detectPanels(img, panelCount);
+      // 정직하게 실패한다 — 못 찾았으면 엉뚱하게 자르느니 알린다 (등분 사고의 교훈).
+      // 08-24(사장): 「통짜 경고만 있고 다시 자를 길이 없어 새로 그리는 수밖에 없었다」 — 이제 ✂로 손을 쓴다.
+      if (!boxes.length) { banner('칸 경계를 못 찾았다 — ✂ 다시 자르기로 손으로 정하시오', 'err'); recutEditor(key, title, panelCount, shape); return; }
+      if (boxes.length !== igSlidesOf(panelCount)) {
+        banner('경고: 칸 ' + panelCount + '개인데 ' + boxes.length + '개로 감지됨 — ✂ 다시 자르기로 바로잡을 수 있소', 'err');
+      }
+      sliceToZip(img, boxes, title, shape);
     };
     img.onerror = function () { banner('이미지를 못 읽었다', 'err'); };
     img.src = fileUrl(key) + '&v=' + Date.now();
@@ -1204,6 +1382,7 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           '<div class="row" style="margin-top:10px">' +
           '<button id="dlWhole">⬇ 통짜 1장</button>' +
           '<button id="cropCheck">🔍 경계 보기</button>' +
+          '<button id="recutBtn">✂ 다시 자르기</button>' +
           '<button id="dlIgV">⬇ 인스타툰 세로 1080×1350</button>' +
           '<button id="dlIgS">⬇ 인스타툰 정사각 1080×1080</button>' +
           '<button id="redraw" class="primary">🎲 전체 다시 그리기</button></div>' +
@@ -1216,7 +1395,9 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
         var dw = $('dlWhole');
         if (dw) dw.onclick = function () { downloadWhole(r.key, s.title); };
         var cc = $('cropCheck');
-        if (cc) cc.onclick = function () { previewPanels(r.key, s.panelCount); };
+        if (cc) cc.onclick = function () { previewPanels(r.key, s.panelCount, s.title); };
+        var rc = $('recutBtn');
+        if (rc) rc.onclick = function () { recutEditor(r.key, s.title, s.panelCount); };
         var dv = $('dlIgV');
         if (dv) dv.onclick = function () { downloadInstatoon(r.key, s.title, s.panelCount, 'portrait'); };
         var ds = $('dlIgS');
@@ -1410,7 +1591,8 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
           //   panelCount를 다 들고 있으므로 같은 도구를 그대로 붙인다. 기능이 최신 것에만
           //   붙어 있으면 쌓인 것들이 죽은 자산이 된다.
           '<div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">' +
-          '<button data-crop="' + esc(c.pageKey) + '" data-n="' + c.panelCount + '" style="font-size:10px">🔍 경계</button>' +
+          '<button data-crop="' + esc(c.pageKey) + '" data-n="' + c.panelCount + '" data-t="' + esc(c.title) + '" style="font-size:10px">🔍 경계</button>' +
+          '<button data-recut="' + esc(c.pageKey) + '" data-n="' + c.panelCount + '" data-t="' + esc(c.title) + '" style="font-size:10px">✂ 자르기</button>' +
           '<button data-whole="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" style="font-size:10px">⬇ 통짜</button>' +
           '<button data-ig="portrait" data-k="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" data-n="' + c.panelCount + '" style="font-size:10px">⬇ 4:5</button>' +
           '<button data-ig="square" data-k="' + esc(c.pageKey) + '" data-t="' + esc(c.title) + '" data-n="' + c.panelCount + '" style="font-size:10px">⬇ 1:1</button>' +
@@ -1421,7 +1603,12 @@ const HTML = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
       $('archive').innerHTML = html;
       $('archive').querySelectorAll('[data-crop]').forEach(function (b) {
         b.onclick = function () {
-          previewPanels(b.getAttribute('data-crop'), Number(b.getAttribute('data-n')));
+          previewPanels(b.getAttribute('data-crop'), Number(b.getAttribute('data-n')), b.getAttribute('data-t'));
+        };
+      });
+      $('archive').querySelectorAll('[data-recut]').forEach(function (b) {
+        b.onclick = function () {
+          recutEditor(b.getAttribute('data-recut'), b.getAttribute('data-t'), Number(b.getAttribute('data-n')));
         };
       });
       $('archive').querySelectorAll('[data-whole]').forEach(function (b) {
