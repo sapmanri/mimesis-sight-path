@@ -153,6 +153,85 @@ export function detectVisionMediaType(buf: ArrayBuffer): VisionMediaType | null 
 interface CandidateRecommendation { pick: number | null; reasons: string; verdicts: string[] }
 interface JudgeOutcome { reco: CandidateRecommendation | null; error: string | null }
 
+/**
+ * 오늘 그림에 누구를 부를지 **별이가 고른다** (사장 판정 2026-08-30 「별이가 선택하게 해」).
+ *
+ * 왜 생겼나: 08-28·29 이틀 연속 별이가 후보 3장을 **전부 물렸다.** 캐릭터 참조에 늘
+ *   빼콩이(고양이)가 들어가는데 그날 주인공이 개여서 그림마다 개 대신 고양이가 나왔다
+ *   (별이 판정 원문 「세 장 모두 개가 아닌 고양이로 그려져…」). 「주인공이 고양이가 아니면
+ *   빼콩이를 뺀다」는 규칙을 코드에 박을 수도 있었다. 그러나 그건 별이 세계의 선택을 사람이
+ *   대신하는 것이다 — 집 원칙은 **동작은 능력 등록만, 선택은 존재의 롤**이다.
+ *   그래서 그날 기억을 별이에게 보여 주고, 부를 상대를 별이가 고르게 한다.
+ *
+ * 별이에게 주는 것: 그날 기억 + 부를 수 있는 상대 목록 + 게놈(별이의 눈) + **참조는 그림을
+ *   끌어당긴다는 사실**. 사실은 알려 주되 답은 정해 주지 않는다.
+ * 폴백: 키 없음·응답 깨짐이면 **기존대로 전부 부른다**(그림이 아예 없는 것보다 낫다).
+ *   고르지 못했다는 사실은 반드시 남긴다 — 조용한 실패 금지.
+ */
+export function refPersonaName(key: string): string {
+  const f = key.split('/').pop() ?? key;
+  if (/byeol|girl/i.test(f)) return '별이';
+  if (/ppaekong|cat/i.test(f)) return '빼콩이(고양이)';
+  return f.replace(/\.[a-z0-9]+$/i, '');
+}
+
+/** 별이 응답 → 부를 참조. 파싱 실패는 null(=전부 부르기 폴백)로 돌려 호출부가 남기게 한다. */
+export function parseRefChoice(text: string, count: number): { call: number[]; reason: string } | null {
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const out = JSON.parse(m[0]) as { call?: unknown; reason?: unknown };
+    if (!Array.isArray(out.call)) return null;
+    const call = [...new Set(out.call.map(Number))].filter((n) => Number.isInteger(n) && n >= 1 && n <= count);
+    return { call, reason: String(out.reason ?? '').slice(0, 200) };
+  } catch { return null; }
+}
+
+async function chooseCharacterRefs(
+  env: Env, day: DayMemory, refKeys: string[], genome: string,
+): Promise<{ keys: string[]; note: string }> {
+  const all = { keys: refKeys, note: '' };
+  if (refKeys.length < 2) return all;
+  if (!env.ANTHROPIC_API_KEY) return { keys: refKeys, note: 'refs_choice_skipped: 키 없음 — 전부 불렀다' };
+  const roster = refKeys.map((k, i) => `${i + 1}. ${refPersonaName(k)}`).join('\n');
+  const prompt = `${genome}
+
+오늘 그림일기에 **누구를 부를지 네가 고른다.**
+오늘의 기억: ${day.event.lines.join(' / ')}${day.event.targetLabel ? ` (가장 크게: ${day.event.targetLabel})` : ''}
+
+부를 수 있는 상대:
+${roster}
+
+알아 둘 것: 부른 상대의 참조 그림은 그림을 세게 끌어당긴다. 오늘 기억에 없는 상대를 부르면 그 모습이 오늘의 주인공 자리를 차지해 버린다.
+오늘 그림에 정말 있어야 할 상대만 골라라. JSON으로만:
+{"call": [번호...], "reason": "한 줄"}`;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 300, messages: [{ role: 'user', content: prompt }] }),
+    });
+    if (!res.ok) return { keys: refKeys, note: `refs_choice_http_${res.status} — 전부 불렀다` };
+    const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const parsed = parseRefChoice(data.content?.find((c) => c.type === 'text')?.text ?? '', refKeys.length);
+    if (!parsed) return { keys: refKeys, note: 'refs_choice_unparsed — 전부 불렀다' };
+    const keys = parsed.call.map((n) => refKeys[n - 1]);
+    const left = refKeys.filter((k) => !keys.includes(k)).map(refPersonaName);
+    return {
+      keys,
+      note: `refs_called: ${keys.map(refPersonaName).join('·') || '(아무도 안 부름)'}`
+        + (left.length ? ` / 안 부름: ${left.join('·')}` : '')
+        + (parsed.reason ? ` — 별이: ${parsed.reason}` : ''),
+    };
+  } catch (e) {
+    return { keys: refKeys, note: `refs_choice_error: ${(e instanceof Error ? e.message : String(e)).slice(0, 100)} — 전부 불렀다` };
+  }
+}
+
 async function judgeCandidates(
   env: Env, day: DayMemory, images: { seed: number; bytes: ArrayBuffer; mediaType: VisionMediaType }[],
 ): Promise<JudgeOutcome> {
@@ -565,13 +644,17 @@ async function generateDaily(
   if (!assigned.length) {
     errors.push('ref_roles_empty: 화면에서 배정된 캐릭터 참조가 없어 폴백 목록을 썼다 — 실험실 ②에서 역할을 지정하라');
   }
-  const refKeys = orderCharacterRefs(assigned.length ? assigned : DAILY_REFS_FALLBACK);
+  const allRefKeys = orderCharacterRefs(assigned.length ? assigned : DAILY_REFS_FALLBACK);
+  const drawGenome = buildGenomeContext('byeoli', null).context;
+  // 누구를 부를지는 별이가 고른다 (08-30 사장 판정) — 못 고르면 전부 부르고 사유를 남긴다
+  const chosen = await chooseCharacterRefs(env, day, allRefKeys, drawGenome);
+  const refKeys = chosen.keys;
+  if (chosen.note) errors.push(chosen.note);
   const refs: { name: string; bytes: ArrayBuffer; contentType: string }[] = [];
   for (const key of refKeys) {
     const obj = await env.CAPTURES.get(key);
     if (obj) refs.push({ name: key.split('/').pop() ?? 'ref', bytes: await obj.arrayBuffer(), contentType: obj.httpMetadata?.contentType ?? 'image/png' });
   }
-  const drawGenome = buildGenomeContext('byeoli', null).context;
   const prompt = buildImagePrompt(
     day.event, drawGenome, sceneEn, subjTr.subjects,
     { characters: refs.length, styles: 0 },

@@ -17,11 +17,18 @@
 //
 // 검증 경로: 결과는 KV reco에 남는다(GET /api/pulse?reco=날짜) — 침묵이 버그다.
 
+// ⚠ 구조 교체 2026-08-27: 실사고 08-26 밤 — 혼잡 구간에서 콜 하나가 150초를 다 먹는 게
+//   실측됐다(백필 중 #3 콜 150s 타임아웃). 12분 한 창에 그런 콜이 몇 번 겹치면 수학적으로
+//   3장을 못 끝낸다. 다섯 번의 패치(07-24·07-31·08-11·08-15·08-16)가 전부 「시간과 싸우는
+//   패치」였다 — 사장 판정: 「몇 달을 며칠에 한 번씩 멈추면 그게 무슨 자동화냐」.
+//   그래서 창을 쪼갰다: 밤 7창(wrangler.jsonc), 창마다 4콜·9분만 쓰고 깨끗이 물러난다.
+//   완주는 어느 한 창의 책임이 아니라 밤 전체의 수렴이다. 이미 done인 날은 첫 콜이
+//   done=true로 즉시 종결되므로 추가 창은 공짜에 가깝다(멱등).
 const ENDPOINT = 'https://mimesis-sight-path.pages.dev/api/sketch-daily';
-const MAX_CALLS = 12;          // 3장 + 나쁜 구간 여유
+const MAX_CALLS = 4;           // 창 하나는 4콜까지만 — 나머지는 다음 창이 이어받는다
 const PER_CALL_MS = 150_000;   // 인내 클라이언트 계약 (--max-time 150과 동일)
-const TIME_BUDGET_MS = 12 * 60_000; // scheduled 핸들러 벽시계 한도 안에서 멈춘다
-const BACKOFF_S = [3, 8, 15, 30, 45, 60, 90, 120]; // 콜 사이 대기 — 혼잡 구간을 넘긴다
+const TIME_BUDGET_MS = 9 * 60_000;  // 창 하나의 벽시계 — 크론 한도 안에서 여유 있게
+const BACKOFF_S = [3, 8, 15, 20];   // 창 안에서는 짧게 — 긴 혼잡은 다음 창이 넘긴다
 
 export function terminalResult(status, body) {
   // ⚠ 실사고 2026-08-11 밤: 접힌 적 없는 전날을 심야 재시도가 400 not_folded로 24번(두 크론
@@ -40,9 +47,9 @@ export function kstDateStr(ms) {
 }
 
 /**
- * 트리거 시각 → 임무. 14:xx UTC(23:30 KST)는 오늘 본진(date 생략 = 오늘 접기).
- * 그 외(심야 재시도 크론)는 **전날** 완주 재시도 — ?date=전날을 명시한다.
- * (시각-6h의 KST 날짜 = 심야 기준 「전날」. 00:40 KST-6h → 18:40 KST 전날 ✓)
+ * 트리거 시각 → 임무. 14:xx UTC(23:30 KST)는 본진(date 생략 = 오늘 접기).
+ * 그 외 여섯 창(00:00~02:30 KST)은 같은 일기 날짜를 이어 그린다 — ?date=(시각-6h) 명시.
+ * (-6h의 KST 날짜 = 그 밤의 일기 날짜. 00:00 KST-6h → 18:00 KST 전날 ✓, 02:30도 ✓)
  */
 export function missionFor(scheduledTime) {
   const utcHour = new Date(scheduledTime).getUTCHours();
