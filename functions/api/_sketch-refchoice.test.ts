@@ -33,3 +33,30 @@ test('음성 — 깨진 응답은 null이다 (호출부가 전부 부르기로 �
   assert.equal(parseRefChoice('{망가진 json', 2), null);
   assert.equal(parseRefChoice('', 2), null);
 });
+
+// ── 판정 응답 파싱 (08-30 실사고: 잘린 JSON 24회 → 그날 그림 무산)
+import { parseJudgeText } from './sketch-daily.ts';
+
+test('온전한 판정 JSON은 그대로 읽는다', () => {
+  const r = parseJudgeText('앞말 {"verdicts":["1장: 좋다"],"pick":2,"reasons":"2번이 낫다"} 뒷말');
+  assert.equal(r?.pick, 2);
+  assert.equal(r?.reasons, '2번이 낫다');
+});
+
+test('잘린 JSON에서도 pick을 건져 낸다 (그날을 통째로 버리지 않는다)', () => {
+  const cut = '{"verdicts":["1장: 개구리가 없어 불합격","2장: 고양이가 보여 불합격"],"pick":3,"reasons":"3번이 기억과 맞는';
+  const r = parseJudgeText(cut);
+  assert.equal(r?.pick, 3);
+  assert.equal(r?.verdicts?.length, 2);
+});
+
+test('전부 불합격(pick null)도 잘린 채로 읽힌다', () => {
+  const r = parseJudgeText('{"verdicts":["1장: 불합격"],"pick":null,"reasons":"전부');
+  assert.notEqual(r, null);
+  assert.equal(r?.pick, undefined);
+});
+
+test('음성 — pick 자체가 없으면 null이다(호출부가 사유를 영수증에 남긴다)', () => {
+  assert.equal(parseJudgeText('그림이 참 좋네요 하지만 JSON은 안 드립니다'), null);
+  assert.equal(parseJudgeText(''), null);
+});

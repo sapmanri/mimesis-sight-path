@@ -232,6 +232,27 @@ ${roster}
   }
 }
 
+/**
+ * 별이의 판정 응답 → 객체. 08-30 실사고: max_tokens가 모자라 JSON이 중간에 잘리면
+ * `{...}` 정규식이 닫는 괄호를 못 찾아 통째로 버려졌다(24회 연속 실패, 그날 그림 무산).
+ * 온전한 JSON을 먼저 보고, 잘렸으면 pick·reasons만이라도 건져 낸다 — 3장을 다시 그리는 것보다 싸다.
+ */
+export function parseJudgeText(text: string): { pick?: number; reasons?: string; verdicts?: string[] } | null {
+  const m = text.match(/\{[\s\S]*\}/);
+  if (m) {
+    try { return JSON.parse(m[0]) as { pick?: number; reasons?: string; verdicts?: string[] }; } catch { /* 잘린 것 — 아래로 */ }
+  }
+  const pick = text.match(/"pick"\s*:\s*(null|\d+)/);
+  if (!pick) return null;
+  const reasons = text.match(/"reasons"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const verdicts = [...text.matchAll(/"((?:[^"\\]|\\.)*?장:[^"]*)"/g)].map((v) => v[1]).slice(0, 5);
+  return {
+    pick: pick[1] === 'null' ? undefined : Number(pick[1]),
+    reasons: reasons ? reasons[1] : '(잘린 응답에서 건져 냄)',
+    verdicts,
+  };
+}
+
 async function judgeCandidates(
   env: Env, day: DayMemory, images: { seed: number; bytes: ArrayBuffer; mediaType: VisionMediaType }[],
 ): Promise<JudgeOutcome> {
@@ -260,7 +281,7 @@ async function judgeCandidates(
         'x-api-key': env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 500, messages: [{ role: 'user', content }] }),
+      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, messages: [{ role: 'user', content }] }),
     });
     if (!res.ok) {
       const detail = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);
@@ -268,9 +289,14 @@ async function judgeCandidates(
     }
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const text = data.content?.find((c) => c.type === 'text')?.text ?? '';
-    const m = text.match(/\{[\s\S]*\}/);
-    if (!m) return { reco: null, error: 'judge_non_json_response' };
-    const out = JSON.parse(m[0]) as { pick?: number; reasons?: string; verdicts?: string[] };
+    const parsed = parseJudgeText(text);
+    if (!parsed) {
+      // ⚠ 08-30 실사고: judge_non_json_response가 24번 났는데 **별이가 뭐라고 답했는지 영수증에 없어**
+      //   아침에 원인을 못 봤다(08-16에 배운 것의 재발). 이제 앞머리를 실어 보낸다.
+      const head = text.replace(/\s+/g, ' ').slice(0, 200);
+      return { reco: null, error: `judge_non_json_response: ${head || '(빈 응답)'}` };
+    }
+    const out = parsed;
     const pick = Number(out.pick);
     return { reco: {
         pick: Number.isInteger(pick) && pick >= 1 && pick <= images.length ? pick : null,
