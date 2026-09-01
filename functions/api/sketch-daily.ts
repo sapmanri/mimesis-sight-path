@@ -40,6 +40,8 @@ interface Env extends ImageProviderEnv, SketchPublishEnv {
   PUBLISH_KEY?: string;
   PULSE_KEY?: string;
   ANTHROPIC_API_KEY?: string;
+  /** 'gemini'면 그림을 제미나이로 그린다. 없거나 다른 값이면 기존대로 workers-ai(flux). */
+  DAILY_IMAGE_PROVIDER?: string;
 }
 
 const META_KEY = 'sketch_trial_meta';
@@ -727,7 +729,13 @@ async function generateDaily(
   const n = priorPicks.length;   // 다음에 그릴 장 번호 (seed 결정론 유지)
 
   // 생성 준비 — 확정 레시피 그대로 (수동 흐름과 동일 재료·동일 모델 flux-2-dev)
-  const provider = selectProvider('workers-ai', env);
+  // 09-02: 그림 프로바이더를 박아 두지 않는다. flux-2-dev가 100% 무응답인 밤이 있었고
+  //   (4콜 연속 ai_run_timeout_100s) 그때 이 한 줄이 밤 전체를 막았다. 제미나이 어댑터와 키는
+  //   이미 있으니, **별이 그림체 판정만 나면 환경변수 한 줄로 갈아탄다.**
+  //   ⚠ 기본값은 그대로 workers-ai — 그림체는 별이의 정체성이라 사장 판정 없이 바꾸지 않는다.
+  const provider = selectProvider(
+    (env.DAILY_IMAGE_PROVIDER === 'gemini' ? 'gemini' : 'workers-ai'), env,
+  );
   const sceneEn = await translateScene(env, day.event.lines).catch(() => null);
   const subjTr = day.event.targetLabel
     ? await translateSubjects(env, [day.event.targetLabel])
