@@ -80,6 +80,7 @@ export function supportsReference(model: string): boolean {
 export async function translateScene(env: { ANTHROPIC_API_KEY?: string }, lines: string[]): Promise<string | null> {
   if (!env.ANTHROPIC_API_KEY || !lines.length) return null;
   const res = await fetch('https://api.anthropic.com/v1/messages', {
+    signal: AbortSignal.timeout(30_000),   // 09-01: 장면 번역이 매달리면 그 밤이 죽는다
     method: 'POST',
     headers: {
       'content-type': 'application/json',
