@@ -60,10 +60,14 @@ test('소진 영수증은 정당한 종료 기록을 덮지 않는다', () => {
   assert.equal(recoIsHonestTerminal({ skipped: '' }), false);
 });
 
-test('옛 3장·무판정 기록은 그림을 다시 만들지 않고 판정 단계만 재개한다', () => {
+test('그린 장이 있고 판정이 없으면 그림을 다시 만들지 않고 판정부터 재개한다', () => {
   assert.equal(recoNeedsJudge({ status: 'done', picks: [1, 2, 3], reco: null }), true);
   assert.equal(recoNeedsJudge({ status: 'images_ready', picks: [1, 2, 3] }), true);
-  assert.equal(recoNeedsJudge({ status: 'partial', picks: [1, 2] }), false);
+  // ⚙ 09-01 계약 변경: 옛 구조는 「3장이 다 있어야 판정 차례」였다(여기서 false를 기대했다).
+  //   이제 한 장씩 그리고 바로 보이므로, 한 장만 있어도 판정할 차례다.
+  assert.equal(recoNeedsJudge({ status: 'partial', picks: [1, 2] }), true);
+  assert.equal(recoNeedsJudge({ status: 'images_ready', picks: [1] }), true);
+  assert.equal(recoNeedsJudge({ status: 'partial', picks: [] }), false);   // 그린 게 없으면 판정할 것도 없다
   assert.equal(recoNeedsJudge({ skipped: 'human_day', picks: [1, 2, 3] }), false);
   assert.equal(recoNeedsJudge({
     status: 'done', picks: [1, 2, 3],
@@ -102,19 +106,19 @@ test('야간 3장은 같은 기억을 서로 다른 능동 포즈로 그린다',
 
 // ⚠ 실사고 2026-07-31: 심야 재시도 크론이 date 없이 부르면 「새 하루를 접어버린다」.
 // missionFor가 그 안전핀이다 — 본진(14:30 UTC)만 date 생략, 심야는 반드시 전날 명시.
-test('스케줄러 임무: 본진은 오늘, 심야 재시도는 전날을 명시한다', () => {
-  // 2026-07-31 14:30 UTC = 23:30 KST 본진
-  const main = missionFor(Date.UTC(2026, 6, 31, 14, 30));
+test('스케줄러 임무: 본진만 오늘을 접고, 나머지 창은 못 끝낸 하루를 잇는다', () => {
+  // ⚙ 09-01 계약 변경: 옛 창들은 「어젯밤 하루」만 ?date=로 재시도했다(그날 못 끝내면 끝).
+  //   이제 서버가 큐에서 못 끝낸 하루를 골라 준다(?pending=1) — 밤이 마감이 아니다.
+  const main = missionFor(Date.UTC(2026, 6, 31, 14, 30));   // 23:30 KST 본진
   assert.equal(main.kind, 'main');
-  assert.equal(main.dateParam, '');
-  // 2026-07-31 15:40 UTC = 08-01 00:40 KST → 전날(07-31) 재시도
-  const retry1 = missionFor(Date.UTC(2026, 6, 31, 15, 40));
-  assert.equal(retry1.kind, 'retry');
-  assert.equal(retry1.dateParam, '?date=2026-07-31');
-  // 2026-07-31 16:40 UTC = 08-01 01:40 KST → 역시 전날(07-31)
-  const retry2 = missionFor(Date.UTC(2026, 6, 31, 16, 40));
-  assert.equal(retry2.dateParam, '?date=2026-07-31');
-  // 음성: 심야 재시도가 새 날짜(08-01)를 접겠다고 나서면 안 된다
-  assert.notEqual(retry1.dateParam, '?date=2026-08-01');
+  assert.equal(main.dateParam, '');                          // 오늘을 접는 유일한 창
+
+  for (const utcHour of [15, 16, 17]) {                      // 00:00~02:30 KST 창들
+    const m = missionFor(Date.UTC(2026, 6, 31, utcHour, 0));
+    assert.equal(m.kind, 'pending');
+    assert.equal(m.dateParam, '?pending=1');
+    // 음성: 큐 창이 날짜를 스스로 정해 새 하루를 접겠다고 나서면 안 된다
+    assert.equal(m.dateParam.includes('date='), false);
+  }
   assert.equal(kstDateStr(Date.UTC(2026, 6, 31, 15, 0)), '2026-08-01'); // 참고: KST로는 이미 새 날
 });

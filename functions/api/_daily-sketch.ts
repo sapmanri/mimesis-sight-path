@@ -322,6 +322,12 @@ export const NIGHTLY_POSE_VARIANTS = [
 export function buildImagePrompt(
   memory: MemoryEvent, genome: GenomeContext | null, sceneEn: string | null,
   subjects: string[] = [], refs: RefRoles | number = 0, poseVariant: string | null = null,
+  /**
+   * 지난 장이 별이에게 물린 이유. 09-01 구조 교체 전에는 3장을 **같은 프롬프트로** 그렸다 —
+   * 첫 장이 「개가 아니라 고양이가 나왔다」로 물리면 나머지 둘도 같은 이유로 물렸다.
+   * 68일 중 21일이 「별이가 전부 물림」이었던 정체가 이것이다. 이제 물린 이유가 다음 장에 실린다.
+   */
+  avoid: string[] = [],
 ): string {
   const roles: RefRoles = typeof refs === 'number' ? { characters: refs, styles: 0 } : refs;
   const nChar = roles.characters ?? 0;
@@ -361,6 +367,10 @@ export function buildImagePrompt(
     `${CHARACTER_SHEET_EN.join('. ')}.`,
     // 낙서는 장식이 아니라 그림일기의 언어다 — 오늘 무엇을 봤는지가 기호로 남는다.
     `Around the subjects add ${doodleFor(memory)}.`,
+    // 별이가 앞서 물린 이유 — 같은 실수를 되풀이하지 않는다(09-01 되먹임 고리)
+    avoid.length
+      ? `Fix these problems from the previous attempts: ${avoid.slice(-3).map((a) => a.replace(/\s+/g, ' ').slice(0, 160)).join(' | ')}`
+      : '',
     `${SKETCH_POSITIVE.join(', ')}.`,
   ].filter((l) => l !== '').join('\n');
 }

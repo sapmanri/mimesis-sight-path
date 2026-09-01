@@ -37,7 +37,10 @@ export function terminalResult(status, body) {
   if (status === 400 && typeof body?.error === 'string' && body.error.startsWith('not_folded')) return 'not_folded';
   if (!(status >= 200 && status < 300) || !body || body.failed === true) return null;
   if (body.done === true) return 'done';
-  if (body.skipped === 'human_day' || body.skipped === 'no_observations') return body.skipped;
+  // 09-01: 큐에 할 일이 없거나(no_pending) 그 하루의 시도를 다 쓴 것(attempts_exhausted)도
+  //   정당한 종결이다 — 남은 콜로 같은 벽을 두드리지 않는다.
+  if (body.skipped === 'human_day' || body.skipped === 'no_observations'
+      || body.skipped === 'no_pending' || body.skipped === 'attempts_exhausted') return body.skipped;
   return null;
 }
 
@@ -54,7 +57,9 @@ export function kstDateStr(ms) {
 export function missionFor(scheduledTime) {
   const utcHour = new Date(scheduledTime).getUTCHours();
   if (utcHour === 14) return { kind: 'main', dateParam: '' };
-  return { kind: 'retry', dateParam: `?date=${kstDateStr(scheduledTime - 6 * 3_600_000)}` };
+  // ⚙ 09-01 구조 교체: 옛 창들은 **어젯밤 하루만** 재시도했다. 이제 서버가 못 끝낸 하루를
+  //   골라 준다(?pending=1, 최대 3일). 밤이 마감이 아니라 큐가 되었다 — 오늘 못 그리면 내일 잇는다.
+  return { kind: 'pending', dateParam: '?pending=1' };
 }
 
 export default {

@@ -83,7 +83,7 @@ export function recoNeedsJudge(reco: HonestRecoLike | null): boolean {
   return !!reco
     && !(typeof reco.skipped === 'string' && reco.skipped)
     && Array.isArray(reco.picks)
-    && reco.picks.length >= 3
+    && reco.picks.length >= 1        // 09-01: 3장 묶음 → 한 장씩. 한 장만 있어도 판정할 차례다
     && !hasRecordedRecommendation(reco.reco);
 }
 export function recoIsHonestTerminal(reco: HonestRecoLike | null): boolean {
@@ -93,10 +93,40 @@ export function recoIsHonestTerminal(reco: HonestRecoLike | null): boolean {
   if (typeof reco.skipped === 'string' && reco.skipped) return true;
   // 그림 3장은 판정 준비일 뿐 완료가 아니다. 08-12 실사고처럼 status=done·picks=3인데
   // reco=null인 기록을 완료로 인정하면 스케줄러 소진 영수증과 아침 감시가 둘 다 거짓말한다.
+  // 시도를 다 쓴 하루는 실패지만 **정직한 종결**이다 — 소진 영수증이 이 진단을 덮으면 안 된다.
+  if (reco.errorCode === 'attempts_exhausted') return true;
   const judged = hasRecordedRecommendation(reco.reco);
   if (reco.status === 'done') return judged;
-  return judged && Array.isArray(reco.picks) && reco.picks.length >= 3;
+  return judged && Array.isArray(reco.picks) && reco.picks.length >= 1;
 }
+/** 하루에 그려 볼 최대 장 수. 다 쓰면 그 하루는 정직하게 접는다(큐 무한 성장 방지). */
+const MAX_ATTEMPTS = 6;
+/** 못 끝낸 하루를 며칠까지 이어 그리나 (사장 판정 09-01: 3일). */
+const PENDING_DAYS = 3;
+/**
+ * 못 끝낸 하루를 찾는다 — 09-01 구조 교체 ①: **마감을 없앤다.**
+ * 옛 구조는 「그날 밤에 못 끝내면 그날은 영영 없음」이었다. 하루의 기억은 KV에 그대로 남아 있는데
+ * 밤이 지났다는 이유로 버렸다. 이제 어제부터 PENDING_DAYS일까지 거슬러 보며 **가장 오래된 미완**을
+ * 이어 그린다. 늦게 그려도 그날 날짜로 발행한다 — 일기는 늦게 써도 그날 일기다.
+ * 오늘은 보지 않는다(오늘 몫은 23:30 본진이 접는다). 영수증이 없는 날은 시도된 적 없는 날이므로
+ * 건드리지 않는다 — 「과거 하루를 새로 접지 않는다」는 엔드포인트 계약 그대로다.
+ */
+export async function findPendingDate(
+  get: (key: string) => Promise<string | null>, today: string, days: number,
+): Promise<string | null> {
+  const base = Date.parse(`${today}T00:00:00+09:00`);
+  for (let i = days; i >= 1; i--) {
+    const d = new Date(base - i * 86_400_000).toISOString().slice(0, 10);
+    const raw = await get(`sketch_daily_reco:${d}`);
+    if (!raw) continue;
+    let reco: HonestRecoLike | null = null;
+    try { reco = JSON.parse(raw) as HonestRecoLike; } catch { continue; }
+    if (recoIsHonestTerminal(reco)) continue;
+    return d;
+  }
+  return null;
+}
+
 const DAILY_MODEL = '@cf/black-forest-labs/flux-2-dev';
 // steps 12 = 품질 판정값 (07-21 심야, "하고하고 또 해서" 결정) — 품질값은 상수다.
 // 07-24 실증: 실패 원인은 스텝이 아니라 30초 클라이언트가 생성 도중 끊은 것.
@@ -364,7 +394,8 @@ async function handleDaily(
   const dateParam = url.searchParams.get('date');
   const resetParam = url.searchParams.get('reset') === '1';
   if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return json(400, { ok: false, error: 'bad_date' });
-  const date = dateParam ?? kstDate(Date.now());
+  const pendingParam = url.searchParams.get('pending') === '1';
+  let date = dateParam ?? kstDate(Date.now());
   trace.stage = 'authenticate';
 
   // 인증: 크론(PUBLISH_KEY)이 정문. 재시도(?date=)에 한해 PULSE_KEY 보조 허용 —
@@ -374,6 +405,13 @@ async function handleDaily(
   const pubOk = request.headers.get('X-Publish-Key') === env.PUBLISH_KEY;
   const pulseRetryOk = !!dateParam && !!env.PULSE_KEY && request.headers.get('X-Pulse-Key') === env.PULSE_KEY;
   if (!pubOk && !pulseRetryOk) return json(403, { ok: false, error: 'forbidden' });
+
+  // ?pending=1 — 못 끝낸 하루를 이어 그린다(마감 없음). 없으면 조용히 물러난다.
+  if (pendingParam) {
+    const found = await findPendingDate((k) => env.PLANET.get(k), kstDate(Date.now()), PENDING_DAYS);
+    if (!found) return json(200, { ok: true, done: true, skipped: 'no_pending', phase: 'no_pending' });
+    date = found;
+  }
 
   // 스케줄러가 모든 재시도를 소진했을 때 남기는 최종 영수증. 같은 인증 경로를 써서
   // Worker에 PLANET 바인딩이라는 두 번째 진실을 만들지 않는다.
@@ -601,60 +639,82 @@ async function generateDaily(
   const priorPicks = (!reset && !prev?.skipped && Array.isArray(prev?.picks)) ? prev!.picks! : [];
   const errors: string[] = [];
   if (reset && (prev?.picks?.length ?? 0) > 0) errors.push(`reset: 이전 ${prev!.picks!.length}장 폐기 후 정규 품질로 재생성`);
-  if (priorPicks.length >= 3) {
+
+  // ⚙ 09-01 구조 교체 (사장 판정 「그림일기는 아예 새로 설계해야겠다」).
+  //   68일 실측: 무개입 완주 3일(4%) · 연속 성공 최장 이틀 · 실패 1위가 「별이가 전부 물림」 21일.
+  //   옛 구조는 곱셈이었다 — 관찰 있음 × 3장 다 그림 × 그중 합격 × 판정 파싱 × 밤 안에.
+  //   하나만 어긋나도 그날은 영영 없었다. 그래서 셋을 뒤집는다:
+//     ① 마감을 없앤다 — 못 끝낸 하루는 큐에 남고 다음 날들이 이어 그린다(?pending=1).
+//     ② 3장 묶음 → 한 장씩: 그리고 바로 보이고, 통과하면 거기서 끝난다(운 좋은 날은 1/3 시간).
+//     ③ 물린 이유가 다음 장 프롬프트에 실린다 — 같은 이유로 셋이 물리던 21일의 정체를 친다.
+  const judgedCount = (!reset && typeof prev?.judgedCount === 'number') ? prev.judgedCount : 0;
+  const rejections: string[] = (!reset && Array.isArray(prev?.rejections)) ? prev!.rejections! : [];
+
+  // ① 아직 별이가 안 본 장이 있으면 **그 한 장**을 본다
+  if (priorPicks.length > judgedCount) {
     if (hasRecordedRecommendation(prev?.reco)) {
-      return {
-        made: 0, total: 3, done: true, trialId: prev?.trialId ?? '',
-        errors: ['already_complete'], phase: 'complete',
-      };
+      return { made: 0, total: priorPicks.length, done: true, trialId: prev?.trialId ?? '', errors: ['already_complete'], phase: 'complete' };
     }
-
-    // 판정은 별도의 *요청* 단계에서 끝낸다. 이미지 생성과 vision을 한 요청에 겹치지 않아
-    // 30초 창을 지키면서도, 응답 뒤 waitUntil에 기록을 맡기지 않는다. 3장째 응답이
-    // done:false를 반환하므로 서버 스케줄러가 이 분기를 반드시 한 번 더 호출한다.
-    const imgs: { seed: number; bytes: ArrayBuffer; mediaType: VisionMediaType }[] = [];
-    for (const pk of priorPicks.slice(0, 3)) {
-      const obj = await env.CAPTURES.get(pk.r2Key);
-      if (!obj) {
-        errors.push(`judge_image_missing: ${pk.r2Key}`);
-        continue;
-      }
-      const bytes = await obj.arrayBuffer();
-      const mediaType = detectVisionMediaType(bytes);
-      if (!mediaType) {
-        errors.push(`judge_image_unsupported: ${pk.r2Key}`);
-        continue;
-      }
-      imgs.push({ seed: pk.seed, bytes, mediaType });
-    }
-    if (imgs.length !== 3) {
-      const judgeError = `judge_images_incomplete: expected=3 actual=${imgs.length}`;
+    const pk = priorPicks[judgedCount];
+    const obj = await env.CAPTURES.get(pk.r2Key);
+    const bytes = obj ? await obj.arrayBuffer() : null;
+    const mediaType = bytes ? detectVisionMediaType(bytes) : null;
+    if (!bytes || !mediaType) {
+      const judgeError = `judge_image_missing: ${pk.r2Key}`;
       errors.push(judgeError);
+      // 읽을 수 없는 장은 본 것으로 치고 넘어간다 — 여기서 멈추면 그날이 영영 막힌다
       await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-        ...prev, date, at: Date.now(), picks: priorPicks, reco: null,
-        status: 'judge_failed', errors: [...(prev?.errors ?? []), ...errors], judgeError,
+        ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount: judgedCount + 1,
+        rejections: [...rejections, `${judgedCount + 1}장: 파일을 읽지 못함`],
+        status: 'partial', errors: [...(prev?.errors ?? []), ...errors], judgeError,
       }));
-      return { made: 0, total: 3, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_retry' };
+      return { made: 0, total: priorPicks.length, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_skip_unreadable' };
     }
-
-    const judged = await judgeCandidates(env, day, imgs);
+    const judged = await judgeCandidates(env, day, [{ seed: pk.seed, bytes, mediaType }]);
     if (!judged.reco) {
       const judgeError = judged.error ?? 'judge_unknown_failure';
       errors.push(judgeError);
       await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-        ...prev, date, at: Date.now(), picks: priorPicks, reco: null,
+        ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount, rejections,
         status: 'judge_failed', errors: [...(prev?.errors ?? []), ...errors], judgeError,
       }));
-      return { made: 0, total: 3, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_retry' };
+      return { made: 0, total: priorPicks.length, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_retry' };
     }
+    const passed = Number(judged.reco.pick) === 1;
+    if (passed) {
+      // 이 장이 오늘의 그림이다. pick은 **전체 목록에서의 번호**로 적는다(발행이 picks[pick-1]을 쓴다).
+      await env.PLANET.put(RECO_KEY(date), JSON.stringify({
+        ...prev, date, at: Date.now(), picks: priorPicks,
+        reco: { ...judged.reco, pick: judgedCount + 1 },
+        judgedCount: judgedCount + 1, rejections,
+        status: 'done', failed: false, errors: [...(prev?.errors ?? []), ...errors],
+        judgedAt: Date.now(), judgeError: null,
+        errorCode: null, errorName: null, errorMessage: null, stage: 'complete',
+      }));
+      return { made: 0, total: priorPicks.length, done: true, trialId: prev?.trialId ?? '', errors, phase: 'complete' };
+    }
+    // 물렸다 — 사유를 쌓고 다음 장으로. 이 사유가 다음 프롬프트에 실린다.
+    const why = (judged.reco.verdicts?.[0] || judged.reco.reasons || '사유 미기록').slice(0, 200);
     await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-      ...prev, date, at: Date.now(), picks: priorPicks, reco: judged.reco,
-      status: 'done', failed: false, errors: [...(prev?.errors ?? []), ...errors],
-      judgedAt: Date.now(), judgeError: null,
-      errorCode: null, errorName: null, errorMessage: null, stage: 'complete',
+      ...prev, date, at: Date.now(), picks: priorPicks, reco: null,
+      judgedCount: judgedCount + 1, rejections: [...rejections, `${judgedCount + 1}장: ${why}`],
+      status: 'partial', errors: [...(prev?.errors ?? []), ...errors],
     }));
-    return { made: 0, total: 3, done: true, trialId: prev?.trialId ?? '', errors, phase: 'complete' };
+    return { made: 0, total: priorPicks.length, done: false, trialId: prev?.trialId ?? '', errors: [...errors, `rejected_${judgedCount + 1}: ${why.slice(0, 80)}`], phase: 'rejected_draw_next' };
   }
+
+  // ② 시도 상한 — 큐가 무한히 자라지 않게. 다 쓰면 정직한 종결로 접는다.
+  if (priorPicks.length >= MAX_ATTEMPTS) {
+    await env.PLANET.put(RECO_KEY(date), JSON.stringify({
+      ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount, rejections,
+      status: 'failed', failed: true, stage: 'attempts_exhausted',
+      errorCode: 'attempts_exhausted', errorName: 'AttemptsExhausted',
+      errorMessage: `${MAX_ATTEMPTS}장을 그렸는데 별이가 전부 물렸다 — 그날 기억과 맞는 그림을 못 얻었다`,
+      errors: [...(prev?.errors ?? []), ...errors, ...rejections],
+    }));
+    return { made: 0, total: priorPicks.length, done: false, skipped: 'attempts_exhausted', trialId: prev?.trialId ?? '', errors, phase: 'attempts_exhausted' };
+  }
+
   const n = priorPicks.length;   // 다음에 그릴 장 번호 (seed 결정론 유지)
 
   // 생성 준비 — 확정 레시피 그대로 (수동 흐름과 동일 재료·동일 모델 flux-2-dev)
@@ -685,6 +745,7 @@ async function generateDaily(
     day.event, drawGenome, sceneEn, subjTr.subjects,
     { characters: refs.length, styles: 0 },
     NIGHTLY_POSE_VARIANTS[n % NIGHTLY_POSE_VARIANTS.length],
+    rejections,   // 별이가 앞서 물린 이유 — 같은 실수를 되풀이하지 않는다
   );
   const promptHash = hashPrompt(prompt);
   // trialId는 첫 호출 것을 계승 — 번역이 매번 조금 달라도 같은 하루의 한 시도로 묶는다
@@ -711,9 +772,10 @@ async function generateDaily(
     await env.PLANET.put(RECO_KEY(date), JSON.stringify({
       date, at: Date.now(), trialId,
       picks: newPick ? [...priorPicks, newPick] : priorPicks,
+      judgedCount, rejections,
       reco: null,
       errors: [...(prev?.errors ?? []).filter((e) => typeof e === 'string'), ...errors],
-      status: (newPick ? priorPicks.length + 1 : priorPicks.length) >= 3 ? 'images_ready' : 'partial',
+      status: newPick ? 'images_ready' : 'partial',   // 09-01: 한 장 그리면 곧 판정 차례다
     }));
   };
 

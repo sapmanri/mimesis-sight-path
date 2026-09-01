@@ -60,3 +60,48 @@ test('음성 — pick 자체가 없으면 null이다(호출부가 사유를 영�
   assert.equal(parseJudgeText('그림이 참 좋네요 하지만 JSON은 안 드립니다'), null);
   assert.equal(parseJudgeText(''), null);
 });
+
+// ── 09-01 구조 교체: 마감 없는 큐 (findPendingDate)
+import { findPendingDate, recoIsHonestTerminal } from './sketch-daily.ts';
+
+const kv = (m: Record<string, unknown>) => async (k: string) => {
+  const v = m[k];
+  return v === undefined ? null : JSON.stringify(v);
+};
+
+test('가장 오래된 미완을 먼저 이어 그린다 (일기는 늦게 써도 그날 일기다)', async () => {
+  const m = {
+    'sketch_daily_reco:2026-08-29': { status: 'partial', picks: [1] },        // 미완 — 더 오래됨
+    'sketch_daily_reco:2026-08-31': { status: 'partial', picks: [1, 2] },     // 미완
+  };
+  assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), '2026-08-29');
+});
+
+test('끝난 하루는 건드리지 않는다', async () => {
+  const done = { status: 'done', picks: [1], reco: { pick: 1, reasons: '합격', verdicts: ['1장: 합격'] } };
+  const m = {
+    'sketch_daily_reco:2026-08-30': done,
+    'sketch_daily_reco:2026-08-31': { skipped: 'no_observations' },           // 정직한 건너뜀도 종결
+  };
+  assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), null);
+});
+
+test('시도를 다 쓴 하루도 종결이다 — 큐가 무한히 자라지 않는다', async () => {
+  const m = { 'sketch_daily_reco:2026-08-31': { status: 'failed', errorCode: 'attempts_exhausted' } };
+  assert.equal(recoIsHonestTerminal(m['sketch_daily_reco:2026-08-31']), true);
+  assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), null);
+});
+
+test('영수증이 없는 날은 새로 접지 않는다 (과거 하루를 새로 만들지 않는다)', async () => {
+  assert.equal(await findPendingDate(kv({}), '2026-09-01', 3), null);
+});
+
+test('오늘은 큐가 건드리지 않는다 (오늘 몫은 본진이 접는다)', async () => {
+  const m = { 'sketch_daily_reco:2026-09-01': { status: 'partial', picks: [1] } };
+  assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), null);
+});
+
+test('3일 밖의 미완은 포기한다 (사장 판정 09-01)', async () => {
+  const m = { 'sketch_daily_reco:2026-08-27': { status: 'partial', picks: [1] } };
+  assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), null);
+});
