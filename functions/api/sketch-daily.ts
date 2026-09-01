@@ -247,6 +247,9 @@ ${roster}
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 300, messages: [{ role: 'user', content: prompt }] }),
+      // ⚠ 09-01 실사고: 바깥 호출에 시한이 하나도 없었다. 매달리면 그 콜이 통째로 죽고
+      //   스케줄러엔 「fetch timeout」만 남는다 — 어디서 매달렸는지 알 길이 없었다.
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) return { keys: refKeys, note: `refs_choice_http_${res.status} — 전부 불렀다` };
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
@@ -315,6 +318,7 @@ async function judgeCandidates(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 1500, messages: [{ role: 'user', content }] }),
+      signal: AbortSignal.timeout(90_000),   // 그림 한 장 보기 — 09-01 시한 신설
     });
     if (!res.ok) {
       const detail = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 160);

@@ -119,6 +119,7 @@ export async function translateSubjects(
   if (env.ANTHROPIC_API_KEY) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
+        signal: AbortSignal.timeout(30_000),   // 09-01: 번역이 매달리면 그 밤이 죽는다
         method: 'POST',
         headers: {
           'content-type': 'application/json',
