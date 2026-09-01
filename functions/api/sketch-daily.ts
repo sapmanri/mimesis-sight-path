@@ -701,7 +701,9 @@ async function generateDaily(
       return { made: 0, total: priorPicks.length, done: true, trialId: prev?.trialId ?? '', errors, phase: 'complete' };
     }
     // 물렸다 — 사유를 쌓고 다음 장으로. 이 사유가 다음 프롬프트에 실린다.
-    const why = (judged.reco.verdicts?.[0] || judged.reco.reasons || '사유 미기록').slice(0, 200);
+    // 별이 판정문은 이미 「1장: …」으로 시작한다 — 앞에 번호를 또 붙이면 「1장: 1장: …」이 된다
+    const why = (judged.reco.verdicts?.[0] || judged.reco.reasons || '사유 미기록')
+      .replace(/^\s*\d+장\s*:\s*/, '').slice(0, 200);
     await env.PLANET.put(RECO_KEY(date), JSON.stringify({
       ...prev, date, at: Date.now(), picks: priorPicks, reco: null,
       judgedCount: judgedCount + 1, rejections: [...rejections, `${judgedCount + 1}장: ${why}`],
