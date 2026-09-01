@@ -105,3 +105,15 @@ test('3일 밖의 미완은 포기한다 (사장 판정 09-01)', async () => {
   const m = { 'sketch_daily_reco:2026-08-27': { status: 'partial', picks: [1] } };
   assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), null);
 });
+
+test('경계 못박기 — 큐는 **어제(D-1)를 반드시** 본다 (09-01 하루 밀림 실사고)', async () => {
+  // 옛 코드는 KST 자정에서 하루를 빼고 UTC로 찍어 D-2·D-3·D-4를 봤다 — 어제를 영영 놓쳤다.
+  // 위 테스트들은 답이 우연히 같아 이 결함을 못 잡았다. 여기서 하루씩 못박는다.
+  const only = (d: string) => kv({ [`sketch_daily_reco:${d}`]: { status: 'partial', picks: [1] } });
+  assert.equal(await findPendingDate(only('2026-08-31'), '2026-09-01', 3), '2026-08-31'); // D-1
+  assert.equal(await findPendingDate(only('2026-08-30'), '2026-09-01', 3), '2026-08-30'); // D-2
+  assert.equal(await findPendingDate(only('2026-08-29'), '2026-09-01', 3), '2026-08-29'); // D-3
+  assert.equal(await findPendingDate(only('2026-08-28'), '2026-09-01', 3), null);         // D-4는 밖
+  // 달 넘김도 밀리지 않는다
+  assert.equal(await findPendingDate(only('2026-07-31'), '2026-08-01', 3), '2026-07-31');
+});

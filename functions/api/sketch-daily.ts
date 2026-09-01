@@ -114,7 +114,10 @@ const PENDING_DAYS = 3;
 export async function findPendingDate(
   get: (key: string) => Promise<string | null>, today: string, days: number,
 ): Promise<string | null> {
-  const base = Date.parse(`${today}T00:00:00+09:00`);
+  // ⚠ 09-01 실사고: `${today}T00:00:00+09:00`(=UTC 전날 15시)에서 하루씩 빼고 UTC로 찍으면
+  //   **날짜가 하루씩 밀려** 어제를 아예 안 봤다(큐가 늘 비어 보였다). 정오 UTC를 기준으로
+  //   온전한 하루씩 빼면 문자열 산술이 정확하다(KST엔 서머타임이 없다).
+  const base = Date.parse(`${today}T12:00:00Z`);
   for (let i = days; i >= 1; i--) {
     const d = new Date(base - i * 86_400_000).toISOString().slice(0, 10);
     const raw = await get(`sketch_daily_reco:${d}`);
