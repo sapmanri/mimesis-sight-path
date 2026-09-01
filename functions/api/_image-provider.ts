@@ -35,6 +35,14 @@ export interface SketchRequest {
   seed?: number;
   /** 실제로 읽힌 기준 그림. 비어 있으면 참조 없이 생성된다(= 대조군). */
   references?: ReferenceImage[];
+  /**
+   * 이 요청 안에서 모델을 몇 번까지 부를까 (기본 3).
+   * ⚠ 09-01 실사고: 서버가 스스로 3번(100초×3 + 백오프 = 최악 316초) 매달리는데
+   *   스케줄러는 150초면 포기한다 — **서버가 클라이언트보다 두 배 오래 버텨** 그 일이 통째로 버려졌다.
+   *   밤 크론처럼 **바깥에 재시도 고리가 있는 곳은 1을 준다**: 안쪽은 한 번만 해 보고 빨리 물러나고,
+   *   재시도는 멱등한 다음 콜이 맡는다.
+   */
+  maxAttempts?: number;
 }
 
 /** 재현성을 위해 모델명·파라미터를 반드시 함께 남긴다 (판정의 근거가 된다). */
@@ -152,7 +160,8 @@ export const workersAiProvider: ImageProvider = {
         AI_CALL_TIMEOUT_MS)),
     ]);
     let lastError = 'ai_run_failed: unknown';
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    const maxAttempts = Math.max(1, req.maxAttempts ?? 3);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const out = await runWithTimeout();
         const bytes = await coerceImageBytes(out);
@@ -164,7 +173,7 @@ export const workersAiProvider: ImageProvider = {
         };
       } catch (e) {
         lastError = `ai_run_failed: ${String(e).slice(0, 160)}${attempt > 1 ? ` (attempt ${attempt})` : ''}`;
-        if (attempt < 3 && TRANSIENT.test(String(e))) {
+        if (attempt < maxAttempts && TRANSIENT.test(String(e))) {
           await new Promise((r) => setTimeout(r, attempt === 1 ? 4_000 : 12_000));
           continue;
         }

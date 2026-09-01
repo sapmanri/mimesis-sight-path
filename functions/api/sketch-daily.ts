@@ -768,6 +768,9 @@ async function generateDaily(
     plan: { memory: day.event, prompt, referenceKeys: withRefs ? refKeys : [] },
     model: DAILY_MODEL, params: { steps: DAILY_STEPS, width: 1024, height: 1024 },
     references: withRefs ? refs : [], seed: base + n,
+    // 09-01: 한 번만 해 보고 물러난다 — 재시도는 큐(다음 콜·다음 창·내일)가 맡는다.
+    //   서버가 316초를 버티는 동안 스케줄러는 150초에 떠나 그 일이 버려졌다.
+    maxAttempts: 1,
   });
   let usedRefs = refs.length > 0;
   let art = await gen(usedRefs);
