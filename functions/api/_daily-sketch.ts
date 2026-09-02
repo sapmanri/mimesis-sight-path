@@ -362,8 +362,11 @@ export function buildImagePrompt(
          flux가 참조를 통째로 베끼던 문제의 대응이다. 제미나이에선 반대로 **참조가 최우선**이다.
        · 부정문 회피 규칙 — 확산 모델 특성이라 제미나이엔 해당 없다. 그래서 09-02 첫 판에서
          그림에 새겨진 'SHADE' 영어 글씨를 여기서는 곧장 금지한다(별이도 그 이유로 물렸다).
-       남긴 것: 별이의 **그림 습관**(색 4~6·주제 1~3 크게·얼굴 단순·배경 비움·낙서)은 flux 최적화가
-       아니라 별이의 결이고, 별이가 판정 기준으로도 쓴다. */
+       · **참조를 글로 설명하던 문장 전부**(사장 지시 09-02 「참조 그림 들어가 있는 것도 다 걷어내야 돼」).
+         참조는 포즈 시트다 — 제미나이는 이미지를 직접 보므로 「image 0은 소녀」 같은 해설이 필요 없고,
+         영어 설명이 길수록 제 스타일(정교한 상업 일러스트)로 끌려간다. **그림체는 참조가 말한다.**
+       · 색·선·얼굴을 글로 규정하던 줄들 — 같은 이유로 걷었다. 참조에 이미 다 있다.
+       남긴 것: 그날 기억(장면·주제·낙서)과 「빈 자리를 남긴다」 한 줄, 그리고 글씨 금지. */
     return [
       'A hand-drawn diary sketch, drawn from memory.',
       `Scene: ${scene}`,
@@ -373,20 +376,9 @@ export function buildImagePrompt(
       // 아무도 안 불렀으면 사람도 동물도 그리지 않는다 — 그날 남은 건 사물과 자리뿐이다
       nChar === 0
         ? 'No people and no animals in this picture — draw only the objects and the place that mattered today.'
-        : '',
-      // 참조가 그림체를 정한다 — 글로 그림체를 설명하지 않는다
-      nChar >= 2
-        ? 'Images 0 and 1 are the authoritative reference — image 0 is the girl, image 1 is the white cat. Match their drawing style, line quality, colouring and proportions as closely as you can: the reference decides how this picture looks. Keep the girl’s exact appearance and the cat’s all-white fur. Render one continuous scene.'
-        : nChar === 1
-          ? 'Image 0 is the authoritative reference for the characters and for the drawing style. Match its line quality, colouring and proportions as closely as you can. Render one continuous scene.'
-          : '',
-      // 별이의 그림 습관 — 그림체가 아니라 구성 규칙이라 참조와 다투지 않는다
-      'A flat palette of four to six colours, flat even fills.',
-      'One to three main subjects drawn large; bare background, only what mattered that day.',
-      'The girl’s face stays simple — a few dots and lines, no fine detail.',
-      // 부른 상대만 못박는다 (안 부른 상대의 생김새를 말하면 모델이 불러들인다)
-      hasGirl ? 'The girl’s cheeks are plain bare skin, the same tone as the rest of her face.' : '',
-      hasCat ? 'The cat is entirely white — all-white fur from head to tail.' : '',
+        : 'Draw the characters exactly as in the reference images.',
+      // 별이의 그림 습관 — 그림체가 아니라 구성 규칙이다
+      'Only what mattered that day; leave the rest of the page empty.',
       `Around the subjects add ${doodleFor(memory)}.`,
       avoid.length
         ? `Fix these problems from the previous attempts: ${avoid.slice(-3).map((a) => a.replace(/\s+/g, ' ').slice(0, 160)).join(' | ')}`

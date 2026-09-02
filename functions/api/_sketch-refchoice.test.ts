@@ -136,12 +136,14 @@ test('제미나이 판은 모눈종이와 flux 대응을 걷어낸다', () => {
   assert.equal(/graph paper|grid paper/.test(g), false);   // 모눈종이 없음
   assert.equal(/pose vocabulary/.test(g), false);          // 참조 약화 지시 없음
   assert.equal(/flat scan|top-down/.test(g), false);       // 공책사진 대응 없음
+  assert.equal(/four to six colours|four to six colors/.test(g), false);   // 색 규정도 글로 하지 않는다
 });
 
-test('제미나이 판은 참조를 최우선으로 세운다', () => {
-  const g = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 2, styles: 0 }, null, [], 'gemini');
-  assert.match(g, /authoritative reference/);
-  assert.match(g, /the reference decides how this picture looks/);
+test('제미나이 판은 참조를 글로 설명하지 않는다 — 그림체는 참조가 말한다 (사장 지시 09-02)', () => {
+  const g = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 2, styles: 0 }, null, [], 'gemini', ['별이', '빼콩이(고양이)']);
+  assert.equal(/image 0 is the girl|reference sheets|pose vocabulary/.test(g), false);  // 참조 해설 없음
+  assert.equal(/flat palette|navy-blue ink|rough .* outlines/.test(g), false);          // 그림체 서술도 없음
+  assert.match(g, /exactly as in the reference images/);                                 // 참조를 따르라는 한 줄만
 });
 
 test('제미나이 판은 그림 속 글씨를 막는다 (09-02 「SHADE」가 그려진 사고)', () => {
@@ -160,21 +162,19 @@ test('아무도 안 부르면 사람도 동물도 그리지 않는다 (09-02 무
   const g = buildImagePrompt(mem, null, 's', [], { characters: 0, styles: 0 }, '쪼그려 앉는다', [], 'gemini', []);
   assert.match(g, /No people and no animals/);
   assert.equal(/Girl's action/.test(g), false);        // 참조가 없으면 소녀를 시키지 않는다
-  assert.equal(/cheeks are plain/.test(g), false);     // 안 부른 상대의 생김새도 말하지 않는다
-  assert.equal(/entirely white/.test(g), false);
+  assert.equal(/reference images/.test(g), false);     // 부를 참조가 없으니 참조 얘기도 없다
 });
 
 test('별이만 부르면 별이만 말한다', () => {
   const g = buildImagePrompt(mem, null, 's', [], { characters: 1, styles: 0 }, '쪼그려 앉는다', [], 'gemini', ['별이']);
   assert.match(g, /Girl's action/);
-  assert.match(g, /cheeks are plain/);
-  assert.equal(/entirely white/.test(g), false);       // 빼콩이는 안 불렀으니 언급 없음
+  assert.match(g, /exactly as in the reference images/);
 });
 
 test('빼콩이만 부르면 소녀 동작을 시키지 않는다', () => {
   const g = buildImagePrompt(mem, null, 's', [], { characters: 1, styles: 0 }, '쪼그려 앉는다', [], 'gemini', ['빼콩이(고양이)']);
   assert.equal(/Girl's action/.test(g), false);
-  assert.match(g, /entirely white/);
+  assert.match(g, /exactly as in the reference images/);
 });
 
 test('flux 판은 이 변경에 영향받지 않는다 (되돌리기 보장)', () => {
