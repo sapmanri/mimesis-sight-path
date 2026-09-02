@@ -733,9 +733,8 @@ async function generateDaily(
   //   (4콜 연속 ai_run_timeout_100s) 그때 이 한 줄이 밤 전체를 막았다. 제미나이 어댑터와 키는
   //   이미 있으니, **별이 그림체 판정만 나면 환경변수 한 줄로 갈아탄다.**
   //   ⚠ 기본값은 그대로 workers-ai — 그림체는 별이의 정체성이라 사장 판정 없이 바꾸지 않는다.
-  const provider = selectProvider(
-    (env.DAILY_IMAGE_PROVIDER === 'gemini' ? 'gemini' : 'workers-ai'), env,
-  );
+  const providerId = env.DAILY_IMAGE_PROVIDER === 'gemini' ? 'gemini' as const : 'workers-ai' as const;
+  const provider = selectProvider(providerId, env);
   const sceneEn = await translateScene(env, day.event.lines).catch(() => null);
   const subjTr = day.event.targetLabel
     ? await translateSubjects(env, [day.event.targetLabel])
@@ -763,6 +762,7 @@ async function generateDaily(
     { characters: refs.length, styles: 0 },
     NIGHTLY_POSE_VARIANTS[n % NIGHTLY_POSE_VARIANTS.length],
     rejections,   // 별이가 앞서 물린 이유 — 같은 실수를 되풀이하지 않는다
+    providerId,   // 그림체 층 — flux 판은 그대로, 되돌리기는 환경변수 한 줄
   );
   const promptHash = hashPrompt(prompt);
   // trialId는 첫 호출 것을 계승 — 번역이 매번 조금 달라도 같은 하루의 한 시도로 묶는다

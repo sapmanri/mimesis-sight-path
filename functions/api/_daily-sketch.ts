@@ -328,6 +328,14 @@ export function buildImagePrompt(
    * 68일 중 21일이 「별이가 전부 물림」이었던 정체가 이것이다. 이제 물린 이유가 다음 장에 실린다.
    */
   avoid: string[] = [],
+  /**
+   * 그림체 층을 고른다 (사장 판정 2026-09-02 「그림체 전혀 아니야 … 모눈종이 하드코딩에서 빼버려 ·
+   * 참조 그림을 최우선으로 · 나머지 flux 최적화 하드코딩도 빼버려 · **되돌릴 수 있게 잘 내비둬**」).
+   *
+   * ⚠ **flux 판(기본값)은 한 글자도 안 고쳤다.** `DAILY_IMAGE_PROVIDER`를 지우거나 workers-ai로
+   *   두면 아래 상수도 이 함수도 예전 그대로 돈다 — 되돌리기는 환경변수 한 줄이다.
+   */
+  provider: 'workers-ai' | 'gemini' = 'workers-ai',
 ): string {
   const roles: RefRoles = typeof refs === 'number' ? { characters: refs, styles: 0 } : refs;
   const nChar = roles.characters ?? 0;
@@ -335,6 +343,41 @@ export function buildImagePrompt(
   const d = SKETCH_DENSITY[memory.density];
   const focus = (genome?.selection ?? []).map((f) => FOCUS_DRAW_EN[f]).filter(Boolean).slice(0, 2);
   const scene = (sceneEn ?? '').trim() || 'a quiet small moment';
+  if (provider === 'gemini') {
+    /* 제미나이 판 — flux 최적화 잔재를 걷어낸 것들과 그 이유:
+       · **모눈종이 세 줄**(SKETCH_RULES_EN[0] · SKETCH_POSITIVE[0] · STYLE_SHEET_EN의 'grid paper').
+         사장 판정: 하드코딩에서 뺀다.
+       · 'flat scan, top-down' — flux가 '공책을 찍은 사진'을 만들던 문제의 대응이었다.
+       · **참조를 약하게 쓰라는 긴 지시**('pose vocabulary' · 'do not copy any single panel') —
+         flux가 참조를 통째로 베끼던 문제의 대응이다. 제미나이에선 반대로 **참조가 최우선**이다.
+       · 부정문 회피 규칙 — 확산 모델 특성이라 제미나이엔 해당 없다. 그래서 09-02 첫 판에서
+         그림에 새겨진 'SHADE' 영어 글씨를 여기서는 곧장 금지한다(별이도 그 이유로 물렸다).
+       남긴 것: 별이의 **그림 습관**(색 4~6·주제 1~3 크게·얼굴 단순·배경 비움·낙서)은 flux 최적화가
+       아니라 별이의 결이고, 별이가 판정 기준으로도 쓴다. */
+    return [
+      'A hand-drawn diary sketch, drawn from memory.',
+      `Scene: ${scene}`,
+      poseVariant ? `Girl's action: ${poseVariant}` : '',
+      pinnedSubjectClause(subjects, d.maxSubjects),
+      focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
+      // 참조가 그림체를 정한다 — 글로 그림체를 설명하지 않는다
+      nChar >= 2
+        ? 'Images 0 and 1 are the authoritative reference — image 0 is the girl, image 1 is the white cat. Match their drawing style, line quality, colouring and proportions as closely as you can: the reference decides how this picture looks. Keep the girl’s exact appearance and the cat’s all-white fur. Render one continuous scene.'
+        : nChar === 1
+          ? 'Image 0 is the authoritative reference for the characters and for the drawing style. Match its line quality, colouring and proportions as closely as you can. Render one continuous scene.'
+          : '',
+      // 별이의 그림 습관 — 그림체가 아니라 구성 규칙이라 참조와 다투지 않는다
+      'A flat palette of four to six colours, flat even fills.',
+      'One to three main subjects drawn large; bare background, only what mattered that day.',
+      'The girl’s face stays simple — a few dots and lines, no fine detail.',
+      `${CHARACTER_SHEET_EN.join('. ')}.`,
+      `Around the subjects add ${doodleFor(memory)}.`,
+      avoid.length
+        ? `Fix these problems from the previous attempts: ${avoid.slice(-3).map((a) => a.replace(/\s+/g, ' ').slice(0, 160)).join(' | ')}`
+        : '',
+      'Do not draw any text, letters, words or numbers anywhere in the picture.',
+    ].filter((l) => l !== '').join('\n');
+  }
   return [
     // "A page from a girl's diary"로 시작하면 모델이 '공책을 찍은 사진'을 만든다(2차 실패).
     // 그림 자체를 말한다 — sketch / drawing / illustration 비중을 앞으로.

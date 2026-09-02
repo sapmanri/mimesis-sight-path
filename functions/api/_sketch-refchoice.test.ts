@@ -117,3 +117,40 @@ test('경계 못박기 — 큐는 **어제(D-1)를 반드시** 본다 (09-01 하
   // 달 넘김도 밀리지 않는다
   assert.equal(await findPendingDate(only('2026-07-31'), '2026-08-01', 3), '2026-07-31');
 });
+
+// ── 09-02 그림체 층: 되돌릴 수 있어야 한다 (사장 지시 「되돌릴 수 있게 잘 내비둬」)
+import { buildImagePrompt, type MemoryEvent } from './_daily-sketch.ts';
+
+const mem = { density: 'normal', lines: ['그늘 찾는 개'], targetLabel: '개' } as unknown as MemoryEvent;
+
+test('flux 판은 한 글자도 안 바뀐다 — 기본값과 명시 지정이 같다', () => {
+  const implicit = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 2, styles: 0 }, null, []);
+  const explicit = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 2, styles: 0 }, null, [], 'workers-ai');
+  assert.equal(implicit, explicit);
+  assert.match(implicit, /graph paper/);        // 모눈종이는 flux 판에 그대로 남아 있다
+  assert.match(implicit, /pose vocabulary/);    // 참조를 약하게 쓰라는 flux 대응도 그대로
+});
+
+test('제미나이 판은 모눈종이와 flux 대응을 걷어낸다', () => {
+  const g = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 2, styles: 0 }, null, [], 'gemini');
+  assert.equal(/graph paper|grid paper/.test(g), false);   // 모눈종이 없음
+  assert.equal(/pose vocabulary/.test(g), false);          // 참조 약화 지시 없음
+  assert.equal(/flat scan|top-down/.test(g), false);       // 공책사진 대응 없음
+});
+
+test('제미나이 판은 참조를 최우선으로 세운다', () => {
+  const g = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 2, styles: 0 }, null, [], 'gemini');
+  assert.match(g, /authoritative reference/);
+  assert.match(g, /the reference decides how this picture looks/);
+});
+
+test('제미나이 판은 그림 속 글씨를 막는다 (09-02 「SHADE」가 그려진 사고)', () => {
+  const g = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 1, styles: 0 }, null, [], 'gemini');
+  assert.match(g, /Do not draw any text/);
+});
+
+test('물린 이유는 두 판 모두에 실린다', () => {
+  const why = ['1장: 개가 없다'];
+  assert.match(buildImagePrompt(mem, null, 's', [], 1, null, why, 'workers-ai'), /개가 없다/);
+  assert.match(buildImagePrompt(mem, null, 's', [], 1, null, why, 'gemini'), /개가 없다/);
+});
