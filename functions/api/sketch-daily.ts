@@ -105,6 +105,14 @@ export function recoIsHonestTerminal(reco: HonestRecoLike | null): boolean {
 }
 /** 하루에 그려 볼 최대 장 수. 다 쓰면 그 하루는 정직하게 접는다(큐 무한 성장 방지). */
 const MAX_ATTEMPTS = 6;
+/**
+ * 판정 기준의 판. 이 값이 바뀌면 **이미 그린 장들을 새 자로 다시 잰다** (다시 그리지 않는다).
+ * ⚠ 실사고 2026-09-02: 그리는 규칙에서 옛 flux 하드코딩을 걷어냈는데 재는 자에는 남겨 둬서
+ *   훌륭한 6장이 전부 물렸다(사장 육안 「6장 다 훌륭한데??」). 기준을 고친 뒤에도 그 하루는
+ *   attempts_exhausted로 잠겨 영영 못 나갈 뻔했다 — 기각은 그때 쓰던 자에 매인 판정이지
+ *   그림의 속성이 아니다. 그래서 자를 갈면 잠금과 기각 사유를 함께 버린다.
+ */
+const JUDGE_VERSION = 'refs-v1';
 /** 못 끝낸 하루를 며칠까지 이어 그리나 (사장 판정 09-01: 3일). */
 const PENDING_DAYS = 3;
 /**
@@ -212,21 +220,41 @@ export function parseJudgeText(text: string): { pick?: number; reasons?: string;
   };
 }
 
+/**
+ * ⚠ 실사고 2026-09-02: **그림은 훌륭한데 6장이 전부 물렸다.** 사장 육안 판정 「그냥 보기에 6장 다
+ * 훌륭한데??」. 원인은 그림이 아니라 **판정 기준**이었다 — 그리는 쪽에서 옛 flux 하드코딩(모눈종이·
+ * 낙서·색 4~6개·그림자 없음)을 걷어냈는데 **판정하는 쪽에는 그대로 남겨 뒀다.** 기각 사유 여섯 줄이
+ * 전부 그 규칙을 읊었다("모눈 배경 부재", "색이 6개를 넘어", "음영이 많아").
+ * 즉 참조 그림을 잘 따를수록 떨어지는 구조였다 — 그리는 규칙과 재는 자가 어긋나면 밤이 통째로 죽는다.
+ * 그래서 **그림체 기준을 참조 그림 자체로 바꾼다**: 참조를 판정에도 붙이고, 말로 된 그림체 규칙은 뺀다.
+ * flux 층은 손대지 않는다(styleRefs 없이 부르면 옛 기준 그대로) — 되돌리기는 환경변수 한 줄.
+ */
 async function judgeCandidates(
   env: Env, day: DayMemory, images: { seed: number; bytes: ArrayBuffer; mediaType: VisionMediaType }[],
+  styleRefs: { name: string; bytes: ArrayBuffer; contentType: string }[] = [],
 ): Promise<JudgeOutcome> {
   if (!env.ANTHROPIC_API_KEY) return { reco: null, error: 'judge_key_missing' };
   if (!images.length) return { reco: null, error: 'judge_images_missing' };
   try {
+    const styleLine = styleRefs.length
+      ? `- 그림체: 맨 앞 ${styleRefs.length}장이 별이와 빼콩이의 **정본 참조**다. 그림체 기준은 오직 이 참조다 — 참조와 같은 인물, 같은 선, 같은 색감인가만 본다. 종이 바탕·낙서·색 개수·음영 같은 말로 된 옛 규칙은 적용하지 않는다.`
+      : `- 그림 습관: ${SKETCH_RULES.join(' · ')}`;
     const content: unknown[] = [{
       type: 'text',
       text: `별이의 그림일기 후보 ${images.length}장이다. 판정 기준(예쁜가가 아니다):
 - Character Identity: ${CHARACTER_IDENTITY_CHECKS.join(' · ')}
-- 그림 습관: ${SKETCH_RULES.join(' · ')}
+${styleLine}
+- 별이와 빼콩이가 둘 다 나왔는가 (사물만 있는 날에도 둘은 늘 나온다)
 - 이 하루의 기억과 맞는가: ${day.event.lines.join(' / ')} (가장 크게: ${day.event.targetLabel ?? '—'})
 각 장의 합격/불합격과 한 줄 사유, 그리고 추천 1장(1~${images.length}, 전부 불합격이면 0)을 JSON으로만:
 {"verdicts": ["1장: ..."], "pick": n, "reasons": "추천 사유 한 줄"}`,
     }];
+    // 참조를 먼저 넣는다 — 뒤에 오는 것이 심사 대상이다
+    for (const r of styleRefs) {
+      const mt = detectVisionMediaType(r.bytes);
+      if (mt) content.push({ type: 'image', source: { type: 'base64', media_type: mt, data: bytesToB64(r.bytes) } });
+    }
+    if (styleRefs.length) content.push({ type: 'text', text: '여기까지가 참조다. 아래가 오늘 심사할 후보다.' });
     for (const im of images) {
       content.push({
         type: 'image',
@@ -554,6 +582,19 @@ async function handleDaily(
   });
 }
 
+/** 화면이 배정한 캐릭터 참조를 R2에서 읽는다. 그리는 쪽과 재는 쪽이 **같은 목록**을 봐야 한다. */
+export async function loadCharacterRefs(env: Env): Promise<{ name: string; bytes: ArrayBuffer; contentType: string }[]> {
+  const roles = await readRefRoles(env);
+  const assigned = refsWithRole(roles, 'character');
+  const keys = orderCharacterRefs(assigned.length ? assigned : DAILY_REFS_FALLBACK);
+  const out: { name: string; bytes: ArrayBuffer; contentType: string }[] = [];
+  for (const key of keys) {
+    const obj = await env.CAPTURES.get(key);
+    if (obj) out.push({ name: key.split('/').pop() ?? 'ref', bytes: await obj.arrayBuffer(), contentType: obj.httpMetadata?.contentType ?? 'image/png' });
+  }
+  return out;
+}
+
 async function generateDaily(
   env: Env, date: string, day: DayMemory, reset = false,
 ): Promise<{
@@ -564,7 +605,7 @@ async function generateDaily(
   const prevRaw = await env.PLANET.get(RECO_KEY(date));
   const prev = prevRaw ? JSON.parse(prevRaw) as {
     trialId?: string; picks?: { seed: number; r2Key: string }[]; errors?: string[]; skipped?: string;
-    status?: string; reco?: CandidateRecommendation | null;
+    status?: string; reco?: CandidateRecommendation | null; judgeVersion?: string;
   } : null;
   const priorPicks = (!reset && !prev?.skipped && Array.isArray(prev?.picks)) ? prev!.picks! : [];
   const errors: string[] = [];
@@ -577,8 +618,11 @@ async function generateDaily(
 //     ① 마감을 없앤다 — 못 끝낸 하루는 큐에 남고 다음 날들이 이어 그린다(?pending=1).
 //     ② 3장 묶음 → 한 장씩: 그리고 바로 보이고, 통과하면 거기서 끝난다(운 좋은 날은 1/3 시간).
 //     ③ 물린 이유가 다음 장 프롬프트에 실린다 — 같은 이유로 셋이 물리던 21일의 정체를 친다.
-  const judgedCount = (!reset && typeof prev?.judgedCount === 'number') ? prev.judgedCount : 0;
-  const rejections: string[] = (!reset && Array.isArray(prev?.rejections)) ? prev!.rejections! : [];
+  // 자가 바뀌었으면 이 하루의 판정을 처음부터 다시 — 그린 장(picks)은 그대로 둔다.
+  const staleJudge = !reset && (prev?.judgedCount ?? 0) > 0 && prev?.judgeVersion !== JUDGE_VERSION;
+  if (staleJudge) errors.push(`judge_reset: 판정 기준이 ${prev?.judgeVersion ?? '(옛 판)'} → ${JUDGE_VERSION}으로 바뀌어 이미 그린 ${priorPicks.length}장을 다시 잰다`);
+  const judgedCount = (!reset && !staleJudge && typeof prev?.judgedCount === 'number') ? prev.judgedCount : 0;
+  const rejections: string[] = (!reset && !staleJudge && Array.isArray(prev?.rejections)) ? prev!.rejections! : [];
 
   // ① 아직 별이가 안 본 장이 있으면 **그 한 장**을 본다
   if (priorPicks.length > judgedCount) {
@@ -594,18 +638,20 @@ async function generateDaily(
       errors.push(judgeError);
       // 읽을 수 없는 장은 본 것으로 치고 넘어간다 — 여기서 멈추면 그날이 영영 막힌다
       await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-        ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount: judgedCount + 1,
+        ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount: judgedCount + 1, judgeVersion: JUDGE_VERSION,
         rejections: [...rejections, `${judgedCount + 1}장: 파일을 읽지 못함`],
         status: 'partial', errors: [...(prev?.errors ?? []), ...errors], judgeError,
       }));
       return { made: 0, total: priorPicks.length, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_skip_unreadable' };
     }
-    const judged = await judgeCandidates(env, day, [{ seed: pk.seed, bytes, mediaType }]);
+    // 그림체 기준은 참조 그림이다 — 재는 자에게도 같은 참조를 쥐여 준다(09-02 6장 전멸 사고).
+    const judgeRefs = env.DAILY_IMAGE_PROVIDER === 'gemini' ? await loadCharacterRefs(env) : [];
+    const judged = await judgeCandidates(env, day, [{ seed: pk.seed, bytes, mediaType }], judgeRefs);
     if (!judged.reco) {
       const judgeError = judged.error ?? 'judge_unknown_failure';
       errors.push(judgeError);
       await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-        ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount, rejections,
+        ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount, judgeVersion: JUDGE_VERSION, rejections,
         status: 'judge_failed', errors: [...(prev?.errors ?? []), ...errors], judgeError,
       }));
       return { made: 0, total: priorPicks.length, done: false, trialId: prev?.trialId ?? '', errors, phase: 'judge_retry' };
@@ -616,7 +662,7 @@ async function generateDaily(
       await env.PLANET.put(RECO_KEY(date), JSON.stringify({
         ...prev, date, at: Date.now(), picks: priorPicks,
         reco: { ...judged.reco, pick: judgedCount + 1 },
-        judgedCount: judgedCount + 1, rejections,
+        judgedCount: judgedCount + 1, judgeVersion: JUDGE_VERSION, rejections,
         status: 'done', failed: false, errors: [...(prev?.errors ?? []), ...errors],
         judgedAt: Date.now(), judgeError: null,
         errorCode: null, errorName: null, errorMessage: null, stage: 'complete',
@@ -629,7 +675,7 @@ async function generateDaily(
       .replace(/^\s*\d+장\s*:\s*/, '').slice(0, 200);
     await env.PLANET.put(RECO_KEY(date), JSON.stringify({
       ...prev, date, at: Date.now(), picks: priorPicks, reco: null,
-      judgedCount: judgedCount + 1, rejections: [...rejections, `${judgedCount + 1}장: ${why}`],
+      judgedCount: judgedCount + 1, judgeVersion: JUDGE_VERSION, rejections: [...rejections, `${judgedCount + 1}장: ${why}`],
       status: 'partial', errors: [...(prev?.errors ?? []), ...errors],
     }));
     return { made: 0, total: priorPicks.length, done: false, trialId: prev?.trialId ?? '', errors: [...errors, `rejected_${judgedCount + 1}: ${why.slice(0, 80)}`], phase: 'rejected_draw_next' };
@@ -638,7 +684,7 @@ async function generateDaily(
   // ② 시도 상한 — 큐가 무한히 자라지 않게. 다 쓰면 정직한 종결로 접는다.
   if (priorPicks.length >= MAX_ATTEMPTS) {
     await env.PLANET.put(RECO_KEY(date), JSON.stringify({
-      ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount, rejections,
+      ...prev, date, at: Date.now(), picks: priorPicks, reco: null, judgedCount, judgeVersion: JUDGE_VERSION, rejections,
       status: 'failed', failed: true, stage: 'attempts_exhausted',
       errorCode: 'attempts_exhausted', errorName: 'AttemptsExhausted',
       errorMessage: `${MAX_ATTEMPTS}장을 그렸는데 별이가 전부 물렸다 — 그날 기억과 맞는 그림을 못 얻었다`,
@@ -656,6 +702,7 @@ async function generateDaily(
   //   ⚠ 기본값은 그대로 workers-ai — 그림체는 별이의 정체성이라 사장 판정 없이 바꾸지 않는다.
   const providerId = env.DAILY_IMAGE_PROVIDER === 'gemini' ? 'gemini' as const : 'workers-ai' as const;
   const provider = selectProvider(providerId, env);
+  const providerModel = providerId === 'gemini' ? (env.GEMINI_IMAGE_MODEL ?? 'gemini-image') : DAILY_MODEL;
   const sceneEn = await translateScene(env, day.event.lines).catch(() => null);
   const subjTr = day.event.targetLabel
     ? await translateSubjects(env, [day.event.targetLabel])
@@ -717,7 +764,7 @@ async function generateDaily(
     await env.PLANET.put(RECO_KEY(date), JSON.stringify({
       date, at: Date.now(), trialId,
       picks: newPick ? [...priorPicks, newPick] : priorPicks,
-      judgedCount, rejections,
+      judgedCount, judgeVersion: JUDGE_VERSION, rejections,
       reco: null,
       errors: [...(prev?.errors ?? []).filter((e) => typeof e === 'string'), ...errors],
       status: newPick ? 'images_ready' : 'partial',   // 09-01: 한 장 그리면 곧 판정 차례다
@@ -736,7 +783,10 @@ async function generateDaily(
   }
   await env.CAPTURES.put(r2Key, art.bytes, { httpMetadata: { contentType: outputMediaType } });
   const record: TrialRecord = {
-    trialId, createdAt: Date.now(), providerId: 'workers-ai', model: DAILY_MODEL,
+    // ⚠ 09-02: 여기가 'workers-ai'·flux로 박혀 있어서, **제미나이로 그린 밤의 영수증에
+    //   flux-2-dev라고 적혔다**(r2Key까지 _cf_black-forest-labs_flux-2-dev-N.png). 무엇으로 그렸는지를
+    //   기록이 거짓말하면 그림체 사고를 영영 못 쫓는다 — 실제로 쓴 층을 적는다.
+    trialId, createdAt: Date.now(), providerId, model: providerModel,
     params: { steps: DAILY_STEPS, width: 1024, height: 1024 }, seed: base + n, r2Key,
     promptHash, sketchVersion: SKETCH_VERSION, note: 'daily-auto (판정 추천작 1장 예약 발행)',
     referenceApplied: usedRefs, role: usedRefs ? 'candidate' : 'control',
