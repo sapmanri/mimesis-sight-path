@@ -203,12 +203,8 @@ interface JudgeOutcome { reco: CandidateRecommendation | null; error: string | n
  * 폴백: 키 없음·응답 깨짐이면 **기존대로 전부 부른다**(그림이 아예 없는 것보다 낫다).
  *   고르지 못했다는 사실은 반드시 남긴다 — 조용한 실패 금지.
  */
-export function refPersonaName(key: string): string {
-  const f = key.split('/').pop() ?? key;
-  if (/byeol|girl/i.test(f)) return '별이';
-  if (/ppaekong|cat/i.test(f)) return '빼콩이(고양이)';
-  return f.replace(/\.[a-z0-9]+$/i, '');
-}
+export { refPersonaName } from './_daily-sketch.ts';
+import { refPersonaName } from './_daily-sketch.ts';
 
 /** 별이 응답 → 부를 참조. 파싱 실패는 null(=전부 부르기 폴백)로 돌려 호출부가 남기게 한다. */
 export function parseRefChoice(text: string, count: number): { call: number[]; reason: string } | null {

@@ -97,6 +97,17 @@ export const CHARACTER_SHEET = [
   '빼콩이: 온몸이 흰 고양이 (올화이트)',
 ] as const;
 
+/**
+ * 참조 파일 이름 → 그 상대의 이름. 별이의 선택과 프롬프트가 **같은 이름표**를 봐야 한다.
+ * (sketch-daily와 실험실이 함께 쓴다 — 순환 참조를 피해 여기 둔다.)
+ */
+export function refPersonaName(key: string): string {
+  const f = key.split('/').pop() ?? key;
+  if (/byeol|girl/i.test(f)) return '별이';
+  if (/ppaekong|cat/i.test(f)) return '빼콩이(고양이)';
+  return f.replace(/\.[a-z0-9]+$/i, '');
+}
+
 export const CHARACTER_SHEET_EN = [
   'the girl’s cheeks are plain bare skin, the same tone as the rest of her face',
   'the cat is entirely white — all-white fur from head to tail',

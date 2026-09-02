@@ -16,7 +16,7 @@ import {
   selectProvider, trialKey, TRIAL_R2_PREFIX, WORKERS_AI_CANDIDATES, MAX_REFERENCE_IMAGES,
   type ImageProviderId, type ImageProviderEnv, type DailySketchPlan, type ReferenceImage,
 } from '../_image-provider.ts';
-import { buildSketchPrompt, buildImagePrompt, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, glossaryLine, type MemoryEvent } from '../_daily-sketch.ts';
+import { buildSketchPrompt, buildImagePrompt, refPersonaName, SKETCH_RULES, SKETCH_DENSITY, SKETCH_VERSION, CHARACTER_IDENTITY_CHECKS, glossaryLine, type MemoryEvent } from '../_daily-sketch.ts';
 import { memoryKey, type DayMemory } from '../_memory-event.ts';
 import { buildGenomeContext } from '../_genome-identity.ts';
 
@@ -318,7 +318,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const mem = { ...memory, targetLabel: sc.targetLabel ?? memory.targetLabel, lines: sc.lines ?? memory.lines };
     return {
       label: sc.label ?? null,
-      prompt: buildImagePrompt(mem, trialGenome, sc.sceneEn ?? sceneEn, sc.subjects ?? subjects, { characters: nChar, styles: nStyle }),
+      // ⚠ 09-02: 실험실이 실전과 **다른 프롬프트**를 쓰고 있었다 — 제미나이를 골라도 flux 판(모눈종이·
+      //   참조 해설)이 나갔다. 사장이 여기서 그림체를 판정하는데 실전과 다르면 그 판정이 헛것이 된다.
+      prompt: buildImagePrompt(
+        mem, trialGenome, sc.sceneEn ?? sceneEn, sc.subjects ?? subjects,
+        { characters: nChar, styles: nStyle }, null, [],
+        providerId === 'gemini' ? 'gemini' : 'workers-ai',
+        referenceKeys.map(refPersonaName),
+      ),
     };
   });
   const prompt = shotPlans[0].prompt;
