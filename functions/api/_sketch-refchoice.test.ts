@@ -154,3 +154,32 @@ test('물린 이유는 두 판 모두에 실린다', () => {
   assert.match(buildImagePrompt(mem, null, 's', [], 1, null, why, 'workers-ai'), /개가 없다/);
   assert.match(buildImagePrompt(mem, null, 's', [], 1, null, why, 'gemini'), /개가 없다/);
 });
+
+// ── 09-02 모순 고리: 부르지 않은 상대는 그림에서도 말하지 않는다
+test('아무도 안 부르면 사람도 동물도 그리지 않는다 (09-02 무한 물림 고리)', () => {
+  const g = buildImagePrompt(mem, null, 's', [], { characters: 0, styles: 0 }, '쪼그려 앉는다', [], 'gemini', []);
+  assert.match(g, /No people and no animals/);
+  assert.equal(/Girl's action/.test(g), false);        // 참조가 없으면 소녀를 시키지 않는다
+  assert.equal(/cheeks are plain/.test(g), false);     // 안 부른 상대의 생김새도 말하지 않는다
+  assert.equal(/entirely white/.test(g), false);
+});
+
+test('별이만 부르면 별이만 말한다', () => {
+  const g = buildImagePrompt(mem, null, 's', [], { characters: 1, styles: 0 }, '쪼그려 앉는다', [], 'gemini', ['별이']);
+  assert.match(g, /Girl's action/);
+  assert.match(g, /cheeks are plain/);
+  assert.equal(/entirely white/.test(g), false);       // 빼콩이는 안 불렀으니 언급 없음
+});
+
+test('빼콩이만 부르면 소녀 동작을 시키지 않는다', () => {
+  const g = buildImagePrompt(mem, null, 's', [], { characters: 1, styles: 0 }, '쪼그려 앉는다', [], 'gemini', ['빼콩이(고양이)']);
+  assert.equal(/Girl's action/.test(g), false);
+  assert.match(g, /entirely white/);
+});
+
+test('flux 판은 이 변경에 영향받지 않는다 (되돌리기 보장)', () => {
+  const a = buildImagePrompt(mem, null, 's', [], { characters: 2, styles: 0 }, '쪼그려 앉는다', [], 'workers-ai', []);
+  const b = buildImagePrompt(mem, null, 's', [], { characters: 2, styles: 0 }, '쪼그려 앉는다', [], 'workers-ai', ['별이', '빼콩이(고양이)']);
+  assert.equal(a, b);                                   // 부른 상대와 무관하게 옛 문자열 그대로
+  assert.match(a, /Girl's action/);
+});

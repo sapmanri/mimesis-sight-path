@@ -336,6 +336,14 @@ export function buildImagePrompt(
    *   두면 아래 상수도 이 함수도 예전 그대로 돈다 — 되돌리기는 환경변수 한 줄이다.
    */
   provider: 'workers-ai' | 'gemini' = 'workers-ai',
+  /**
+   * 별이가 **실제로 부른** 상대들(예: ['별이'] · ['빼콩이(고양이)'] · []).
+   * 09-02 실사고: 별이가 「오늘 기억엔 우산·창·바구니뿐, 별이도 빼콩이도 등장하지 않는다」며
+   * 아무도 안 불렀는데 **프롬프트는 여전히 「소녀의 동작」을 시켰다.** 참조 없이 아무 아이나
+   * 그려졌고, 그걸 별이가 「별이 캐릭터가 아니다」로 물렸다 — 스스로 되풀이하는 모순 고리였다.
+   * 이제 **부르지 않은 상대는 그림에서도 말하지 않는다** — 참조가 없으면 캐릭터도 없다.
+   */
+  characterNames: string[] = [],
 ): string {
   const roles: RefRoles = typeof refs === 'number' ? { characters: refs, styles: 0 } : refs;
   const nChar = roles.characters ?? 0;
@@ -343,6 +351,8 @@ export function buildImagePrompt(
   const d = SKETCH_DENSITY[memory.density];
   const focus = (genome?.selection ?? []).map((f) => FOCUS_DRAW_EN[f]).filter(Boolean).slice(0, 2);
   const scene = (sceneEn ?? '').trim() || 'a quiet small moment';
+  const hasGirl = characterNames.some((n) => n.includes('별이'));
+  const hasCat = characterNames.some((n) => n.includes('빼콩'));
   if (provider === 'gemini') {
     /* 제미나이 판 — flux 최적화 잔재를 걷어낸 것들과 그 이유:
        · **모눈종이 세 줄**(SKETCH_RULES_EN[0] · SKETCH_POSITIVE[0] · STYLE_SHEET_EN의 'grid paper').
@@ -357,9 +367,13 @@ export function buildImagePrompt(
     return [
       'A hand-drawn diary sketch, drawn from memory.',
       `Scene: ${scene}`,
-      poseVariant ? `Girl's action: ${poseVariant}` : '',
+      hasGirl && poseVariant ? `Girl's action: ${poseVariant}` : '',
       pinnedSubjectClause(subjects, d.maxSubjects),
       focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
+      // 아무도 안 불렀으면 사람도 동물도 그리지 않는다 — 그날 남은 건 사물과 자리뿐이다
+      nChar === 0
+        ? 'No people and no animals in this picture — draw only the objects and the place that mattered today.'
+        : '',
       // 참조가 그림체를 정한다 — 글로 그림체를 설명하지 않는다
       nChar >= 2
         ? 'Images 0 and 1 are the authoritative reference — image 0 is the girl, image 1 is the white cat. Match their drawing style, line quality, colouring and proportions as closely as you can: the reference decides how this picture looks. Keep the girl’s exact appearance and the cat’s all-white fur. Render one continuous scene.'
@@ -370,7 +384,9 @@ export function buildImagePrompt(
       'A flat palette of four to six colours, flat even fills.',
       'One to three main subjects drawn large; bare background, only what mattered that day.',
       'The girl’s face stays simple — a few dots and lines, no fine detail.',
-      `${CHARACTER_SHEET_EN.join('. ')}.`,
+      // 부른 상대만 못박는다 (안 부른 상대의 생김새를 말하면 모델이 불러들인다)
+      hasGirl ? 'The girl’s cheeks are plain bare skin, the same tone as the rest of her face.' : '',
+      hasCat ? 'The cat is entirely white — all-white fur from head to tail.' : '',
       `Around the subjects add ${doodleFor(memory)}.`,
       avoid.length
         ? `Fix these problems from the previous attempts: ${avoid.slice(-3).map((a) => a.replace(/\s+/g, ' ').slice(0, 160)).join(' | ')}`

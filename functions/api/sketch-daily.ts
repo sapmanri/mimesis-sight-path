@@ -763,6 +763,7 @@ async function generateDaily(
     NIGHTLY_POSE_VARIANTS[n % NIGHTLY_POSE_VARIANTS.length],
     rejections,   // 별이가 앞서 물린 이유 — 같은 실수를 되풀이하지 않는다
     providerId,   // 그림체 층 — flux 판은 그대로, 되돌리기는 환경변수 한 줄
+    refKeys.map(refPersonaName),   // 별이가 실제로 부른 상대 — 안 부른 상대는 그림에서도 말하지 않는다
   );
   const promptHash = hashPrompt(prompt);
   // trialId는 첫 호출 것을 계승 — 번역이 매번 조금 달라도 같은 하루의 한 시도로 묶는다
