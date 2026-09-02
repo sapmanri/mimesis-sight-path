@@ -20,7 +20,9 @@ import {
 } from './_memory-event.ts';
 import {
   buildImagePrompt, CHARACTER_IDENTITY_CHECKS, NIGHTLY_POSE_VARIANTS, SKETCH_RULES, SKETCH_VERSION,
+  refPersonaName,
 } from './_daily-sketch.ts';
+export { refPersonaName };
 import { selectProvider, trialKey, type ImageProviderEnv } from './_image-provider.ts';
 // 431 게놈 배선 (08-11): buildSketchPrompt/buildImagePrompt는 처음부터 게놈 인자를 받게
 // 설계됐는데 호출부가 전부 null이었다 — 별이가 그리는데 별이 눈으로 고르질 않았다.
@@ -685,7 +687,7 @@ async function generateDaily(
     NIGHTLY_POSE_VARIANTS[n % NIGHTLY_POSE_VARIANTS.length],
     rejections,   // 별이가 앞서 물린 이유 — 같은 실수를 되풀이하지 않는다
     providerId,   // 그림체 층 — flux 판은 그대로, 되돌리기는 환경변수 한 줄
-    refKeys.map(refPersonaName),   // 별이가 실제로 부른 상대 — 안 부른 상대는 그림에서도 말하지 않는다
+    refKeys.map(refPersonaName),   // 붙은 캐릭터 참조의 이름표(진단용) — 등장 여부는 여기서 안 정한다
   );
   const promptHash = hashPrompt(prompt);
   // trialId는 첫 호출 것을 계승 — 번역이 매번 조금 달라도 같은 하루의 한 시도로 묶는다
