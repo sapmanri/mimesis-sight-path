@@ -4,35 +4,12 @@
 // 호출부가 **전부 부르기 폴백 + 사유 남기기**로 가게 한다 — 조용히 아무도 안 부르면 안 된다.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRefChoice, refPersonaName } from './sketch-daily.ts';
+import { refPersonaName } from './sketch-daily.ts';
 
-test('참조 파일 이름에서 상대를 알아본다', () => {
-  assert.equal(refPersonaName('sketch-refs/byeol-front.png'), '별이');
-  assert.equal(refPersonaName('sketch-refs/ppaekong-sit.png'), '빼콩이(고양이)');
-  assert.equal(refPersonaName('sketch-refs/etc-thing.png'), 'etc-thing');
-});
 
-test('별이가 하나만 부르면 그대로 존중한다 (08-29 사고의 자리)', () => {
-  const r = parseRefChoice('{"call":[1],"reason":"오늘 주인공은 개라 빼콩이는 안 부른다"}', 2);
-  assert.deepEqual(r?.call, [1]);
-  assert.match(r?.reason ?? '', /개/);
-});
 
-test('둘 다 부르는 것도, 아무도 안 부르는 것도 별이의 선택이다', () => {
-  assert.deepEqual(parseRefChoice('{"call":[1,2],"reason":"둘 다 있었다"}', 2)?.call, [1, 2]);
-  assert.deepEqual(parseRefChoice('{"call":[],"reason":"오늘은 사물만"}', 2)?.call, []);
-});
 
-test('범위 밖·중복 번호는 걸러낸다', () => {
-  assert.deepEqual(parseRefChoice('{"call":[1,1,5,0,-2],"reason":"x"}', 2)?.call, [1]);
-});
 
-test('음성 — 깨진 응답은 null이다 (호출부가 전부 부르기로 폴백한다)', () => {
-  assert.equal(parseRefChoice('그냥 말로 대답했다', 2), null);
-  assert.equal(parseRefChoice('{"reason":"call이 없다"}', 2), null);
-  assert.equal(parseRefChoice('{망가진 json', 2), null);
-  assert.equal(parseRefChoice('', 2), null);
-});
 
 // ── 판정 응답 파싱 (08-30 실사고: 잘린 JSON 24회 → 그날 그림 무산)
 import { parseJudgeText } from './sketch-daily.ts';
@@ -157,29 +134,23 @@ test('물린 이유는 두 판 모두에 실린다', () => {
   assert.match(buildImagePrompt(mem, null, 's', [], 1, null, why, 'gemini'), /개가 없다/);
 });
 
-// ── 09-02 모순 고리: 부르지 않은 상대는 그림에서도 말하지 않는다
-test('아무도 안 부르면 사람도 동물도 그리지 않는다 (09-02 무한 물림 고리)', () => {
-  const g = buildImagePrompt(mem, null, 's', [], { characters: 0, styles: 0 }, '쪼그려 앉는다', [], 'gemini', []);
-  assert.match(g, /No people and no animals/);
-  assert.equal(/Girl's action/.test(g), false);        // 참조가 없으면 소녀를 시키지 않는다
-  assert.equal(/reference images/.test(g), false);     // 부를 참조가 없으니 참조 얘기도 없다
+// ── 09-02 사장 판정: 캐릭터 둘은 **항상** 등장한다
+test('사물만 있는 날에도 별이와 빼콩이는 그림에 있다 (flux 시절 규칙 복원)', () => {
+  for (const names of [[], ['별이'], ['빼콩이(고양이)'], ['별이', '빼콩이(고양이)']]) {
+    const g = buildImagePrompt(mem, null, 's', [], { characters: names.length, styles: 0 }, '쪼그려 앉는다', [], 'gemini', names);
+    assert.match(g, /The girl and the white cat are both in this picture, always/);
+    assert.equal(/No people and no animals/.test(g), false);   // 이 줄은 규칙을 깨던 것 — 없어야 한다
+  }
 });
 
-test('별이만 부르면 별이만 말한다', () => {
-  const g = buildImagePrompt(mem, null, 's', [], { characters: 1, styles: 0 }, '쪼그려 앉는다', [], 'gemini', ['별이']);
-  assert.match(g, /Girl's action/);
-  assert.match(g, /exactly as in the reference images/);
-});
-
-test('빼콩이만 부르면 소녀 동작을 시키지 않는다', () => {
-  const g = buildImagePrompt(mem, null, 's', [], { characters: 1, styles: 0 }, '쪼그려 앉는다', [], 'gemini', ['빼콩이(고양이)']);
-  assert.equal(/Girl's action/.test(g), false);
-  assert.match(g, /exactly as in the reference images/);
+test('캐릭터가 늘 있어도 그날의 주제가 가장 크다', () => {
+  const g = buildImagePrompt(mem, null, 's', [], { characters: 2, styles: 0 }, null, [], 'gemini', ['별이', '빼콩이(고양이)']);
+  assert.match(g, /largest thing on the page/);
 });
 
 test('flux 판은 이 변경에 영향받지 않는다 (되돌리기 보장)', () => {
   const a = buildImagePrompt(mem, null, 's', [], { characters: 2, styles: 0 }, '쪼그려 앉는다', [], 'workers-ai', []);
   const b = buildImagePrompt(mem, null, 's', [], { characters: 2, styles: 0 }, '쪼그려 앉는다', [], 'workers-ai', ['별이', '빼콩이(고양이)']);
-  assert.equal(a, b);                                   // 부른 상대와 무관하게 옛 문자열 그대로
-  assert.match(a, /Girl's action/);
+  assert.equal(a, b);
+  assert.match(a, /graph paper/);
 });

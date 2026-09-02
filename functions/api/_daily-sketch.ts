@@ -348,11 +348,8 @@ export function buildImagePrompt(
    */
   provider: 'workers-ai' | 'gemini' = 'workers-ai',
   /**
-   * 별이가 **실제로 부른** 상대들(예: ['별이'] · ['빼콩이(고양이)'] · []).
-   * 09-02 실사고: 별이가 「오늘 기억엔 우산·창·바구니뿐, 별이도 빼콩이도 등장하지 않는다」며
-   * 아무도 안 불렀는데 **프롬프트는 여전히 「소녀의 동작」을 시켰다.** 참조 없이 아무 아이나
-   * 그려졌고, 그걸 별이가 「별이 캐릭터가 아니다」로 물렸다 — 스스로 되풀이하는 모순 고리였다.
-   * 이제 **부르지 않은 상대는 그림에서도 말하지 않는다** — 참조가 없으면 캐릭터도 없다.
+   * 붙은 캐릭터 참조의 이름표(진단·기록용). **누가 등장할지는 여기서 정하지 않는다** —
+   * 09-02 사장 판정으로 **별이와 빼콩이는 늘 함께 등장한다.**
    */
   characterNames: string[] = [],
 ): string {
@@ -362,8 +359,6 @@ export function buildImagePrompt(
   const d = SKETCH_DENSITY[memory.density];
   const focus = (genome?.selection ?? []).map((f) => FOCUS_DRAW_EN[f]).filter(Boolean).slice(0, 2);
   const scene = (sceneEn ?? '').trim() || 'a quiet small moment';
-  const hasGirl = characterNames.some((n) => n.includes('별이'));
-  const hasCat = characterNames.some((n) => n.includes('빼콩'));
   if (provider === 'gemini') {
     /* 제미나이 판 — flux 최적화 잔재를 걷어낸 것들과 그 이유:
        · **모눈종이 세 줄**(SKETCH_RULES_EN[0] · SKETCH_POSITIVE[0] · STYLE_SHEET_EN의 'grid paper').
@@ -381,13 +376,17 @@ export function buildImagePrompt(
     return [
       'A hand-drawn diary sketch, drawn from memory.',
       `Scene: ${scene}`,
-      hasGirl && poseVariant ? `Girl's action: ${poseVariant}` : '',
+      poseVariant ? `Girl's action: ${poseVariant}` : '',
       pinnedSubjectClause(subjects, d.maxSubjects),
       focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
-      // 아무도 안 불렀으면 사람도 동물도 그리지 않는다 — 그날 남은 건 사물과 자리뿐이다
-      nChar === 0
-        ? 'No people and no animals in this picture — draw only the objects and the place that mattered today.'
-        : 'Draw the characters exactly as in the reference images.',
+      // ⚖ 09-02 사장 판정: **「사물만 있는 날이든 뭐든 캐릭터는 둘 다 항상 등장한다.」**
+      //   flux 시절이 그랬다(사장 확인) — 사물만 남은 날에도 별이와 빼콩이는 그 자리에 있었다.
+      //   내가 08-30에 넣은 「별이가 상대를 고른다」와 「아무도 없으면 사람·동물 없이」가 이 규칙을 깼다.
+      'The girl and the white cat are both in this picture, always — even on a day when only objects mattered.',
+      'Draw them exactly as in the reference images.',
+      // 그날의 주제가 주인공이다 — 캐릭터가 늘 있어도 자리를 빼앗지 않는다.
+      //   (08-30 「개인데 고양이가 그려짐」의 진짜 해법은 캐릭터를 빼는 게 아니라 이것이었다.)
+      memory.targetLabel ? 'The thing that mattered today is the largest thing on the page.' : '',
       // 별이의 그림 습관 — 그림체가 아니라 구성 규칙이다
       'Only what mattered that day; leave the rest of the page empty.',
       `Around the subjects add ${doodleFor(memory)}.`,

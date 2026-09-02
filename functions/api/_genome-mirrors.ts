@@ -82,7 +82,7 @@ export const SAP_MIRROR: CreatorMirror = {
 export const HOLMES_MIRROR: CreatorMirror = {
   creatorId: 'holmes',
   meta: {
-    source: 'vault MIMESIS Studio/HOLMES_GENOME_EDITION_1_CANDIDATE_v2.md',
+    source: 'vault MIMESIS 게놈 (결)/존재 게놈/HOLMES_GENOME_EDITION_1_CANDIDATE_v2.md',
     sourceVersion: 'edition1-candidate-v2',
     expectedVersion: 'edition1-candidate-v2',
     authority: 'none',
@@ -142,7 +142,7 @@ export interface RelationSummary {
 export const SAP_HOLMES_RELATION: RelationSummary = {
   relationId: 'sap-holmes',
   version: 'v0',
-  source: 'vault MIMESIS Studio/VASE_HOLMES_RELATIONAL_PATTERN_v0.md (인간 측 = Sap 정정)',
+  source: 'vault MIMESIS 게놈 (결)/존재 게놈/VASE_HOLMES_RELATIONAL_PATTERN_v0.md (인간 측 = Sap 정정)',
   pattern: [
     '홈즈가 정의한다 (구조·이름·순서를 세운다)',
     '삽이 한 줄로 부순다 (반박·즉흥·감 — 설득이 아니라 지나가는 말로)',
