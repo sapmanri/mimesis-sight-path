@@ -12,7 +12,7 @@ import { refPersonaName } from './sketch-daily.ts';
 
 
 // ── 판정 응답 파싱 (08-30 실사고: 잘린 JSON 24회 → 그날 그림 무산)
-import { parseJudgeText } from './sketch-daily.ts';
+import { JUDGE_VERSION, parseJudgeText } from './sketch-daily.ts';
 
 test('온전한 판정 JSON은 그대로 읽는다', () => {
   const r = parseJudgeText('앞말 {"verdicts":["1장: 좋다"],"pick":2,"reasons":"2번이 낫다"} 뒷말');
@@ -63,10 +63,22 @@ test('끝난 하루는 건드리지 않는다', async () => {
   assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), null);
 });
 
-test('시도를 다 쓴 하루도 종결이다 — 큐가 무한히 자라지 않는다', async () => {
-  const m = { 'sketch_daily_reco:2026-08-31': { status: 'failed', errorCode: 'attempts_exhausted' } };
+test('시도를 다 쓴 하루도 종결이다 — 큐가 무한히 자라지 않는다 (같은 자로 쟀을 때)', async () => {
+  const m = { 'sketch_daily_reco:2026-08-31': { status: 'failed', errorCode: 'attempts_exhausted', judgeVersion: JUDGE_VERSION } };
   assert.equal(recoIsHonestTerminal(m['sketch_daily_reco:2026-08-31']), true);
   assert.equal(await findPendingDate(kv(m), '2026-09-01', 3), null);
+});
+
+// 09-02 실사고의 계약: 그림은 사장 육안 합격이었는데 옛 자(모눈종이·색 개수)로 6장이 물렸다.
+// 자를 고친 뒤에도 그 하루가 잠겨 있으면 **버그가 하루를 영구히 삼킨다.** 소진은 자에 매인다.
+test('자가 바뀌면 소진 잠금이 풀린다 — 판정 버그가 하루를 영영 삼키지 않는다', async () => {
+  const stale = { status: 'failed', errorCode: 'attempts_exhausted', judgeVersion: '옛-판', picks: [{ seed: 1, r2Key: 'a.png' }] };
+  assert.equal(recoIsHonestTerminal(stale), false);
+  assert.equal(await findPendingDate(kv({ 'sketch_daily_reco:2026-08-31': stale }), '2026-09-01', 3), '2026-08-31');
+});
+
+test('자를 적지 않은 옛 영수증도 다시 열린다 (판 도입 이전 기록)', () => {
+  assert.equal(recoIsHonestTerminal({ status: 'failed', errorCode: 'attempts_exhausted' }), false);
 });
 
 test('영수증이 없는 날은 새로 접지 않는다 (과거 하루를 새로 만들지 않는다)', async () => {

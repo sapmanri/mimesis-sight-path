@@ -75,7 +75,7 @@ export function foldedDayDecision(
 }
 
 /** 스케줄러 소진 영수증이 덮으면 안 되는 기존 기록 판별 (08-11 실사고의 가드) */
-export interface HonestRecoLike { skipped?: unknown; status?: unknown; picks?: unknown; reco?: unknown }
+export interface HonestRecoLike { skipped?: unknown; status?: unknown; picks?: unknown; reco?: unknown; errorCode?: unknown; judgeVersion?: string }
 export function hasRecordedRecommendation(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const reco = value as Record<string, unknown>;
@@ -98,7 +98,9 @@ export function recoIsHonestTerminal(reco: HonestRecoLike | null): boolean {
   // 그림 3장은 판정 준비일 뿐 완료가 아니다. 08-12 실사고처럼 status=done·picks=3인데
   // reco=null인 기록을 완료로 인정하면 스케줄러 소진 영수증과 아침 감시가 둘 다 거짓말한다.
   // 시도를 다 쓴 하루는 실패지만 **정직한 종결**이다 — 소진 영수증이 이 진단을 덮으면 안 된다.
-  if (reco.errorCode === 'attempts_exhausted') return true;
+  // ⚠ 09-02: 소진 잠금은 **그때 쓰던 자에 매인 판정**이다. 자(JUDGE_VERSION)를 갈면 다시 연다 —
+  //   안 그러면 판정 버그로 물린 하루가 고친 뒤에도 영영 못 나간다(그날 6장은 사장 육안 합격이었다).
+  if (reco.errorCode === 'attempts_exhausted') return reco.judgeVersion === JUDGE_VERSION;
   const judged = hasRecordedRecommendation(reco.reco);
   if (reco.status === 'done') return judged;
   return judged && Array.isArray(reco.picks) && reco.picks.length >= 1;
@@ -112,7 +114,7 @@ const MAX_ATTEMPTS = 6;
  *   attempts_exhausted로 잠겨 영영 못 나갈 뻔했다 — 기각은 그때 쓰던 자에 매인 판정이지
  *   그림의 속성이 아니다. 그래서 자를 갈면 잠금과 기각 사유를 함께 버린다.
  */
-const JUDGE_VERSION = 'refs-v1';
+export const JUDGE_VERSION = 'refs-v1';
 /** 못 끝낸 하루를 며칠까지 이어 그리나 (사장 판정 09-01: 3일). */
 const PENDING_DAYS = 3;
 /**
