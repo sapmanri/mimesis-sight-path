@@ -371,25 +371,22 @@ export function buildImagePrompt(
        · **참조를 글로 설명하던 문장 전부**(사장 지시 09-02 「참조 그림 들어가 있는 것도 다 걷어내야 돼」).
          참조는 포즈 시트다 — 제미나이는 이미지를 직접 보므로 「image 0은 소녀」 같은 해설이 필요 없고,
          영어 설명이 길수록 제 스타일(정교한 상업 일러스트)로 끌려간다. **그림체는 참조가 말한다.**
-       · 색·선·얼굴을 글로 규정하던 줄들 — 같은 이유로 걷었다. 참조에 이미 다 있다.
-       남긴 것: 그날 기억(장면·주제·낙서)과 「빈 자리를 남긴다」 한 줄, 그리고 글씨 금지. */
+       · 색·선·얼굴을 글로 규정하던 줄들 · **'A hand-drawn diary sketch'(스케치하듯 그린다)** ·
+         낙서 지시 · 「빈 자리를 남긴다」 · 게놈 Emphasis — 09-02 사장 판정으로 **화풍 서술을 전부** 걷었다.
+         「스케치하듯이 그린다 뭐 이런 내용 다 걷어내고 참조 캐릭터만 참조해서 그린다가 되어야 해.」
+       남긴 것: 그날 무엇을 그리나(장면·동작·주제 수·가장 큰 것) · 캐릭터 상시 등장 · 참조가
+       그림체를 정한다는 한 줄 · 글씨 금지 · 별이가 물린 이유. 그림체를 말하는 문장은 하나도 없다. */
     return [
-      'A hand-drawn diary sketch, drawn from memory.',
       `Scene: ${scene}`,
       poseVariant ? `Girl's action: ${poseVariant}` : '',
       pinnedSubjectClause(subjects, d.maxSubjects),
-      focus.length ? `Emphasis: ${focus.join('; ')}.` : '',
-      // ⚖ 09-02 사장 판정: **「사물만 있는 날이든 뭐든 캐릭터는 둘 다 항상 등장한다.」**
-      //   flux 시절이 그랬다(사장 확인) — 사물만 남은 날에도 별이와 빼콩이는 그 자리에 있었다.
-      //   내가 08-30에 넣은 「별이가 상대를 고른다」와 「아무도 없으면 사람·동물 없이」가 이 규칙을 깼다.
+      // ⚖ 09-02 사장 판정: 캐릭터 둘은 사물만 있는 날에도 **항상** 등장한다.
       'The girl and the white cat are both in this picture, always — even on a day when only objects mattered.',
-      'Draw them exactly as in the reference images.',
-      // 그날의 주제가 주인공이다 — 캐릭터가 늘 있어도 자리를 빼앗지 않는다.
-      //   (08-30 「개인데 고양이가 그려짐」의 진짜 해법은 캐릭터를 빼는 게 아니라 이것이었다.)
+      // ⚖ 09-02 사장 판정: 「스케치하듯이 그린다 뭐 이런 내용 다 걷어내고 **참조 캐릭터만 참조해서
+      //   그린다**가 되어야 해.」 → 화풍을 글로 말하지 않는다. 그림체는 오직 참조가 정한다.
+      'Draw everything — the characters and the whole picture — in exactly the same drawing style as the reference images: the same line, the same colours, the same level of detail.',
+      // 그날의 주제가 주인공이다 (08-30 「개인데 고양이가 그려짐」의 해법)
       memory.targetLabel ? 'The thing that mattered today is the largest thing on the page.' : '',
-      // 별이의 그림 습관 — 그림체가 아니라 구성 규칙이다
-      'Only what mattered that day; leave the rest of the page empty.',
-      `Around the subjects add ${doodleFor(memory)}.`,
       avoid.length
         ? `Fix these problems from the previous attempts: ${avoid.slice(-3).map((a) => a.replace(/\s+/g, ' ').slice(0, 160)).join(' | ')}`
         : '',

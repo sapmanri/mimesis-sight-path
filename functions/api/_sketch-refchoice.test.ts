@@ -114,13 +114,15 @@ test('제미나이 판은 모눈종이와 flux 대응을 걷어낸다', () => {
   assert.equal(/pose vocabulary/.test(g), false);          // 참조 약화 지시 없음
   assert.equal(/flat scan|top-down/.test(g), false);       // 공책사진 대응 없음
   assert.equal(/four to six colours|four to six colors/.test(g), false);   // 색 규정도 글로 하지 않는다
+  // ⚖ 09-02 사장 판정: 화풍을 말하는 문장은 하나도 없어야 한다
+  assert.equal(/hand-drawn diary sketch|drawn from memory|doodle|leave the rest of the page empty/.test(g), false);
 });
 
 test('제미나이 판은 참조를 글로 설명하지 않는다 — 그림체는 참조가 말한다 (사장 지시 09-02)', () => {
   const g = buildImagePrompt(mem, null, 'a dog in shade', ['a dog'], { characters: 2, styles: 0 }, null, [], 'gemini', ['별이', '빼콩이(고양이)']);
   assert.equal(/image 0 is the girl|reference sheets|pose vocabulary/.test(g), false);  // 참조 해설 없음
   assert.equal(/flat palette|navy-blue ink|rough .* outlines/.test(g), false);          // 그림체 서술도 없음
-  assert.match(g, /exactly as in the reference images/);                                 // 참조를 따르라는 한 줄만
+  assert.match(g, /same drawing style as the reference images/);                                 // 참조를 따르라는 한 줄만
 });
 
 test('제미나이 판은 그림 속 글씨를 막는다 (09-02 「SHADE」가 그려진 사고)', () => {
